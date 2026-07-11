@@ -9,32 +9,14 @@ export default function RootLayout() {
       <Stack
         screenOptions={{
           headerShown: false,
-          animation: "fade",
-          contentStyle: {
-            backgroundColor: "#7B1113",
-          },
         }}
       >
         <Stack.Screen name="index" />
-
+        <Stack.Screen name="login" />
         <Stack.Screen
-          name="login"
+          name="(tabs)"
           options={{
             animation: "fade",
-          }}
-        />
-
-        <Stack.Screen
-          name="dashboard"
-          options={{
-            animation: "slide_from_right",
-          }}
-        />
-
-        <Stack.Screen
-          name="incidents"
-          options={{
-            animation: "slide_from_right",
           }}
         />
       </Stack>

@@ -56,7 +56,7 @@ export default function LoginScreen() {
        * Temporary navigation.
        * Replace this with the real Supabase login later.
        */
-      router.replace("/dashboard");
+      router.replace("/home");
     } catch {
       Alert.alert(
         "Login failed",
