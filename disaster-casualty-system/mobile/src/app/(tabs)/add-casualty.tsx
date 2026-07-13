@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -23,6 +24,16 @@ import {
   type CreateCasualtyPayload,
   type UpdateCasualtyPayload,
 } from "../../api/casualties";
+import {
+  createIncident,
+  getIncidents,
+  type Incident,
+} from "../../api/incidents";
+import {
+  createEvacuationCenter,
+  getEvacuationCenters,
+  type EvacuationCenter,
+} from "../../api/evacuation-centers";
 
 const COLORS = {
   maroon: "#7B1113",
@@ -45,7 +56,38 @@ const STEPS = [
   "Remarks",
 ] as const;
 
+const SEX_OPTIONS = ["Male", "Female", "Unknown"] as const;
+
+const STATUS_OPTIONS = [
+  "Safe",
+  "Displaced",
+  "Evacuated",
+  "Rescued",
+  "Missing",
+  "Injured",
+  "Hospitalized",
+  "Deceased",
+  "Unknown",
+] as const;
+
+const SEVERITY_OPTIONS = [
+  "None",
+  "Minor",
+  "Moderate",
+  "Severe",
+  "Critical",
+] as const;
+
+const testUserId = process.env.EXPO_PUBLIC_TEST_USER_ID;
+
 type StepName = (typeof STEPS)[number];
+
+type ChoiceSheetName =
+  | "sex"
+  | "incident"
+  | "evacuationCenter"
+  | "casualtyStatus"
+  | "severity";
 
 type FormState = {
   idNumber: string;
@@ -222,6 +264,32 @@ function normalizeDate(value: string): string | undefined {
   return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
 }
 
+function formatTodayForInput(): string {
+  const today = new Date();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+  const year = today.getFullYear();
+
+  return `${month}/${day}/${year}`;
+}
+
+function generateCasualtyIdNumber(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const hour = String(now.getHours()).padStart(2, "0");
+  const minute = String(now.getMinutes()).padStart(2, "0");
+  const second = String(now.getSeconds()).padStart(2, "0");
+  const millisecond = String(now.getMilliseconds()).padStart(3, "0");
+  const suffix = Math.random()
+    .toString(36)
+    .slice(2, 8)
+    .toUpperCase();
+
+  return `CAS-${year}${month}${day}-${hour}${minute}${second}${millisecond}-${suffix}`;
+}
+
 function mapRecordToForm(record: CasualtyRecord): FormState {
   return {
     idNumber: valueOrEmpty(record.casualty.id_number),
@@ -242,7 +310,10 @@ function mapRecordToForm(record: CasualtyRecord): FormState {
     incidentName: record.incident.incident_name,
     currentLocation: valueOrEmpty(record.current_location),
     evacuationCenterId: valueOrEmpty(record.evacuation_center_id),
-    evacuationCenter: valueOrEmpty(record.evacuation_center_id),
+    evacuationCenter: valueOrEmpty(
+      record.evacuation_center?.center_name ??
+        record.evacuation_center_id,
+    ),
     latitude: valueOrEmpty(record.latitude),
     longitude: valueOrEmpty(record.longitude),
 
@@ -265,6 +336,7 @@ type FieldProps = {
   onChangeText: (value: string) => void;
   keyboardType?: "default" | "numeric" | "phone-pad";
   multiline?: boolean;
+  editable?: boolean;
 };
 
 function FormField({
@@ -274,6 +346,7 @@ function FormField({
   onChangeText,
   keyboardType = "default",
   multiline = false,
+  editable = true,
 }: FieldProps) {
   return (
     <View style={styles.fieldGroup}>
@@ -286,9 +359,11 @@ function FormField({
         placeholderTextColor={COLORS.muted}
         keyboardType={keyboardType}
         multiline={multiline}
+        editable={editable}
         textAlignVertical={multiline ? "top" : "center"}
         style={[
           styles.input,
+          !editable && styles.inputDisabled,
           multiline && styles.multilineInput,
         ]}
       />
@@ -341,6 +416,110 @@ function SelectField({
   );
 }
 
+type ChoiceOption = {
+  label: string;
+  selected: boolean;
+  onSelect: () => void;
+};
+
+type ChoiceSheetProps = {
+  visible: boolean;
+  title: string;
+  options: ChoiceOption[];
+  onClose: () => void;
+};
+
+function ChoiceSheet({
+  visible,
+  title,
+  options,
+  onClose,
+}: ChoiceSheetProps) {
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.sheetBackdrop} onPress={onClose}>
+        <Pressable style={styles.choiceSheet}>
+          <View style={styles.sheetHandle} />
+
+          <View style={styles.sheetHeader}>
+            <Text style={styles.sheetTitle}>{title}</Text>
+
+            <Pressable
+              onPress={onClose}
+              style={({ pressed }) => [
+                styles.sheetCloseButton,
+                pressed && styles.pressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Close options"
+            >
+              <Ionicons
+                name="close"
+                size={20}
+                color={COLORS.secondaryText}
+              />
+            </Pressable>
+          </View>
+
+          <ScrollView
+            contentContainerStyle={styles.choiceList}
+            showsVerticalScrollIndicator={false}
+          >
+            {options.length === 0 ? (
+              <View style={styles.choiceEmptyState}>
+                <Text style={styles.choiceEmptyTitle}>
+                  No options available
+                </Text>
+                <Text style={styles.choiceEmptyText}>
+                  Create a new option first, then it will appear here.
+                </Text>
+              </View>
+            ) : null}
+
+            {options.map((option) => (
+              <Pressable
+                key={option.label}
+                onPress={() => {
+                  option.onSelect();
+                  onClose();
+                }}
+                style={({ pressed }) => [
+                  styles.choiceOption,
+                  option.selected && styles.choiceOptionSelected,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.choiceOptionText,
+                    option.selected &&
+                      styles.choiceOptionTextSelected,
+                  ]}
+                >
+                  {option.label}
+                </Text>
+
+                {option.selected ? (
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={20}
+                    color={COLORS.maroon}
+                  />
+                ) : null}
+              </Pressable>
+            ))}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 export default function AddCasualtyScreen() {
   const { editId } = useLocalSearchParams<{
     editId?: string;
@@ -349,11 +528,42 @@ export default function AddCasualtyScreen() {
   const casualtyId = Array.isArray(editId) ? editId[0] : editId;
   const isEditing = Boolean(casualtyId);
   const [currentStep, setCurrentStep] = useState(0);
-  const [form, setForm] = useState<FormState>(initialForm);
+  const [form, setForm] = useState<FormState>(() => ({
+    ...initialForm,
+    idNumber: isEditing ? "" : generateCasualtyIdNumber(),
+  }));
   const [isLoadingRecord, setIsLoadingRecord] =
     useState(isEditing);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [activeChoiceSheet, setActiveChoiceSheet] =
+    useState<ChoiceSheetName | null>(null);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [isLoadingIncidents, setIsLoadingIncidents] =
+    useState(false);
+  const [incidentError, setIncidentError] =
+    useState<string | null>(null);
+  const [newIncidentName, setNewIncidentName] = useState("");
+  const [newIncidentType, setNewIncidentType] = useState("");
+  const [isCreatingIncident, setIsCreatingIncident] =
+    useState(false);
+  const [evacuationCenters, setEvacuationCenters] = useState<
+    EvacuationCenter[]
+  >([]);
+  const [isLoadingEvacuationCenters, setIsLoadingEvacuationCenters] =
+    useState(false);
+  const [evacuationCenterError, setEvacuationCenterError] =
+    useState<string | null>(null);
+  const [newEvacuationCenterName, setNewEvacuationCenterName] =
+    useState("");
+  const [newEvacuationCenterAddress, setNewEvacuationCenterAddress] =
+    useState("");
+  const [
+    newEvacuationCenterCapacity,
+    setNewEvacuationCenterCapacity,
+  ] = useState("");
+  const [isCreatingEvacuationCenter, setIsCreatingEvacuationCenter] =
+    useState(false);
 
   const stepName: StepName = STEPS[currentStep];
   const screenTitle = isEditing ? "Edit Casualty" : "Add Casualty";
@@ -400,6 +610,86 @@ export default function AddCasualtyScreen() {
     }),
     [form],
   );
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadIncidentOptions() {
+      try {
+        setIsLoadingIncidents(true);
+        setIncidentError(null);
+
+        const data = await getIncidents();
+
+        if (isMounted) {
+          setIncidents(data);
+        }
+      } catch (error) {
+        console.error("Failed to load incidents:", error);
+
+        if (isMounted) {
+          setIncidentError(
+            error instanceof Error
+              ? error.message
+              : "Unable to load disaster incidents.",
+          );
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingIncidents(false);
+        }
+      }
+    }
+
+    void loadIncidentOptions();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadEvacuationCenterOptions() {
+      if (!form.incidentId) {
+        setEvacuationCenters([]);
+        setEvacuationCenterError(null);
+        return;
+      }
+
+      try {
+        setIsLoadingEvacuationCenters(true);
+        setEvacuationCenterError(null);
+
+        const data = await getEvacuationCenters(form.incidentId);
+
+        if (isMounted) {
+          setEvacuationCenters(data);
+        }
+      } catch (error) {
+        console.error("Failed to load evacuation centers:", error);
+
+        if (isMounted) {
+          setEvacuationCenterError(
+            error instanceof Error
+              ? error.message
+              : "Unable to load evacuation centers.",
+          );
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingEvacuationCenters(false);
+        }
+      }
+    }
+
+    void loadEvacuationCenterOptions();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [form.incidentId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -451,6 +741,258 @@ export default function AddCasualtyScreen() {
       ...current,
       [key]: value,
     }));
+  }
+
+  async function handleCreateIncident() {
+    const incidentName = newIncidentName.trim();
+    const disasterType = newIncidentType.trim();
+
+    if (!testUserId) {
+      Alert.alert(
+        "Unable to create incident",
+        "EXPO_PUBLIC_TEST_USER_ID is missing from the mobile .env file.",
+      );
+      return;
+    }
+
+    if (!incidentName || !disasterType) {
+      Alert.alert(
+        "Complete incident details",
+        "Enter both the disaster incident name and disaster type.",
+      );
+      return;
+    }
+
+    try {
+      setIsCreatingIncident(true);
+      setIncidentError(null);
+
+      const incident = await createIncident({
+        incidentName,
+        disasterType,
+        createdBy: testUserId,
+        province: form.province || undefined,
+        municipality: form.municipality || undefined,
+        barangay: form.barangay || undefined,
+      });
+
+      setIncidents((current) => {
+        const exists = current.some((item) => item.id === incident.id);
+
+        return exists
+          ? current.map((item) =>
+              item.id === incident.id ? incident : item,
+            )
+          : [incident, ...current];
+      });
+
+      updateField("incidentId", incident.id);
+      updateField("incidentName", incident.incident_name);
+      setNewIncidentName("");
+      setNewIncidentType("");
+
+      Alert.alert(
+        "Incident ready",
+        "The disaster incident has been added and selected for this casualty.",
+      );
+    } catch (error) {
+      console.error("Failed to create incident:", error);
+
+      Alert.alert(
+        "Unable to create incident",
+        error instanceof Error
+          ? error.message
+          : "Please review the incident details and try again.",
+      );
+    } finally {
+      setIsCreatingIncident(false);
+    }
+  }
+
+  async function handleCreateEvacuationCenter() {
+    const centerName = newEvacuationCenterName.trim();
+
+    if (!form.incidentId) {
+      Alert.alert(
+        "Select an incident first",
+        "Choose or create a disaster incident before adding an evacuation center.",
+      );
+      return;
+    }
+
+    if (!centerName) {
+      Alert.alert(
+        "Enter center name",
+        "Add the evacuation center name before creating it.",
+      );
+      return;
+    }
+
+    try {
+      setIsCreatingEvacuationCenter(true);
+      setEvacuationCenterError(null);
+
+      const center = await createEvacuationCenter({
+        incidentId: form.incidentId,
+        centerName,
+        address: newEvacuationCenterAddress || undefined,
+        barangay: form.barangay || undefined,
+        municipality: form.municipality || undefined,
+        province: form.province || undefined,
+        capacity: parseOptionalInteger(newEvacuationCenterCapacity),
+      });
+
+      setEvacuationCenters((current) => {
+        const exists = current.some((item) => item.id === center.id);
+
+        return exists
+          ? current.map((item) =>
+              item.id === center.id ? center : item,
+            )
+          : [center, ...current];
+      });
+
+      updateField("evacuationCenterId", center.id);
+      updateField("evacuationCenter", center.center_name);
+      setNewEvacuationCenterName("");
+      setNewEvacuationCenterAddress("");
+      setNewEvacuationCenterCapacity("");
+
+      Alert.alert(
+        "Evacuation center ready",
+        "The evacuation center has been added and selected for this casualty.",
+      );
+    } catch (error) {
+      console.error("Failed to create evacuation center:", error);
+
+      Alert.alert(
+        "Unable to create evacuation center",
+        error instanceof Error
+          ? error.message
+          : "Please review the center details and try again.",
+      );
+    } finally {
+      setIsCreatingEvacuationCenter(false);
+    }
+  }
+
+  function getChoiceSheetTitle(): string {
+    switch (activeChoiceSheet) {
+      case "sex":
+        return "Select Sex";
+      case "incident":
+        return "Select Disaster Incident";
+      case "evacuationCenter":
+        return "Select Evacuation Center";
+      case "casualtyStatus":
+        return "Select Casualty Status";
+      case "severity":
+        return "Select Severity";
+      default:
+        return "";
+    }
+  }
+
+  function getChoiceOptions(): ChoiceOption[] {
+    switch (activeChoiceSheet) {
+      case "sex":
+        return SEX_OPTIONS.map((option) => ({
+          label: option,
+          selected:
+            form.sex.toLowerCase() === option.toLowerCase(),
+          onSelect: () => updateField("sex", option),
+        }));
+
+      case "incident": {
+        const incidentOptions =
+          incidents.length > 0
+            ? incidents
+            : form.incidentId && form.incidentName
+              ? [
+                  {
+                    id: form.incidentId,
+                    incident_name: form.incidentName,
+                    incident_code: "",
+                    disaster_type: "",
+                    description: null,
+                    province: null,
+                    municipality: null,
+                    barangay: null,
+                    started_at: "",
+                    ended_at: null,
+                    status: "active" as const,
+                  },
+                ]
+              : [];
+
+        return incidentOptions.map((incident) => ({
+          label: incident.incident_name,
+          selected: form.incidentId === incident.id,
+          onSelect: () => {
+            updateField("incidentId", incident.id);
+            updateField("incidentName", incident.incident_name);
+            updateField("evacuationCenterId", "");
+            updateField("evacuationCenter", "");
+          },
+        }));
+      }
+
+      case "evacuationCenter": {
+        const evacuationOptions =
+          evacuationCenters.length > 0
+            ? evacuationCenters
+            : form.evacuationCenterId && form.evacuationCenter
+              ? [
+                  {
+                    id: form.evacuationCenterId,
+                    incident_id: form.incidentId,
+                    center_name: form.evacuationCenter,
+                    address: null,
+                    barangay: null,
+                    municipality: null,
+                    province: null,
+                    capacity: null,
+                    contact_person: null,
+                    contact_number: null,
+                    latitude: null,
+                    longitude: null,
+                    is_active: true,
+                    created_at: "",
+                    updated_at: "",
+                  },
+                ]
+              : [];
+
+        return evacuationOptions.map((center) => ({
+          label: center.center_name,
+          selected: form.evacuationCenterId === center.id,
+          onSelect: () => {
+            updateField("evacuationCenterId", center.id);
+            updateField("evacuationCenter", center.center_name);
+          },
+        }));
+      }
+
+      case "casualtyStatus":
+        return STATUS_OPTIONS.map((option) => ({
+          label: option,
+          selected:
+            form.casualtyStatus.toLowerCase() ===
+            option.toLowerCase(),
+          onSelect: () => updateField("casualtyStatus", option),
+        }));
+
+      case "severity":
+        return SEVERITY_OPTIONS.map((option) => ({
+          label: option,
+          selected:
+            form.severity.toLowerCase() === option.toLowerCase(),
+          onSelect: () => updateField("severity", option),
+        }));
+
+      default:
+        return [];
+    }
   }
 
   async function handleSubmit() {
@@ -517,7 +1059,8 @@ export default function AddCasualtyScreen() {
             <FormField
               label="ID NUMBER"
               value={form.idNumber}
-              placeholder="e.g. C-2026-008"
+              placeholder="Auto generated"
+              editable={false}
               onChangeText={(value) =>
                 updateField("idNumber", value)
               }
@@ -570,16 +1113,7 @@ export default function AddCasualtyScreen() {
               label="SEX"
               value={form.sex}
               placeholder="Select sex"
-              onPress={() => {
-                updateField(
-                  "sex",
-                  form.sex === "Male"
-                    ? "Female"
-                    : form.sex === "Female"
-                      ? "Unknown"
-                      : "Male",
-                );
-              }}
+              onPress={() => setActiveChoiceSheet("sex")}
             />
           </View>
 
@@ -590,7 +1124,7 @@ export default function AddCasualtyScreen() {
               placeholder="mm/dd/yyyy"
               icon="calendar-outline"
               onPress={() =>
-                updateField("dateOfBirth", "07/10/1990")
+                updateField("dateOfBirth", formatTodayForInput())
               }
             />
           </View>
@@ -656,18 +1190,84 @@ export default function AddCasualtyScreen() {
         <SelectField
           label="DISASTER INCIDENT"
           value={form.incidentName || form.incidentId}
-          placeholder="Select active incident"
-          onPress={() => {
-            if (isEditing) {
-              return;
-            }
-
-            updateField(
-              "incidentName",
-              "Typhoon Egay - Level 3 Response",
-            );
-          }}
+          placeholder={
+            isLoadingIncidents
+              ? "Loading active incidents..."
+              : "Select active incident"
+          }
+          onPress={() => setActiveChoiceSheet("incident")}
         />
+
+        {incidentError ? (
+          <View style={styles.inlineWarning}>
+            <Ionicons
+              name="alert-circle-outline"
+              size={18}
+              color={COLORS.maroon}
+            />
+            <Text style={styles.inlineWarningText}>
+              {incidentError}
+            </Text>
+          </View>
+        ) : null}
+
+        <View style={styles.quickCreateCard}>
+          <View style={styles.quickCreateHeader}>
+            <Ionicons
+              name="add-circle-outline"
+              size={20}
+              color={COLORS.maroon}
+            />
+            <Text style={styles.quickCreateTitle}>
+              Quick create incident
+            </Text>
+          </View>
+
+          <FormField
+            label="NEW INCIDENT NAME"
+            value={newIncidentName}
+            placeholder="e.g. Flood in Barangay San Isidro"
+            onChangeText={setNewIncidentName}
+          />
+
+          <FormField
+            label="DISASTER TYPE"
+            value={newIncidentType}
+            placeholder="e.g. Flood, Fire, Earthquake"
+            onChangeText={setNewIncidentType}
+          />
+
+          <Pressable
+            disabled={isCreatingIncident}
+            onPress={() => {
+              void handleCreateIncident();
+            }}
+            style={({ pressed }) => [
+              styles.createIncidentButton,
+              isCreatingIncident && styles.disabledButton,
+              pressed && styles.primaryButtonPressed,
+            ]}
+          >
+            <Text style={styles.createIncidentButtonText}>
+              {isCreatingIncident
+                ? "Creating incident..."
+                : "Create and select incident"}
+            </Text>
+
+            {isCreatingIncident ? (
+              <ActivityIndicator
+                size="small"
+                color={COLORS.white}
+              />
+            ) : (
+              <Ionicons
+                name="checkmark-circle-outline"
+                size={18}
+                color={COLORS.white}
+              />
+            )}
+          </Pressable>
+        </View>
 
         <FormField
           label="CURRENT LOCATION"
@@ -681,14 +1281,99 @@ export default function AddCasualtyScreen() {
         <SelectField
           label="EVACUATION CENTER"
           value={form.evacuationCenter}
-          placeholder="Select evacuation center"
+          placeholder={
+            !form.incidentId
+              ? "Select incident first"
+              : isLoadingEvacuationCenters
+                ? "Loading evacuation centers..."
+                : "Select evacuation center"
+          }
           onPress={() =>
-            updateField(
-              "evacuationCenter",
-              "San Isidro Covered Court",
-            )
+            setActiveChoiceSheet("evacuationCenter")
           }
         />
+
+        {evacuationCenterError ? (
+          <View style={styles.inlineWarning}>
+            <Ionicons
+              name="alert-circle-outline"
+              size={18}
+              color={COLORS.maroon}
+            />
+            <Text style={styles.inlineWarningText}>
+              {evacuationCenterError}
+            </Text>
+          </View>
+        ) : null}
+
+        <View style={styles.quickCreateCard}>
+          <View style={styles.quickCreateHeader}>
+            <Ionicons
+              name="business-outline"
+              size={20}
+              color={COLORS.maroon}
+            />
+            <Text style={styles.quickCreateTitle}>
+              Quick create evacuation center
+            </Text>
+          </View>
+
+          <FormField
+            label="CENTER NAME"
+            value={newEvacuationCenterName}
+            placeholder="e.g. San Isidro Covered Court"
+            onChangeText={setNewEvacuationCenterName}
+          />
+
+          <FormField
+            label="ADDRESS"
+            value={newEvacuationCenterAddress}
+            placeholder="Street, building, or landmark"
+            onChangeText={setNewEvacuationCenterAddress}
+          />
+
+          <FormField
+            label="CAPACITY"
+            value={newEvacuationCenterCapacity}
+            placeholder="Estimated capacity"
+            keyboardType="numeric"
+            onChangeText={setNewEvacuationCenterCapacity}
+          />
+
+          <Pressable
+            disabled={
+              isCreatingEvacuationCenter || !form.incidentId
+            }
+            onPress={() => {
+              void handleCreateEvacuationCenter();
+            }}
+            style={({ pressed }) => [
+              styles.createIncidentButton,
+              (isCreatingEvacuationCenter || !form.incidentId) &&
+                styles.disabledButton,
+              pressed && styles.primaryButtonPressed,
+            ]}
+          >
+            <Text style={styles.createIncidentButtonText}>
+              {isCreatingEvacuationCenter
+                ? "Creating center..."
+                : "Create and select center"}
+            </Text>
+
+            {isCreatingEvacuationCenter ? (
+              <ActivityIndicator
+                size="small"
+                color={COLORS.white}
+              />
+            ) : (
+              <Ionicons
+                name="checkmark-circle-outline"
+                size={18}
+                color={COLORS.white}
+              />
+            )}
+          </Pressable>
+        </View>
 
         <View style={styles.twoColumnRow}>
           <View style={styles.halfColumn}>
@@ -738,7 +1423,7 @@ export default function AddCasualtyScreen() {
           value={form.casualtyStatus}
           placeholder="Select status"
           onPress={() =>
-            updateField("casualtyStatus", "Injured")
+            setActiveChoiceSheet("casualtyStatus")
           }
         />
 
@@ -746,9 +1431,7 @@ export default function AddCasualtyScreen() {
           label="SEVERITY"
           value={form.severity}
           placeholder="Select severity"
-          onPress={() =>
-            updateField("severity", "Moderate")
-          }
+          onPress={() => setActiveChoiceSheet("severity")}
         />
 
         <FormField
@@ -950,16 +1633,16 @@ export default function AddCasualtyScreen() {
                 color={COLORS.white}
               />
             </Pressable>
+          </View>
 
-            <View style={styles.headerTitleWrapper}>
-              <Text style={styles.headerTitle}>
-                {screenTitle}
-              </Text>
-              <Text style={styles.headerSubtitle}>
-                Step {currentStep + 1} of {STEPS.length} -{" "}
-                {stepName}
-              </Text>
-            </View>
+          <View style={styles.headerTitleWrapper}>
+            <Text style={styles.headerTitle}>
+              {screenTitle}
+            </Text>
+            <Text style={styles.headerSubtitle}>
+              Step {currentStep + 1} of {STEPS.length} -{" "}
+              {stepName}
+            </Text>
           </View>
 
           <View style={styles.progressRow}>
@@ -1059,6 +1742,13 @@ export default function AddCasualtyScreen() {
           </View>
         </SafeAreaView>
       </KeyboardAvoidingView>
+
+      <ChoiceSheet
+        visible={activeChoiceSheet !== null}
+        title={getChoiceSheetTitle()}
+        options={getChoiceOptions()}
+        onClose={() => setActiveChoiceSheet(null)}
+      />
     </View>
   );
 }
@@ -1106,6 +1796,95 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
+  sheetBackdrop: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(23,33,58,0.38)",
+  },
+  choiceSheet: {
+    maxHeight: "72%",
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 24,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    backgroundColor: COLORS.white,
+  },
+  sheetHandle: {
+    width: 42,
+    height: 4,
+    alignSelf: "center",
+    borderRadius: 2,
+    backgroundColor: "#D7DDE8",
+    marginBottom: 14,
+  },
+  sheetHeader: {
+    minHeight: 42,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  sheetTitle: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: "900",
+  },
+  sheetCloseButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.fieldBackground,
+  },
+  choiceList: {
+    paddingBottom: 4,
+    gap: 8,
+  },
+  choiceEmptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 24,
+  },
+  choiceEmptyTitle: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  choiceEmptyText: {
+    color: COLORS.secondaryText,
+    fontSize: 11,
+    lineHeight: 17,
+    textAlign: "center",
+    marginTop: 6,
+  },
+  choiceOption: {
+    minHeight: 50,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: COLORS.fieldBorder,
+    borderRadius: 13,
+    backgroundColor: COLORS.fieldBackground,
+  },
+  choiceOptionSelected: {
+    borderColor: COLORS.maroon,
+    backgroundColor: "#FFF4F4",
+  },
+  choiceOptionText: {
+    flex: 1,
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  choiceOptionTextSelected: {
+    color: COLORS.maroon,
+  },
+
   headerSafeArea: {
     backgroundColor: COLORS.maroon,
   },
@@ -1126,10 +1905,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.15)",
-    marginRight: 11,
   },
   headerTitleWrapper: {
-    flex: 1,
+    marginTop: 10,
   },
   headerTitle: {
     color: COLORS.white,
@@ -1170,7 +1948,7 @@ const styles = StyleSheet.create({
   },
 
   formContent: {
-    paddingHorizontal: 2,
+    paddingHorizontal: 14,
     paddingTop: 23,
     paddingBottom: 30,
   },
@@ -1193,6 +1971,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.fieldBackground,
     color: COLORS.text,
     fontSize: 14,
+  },
+  inputDisabled: {
+    color: COLORS.secondaryText,
+    backgroundColor: "#EEF2F7",
   },
   multilineInput: {
     minHeight: 105,
@@ -1240,6 +2022,62 @@ const styles = StyleSheet.create({
     color: COLORS.maroon,
     fontSize: 13,
     fontWeight: "700",
+  },
+
+  inlineWarning: {
+    minHeight: 46,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#F1C8CA",
+    backgroundColor: "#FFF6F6",
+    marginTop: -5,
+    marginBottom: 17,
+    gap: 8,
+  },
+  inlineWarningText: {
+    flex: 1,
+    color: COLORS.secondaryText,
+    fontSize: 11,
+    lineHeight: 16,
+  },
+
+  quickCreateCard: {
+    borderWidth: 1,
+    borderColor: "#E8D4D6",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingTop: 13,
+    paddingBottom: 12,
+    marginBottom: 17,
+    backgroundColor: "#FFF9F9",
+  },
+  quickCreateHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 13,
+    gap: 8,
+  },
+  quickCreateTitle: {
+    color: COLORS.maroon,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  createIncidentButton: {
+    minHeight: 47,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+    backgroundColor: COLORS.maroon,
+    gap: 8,
+  },
+  createIncidentButtonText: {
+    color: COLORS.white,
+    fontSize: 13,
+    fontWeight: "800",
   },
 
   uploadCard: {
@@ -1301,7 +2139,7 @@ const styles = StyleSheet.create({
   },
   footer: {
     flexDirection: "row",
-    paddingHorizontal: 12,
+    paddingHorizontal: 20,
     paddingTop: 11,
     paddingBottom: 7,
     gap: 10,

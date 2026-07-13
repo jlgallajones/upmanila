@@ -48,6 +48,15 @@ export type CasualtyRecord = {
     status: string;
   };
 
+  evacuation_center: {
+    id: string;
+    center_name: string;
+    address: string | null;
+    barangay: string | null;
+    municipality: string | null;
+    province: string | null;
+  } | null;
+
   encoder: {
     id: string;
     full_name: string;

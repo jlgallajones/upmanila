@@ -77,6 +77,14 @@ const casualtyRecordSelect = `
     disaster_type,
     status
   ),
+  evacuation_center:evacuation_centers (
+    id,
+    center_name,
+    address,
+    barangay,
+    municipality,
+    province
+  ),
   encoder:users!casualty_incidents_encoded_by_fkey (
     id,
     full_name,
@@ -93,6 +101,38 @@ function trimmedOrNull(
   }
 
   return value.trim() || null;
+}
+
+async function ensureUniqueIdNumber(
+  idNumber: string | undefined,
+  excludeCasualtyId?: string,
+): Promise<string | null> {
+  const normalizedIdNumber = idNumber?.trim();
+
+  if (!normalizedIdNumber) {
+    return null;
+  }
+
+  let query = supabase
+    .from("casualties")
+    .select("id")
+    .eq("id_number", normalizedIdNumber)
+    .is("deleted_at", null)
+    .limit(1);
+
+  if (excludeCasualtyId) {
+    query = query.neq("id", excludeCasualtyId);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw new Error(
+      `Unable to check duplicate ID number: ${error.message}`,
+    );
+  }
+
+  return data?.[0]?.id ?? null;
 }
 
 export async function createCasualty(
@@ -243,6 +283,19 @@ export async function createCasualty(
         success: false,
         message: "This mobile record has already been synchronized.",
         data: existingSubmission,
+      });
+      return;
+    }
+
+    const existingIdNumber = await ensureUniqueIdNumber(
+      person.idNumber,
+    );
+
+    if (existingIdNumber) {
+      response.status(409).json({
+        success: false,
+        message:
+          "A casualty with this ID number already exists. Please generate a new record.",
       });
       return;
     }
@@ -682,6 +735,20 @@ export async function updateCasualty(
     }
 
     if (person) {
+      const existingIdNumber = await ensureUniqueIdNumber(
+        person.idNumber,
+        existingRecord.casualty_id,
+      );
+
+      if (existingIdNumber) {
+        response.status(409).json({
+          success: false,
+          message:
+            "A casualty with this ID number already exists. Please generate a new record.",
+        });
+        return;
+      }
+
       const casualtyUpdates = {
         id_number: trimmedOrNull(person.idNumber),
         id_type: trimmedOrNull(person.idType),

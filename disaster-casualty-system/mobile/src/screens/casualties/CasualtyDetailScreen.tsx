@@ -354,7 +354,10 @@ export default function CasualtyDetailScreen() {
       province: formatValue(record.casualty.province),
       region: formatValue(record.casualty.region),
       incident: record.incident.incident_name,
-      evacuationCenter: formatValue(record.evacuation_center_id),
+      evacuationCenter: formatValue(
+        record.evacuation_center?.center_name ??
+          record.evacuation_center_id,
+      ),
       gpsLocation: formatCoordinates(record),
       dateTime: formatDateTime(record.reported_at),
       status: formatStatus(record.current_status),

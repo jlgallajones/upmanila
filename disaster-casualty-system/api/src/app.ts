@@ -8,6 +8,7 @@ import express, {
 import { incidentRouter } from "./routes/incident.routes.js";
 import { casualtyRouter } from "./routes/casualty.routes.js";
 import { dashboardRouter } from "./routes/dashboard.routes.js";
+import { evacuationCenterRouter } from "./routes/evacuation-center.routes.js";
 import { notificationRouter } from "./routes/notification.routes.js";
 import { profileRouter } from "./routes/profile.routes.js";
 export const app = express();
@@ -38,6 +39,7 @@ app.get("/api/health", (_request: Request, response: Response) => {
 });
 
 app.use("/api/incidents", incidentRouter);
+app.use("/api/evacuation-centers", evacuationCenterRouter);
 app.use("/api/casualties", casualtyRouter);
 app.use("/api/dashboard", dashboardRouter);
 app.use("/api/notifications", notificationRouter);
