@@ -3,6 +3,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   ScrollView,
   StatusBar,
@@ -14,8 +15,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
   getCasualty,
+  getCasualtyStatusHistory,
   type CasualtyRecord,
+  type CasualtyStatusHistoryItem,
 } from "../../api/casualties";
+import {
+  getAttachments,
+  type Attachment,
+} from "../../api/attachments";
 
 const COLORS = {
   maroon: "#7B1113",
@@ -144,6 +151,39 @@ function TimelineItem({
 
         <Text style={styles.timelineTime}>{time}</Text>
         <Text style={styles.timelineUser}>By: {user}</Text>
+      </View>
+    </View>
+  );
+}
+
+function AttachmentCard({ item }: { item: Attachment }) {
+  const isImage = item.mime_type?.startsWith("image/") ?? false;
+
+  return (
+    <View style={styles.attachmentCard}>
+      {isImage && item.signed_url ? (
+        <Image
+          source={{ uri: item.signed_url }}
+          style={styles.attachmentImage}
+          resizeMode="cover"
+        />
+      ) : (
+        <View style={styles.attachmentIcon}>
+          <Ionicons
+            name="document-attach-outline"
+            size={22}
+            color={COLORS.maroon}
+          />
+        </View>
+      )}
+
+      <View style={styles.attachmentInfo}>
+        <Text style={styles.attachmentName} numberOfLines={1}>
+          {item.file_name}
+        </Text>
+        <Text style={styles.attachmentMeta}>
+          {formatDateTime(item.created_at)}
+        </Text>
       </View>
     </View>
   );
@@ -292,6 +332,10 @@ export default function CasualtyDetailScreen() {
 
   const casualtyId = Array.isArray(id) ? id[0] : id;
   const [record, setRecord] = useState<CasualtyRecord | null>(null);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [statusHistory, setStatusHistory] = useState<
+    CasualtyStatusHistoryItem[]
+  >([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] =
     useState<string | null>(null);
@@ -306,8 +350,16 @@ export default function CasualtyDetailScreen() {
     try {
       setErrorMessage(null);
 
-      const data = await getCasualty(casualtyId);
+      const [data, attachmentData, historyData] =
+        await Promise.all([
+          getCasualty(casualtyId),
+          getAttachments(casualtyId),
+          getCasualtyStatusHistory(casualtyId),
+        ]);
+
       setRecord(data);
+      setAttachments(attachmentData);
+      setStatusHistory(historyData);
     } catch (error) {
       console.error("Failed to load casualty detail:", error);
 
@@ -683,13 +735,29 @@ export default function CasualtyDetailScreen() {
         </SectionCard>
 
         <SectionCard title="STATUS TIMELINE">
-          <TimelineItem
-            title={casualty.status}
-            time={formatDateTime(record?.updated_at)}
-            user={casualty.encoderName}
-            color={statusPalette.color}
-            backgroundColor={statusPalette.backgroundColor}
-          />
+          {statusHistory.length > 0
+            ? statusHistory.map((history, index) => {
+                const palette = getStatusPalette(history.new_status);
+                const oldStatus = history.old_status
+                  ? `${formatStatus(history.old_status)} to `
+                  : "";
+
+                return (
+                  <TimelineItem
+                    key={history.id}
+                    title={`${oldStatus}${formatStatus(history.new_status)}`}
+                    time={formatDateTime(history.created_at)}
+                    user={
+                      history.changed_by_user?.full_name ??
+                      "System"
+                    }
+                    color={palette.color}
+                    backgroundColor={palette.backgroundColor}
+                    isLast={false}
+                  />
+                );
+              })
+            : null}
 
           <TimelineItem
             title="Reported"
@@ -707,6 +775,33 @@ export default function CasualtyDetailScreen() {
             backgroundColor={COLORS.greenBackground}
             isLast
           />
+        </SectionCard>
+
+        <SectionCard title="ATTACHMENTS">
+          {attachments.length > 0 ? (
+            <View style={styles.attachmentList}>
+              {attachments.map((attachment) => (
+                <AttachmentCard
+                  key={attachment.id}
+                  item={attachment}
+                />
+              ))}
+            </View>
+          ) : (
+            <View style={styles.emptyAttachmentCard}>
+              <Ionicons
+                name="images-outline"
+                size={31}
+                color={COLORS.secondary}
+              />
+              <Text style={styles.emptyAttachmentTitle}>
+                No attachments yet
+              </Text>
+              <Text style={styles.emptyAttachmentText}>
+                Photos uploaded from add or edit casualty will appear here.
+              </Text>
+            </View>
+          )}
         </SectionCard>
 
         <View style={styles.bottomSpacing} />
@@ -1087,6 +1182,80 @@ const styles = StyleSheet.create({
   timelineUser: {
     color: COLORS.text,
     fontSize: 10,
+    marginTop: 5,
+  },
+
+  attachmentList: {
+    gap: 10,
+  },
+
+  attachmentCard: {
+    minHeight: 66,
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 13,
+    backgroundColor: COLORS.grayBackground,
+  },
+
+  attachmentImage: {
+    width: 58,
+    height: 58,
+    borderRadius: 11,
+    marginRight: 11,
+    backgroundColor: COLORS.border,
+  },
+
+  attachmentIcon: {
+    width: 58,
+    height: 58,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 11,
+    backgroundColor: COLORS.redBackground,
+  },
+
+  attachmentInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  attachmentName: {
+    color: COLORS.text,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
+  attachmentMeta: {
+    color: COLORS.secondary,
+    fontSize: 10,
+    marginTop: 5,
+  },
+
+  emptyAttachmentCard: {
+    minHeight: 118,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+    borderRadius: 13,
+    backgroundColor: COLORS.grayBackground,
+  },
+
+  emptyAttachmentTitle: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: "800",
+    marginTop: 8,
+  },
+
+  emptyAttachmentText: {
+    color: COLORS.secondary,
+    fontSize: 10,
+    lineHeight: 15,
+    textAlign: "center",
     marginTop: 5,
   },
 

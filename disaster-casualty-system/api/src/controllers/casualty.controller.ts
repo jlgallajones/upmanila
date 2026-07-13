@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 
 import { supabase } from "../config/supabase.js";
+import { getAuthenticatedUser } from "../middleware/auth.js";
 import type {
   CreateCasualtyRequest,
   UpdateCasualtyRequest,
@@ -31,6 +32,22 @@ const identificationStatuses = [
   "partially_identified",
   "unidentified",
 ];
+
+type CreateCasualtyRpcResult = {
+  casualty: unknown;
+  casualtyIncident: {
+    id: string;
+  };
+  incident: {
+    id: string;
+    incidentCode: string;
+    incidentName: string;
+  };
+  encoder: {
+    id: string;
+    fullName: string;
+  };
+};
 
 const casualtyRecordSelect = `
   id,
@@ -144,22 +161,20 @@ export async function createCasualty(
   response: Response,
   next: NextFunction,
 ): Promise<void> {
-  let createdCasualtyId: string | null = null;
-
   try {
     const {
       clientRecordId,
       incidentId,
-      encodedBy,
       person,
       incidentDetails,
     } = request.body;
+    const user = getAuthenticatedUser(request);
 
-    if (!clientRecordId || !incidentId || !encodedBy) {
+    if (!clientRecordId || !incidentId) {
       response.status(400).json({
         success: false,
         message:
-          "clientRecordId, incidentId, and encodedBy are required.",
+          "clientRecordId and incidentId are required.",
       });
       return;
     }
@@ -328,15 +343,13 @@ export async function createCasualty(
     }
 
     /*
-     * Confirm that the encoder exists and is active.
-     * Authentication middleware will replace this manual encodedBy
-     * field later.
+     * Confirm that the authenticated encoder exists and is active.
      */
     const { data: encoder, error: encoderError } =
       await supabase
         .from("users")
         .select("id, full_name, role, is_active")
-        .eq("id", encodedBy)
+        .eq("id", user.id)
         .single();
 
     if (encoderError || !encoder) {
@@ -355,154 +368,37 @@ export async function createCasualty(
       return;
     }
 
-    /*
-     * Create the permanent person record.
-     */
-    const { data: casualty, error: casualtyError } =
-      await supabase
-        .from("casualties")
-        .insert({
-          id_number: person.idNumber?.trim() || null,
-          id_type: person.idType?.trim() || null,
-
-          identification_status:
-            person.identificationStatus,
-
-          first_name: person.firstName?.trim() || null,
-          middle_name: person.middleName?.trim() || null,
-          last_name: person.lastName?.trim() || null,
-          suffix: person.suffix?.trim() || null,
-
-          date_of_birth: person.dateOfBirth || null,
-          estimated_age: person.estimatedAge ?? null,
-
-          sex: person.sex?.trim() || null,
-          civil_status: person.civilStatus?.trim() || null,
-          nationality: person.nationality?.trim() || null,
-          contact_number: person.contactNumber?.trim() || null,
-
-          house_street: person.houseStreet?.trim() || null,
-          barangay: person.barangay?.trim() || null,
-          municipality: person.municipality?.trim() || null,
-          province: person.province?.trim() || null,
-          region: person.region?.trim() || null,
-        })
-        .select()
-        .single();
-
-    if (casualtyError || !casualty) {
-      throw new Error(
-        `Unable to create casualty: ${
-          casualtyError?.message ?? "Unknown database error"
-        }`,
-      );
-    }
-
-    createdCasualtyId = casualty.id;
-
-    /*
-     * Connect the person to the selected disaster.
-     */
-    const { data: casualtyIncident, error: casualtyIncidentError } =
-      await supabase
-        .from("casualty_incidents")
-        .insert({
-          client_record_id: clientRecordId,
-          casualty_id: casualty.id,
-          incident_id: incidentId,
-
-          evacuation_center_id:
-            incidentDetails.evacuationCenterId || null,
-
-          current_status: incidentDetails.currentStatus,
+    const { data, error: transactionError } = await supabase.rpc(
+      "create_casualty_record_transaction",
+      {
+        p_client_record_id: clientRecordId,
+        p_incident_id: incidentId,
+        p_encoded_by: user.id,
+        p_person: person,
+        p_incident_details: {
+          ...incidentDetails,
           severity,
+        },
+      },
+    );
 
-          verification_status: "submitted",
+    const transactionResult =
+      data as CreateCasualtyRpcResult | null;
 
-          current_location:
-            incidentDetails.currentLocation?.trim() || null,
-
-          hospital_name:
-            incidentDetails.hospitalName?.trim() || null,
-
-          visible_injury:
-            incidentDetails.visibleInjury?.trim() || null,
-
-          medical_condition:
-            incidentDetails.medicalCondition?.trim() || null,
-
-          assistance_needed:
-            incidentDetails.assistanceNeeded?.trim() || null,
-
-          assistance_provided:
-            incidentDetails.assistanceProvided?.trim() || null,
-
-          remarks: incidentDetails.remarks?.trim() || null,
-
-          encoded_by: encodedBy,
-
-          reported_at:
-            incidentDetails.reportedAt ??
-            new Date().toISOString(),
-
-          latitude: incidentDetails.latitude ?? null,
-          longitude: incidentDetails.longitude ?? null,
-        })
-        .select()
-        .single();
-
-    if (casualtyIncidentError || !casualtyIncident) {
-      /*
-       * Remove the newly created person if linking it to the incident
-       * fails. Later, this should be replaced with a PostgreSQL RPC
-       * transaction.
-       */
-      await supabase
-        .from("casualties")
-        .delete()
-        .eq("id", casualty.id);
-
-      createdCasualtyId = null;
-
+    if (transactionError || !transactionResult) {
       throw new Error(
-        `Unable to create casualty incident: ${
-          casualtyIncidentError?.message ??
-          "Unknown database error"
+        `Unable to create casualty record: ${
+          transactionError?.message ?? "Unknown database error"
         }`,
       );
     }
-
-    createdCasualtyId = null;
 
     response.status(201).json({
       success: true,
       message: "Casualty record submitted successfully.",
-      data: {
-        casualty,
-        casualtyIncident,
-        incident: {
-          id: incident.id,
-          incidentCode: incident.incident_code,
-          incidentName: incident.incident_name,
-        },
-        encoder: {
-          id: encoder.id,
-          fullName: encoder.full_name,
-        },
-      },
+      data: transactionResult,
     });
   } catch (error) {
-    /*
-     * Safety cleanup in case an unexpected error occurs after creating
-     * the person but before completing the incident connection.
-     */
-    if (createdCasualtyId) {
-      await supabase
-        .from("casualties")
-        .delete()
-        .eq("id", createdCasualtyId);
-    }
-
     next(error);
   }
 }
@@ -589,6 +485,106 @@ export async function getCasualtyById(
   }
 }
 
+export async function getCasualtyStatusHistory(
+  request: Request<{ id: string }>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { id } = request.params;
+
+    const { data: existingRecord, error: existingError } =
+      await supabase
+        .from("casualty_incidents")
+        .select("id")
+        .eq("id", id)
+        .is("deleted_at", null)
+        .maybeSingle();
+
+    if (existingError) {
+      throw new Error(
+        `Unable to retrieve casualty record: ${existingError.message}`,
+      );
+    }
+
+    if (!existingRecord) {
+      response.status(404).json({
+        success: false,
+        message: "Casualty record not found.",
+      });
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("casualty_status_history")
+      .select(
+        "id, casualty_incident_id, old_status, new_status, changed_by, change_reason, created_at",
+      )
+      .eq("casualty_incident_id", id)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      throw new Error(
+        `Unable to retrieve status history: ${error.message}`,
+      );
+    }
+
+    const changedByIds = [
+      ...new Set(
+        (data ?? [])
+          .map((item) => item.changed_by)
+          .filter(
+            (changedBy): changedBy is string =>
+              typeof changedBy === "string" &&
+              changedBy.trim().length > 0,
+          ),
+      ),
+    ];
+
+    const usersById = new Map<
+      string,
+      {
+        id: string;
+        full_name: string;
+        email: string;
+        role: string;
+      }
+    >();
+
+    if (changedByIds.length > 0) {
+      const { data: users, error: usersError } = await supabase
+        .from("users")
+        .select("id, full_name, email, role")
+        .in("id", changedByIds);
+
+      if (usersError) {
+        throw new Error(
+          `Unable to retrieve status history users: ${usersError.message}`,
+        );
+      }
+
+      for (const user of users ?? []) {
+        usersById.set(user.id, user);
+      }
+    }
+
+    const history = (data ?? []).map((item) => ({
+      ...item,
+      changed_by_user: item.changed_by
+        ? usersById.get(item.changed_by) ?? null
+        : null,
+    }));
+
+    response.status(200).json({
+      success: true,
+      count: history.length,
+      data: history,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function updateCasualty(
   request: Request<{ id: string }, unknown, UpdateCasualtyRequest>,
   response: Response,
@@ -597,6 +593,7 @@ export async function updateCasualty(
   try {
     const { id } = request.params;
     const { incidentId, person, incidentDetails } = request.body;
+    const user = getAuthenticatedUser(request);
 
     if (!person && !incidentDetails && !incidentId) {
       response.status(400).json({
@@ -609,7 +606,7 @@ export async function updateCasualty(
     const { data: existingRecord, error: existingError } =
       await supabase
         .from("casualty_incidents")
-        .select("id, casualty_id")
+        .select("id, casualty_id, current_status, encoded_by")
         .eq("id", id)
         .is("deleted_at", null)
         .maybeSingle();
@@ -835,6 +832,26 @@ export async function updateCasualty(
         throw new Error(
           `Unable to update casualty incident: ${incidentError.message}`,
         );
+      }
+
+      if (
+        incidentDetails?.currentStatus &&
+        incidentDetails.currentStatus !== existingRecord.current_status
+      ) {
+        const { error: historyError } = await supabase
+          .from("casualty_status_history")
+          .insert({
+            casualty_incident_id: id,
+            old_status: existingRecord.current_status,
+            new_status: incidentDetails.currentStatus,
+            changed_by: user.id,
+          });
+
+        if (historyError) {
+          throw new Error(
+            `Unable to record status history: ${historyError.message}`,
+          );
+        }
       }
     }
 

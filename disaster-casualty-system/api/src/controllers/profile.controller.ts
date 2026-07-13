@@ -5,6 +5,7 @@ import type {
 } from "express";
 
 import { supabase } from "../config/supabase.js";
+import { getAuthenticatedUser } from "../middleware/auth.js";
 
 type ProfileParams = {
   userId: string;
@@ -17,11 +18,25 @@ export async function getProfile(
 ): Promise<void> {
   try {
     const { userId } = request.params;
+    const authenticatedUser = getAuthenticatedUser(request);
 
     if (!userId) {
       response.status(400).json({
         success: false,
         message: "User ID is required.",
+      });
+      return;
+    }
+
+    const canViewAnyProfile = [
+      "super_admin",
+      "administrator",
+    ].includes(authenticatedUser.role);
+
+    if (userId !== authenticatedUser.id && !canViewAnyProfile) {
+      response.status(403).json({
+        success: false,
+        message: "Your account is not allowed to view this profile.",
       });
       return;
     }

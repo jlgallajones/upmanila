@@ -19,6 +19,7 @@ import {
   getProfile,
   type ProfileData,
 } from "../../api/profile";
+import { clearSession, getCurrentUserId } from "../../auth/session";
 
 const COLORS = {
   maroon: "#7B1113",
@@ -43,8 +44,7 @@ const COLORS = {
   iconBackground: "#F7F9FC",
 };
 
-const testUserId =
-  process.env.EXPO_PUBLIC_TEST_USER_ID;
+const SCREEN_PADDING = 16;
 
 type InformationRowProps = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -179,9 +179,11 @@ export default function ProfileScreen() {
     useState<Date | null>(null);
 
   const loadProfile = useCallback(async () => {
-    if (!testUserId) {
+    const currentUserId = await getCurrentUserId();
+
+    if (!currentUserId) {
       setErrorMessage(
-        "EXPO_PUBLIC_TEST_USER_ID is missing from the mobile .env file.",
+        "No active session found. Please log in again.",
       );
       setIsLoading(false);
       return;
@@ -190,7 +192,7 @@ export default function ProfileScreen() {
     try {
       setErrorMessage(null);
 
-      const data = await getProfile(testUserId);
+      const data = await getProfile(currentUserId);
 
       setProfile(data);
       setLastLoadedAt(new Date());
@@ -242,10 +244,7 @@ export default function ProfileScreen() {
             try {
               setIsLoggingOut(true);
 
-              /*
-               * Supabase sign-out and SecureStore cleanup
-               * will be added when authentication is connected.
-               */
+              await clearSession();
 
               router.replace("/login");
             } finally {
@@ -610,7 +609,7 @@ const styles = StyleSheet.create({
   header: {
     minHeight: 150,
     overflow: "hidden",
-    paddingHorizontal: 8,
+    paddingHorizontal: SCREEN_PADDING,
     paddingTop: 10,
     backgroundColor: COLORS.maroon,
   },
@@ -649,7 +648,7 @@ const styles = StyleSheet.create({
 
   profileCardWrapper: {
     marginTop: -52,
-    paddingHorizontal: 4,
+    paddingHorizontal: SCREEN_PADDING,
     zIndex: 30,
     elevation: 30,
   },
@@ -826,7 +825,7 @@ const styles = StyleSheet.create({
   },
 
   scrollContent: {
-    paddingHorizontal: 4,
+    paddingHorizontal: SCREEN_PADDING,
     paddingTop: 17,
     paddingBottom: 20,
   },

@@ -1,5 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
+import * as FileSystem from "expo-file-system";
+import * as ImagePicker from "expo-image-picker";
+import * as Location from "expo-location";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -18,12 +21,14 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
+  createCasualty,
   getCasualty,
   updateCasualty,
   type CasualtyRecord,
   type CreateCasualtyPayload,
   type UpdateCasualtyPayload,
 } from "../../api/casualties";
+import { uploadAttachment } from "../../api/attachments";
 import {
   createIncident,
   getIncidents,
@@ -34,6 +39,11 @@ import {
   getEvacuationCenters,
   type EvacuationCenter,
 } from "../../api/evacuation-centers";
+import { getCurrentUser } from "../../auth/session";
+import {
+  isNetworkSubmissionError,
+  queueCasualtySubmission,
+} from "../../offline/casualtyQueue";
 
 const COLORS = {
   maroon: "#7B1113",
@@ -58,6 +68,17 @@ const STEPS = [
 
 const SEX_OPTIONS = ["Male", "Female", "Unknown"] as const;
 
+const DISASTER_TYPE_OPTIONS = [
+  "Typhoon",
+  "Flood",
+  "Fire",
+  "Earthquake",
+  "Landslide",
+  "Volcanic Eruption",
+  "Storm Surge",
+  "Other",
+] as const;
+
 const STATUS_OPTIONS = [
   "Safe",
   "Displaced",
@@ -78,7 +99,11 @@ const SEVERITY_OPTIONS = [
   "Critical",
 ] as const;
 
-const testUserId = process.env.EXPO_PUBLIC_TEST_USER_ID;
+const REFERENCE_MANAGER_ROLES = [
+  "super_admin",
+  "administrator",
+  "encoder",
+] as const;
 
 type StepName = (typeof STEPS)[number];
 
@@ -86,8 +111,24 @@ type ChoiceSheetName =
   | "sex"
   | "incident"
   | "evacuationCenter"
+  | "disasterType"
   | "casualtyStatus"
   | "severity";
+
+const MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+] as const;
 
 type FormState = {
   idNumber: string;
@@ -122,6 +163,18 @@ type FormState = {
 
   remarks: string;
 };
+
+type SelectedPhoto = {
+  uri: string;
+  fileName: string;
+  mimeType: string;
+  fileSize?: number;
+};
+
+type EvacuationCenterLabelSource = Pick<
+  EvacuationCenter,
+  "center_name" | "barangay" | "municipality"
+>;
 
 const initialForm: FormState = {
   idNumber: "",
@@ -180,6 +233,21 @@ function titleCase(value: string | null | undefined): string {
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function formatEvacuationCenterLabel(
+  center: EvacuationCenterLabelSource,
+): string {
+  const location = [center.barangay, center.municipality]
+    .filter(
+      (part): part is string =>
+        typeof part === "string" && part.trim().length > 0,
+    )
+    .join(", ");
+
+  return location
+    ? `${center.center_name} - ${location}`
+    : center.center_name;
 }
 
 function normalizeEnumValue(value: string): string {
@@ -264,13 +332,56 @@ function normalizeDate(value: string): string | undefined {
   return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
 }
 
-function formatTodayForInput(): string {
-  const today = new Date();
-  const month = String(today.getMonth() + 1).padStart(2, "0");
-  const day = String(today.getDate()).padStart(2, "0");
-  const year = today.getFullYear();
+function formatDateForInput(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const year = date.getFullYear();
 
   return `${month}/${day}/${year}`;
+}
+
+function formatTodayForInput(): string {
+  return formatDateForInput(new Date());
+}
+
+function parseDateInput(value: string): Date {
+  const normalized = normalizeDate(value);
+
+  if (!normalized) {
+    return new Date();
+  }
+
+  const date = new Date(`${normalized}T00:00:00`);
+
+  return Number.isNaN(date.getTime()) ? new Date() : date;
+}
+
+function getValidDateInput(value: string): Date | null {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  const normalized = normalizeDate(trimmed);
+
+  if (!normalized || !/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    return null;
+  }
+
+  const date = new Date(`${normalized}T00:00:00`);
+
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function isInRange(
+  value: string,
+  min: number,
+  max: number,
+): boolean {
+  const parsed = parseOptionalNumber(value);
+
+  return parsed === undefined || (parsed >= min && parsed <= max);
 }
 
 function generateCasualtyIdNumber(): string {
@@ -288,6 +399,19 @@ function generateCasualtyIdNumber(): string {
     .toUpperCase();
 
   return `CAS-${year}${month}${day}-${hour}${minute}${second}${millisecond}-${suffix}`;
+}
+
+function generateUuid(): string {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
+    /[xy]/g,
+    (character) => {
+      const random = Math.floor(Math.random() * 16);
+      const value =
+        character === "x" ? random : (random & 0x3) | 0x8;
+
+      return value.toString(16);
+    },
+  );
 }
 
 function mapRecordToForm(record: CasualtyRecord): FormState {
@@ -311,8 +435,9 @@ function mapRecordToForm(record: CasualtyRecord): FormState {
     currentLocation: valueOrEmpty(record.current_location),
     evacuationCenterId: valueOrEmpty(record.evacuation_center_id),
     evacuationCenter: valueOrEmpty(
-      record.evacuation_center?.center_name ??
-        record.evacuation_center_id,
+      record.evacuation_center
+        ? formatEvacuationCenterLabel(record.evacuation_center)
+        : record.evacuation_center_id,
     ),
     latitude: valueOrEmpty(record.latitude),
     longitude: valueOrEmpty(record.longitude),
@@ -417,6 +542,7 @@ function SelectField({
 }
 
 type ChoiceOption = {
+  key?: string;
   label: string;
   selected: boolean;
   onSelect: () => void;
@@ -426,6 +552,9 @@ type ChoiceSheetProps = {
   visible: boolean;
   title: string;
   options: ChoiceOption[];
+  searchQuery: string;
+  searchable?: boolean;
+  onSearchChange: (value: string) => void;
   onClose: () => void;
 };
 
@@ -433,8 +562,19 @@ function ChoiceSheet({
   visible,
   title,
   options,
+  searchQuery,
+  searchable = false,
+  onSearchChange,
   onClose,
 }: ChoiceSheetProps) {
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const filteredOptions =
+    searchable && normalizedSearch.length > 0
+      ? options.filter((option) =>
+          option.label.toLowerCase().includes(normalizedSearch),
+        )
+      : options;
+
   return (
     <Modal
       visible={visible}
@@ -466,14 +606,34 @@ function ChoiceSheet({
             </Pressable>
           </View>
 
+          {searchable ? (
+            <View style={styles.sheetSearchBar}>
+              <Ionicons
+                name="search-outline"
+                size={18}
+                color={COLORS.secondaryText}
+              />
+
+              <TextInput
+                value={searchQuery}
+                onChangeText={onSearchChange}
+                style={styles.sheetSearchInput}
+                placeholder="Search options..."
+                placeholderTextColor={COLORS.muted}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+          ) : null}
+
           <ScrollView
             contentContainerStyle={styles.choiceList}
             showsVerticalScrollIndicator={false}
           >
-            {options.length === 0 ? (
+            {filteredOptions.length === 0 ? (
               <View style={styles.choiceEmptyState}>
                 <Text style={styles.choiceEmptyTitle}>
-                  No options available
+                  No options found
                 </Text>
                 <Text style={styles.choiceEmptyText}>
                   Create a new option first, then it will appear here.
@@ -481,9 +641,9 @@ function ChoiceSheet({
               </View>
             ) : null}
 
-            {options.map((option) => (
+            {filteredOptions.map((option) => (
               <Pressable
-                key={option.label}
+                key={option.key ?? option.label}
                 onPress={() => {
                   option.onSelect();
                   onClose();
@@ -520,6 +680,163 @@ function ChoiceSheet({
   );
 }
 
+type DatePickerSheetProps = {
+  visible: boolean;
+  value: string;
+  onSelect: (value: string) => void;
+  onClose: () => void;
+};
+
+function DatePickerSheet({
+  visible,
+  value,
+  onSelect,
+  onClose,
+}: DatePickerSheetProps) {
+  const [visibleMonth, setVisibleMonth] = useState(() =>
+    parseDateInput(value),
+  );
+
+  useEffect(() => {
+    if (visible) {
+      setVisibleMonth(parseDateInput(value));
+    }
+  }, [value, visible]);
+
+  const year = visibleMonth.getFullYear();
+  const month = visibleMonth.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDay = new Date(year, month, 1).getDay();
+  const selectedDate = parseDateInput(value);
+
+  const dayCells = [
+    ...Array.from({ length: firstDay }, (_, index) => ({
+      key: `empty-${index}`,
+      day: null,
+    })),
+    ...Array.from({ length: daysInMonth }, (_, index) => ({
+      key: `day-${index + 1}`,
+      day: index + 1,
+    })),
+  ];
+
+  function moveMonth(offset: number) {
+    setVisibleMonth((current) => {
+      const next = new Date(current);
+      next.setMonth(current.getMonth() + offset);
+      return next;
+    });
+  }
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.sheetBackdrop} onPress={onClose}>
+        <Pressable style={styles.dateSheet}>
+          <View style={styles.sheetHandle} />
+
+          <View style={styles.dateHeader}>
+            <Pressable
+              onPress={() => moveMonth(-1)}
+              style={styles.dateArrowButton}
+            >
+              <Ionicons
+                name="chevron-back"
+                size={20}
+                color={COLORS.maroon}
+              />
+            </Pressable>
+
+            <Text style={styles.dateTitle}>
+              {MONTH_NAMES[month]} {year}
+            </Text>
+
+            <Pressable
+              onPress={() => moveMonth(1)}
+              style={styles.dateArrowButton}
+            >
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={COLORS.maroon}
+              />
+            </Pressable>
+          </View>
+
+          <View style={styles.weekRow}>
+            {["S", "M", "T", "W", "T", "F", "S"].map(
+              (day, index) => (
+                <Text
+                  key={`${day}-${index}`}
+                  style={styles.weekLabel}
+                >
+                  {day}
+                </Text>
+              ),
+            )}
+          </View>
+
+          <View style={styles.dayGrid}>
+            {dayCells.map((cell) => {
+              const isSelected =
+                cell.day !== null &&
+                selectedDate.getFullYear() === year &&
+                selectedDate.getMonth() === month &&
+                selectedDate.getDate() === cell.day;
+
+              return (
+                <Pressable
+                  key={cell.key}
+                  disabled={cell.day === null}
+                  onPress={() => {
+                    if (cell.day === null) {
+                      return;
+                    }
+
+                    onSelect(
+                      formatDateForInput(
+                        new Date(year, month, cell.day),
+                      ),
+                    );
+                    onClose();
+                  }}
+                  style={[
+                    styles.dayCell,
+                    isSelected && styles.dayCellSelected,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.dayText,
+                      isSelected && styles.dayTextSelected,
+                    ]}
+                  >
+                    {cell.day ?? ""}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <Pressable
+            onPress={() => {
+              onSelect(formatTodayForInput());
+              onClose();
+            }}
+            style={styles.todayButton}
+          >
+            <Text style={styles.todayButtonText}>Use Today</Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 export default function AddCasualtyScreen() {
   const { editId } = useLocalSearchParams<{
     editId?: string;
@@ -538,6 +855,9 @@ export default function AddCasualtyScreen() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeChoiceSheet, setActiveChoiceSheet] =
     useState<ChoiceSheetName | null>(null);
+  const [choiceSearchQuery, setChoiceSearchQuery] = useState("");
+  const [isDatePickerVisible, setIsDatePickerVisible] =
+    useState(false);
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [isLoadingIncidents, setIsLoadingIncidents] =
     useState(false);
@@ -564,52 +884,104 @@ export default function AddCasualtyScreen() {
   ] = useState("");
   const [isCreatingEvacuationCenter, setIsCreatingEvacuationCenter] =
     useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(
+    null,
+  );
+  const [currentUserRole, setCurrentUserRole] = useState<
+    string | null
+  >(null);
+  const [selectedPhoto, setSelectedPhoto] =
+    useState<SelectedPhoto | null>(null);
+  const [isCapturingLocation, setIsCapturingLocation] =
+    useState(false);
 
   const stepName: StepName = STEPS[currentStep];
   const screenTitle = isEditing ? "Edit Casualty" : "Add Casualty";
   const finalActionLabel = isEditing
     ? "Save Changes"
     : "Submit Casualty";
+  const hasGpsCoordinates =
+    form.latitude.trim().length > 0 &&
+    form.longitude.trim().length > 0;
+  const locationActionLabel = hasGpsCoordinates
+    ? "Update current GPS location"
+    : "Use current GPS location";
+  const canManageReferenceData =
+    currentUserRole !== null &&
+    REFERENCE_MANAGER_ROLES.includes(
+      currentUserRole as (typeof REFERENCE_MANAGER_ROLES)[number],
+    );
+
+  const personPayload = useMemo<CreateCasualtyPayload["person"]>(
+    () => ({
+      idNumber: form.idNumber,
+      identificationStatus:
+        form.firstName.trim() || form.lastName.trim()
+          ? "identified"
+          : "unidentified",
+      firstName: form.firstName,
+      middleName: form.middleName,
+      lastName: form.lastName,
+      dateOfBirth: normalizeDate(form.dateOfBirth),
+      estimatedAge: parseOptionalInteger(form.age),
+      sex: form.sex,
+      houseStreet: form.houseStreet,
+      barangay: form.barangay,
+      municipality: form.municipality,
+      province: form.province,
+      region: form.region,
+    }),
+    [form],
+  );
+
+  const incidentDetailsPayload = useMemo<
+    CreateCasualtyPayload["incidentDetails"]
+  >(
+    () => ({
+      currentStatus: normalizeStatus(form.casualtyStatus),
+      severity: normalizeSeverity(form.severity),
+      evacuationCenterId:
+        form.evacuationCenterId || undefined,
+      currentLocation: form.currentLocation,
+      hospitalName: form.hospitalName,
+      visibleInjury: form.visibleInjury,
+      medicalCondition: form.medicalCondition,
+      assistanceNeeded: form.assistanceNeeded,
+      assistanceProvided: form.assistanceProvided,
+      remarks: form.remarks,
+      latitude: parseOptionalNumber(form.latitude),
+      longitude: parseOptionalNumber(form.longitude),
+    }),
+    [form],
+  );
 
   const updatePayload = useMemo<UpdateCasualtyPayload>(
     () => ({
       incidentId: form.incidentId || undefined,
-      person: {
-        idNumber: form.idNumber,
-        identificationStatus:
-          form.firstName.trim() || form.lastName.trim()
-            ? "identified"
-            : "unidentified",
-        firstName: form.firstName,
-        middleName: form.middleName,
-        lastName: form.lastName,
-        dateOfBirth: normalizeDate(form.dateOfBirth),
-        estimatedAge: parseOptionalInteger(form.age),
-        sex: form.sex,
-        houseStreet: form.houseStreet,
-        barangay: form.barangay,
-        municipality: form.municipality,
-        province: form.province,
-        region: form.region,
-      },
-      incidentDetails: {
-        currentStatus: normalizeStatus(form.casualtyStatus),
-        severity: normalizeSeverity(form.severity),
-        evacuationCenterId:
-          form.evacuationCenterId || undefined,
-        currentLocation: form.currentLocation,
-        hospitalName: form.hospitalName,
-        visibleInjury: form.visibleInjury,
-        medicalCondition: form.medicalCondition,
-        assistanceNeeded: form.assistanceNeeded,
-        assistanceProvided: form.assistanceProvided,
-        remarks: form.remarks,
-        latitude: parseOptionalNumber(form.latitude),
-        longitude: parseOptionalNumber(form.longitude),
-      },
+      person: personPayload,
+      incidentDetails: incidentDetailsPayload,
     }),
-    [form],
+    [form.incidentId, incidentDetailsPayload, personPayload],
   );
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadCurrentUser() {
+      const user = await getCurrentUser();
+
+      if (isMounted) {
+        setCurrentUserId(user?.id ?? null);
+        setCurrentUserRole(user?.role ?? null);
+      }
+    }
+
+    void loadCurrentUser();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -743,14 +1115,137 @@ export default function AddCasualtyScreen() {
     }));
   }
 
+  function openChoiceSheet(sheetName: ChoiceSheetName) {
+    setChoiceSearchQuery("");
+    setActiveChoiceSheet(sheetName);
+  }
+
+  function isActiveChoiceSheetSearchable(): boolean {
+    return (
+      activeChoiceSheet === "incident" ||
+      activeChoiceSheet === "evacuationCenter"
+    );
+  }
+
+  function validateCurrentStep(): boolean {
+    switch (stepName) {
+      case "Personal":
+        if (!form.firstName.trim() && !form.lastName.trim()) {
+          Alert.alert(
+            "Name required",
+            "Enter at least a first name or last name before continuing.",
+          );
+          return false;
+        }
+
+        if (!form.sex.trim()) {
+          Alert.alert(
+            "Sex required",
+            "Select the casualty sex before continuing.",
+          );
+          return false;
+        }
+
+        if (form.dateOfBirth.trim()) {
+          const dateOfBirth = getValidDateInput(form.dateOfBirth);
+
+          if (!dateOfBirth) {
+            Alert.alert(
+              "Invalid date of birth",
+              "Enter a valid date using mm/dd/yyyy.",
+            );
+            return false;
+          }
+
+          if (dateOfBirth > new Date()) {
+            Alert.alert(
+              "Invalid date of birth",
+              "Date of birth cannot be in the future.",
+            );
+            return false;
+          }
+        }
+
+        return true;
+
+      case "Address":
+        if (!form.barangay.trim() || !form.municipality.trim()) {
+          Alert.alert(
+            "Address required",
+            "Enter the barangay and municipality or city before continuing.",
+          );
+          return false;
+        }
+
+        return true;
+
+      case "Incident":
+        if (!form.incidentId) {
+          Alert.alert(
+            "Incident required",
+            "Choose or create a disaster incident before continuing.",
+          );
+          return false;
+        }
+
+        if (!form.currentLocation.trim()) {
+          Alert.alert(
+            "Current location required",
+            "Enter where the casualty was found before continuing.",
+          );
+          return false;
+        }
+
+        if (!isInRange(form.latitude, -90, 90)) {
+          Alert.alert(
+            "Invalid latitude",
+            "Latitude must be from -90 to 90.",
+          );
+          return false;
+        }
+
+        if (!isInRange(form.longitude, -180, 180)) {
+          Alert.alert(
+            "Invalid longitude",
+            "Longitude must be from -180 to 180.",
+          );
+          return false;
+        }
+
+        return true;
+
+      case "Status":
+        if (!form.casualtyStatus.trim()) {
+          Alert.alert(
+            "Casualty status required",
+            "Select the casualty status before continuing.",
+          );
+          return false;
+        }
+
+        return true;
+
+      case "Remarks":
+        return true;
+    }
+  }
+
   async function handleCreateIncident() {
     const incidentName = newIncidentName.trim();
     const disasterType = newIncidentType.trim();
 
-    if (!testUserId) {
+    if (!currentUserId) {
       Alert.alert(
         "Unable to create incident",
-        "EXPO_PUBLIC_TEST_USER_ID is missing from the mobile .env file.",
+        "Please log in again before creating an incident.",
+      );
+      return;
+    }
+
+    if (!canManageReferenceData) {
+      Alert.alert(
+        "Permission required",
+        "Your account is not allowed to create disaster incidents.",
       );
       return;
     }
@@ -770,7 +1265,6 @@ export default function AddCasualtyScreen() {
       const incident = await createIncident({
         incidentName,
         disasterType,
-        createdBy: testUserId,
         province: form.province || undefined,
         municipality: form.municipality || undefined,
         barangay: form.barangay || undefined,
@@ -820,6 +1314,22 @@ export default function AddCasualtyScreen() {
       return;
     }
 
+    if (!currentUserId) {
+      Alert.alert(
+        "Unable to create evacuation center",
+        "Please log in again before creating an evacuation center.",
+      );
+      return;
+    }
+
+    if (!canManageReferenceData) {
+      Alert.alert(
+        "Permission required",
+        "Your account is not allowed to create evacuation centers.",
+      );
+      return;
+    }
+
     if (!centerName) {
       Alert.alert(
         "Enter center name",
@@ -853,7 +1363,10 @@ export default function AddCasualtyScreen() {
       });
 
       updateField("evacuationCenterId", center.id);
-      updateField("evacuationCenter", center.center_name);
+      updateField(
+        "evacuationCenter",
+        formatEvacuationCenterLabel(center),
+      );
       setNewEvacuationCenterName("");
       setNewEvacuationCenterAddress("");
       setNewEvacuationCenterCapacity("");
@@ -876,6 +1389,168 @@ export default function AddCasualtyScreen() {
     }
   }
 
+  async function setPhotoFromPickerResult(
+    result: ImagePicker.ImagePickerResult,
+  ) {
+    if (result.canceled || result.assets.length === 0) {
+      return;
+    }
+
+    const asset = result.assets[0];
+    const fallbackName = `casualty-photo-${Date.now()}.jpg`;
+
+    setSelectedPhoto({
+      uri: asset.uri,
+      fileName: asset.fileName ?? fallbackName,
+      mimeType: asset.mimeType ?? "image/jpeg",
+      fileSize: asset.fileSize,
+    });
+  }
+
+  async function pickPhotoFromLibrary() {
+    const permission =
+      await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permission.granted) {
+      Alert.alert(
+        "Photo permission needed",
+        "Allow photo library access to attach a casualty photo.",
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.72,
+      allowsEditing: false,
+    });
+
+    await setPhotoFromPickerResult(result);
+  }
+
+  async function takePhotoWithCamera() {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+
+    if (!permission.granted) {
+      Alert.alert(
+        "Camera permission needed",
+        "Allow camera access to capture a casualty photo.",
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.72,
+      allowsEditing: false,
+    });
+
+    await setPhotoFromPickerResult(result);
+  }
+
+  function handlePickPhoto() {
+    Alert.alert("Add casualty photo", "Choose a photo source.", [
+      {
+        text: "Camera",
+        onPress: () => {
+          void takePhotoWithCamera();
+        },
+      },
+      {
+        text: "Photo Library",
+        onPress: () => {
+          void pickPhotoFromLibrary();
+        },
+      },
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+    ]);
+  }
+
+  async function handleUseCurrentLocation() {
+    try {
+      setIsCapturingLocation(true);
+
+      const permission =
+        await Location.requestForegroundPermissionsAsync();
+
+      if (permission.status !== "granted") {
+        Alert.alert(
+          "Location permission needed",
+          "Allow location access to capture the current GPS coordinates.",
+        );
+        return;
+      }
+
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+
+      updateField(
+        "latitude",
+        position.coords.latitude.toFixed(7),
+      );
+      updateField(
+        "longitude",
+        position.coords.longitude.toFixed(7),
+      );
+
+      if (!form.currentLocation.trim()) {
+        updateField(
+          "currentLocation",
+          `${position.coords.latitude.toFixed(5)}, ${position.coords.longitude.toFixed(5)}`,
+        );
+      }
+    } catch (error) {
+      console.error("Failed to capture location:", error);
+
+      Alert.alert(
+        "Unable to capture location",
+        error instanceof Error
+          ? error.message
+          : "Please try again or enter the coordinates manually.",
+      );
+    } finally {
+      setIsCapturingLocation(false);
+    }
+  }
+
+  async function uploadSelectedPhoto(
+    casualtyIncidentId: string,
+  ): Promise<string | null> {
+    if (!selectedPhoto) {
+      return null;
+    }
+
+    try {
+      const base64Data = await FileSystem.readAsStringAsync(
+        selectedPhoto.uri,
+        {
+          encoding: FileSystem.EncodingType.Base64,
+        },
+      );
+
+      await uploadAttachment({
+        casualtyIncidentId,
+        fileName: selectedPhoto.fileName,
+        fileType: "photo",
+        mimeType: selectedPhoto.mimeType,
+        base64Data,
+        fileSizeBytes: selectedPhoto.fileSize,
+      });
+
+      return null;
+    } catch (error) {
+      console.error("Failed to upload casualty photo:", error);
+
+      return error instanceof Error
+        ? error.message
+        : "The photo could not be uploaded.";
+    }
+  }
+
   function getChoiceSheetTitle(): string {
     switch (activeChoiceSheet) {
       case "sex":
@@ -884,6 +1559,8 @@ export default function AddCasualtyScreen() {
         return "Select Disaster Incident";
       case "evacuationCenter":
         return "Select Evacuation Center";
+      case "disasterType":
+        return "Select Disaster Type";
       case "casualtyStatus":
         return "Select Casualty Status";
       case "severity":
@@ -926,6 +1603,7 @@ export default function AddCasualtyScreen() {
               : [];
 
         return incidentOptions.map((incident) => ({
+          key: incident.id,
           label: incident.incident_name,
           selected: form.incidentId === incident.id,
           onSelect: () => {
@@ -964,14 +1642,26 @@ export default function AddCasualtyScreen() {
               : [];
 
         return evacuationOptions.map((center) => ({
-          label: center.center_name,
+          key: center.id,
+          label: formatEvacuationCenterLabel(center),
           selected: form.evacuationCenterId === center.id,
           onSelect: () => {
             updateField("evacuationCenterId", center.id);
-            updateField("evacuationCenter", center.center_name);
+            updateField(
+              "evacuationCenter",
+              formatEvacuationCenterLabel(center),
+            );
           },
         }));
       }
+
+      case "disasterType":
+        return DISASTER_TYPE_OPTIONS.map((option) => ({
+          label: option,
+          selected:
+            newIncidentType.toLowerCase() === option.toLowerCase(),
+          onSelect: () => setNewIncidentType(option),
+        }));
 
       case "casualtyStatus":
         return STATUS_OPTIONS.map((option) => ({
@@ -997,7 +1687,84 @@ export default function AddCasualtyScreen() {
 
   async function handleSubmit() {
     if (!isEditing || !casualtyId) {
-      console.log("Submit casualty:", form);
+      if (!currentUserId) {
+        Alert.alert(
+          "Unable to submit casualty",
+          "Please log in again before submitting this casualty.",
+        );
+        return;
+      }
+
+      if (!form.incidentId) {
+        Alert.alert(
+          "Select a disaster incident",
+          "Choose or create a disaster incident before submitting this casualty.",
+        );
+        setCurrentStep(2);
+        return;
+      }
+
+      try {
+        setIsSubmitting(true);
+
+        const payload: CreateCasualtyPayload = {
+          clientRecordId: generateUuid(),
+          incidentId: form.incidentId,
+          person: personPayload,
+          incidentDetails: incidentDetailsPayload,
+        };
+
+        const response = await createCasualty(payload);
+
+        const createdRecordId =
+          response.data.casualtyIncident.id;
+
+        const photoUploadError =
+          await uploadSelectedPhoto(createdRecordId);
+
+        Alert.alert(
+          "Casualty submitted",
+          photoUploadError
+            ? `The casualty record was saved, but the photo upload failed: ${photoUploadError}`
+            : "The casualty record has been saved successfully.",
+          [
+            {
+              text: "OK",
+              onPress: () =>
+                router.replace(
+                  `/casualty/${encodeURIComponent(createdRecordId)}` as never,
+                ),
+            },
+          ],
+        );
+      } catch (error) {
+        console.error("Failed to submit casualty:", error);
+
+        if (isNetworkSubmissionError(error)) {
+          await queueCasualtySubmission({
+            clientRecordId: generateUuid(),
+            incidentId: form.incidentId,
+            person: personPayload,
+            incidentDetails: incidentDetailsPayload,
+          });
+
+          Alert.alert(
+            "Saved offline",
+            "The casualty record was saved on this device and will sync when the connection is available.",
+          );
+          return;
+        }
+
+        Alert.alert(
+          "Unable to submit casualty",
+          error instanceof Error
+            ? error.message
+            : "Please review the record and try again.",
+        );
+      } finally {
+        setIsSubmitting(false);
+      }
+
       return;
     }
 
@@ -1005,10 +1772,13 @@ export default function AddCasualtyScreen() {
       setIsSubmitting(true);
 
       await updateCasualty(casualtyId, updatePayload);
+      const photoUploadError = await uploadSelectedPhoto(casualtyId);
 
       Alert.alert(
         "Casualty updated",
-        "The casualty record has been saved successfully.",
+        photoUploadError
+          ? `The casualty record was saved, but the photo upload failed: ${photoUploadError}`
+          : "The casualty record has been saved successfully.",
         [
           {
             text: "OK",
@@ -1034,6 +1804,10 @@ export default function AddCasualtyScreen() {
   }
 
   function goNext() {
+    if (!validateCurrentStep()) {
+      return;
+    }
+
     if (currentStep < STEPS.length - 1) {
       setCurrentStep((step) => step + 1);
       return;
@@ -1113,7 +1887,7 @@ export default function AddCasualtyScreen() {
               label="SEX"
               value={form.sex}
               placeholder="Select sex"
-              onPress={() => setActiveChoiceSheet("sex")}
+              onPress={() => openChoiceSheet("sex")}
             />
           </View>
 
@@ -1123,9 +1897,7 @@ export default function AddCasualtyScreen() {
               value={form.dateOfBirth}
               placeholder="mm/dd/yyyy"
               icon="calendar-outline"
-              onPress={() =>
-                updateField("dateOfBirth", formatTodayForInput())
-              }
+              onPress={() => setIsDatePickerVisible(true)}
             />
           </View>
         </View>
@@ -1195,7 +1967,7 @@ export default function AddCasualtyScreen() {
               ? "Loading active incidents..."
               : "Select active incident"
           }
-          onPress={() => setActiveChoiceSheet("incident")}
+          onPress={() => openChoiceSheet("incident")}
         />
 
         {incidentError ? (
@@ -1211,63 +1983,65 @@ export default function AddCasualtyScreen() {
           </View>
         ) : null}
 
-        <View style={styles.quickCreateCard}>
-          <View style={styles.quickCreateHeader}>
-            <Ionicons
-              name="add-circle-outline"
-              size={20}
-              color={COLORS.maroon}
-            />
-            <Text style={styles.quickCreateTitle}>
-              Quick create incident
-            </Text>
-          </View>
-
-          <FormField
-            label="NEW INCIDENT NAME"
-            value={newIncidentName}
-            placeholder="e.g. Flood in Barangay San Isidro"
-            onChangeText={setNewIncidentName}
-          />
-
-          <FormField
-            label="DISASTER TYPE"
-            value={newIncidentType}
-            placeholder="e.g. Flood, Fire, Earthquake"
-            onChangeText={setNewIncidentType}
-          />
-
-          <Pressable
-            disabled={isCreatingIncident}
-            onPress={() => {
-              void handleCreateIncident();
-            }}
-            style={({ pressed }) => [
-              styles.createIncidentButton,
-              isCreatingIncident && styles.disabledButton,
-              pressed && styles.primaryButtonPressed,
-            ]}
-          >
-            <Text style={styles.createIncidentButtonText}>
-              {isCreatingIncident
-                ? "Creating incident..."
-                : "Create and select incident"}
-            </Text>
-
-            {isCreatingIncident ? (
-              <ActivityIndicator
-                size="small"
-                color={COLORS.white}
-              />
-            ) : (
+        {canManageReferenceData ? (
+          <View style={styles.quickCreateCard}>
+            <View style={styles.quickCreateHeader}>
               <Ionicons
-                name="checkmark-circle-outline"
-                size={18}
-                color={COLORS.white}
+                name="add-circle-outline"
+                size={20}
+                color={COLORS.maroon}
               />
-            )}
-          </Pressable>
-        </View>
+              <Text style={styles.quickCreateTitle}>
+                Quick create incident
+              </Text>
+            </View>
+
+            <FormField
+              label="NEW INCIDENT NAME"
+              value={newIncidentName}
+              placeholder="e.g. Flood in Barangay San Isidro"
+              onChangeText={setNewIncidentName}
+            />
+
+            <SelectField
+              label="DISASTER TYPE"
+              value={newIncidentType}
+              placeholder="Select disaster type"
+              onPress={() => openChoiceSheet("disasterType")}
+            />
+
+            <Pressable
+              disabled={isCreatingIncident}
+              onPress={() => {
+                void handleCreateIncident();
+              }}
+              style={({ pressed }) => [
+                styles.createIncidentButton,
+                isCreatingIncident && styles.disabledButton,
+                pressed && styles.primaryButtonPressed,
+              ]}
+            >
+              <Text style={styles.createIncidentButtonText}>
+                {isCreatingIncident
+                  ? "Creating incident..."
+                  : "Create and select incident"}
+              </Text>
+
+              {isCreatingIncident ? (
+                <ActivityIndicator
+                  size="small"
+                  color={COLORS.white}
+                />
+              ) : (
+                <Ionicons
+                  name="checkmark-circle-outline"
+                  size={18}
+                  color={COLORS.white}
+                />
+              )}
+            </Pressable>
+          </View>
+        ) : null}
 
         <FormField
           label="CURRENT LOCATION"
@@ -1289,7 +2063,7 @@ export default function AddCasualtyScreen() {
                 : "Select evacuation center"
           }
           onPress={() =>
-            setActiveChoiceSheet("evacuationCenter")
+            openChoiceSheet("evacuationCenter")
           }
         />
 
@@ -1306,74 +2080,76 @@ export default function AddCasualtyScreen() {
           </View>
         ) : null}
 
-        <View style={styles.quickCreateCard}>
-          <View style={styles.quickCreateHeader}>
-            <Ionicons
-              name="business-outline"
-              size={20}
-              color={COLORS.maroon}
-            />
-            <Text style={styles.quickCreateTitle}>
-              Quick create evacuation center
-            </Text>
-          </View>
-
-          <FormField
-            label="CENTER NAME"
-            value={newEvacuationCenterName}
-            placeholder="e.g. San Isidro Covered Court"
-            onChangeText={setNewEvacuationCenterName}
-          />
-
-          <FormField
-            label="ADDRESS"
-            value={newEvacuationCenterAddress}
-            placeholder="Street, building, or landmark"
-            onChangeText={setNewEvacuationCenterAddress}
-          />
-
-          <FormField
-            label="CAPACITY"
-            value={newEvacuationCenterCapacity}
-            placeholder="Estimated capacity"
-            keyboardType="numeric"
-            onChangeText={setNewEvacuationCenterCapacity}
-          />
-
-          <Pressable
-            disabled={
-              isCreatingEvacuationCenter || !form.incidentId
-            }
-            onPress={() => {
-              void handleCreateEvacuationCenter();
-            }}
-            style={({ pressed }) => [
-              styles.createIncidentButton,
-              (isCreatingEvacuationCenter || !form.incidentId) &&
-                styles.disabledButton,
-              pressed && styles.primaryButtonPressed,
-            ]}
-          >
-            <Text style={styles.createIncidentButtonText}>
-              {isCreatingEvacuationCenter
-                ? "Creating center..."
-                : "Create and select center"}
-            </Text>
-
-            {isCreatingEvacuationCenter ? (
-              <ActivityIndicator
-                size="small"
-                color={COLORS.white}
-              />
-            ) : (
+        {canManageReferenceData ? (
+          <View style={styles.quickCreateCard}>
+            <View style={styles.quickCreateHeader}>
               <Ionicons
-                name="checkmark-circle-outline"
-                size={18}
-                color={COLORS.white}
+                name="business-outline"
+                size={20}
+                color={COLORS.maroon}
               />
-            )}
-          </Pressable>
-        </View>
+              <Text style={styles.quickCreateTitle}>
+                Quick create evacuation center
+              </Text>
+            </View>
+
+            <FormField
+              label="CENTER NAME"
+              value={newEvacuationCenterName}
+              placeholder="e.g. San Isidro Covered Court"
+              onChangeText={setNewEvacuationCenterName}
+            />
+
+            <FormField
+              label="ADDRESS"
+              value={newEvacuationCenterAddress}
+              placeholder="Street, building, or landmark"
+              onChangeText={setNewEvacuationCenterAddress}
+            />
+
+            <FormField
+              label="CAPACITY"
+              value={newEvacuationCenterCapacity}
+              placeholder="Estimated capacity"
+              keyboardType="numeric"
+              onChangeText={setNewEvacuationCenterCapacity}
+            />
+
+            <Pressable
+              disabled={
+                isCreatingEvacuationCenter || !form.incidentId
+              }
+              onPress={() => {
+                void handleCreateEvacuationCenter();
+              }}
+              style={({ pressed }) => [
+                styles.createIncidentButton,
+                (isCreatingEvacuationCenter || !form.incidentId) &&
+                  styles.disabledButton,
+                pressed && styles.primaryButtonPressed,
+              ]}
+            >
+              <Text style={styles.createIncidentButtonText}>
+                {isCreatingEvacuationCenter
+                  ? "Creating center..."
+                  : "Create and select center"}
+              </Text>
+
+              {isCreatingEvacuationCenter ? (
+                <ActivityIndicator
+                  size="small"
+                  color={COLORS.white}
+                />
+              ) : (
+                <Ionicons
+                  name="checkmark-circle-outline"
+                  size={18}
+                  color={COLORS.white}
+                />
+              )}
+            </Pressable>
+          </View>
+        ) : null}
 
         <View style={styles.twoColumnRow}>
           <View style={styles.halfColumn}>
@@ -1401,14 +2177,32 @@ export default function AddCasualtyScreen() {
           </View>
         </View>
 
-        <Pressable style={styles.locationButton}>
-          <Ionicons
-            name="locate-outline"
-            size={19}
-            color={COLORS.maroon}
-          />
+        <Pressable
+          disabled={isCapturingLocation}
+          onPress={() => {
+            void handleUseCurrentLocation();
+          }}
+          style={[
+            styles.locationButton,
+            isCapturingLocation && styles.disabledButton,
+          ]}
+        >
+          {isCapturingLocation ? (
+            <ActivityIndicator
+              size="small"
+              color={COLORS.maroon}
+            />
+          ) : (
+            <Ionicons
+              name="locate-outline"
+              size={19}
+              color={COLORS.maroon}
+            />
+          )}
           <Text style={styles.locationButtonText}>
-            Use current GPS location
+            {isCapturingLocation
+              ? "Capturing GPS location..."
+              : locationActionLabel}
           </Text>
         </Pressable>
       </>
@@ -1423,7 +2217,7 @@ export default function AddCasualtyScreen() {
           value={form.casualtyStatus}
           placeholder="Select status"
           onPress={() =>
-            setActiveChoiceSheet("casualtyStatus")
+            openChoiceSheet("casualtyStatus")
           }
         />
 
@@ -1431,7 +2225,7 @@ export default function AddCasualtyScreen() {
           label="SEVERITY"
           value={form.severity}
           placeholder="Select severity"
-          onPress={() => setActiveChoiceSheet("severity")}
+          onPress={() => openChoiceSheet("severity")}
         />
 
         <FormField
@@ -1499,7 +2293,15 @@ export default function AddCasualtyScreen() {
           }
         />
 
-        <Pressable style={styles.uploadCard}>
+        <Pressable
+          onPress={() => {
+            void handlePickPhoto();
+          }}
+          style={({ pressed }) => [
+            styles.uploadCard,
+            pressed && styles.pressed,
+          ]}
+        >
           <View style={styles.uploadIcon}>
             <Ionicons
               name="camera-outline"
@@ -1510,10 +2312,14 @@ export default function AddCasualtyScreen() {
 
           <View style={styles.uploadTextWrapper}>
             <Text style={styles.uploadTitle}>
-              Add casualty photo
+              {selectedPhoto
+                ? "Casualty photo selected"
+                : "Add casualty photo"}
             </Text>
             <Text style={styles.uploadDescription}>
-              Capture a photo or select one from the device.
+              {selectedPhoto
+                ? `${selectedPhoto.fileName} - uploads when saved.`
+                : "Select or capture a photo to upload with this record."}
             </Text>
           </View>
 
@@ -1747,7 +2553,17 @@ export default function AddCasualtyScreen() {
         visible={activeChoiceSheet !== null}
         title={getChoiceSheetTitle()}
         options={getChoiceOptions()}
+        searchQuery={choiceSearchQuery}
+        searchable={isActiveChoiceSheetSearchable()}
+        onSearchChange={setChoiceSearchQuery}
         onClose={() => setActiveChoiceSheet(null)}
+      />
+
+      <DatePickerSheet
+        visible={isDatePickerVisible}
+        value={form.dateOfBirth}
+        onSelect={(value) => updateField("dateOfBirth", value)}
+        onClose={() => setIsDatePickerVisible(false)}
       />
     </View>
   );
@@ -1838,6 +2654,24 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: COLORS.fieldBackground,
   },
+  sheetSearchBar: {
+    minHeight: 46,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: COLORS.fieldBorder,
+    borderRadius: 13,
+    backgroundColor: COLORS.fieldBackground,
+    marginBottom: 10,
+  },
+  sheetSearchInput: {
+    flex: 1,
+    minHeight: 44,
+    color: COLORS.text,
+    fontSize: 14,
+    paddingLeft: 9,
+  },
   choiceList: {
     paddingBottom: 4,
     gap: 8,
@@ -1883,6 +2717,82 @@ const styles = StyleSheet.create({
   },
   choiceOptionTextSelected: {
     color: COLORS.maroon,
+  },
+
+  dateSheet: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 24,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    backgroundColor: COLORS.white,
+  },
+  dateHeader: {
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  dateArrowButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFF4F4",
+  },
+  dateTitle: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: "900",
+  },
+  weekRow: {
+    flexDirection: "row",
+    marginTop: 6,
+  },
+  weekLabel: {
+    width: `${100 / 7}%`,
+    color: COLORS.secondaryText,
+    fontSize: 11,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  dayGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginTop: 8,
+  },
+  dayCell: {
+    width: `${100 / 7}%`,
+    height: 42,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dayCellSelected: {
+    borderRadius: 12,
+    backgroundColor: COLORS.maroon,
+  },
+  dayText: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  dayTextSelected: {
+    color: COLORS.white,
+  },
+  todayButton: {
+    minHeight: 45,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+    marginTop: 12,
+    backgroundColor: COLORS.maroon,
+  },
+  todayButtonText: {
+    color: COLORS.white,
+    fontSize: 13,
+    fontWeight: "800",
   },
 
   headerSafeArea: {

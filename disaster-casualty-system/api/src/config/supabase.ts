@@ -23,3 +23,14 @@ export const supabase = createClient(
     },
   },
 );
+
+export const supabaseAuth = createClient(
+  supabaseUrl,
+  supabaseServiceRoleKey,
+  {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  },
+);

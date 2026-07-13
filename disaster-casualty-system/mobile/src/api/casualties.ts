@@ -71,10 +71,32 @@ type CasualtyListResponse = {
   data: CasualtyRecord[];
 };
 
+export type CasualtyStatusHistoryItem = {
+  id: string;
+  casualty_incident_id: string;
+  old_status: string | null;
+  new_status: string;
+  changed_by: string | null;
+  change_reason: string | null;
+  created_at: string;
+  changed_by_user: {
+    id: string;
+    full_name: string;
+    email: string;
+    role: string;
+  } | null;
+};
+
 type CasualtyResponse = {
   success: boolean;
   message?: string;
   data: CasualtyRecord;
+};
+
+type CasualtyStatusHistoryResponse = {
+  success: boolean;
+  count: number;
+  data: CasualtyStatusHistoryItem[];
 };
 
 export async function getCasualties(): Promise<CasualtyRecord[]> {
@@ -94,10 +116,19 @@ export async function getCasualty(
   return response.data.data;
 }
 
+export async function getCasualtyStatusHistory(
+  id: string,
+): Promise<CasualtyStatusHistoryItem[]> {
+  const response = await api.get<CasualtyStatusHistoryResponse>(
+    `/casualties/${encodeURIComponent(id)}/status-history`,
+  );
+
+  return response.data.data;
+}
+
 export type CreateCasualtyPayload = {
   clientRecordId: string;
   incidentId: string;
-  encodedBy: string;
 
   person: {
     idNumber?: string;
@@ -164,7 +195,14 @@ export type CreateCasualtyPayload = {
 type CreateCasualtyResponse = {
   success: boolean;
   message: string;
-  data: unknown;
+  data: {
+    casualty: unknown;
+    casualtyIncident: {
+      id: string;
+    };
+    incident: unknown;
+    encoder: unknown;
+  };
 };
 
 export async function createCasualty(

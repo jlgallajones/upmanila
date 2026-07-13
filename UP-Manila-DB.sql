@@ -477,6 +477,11 @@ CREATE INDEX incidents_location_idx
 CREATE INDEX casualties_id_number_idx
   ON public.casualties(id_number);
 
+CREATE UNIQUE INDEX casualties_id_number_unique_idx
+  ON public.casualties(id_number)
+  WHERE id_number IS NOT NULL
+    AND deleted_at IS NULL;
+
 CREATE INDEX casualties_name_idx
   ON public.casualties(last_name, first_name);
 

@@ -5,6 +5,8 @@ import express, {
   type Response,
 } from "express";
 
+import { attachmentRouter } from "./routes/attachment.routes.js";
+import { authRouter } from "./routes/auth.routes.js";
 import { incidentRouter } from "./routes/incident.routes.js";
 import { casualtyRouter } from "./routes/casualty.routes.js";
 import { dashboardRouter } from "./routes/dashboard.routes.js";
@@ -20,7 +22,7 @@ app.use(
   }),
 );
 
-app.use(express.json({ limit: "10mb" }));
+app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 app.get("/", (_request: Request, response: Response) => {
@@ -39,6 +41,8 @@ app.get("/api/health", (_request: Request, response: Response) => {
 });
 
 app.use("/api/incidents", incidentRouter);
+app.use("/api/auth", authRouter);
+app.use("/api/attachments", attachmentRouter);
 app.use("/api/evacuation-centers", evacuationCenterRouter);
 app.use("/api/casualties", casualtyRouter);
 app.use("/api/dashboard", dashboardRouter);

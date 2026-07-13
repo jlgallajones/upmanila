@@ -31,7 +31,6 @@ type SingleIncidentResponse = {
 export type CreateIncidentPayload = {
   incidentName: string;
   disasterType: string;
-  createdBy: string;
   description?: string;
   province?: string;
   municipality?: string;
@@ -50,6 +49,14 @@ export async function createIncident(
   const response = await api.post<SingleIncidentResponse>(
     "/incidents",
     payload,
+  );
+
+  return response.data.data;
+}
+
+export async function closeIncident(id: string): Promise<Incident> {
+  const response = await api.patch<SingleIncidentResponse>(
+    `/incidents/${encodeURIComponent(id)}/close`,
   );
 
   return response.data.data;

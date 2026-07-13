@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 
 import { supabase } from "../config/supabase.js";
+import { getAuthenticatedUser } from "../middleware/auth.js";
 
 type CreateEvacuationCenterRequest = {
   incidentId: string;
@@ -15,6 +16,12 @@ type CreateEvacuationCenterRequest = {
   latitude?: number;
   longitude?: number;
 };
+
+const evacuationCenterManagerRoles = new Set([
+  "super_admin",
+  "administrator",
+  "encoder",
+]);
 
 const evacuationCenterSelect = `
   id,
@@ -96,13 +103,15 @@ export async function createEvacuationCenter(
       latitude,
       longitude,
     } = request.body;
+    const user = getAuthenticatedUser(request);
 
     const normalizedName = centerName?.trim();
 
     if (!incidentId || !normalizedName) {
       response.status(400).json({
         success: false,
-        message: "incidentId and centerName are required.",
+        message:
+          "incidentId and centerName are required.",
       });
       return;
     }
@@ -150,6 +159,37 @@ export async function createEvacuationCenter(
       response.status(404).json({
         success: false,
         message: "Incident not found.",
+      });
+      return;
+    }
+
+    const { data: creator, error: creatorError } = await supabase
+      .from("users")
+      .select("id, role, is_active")
+      .eq("id", user.id)
+      .single();
+
+    if (creatorError || !creator) {
+      response.status(404).json({
+        success: false,
+        message: "Creator account not found.",
+      });
+      return;
+    }
+
+    if (!creator.is_active) {
+      response.status(403).json({
+        success: false,
+        message: "The creator account is inactive.",
+      });
+      return;
+    }
+
+    if (!evacuationCenterManagerRoles.has(creator.role)) {
+      response.status(403).json({
+        success: false,
+        message:
+          "Your account is not allowed to create evacuation centers.",
       });
       return;
     }

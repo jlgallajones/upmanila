@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -53,6 +53,8 @@ const filters = [
   "Evacuated",
   "Safe",
 ] as const;
+
+const SCREEN_PADDING = 16;
 
 type FilterOption = (typeof filters)[number];
 
@@ -305,7 +307,8 @@ export default function RecordsScreen() {
     }
   }, []);
 
-  useEffect(() => {
+  useFocusEffect(
+    useCallback(() => {
     let isMounted = true;
 
     async function initialize() {
@@ -340,7 +343,8 @@ export default function RecordsScreen() {
     return () => {
       isMounted = false;
     };
-  }, []);
+    }, []),
+  );
 
   const handleRefresh = useCallback(async () => {
     try {
@@ -598,7 +602,7 @@ const styles = StyleSheet.create({
 
   header: {
     backgroundColor: COLORS.maroon,
-    paddingHorizontal: 6,
+    paddingHorizontal: SCREEN_PADDING,
     paddingTop: 10,
     paddingBottom: 18,
   },
@@ -650,7 +654,7 @@ const styles = StyleSheet.create({
   },
 
   filterList: {
-    paddingHorizontal: 2,
+    paddingHorizontal: SCREEN_PADDING,
     paddingVertical: 12,
     gap: 8,
   },
@@ -681,7 +685,7 @@ const styles = StyleSheet.create({
   errorBanner: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginHorizontal: 8,
+    marginHorizontal: SCREEN_PADDING,
     marginTop: 10,
     padding: 12,
     borderRadius: 12,
@@ -725,7 +729,7 @@ const styles = StyleSheet.create({
 
   listContent: {
     flexGrow: 1,
-    paddingHorizontal: 4,
+    paddingHorizontal: SCREEN_PADDING,
     paddingTop: 13,
     paddingBottom: 110,
     gap: 10,

@@ -1,10 +1,23 @@
 import { api } from "./client";
+import type { ProfileUser } from "./profile";
 
-export async function login(email: string, password: string) {
-  const response = await api.post("/login", {
+export type LoginResponse = {
+  success: boolean;
+  data: {
+    user: ProfileUser;
+    accessToken: string | null;
+    refreshToken: string | null;
+  };
+};
+
+export async function login(
+  email: string,
+  password: string,
+): Promise<LoginResponse["data"]> {
+  const response = await api.post<LoginResponse>("/auth/login", {
     email,
     password,
   });
 
-  return response.data;
+  return response.data.data;
 }

@@ -15,6 +15,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { login } from "../../api/auth";
+import { saveSession } from "../../auth/session";
 import EmergencyShield from "../../components/common/EmergencyShield";
 
 const COLORS = {
@@ -52,15 +54,16 @@ export default function LoginScreen() {
     try {
       setIsSubmitting(true);
 
-      /*
-       * Temporary navigation.
-       * Replace this with the real Supabase login later.
-       */
+      const session = await login(email.trim(), password);
+      await saveSession(session);
+
       router.replace("/home");
-    } catch {
+    } catch (error) {
       Alert.alert(
         "Login failed",
-        "Unable to sign in. Please check your credentials.",
+        error instanceof Error
+          ? error.message
+          : "Unable to sign in. Please check your credentials.",
       );
     } finally {
       setIsSubmitting(false);

@@ -24,7 +24,6 @@ export type IdentificationStatus =
 export interface CreateCasualtyRequest {
   clientRecordId: string;
   incidentId: string;
-  encodedBy: string;
 
   person: {
     idNumber?: string;

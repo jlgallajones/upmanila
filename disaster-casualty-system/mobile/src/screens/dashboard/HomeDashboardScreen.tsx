@@ -19,6 +19,10 @@ import {
   type DashboardSummary,
   type RecentActivity,
 } from "../../api/dashboard";
+import {
+  getQueuedCasualtyCount,
+  syncQueuedCasualtySubmissions,
+} from "../../offline/casualtyQueue";
 
 const COLORS = {
   maroon: "#7B1113",
@@ -48,6 +52,8 @@ const initialSummary: DashboardSummary = {
   pendingRecords: 0,
   activeIncidents: 0,
 };
+
+const SCREEN_PADDING = 12;
 
 type SummaryCardProps = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -389,10 +395,15 @@ export default function HomeDashboardScreen() {
 
   const [errorMessage, setErrorMessage] =
     useState<string | null>(null);
+  const [queuedCasualtyCount, setQueuedCasualtyCount] =
+    useState(0);
 
   const loadDashboard = useCallback(async () => {
     try {
       setErrorMessage(null);
+
+      const syncResult = await syncQueuedCasualtySubmissions();
+      setQueuedCasualtyCount(syncResult.remaining);
 
       const [summaryData, activityData] =
         await Promise.all([
@@ -413,6 +424,9 @@ export default function HomeDashboardScreen() {
           ? error.message
           : "Unable to load dashboard information.",
       );
+
+      const queuedCount = await getQueuedCasualtyCount();
+      setQueuedCasualtyCount(queuedCount);
     } finally {
       setIsLoading(false);
     }
@@ -565,6 +579,20 @@ export default function HomeDashboardScreen() {
                 Retry
               </Text>
             </Pressable>
+          </View>
+        ) : null}
+
+        {queuedCasualtyCount > 0 ? (
+          <View style={styles.offlineBanner}>
+            <Ionicons
+              name="cloud-offline-outline"
+              size={19}
+              color={COLORS.orange}
+            />
+            <Text style={styles.offlineBannerText}>
+              {queuedCasualtyCount} casualty record
+              {queuedCasualtyCount === 1 ? "" : "s"} waiting to sync.
+            </Text>
           </View>
         ) : null}
 
@@ -734,7 +762,7 @@ const styles = StyleSheet.create({
   header: {
     overflow: "hidden",
     backgroundColor: COLORS.maroon,
-    paddingHorizontal: 10,
+    paddingHorizontal: SCREEN_PADDING,
     paddingTop: 7,
     paddingBottom: 28,
   },
@@ -857,7 +885,7 @@ const styles = StyleSheet.create({
   },
 
   scrollContent: {
-    paddingHorizontal: 5,
+    paddingHorizontal: SCREEN_PADDING,
     paddingTop: 20,
   },
 
@@ -914,6 +942,27 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     justifyContent: "space-between",
     marginBottom: 26,
+  },
+
+  offlineBanner: {
+    minHeight: 45,
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#F4D3AF",
+    borderRadius: 13,
+    backgroundColor: COLORS.paleOrange,
+    paddingHorizontal: 12,
+    marginBottom: 17,
+    gap: 8,
+  },
+
+  offlineBannerText: {
+    flex: 1,
+    color: COLORS.orange,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "700",
   },
 
   summaryCard: {
