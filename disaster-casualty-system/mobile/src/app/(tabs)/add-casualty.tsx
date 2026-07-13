@@ -1,7 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
-import { useState } from "react";
+import { router, useLocalSearchParams } from "expo-router";
+import { useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -13,6 +15,14 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import {
+  getCasualty,
+  updateCasualty,
+  type CasualtyRecord,
+  type CreateCasualtyPayload,
+  type UpdateCasualtyPayload,
+} from "../../api/casualties";
 
 const COLORS = {
   maroon: "#7B1113",
@@ -53,7 +63,9 @@ type FormState = {
   region: string;
 
   incidentId: string;
+  incidentName: string;
   currentLocation: string;
+  evacuationCenterId: string;
   evacuationCenter: string;
   latitude: string;
   longitude: string;
@@ -85,7 +97,9 @@ const initialForm: FormState = {
   region: "",
 
   incidentId: "",
+  incidentName: "",
   currentLocation: "",
+  evacuationCenterId: "",
   evacuationCenter: "",
   latitude: "",
   longitude: "",
@@ -100,6 +114,149 @@ const initialForm: FormState = {
 
   remarks: "",
 };
+
+type CasualtyStatus =
+  CreateCasualtyPayload["incidentDetails"]["currentStatus"];
+
+type CasualtySeverity =
+  NonNullable<CreateCasualtyPayload["incidentDetails"]["severity"]>;
+
+function valueOrEmpty(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  return String(value);
+}
+
+function titleCase(value: string | null | undefined): string {
+  if (!value) {
+    return "";
+  }
+
+  return value
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function normalizeEnumValue(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, "_");
+}
+
+function normalizeStatus(value: string): CasualtyStatus {
+  const normalized = normalizeEnumValue(value);
+  const allowed: CasualtyStatus[] = [
+    "safe",
+    "displaced",
+    "evacuated",
+    "rescued",
+    "missing",
+    "injured",
+    "hospitalized",
+    "deceased",
+    "unknown",
+  ];
+
+  return allowed.includes(normalized as CasualtyStatus)
+    ? (normalized as CasualtyStatus)
+    : "unknown";
+}
+
+function normalizeSeverity(value: string): CasualtySeverity {
+  const normalized = normalizeEnumValue(value);
+  const allowed: CasualtySeverity[] = [
+    "none",
+    "minor",
+    "moderate",
+    "severe",
+    "critical",
+  ];
+
+  return allowed.includes(normalized as CasualtySeverity)
+    ? (normalized as CasualtySeverity)
+    : "none";
+}
+
+function parseOptionalInteger(value: string): number | undefined {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(trimmed, 10);
+  return Number.isNaN(parsed) ? undefined : parsed;
+}
+
+function parseOptionalNumber(value: string): number | undefined {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const parsed = Number.parseFloat(trimmed);
+  return Number.isNaN(parsed) ? undefined : parsed;
+}
+
+function normalizeDate(value: string): string | undefined {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return undefined;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  const match = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(trimmed);
+
+  if (!match) {
+    return trimmed;
+  }
+
+  const [, month, day, year] = match;
+
+  return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+}
+
+function mapRecordToForm(record: CasualtyRecord): FormState {
+  return {
+    idNumber: valueOrEmpty(record.casualty.id_number),
+    age: valueOrEmpty(record.casualty.estimated_age),
+    firstName: valueOrEmpty(record.casualty.first_name),
+    middleName: valueOrEmpty(record.casualty.middle_name),
+    lastName: valueOrEmpty(record.casualty.last_name),
+    sex: valueOrEmpty(record.casualty.sex),
+    dateOfBirth: valueOrEmpty(record.casualty.date_of_birth),
+
+    houseStreet: valueOrEmpty(record.casualty.house_street),
+    barangay: valueOrEmpty(record.casualty.barangay),
+    municipality: valueOrEmpty(record.casualty.municipality),
+    province: valueOrEmpty(record.casualty.province),
+    region: valueOrEmpty(record.casualty.region),
+
+    incidentId: record.incident.id,
+    incidentName: record.incident.incident_name,
+    currentLocation: valueOrEmpty(record.current_location),
+    evacuationCenterId: valueOrEmpty(record.evacuation_center_id),
+    evacuationCenter: valueOrEmpty(record.evacuation_center_id),
+    latitude: valueOrEmpty(record.latitude),
+    longitude: valueOrEmpty(record.longitude),
+
+    casualtyStatus: titleCase(record.current_status),
+    severity: titleCase(record.severity),
+    hospitalName: valueOrEmpty(record.hospital_name),
+    visibleInjury: valueOrEmpty(record.visible_injury),
+    medicalCondition: valueOrEmpty(record.medical_condition),
+    assistanceNeeded: valueOrEmpty(record.assistance_needed),
+    assistanceProvided: valueOrEmpty(record.assistance_provided),
+
+    remarks: valueOrEmpty(record.remarks),
+  };
+}
 
 type FieldProps = {
   label: string;
@@ -185,10 +342,106 @@ function SelectField({
 }
 
 export default function AddCasualtyScreen() {
+  const { editId } = useLocalSearchParams<{
+    editId?: string;
+  }>();
+
+  const casualtyId = Array.isArray(editId) ? editId[0] : editId;
+  const isEditing = Boolean(casualtyId);
   const [currentStep, setCurrentStep] = useState(0);
   const [form, setForm] = useState<FormState>(initialForm);
+  const [isLoadingRecord, setIsLoadingRecord] =
+    useState(isEditing);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const stepName: StepName = STEPS[currentStep];
+  const screenTitle = isEditing ? "Edit Casualty" : "Add Casualty";
+  const finalActionLabel = isEditing
+    ? "Save Changes"
+    : "Submit Casualty";
+
+  const updatePayload = useMemo<UpdateCasualtyPayload>(
+    () => ({
+      incidentId: form.incidentId || undefined,
+      person: {
+        idNumber: form.idNumber,
+        identificationStatus:
+          form.firstName.trim() || form.lastName.trim()
+            ? "identified"
+            : "unidentified",
+        firstName: form.firstName,
+        middleName: form.middleName,
+        lastName: form.lastName,
+        dateOfBirth: normalizeDate(form.dateOfBirth),
+        estimatedAge: parseOptionalInteger(form.age),
+        sex: form.sex,
+        houseStreet: form.houseStreet,
+        barangay: form.barangay,
+        municipality: form.municipality,
+        province: form.province,
+        region: form.region,
+      },
+      incidentDetails: {
+        currentStatus: normalizeStatus(form.casualtyStatus),
+        severity: normalizeSeverity(form.severity),
+        evacuationCenterId:
+          form.evacuationCenterId || undefined,
+        currentLocation: form.currentLocation,
+        hospitalName: form.hospitalName,
+        visibleInjury: form.visibleInjury,
+        medicalCondition: form.medicalCondition,
+        assistanceNeeded: form.assistanceNeeded,
+        assistanceProvided: form.assistanceProvided,
+        remarks: form.remarks,
+        latitude: parseOptionalNumber(form.latitude),
+        longitude: parseOptionalNumber(form.longitude),
+      },
+    }),
+    [form],
+  );
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadEditableRecord() {
+      if (!casualtyId) {
+        setIsLoadingRecord(false);
+        return;
+      }
+
+      try {
+        setIsLoadingRecord(true);
+        setLoadError(null);
+
+        const record = await getCasualty(casualtyId);
+
+        if (isMounted) {
+          setForm(mapRecordToForm(record));
+        }
+      } catch (error) {
+        console.error("Failed to load casualty for editing:", error);
+
+        if (isMounted) {
+          setLoadError(
+            error instanceof Error
+              ? error.message
+              : "Unable to load casualty for editing.",
+          );
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingRecord(false);
+        }
+      }
+    }
+
+    void loadEditableRecord();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [casualtyId]);
 
   function updateField<K extends keyof FormState>(
     key: K,
@@ -200,13 +453,51 @@ export default function AddCasualtyScreen() {
     }));
   }
 
+  async function handleSubmit() {
+    if (!isEditing || !casualtyId) {
+      console.log("Submit casualty:", form);
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+
+      await updateCasualty(casualtyId, updatePayload);
+
+      Alert.alert(
+        "Casualty updated",
+        "The casualty record has been saved successfully.",
+        [
+          {
+            text: "OK",
+            onPress: () =>
+              router.replace(
+                `/casualty/${encodeURIComponent(casualtyId)}` as never,
+              ),
+          },
+        ],
+      );
+    } catch (error) {
+      console.error("Failed to update casualty:", error);
+
+      Alert.alert(
+        "Unable to save changes",
+        error instanceof Error
+          ? error.message
+          : "Please review the record and try again.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   function goNext() {
     if (currentStep < STEPS.length - 1) {
       setCurrentStep((step) => step + 1);
       return;
     }
 
-    console.log("Submit casualty:", form);
+    void handleSubmit();
   }
 
   function goBack() {
@@ -364,14 +655,18 @@ export default function AddCasualtyScreen() {
       <>
         <SelectField
           label="DISASTER INCIDENT"
-          value={form.incidentId}
+          value={form.incidentName || form.incidentId}
           placeholder="Select active incident"
-          onPress={() =>
+          onPress={() => {
+            if (isEditing) {
+              return;
+            }
+
             updateField(
-              "incidentId",
-              "Typhoon Egay — Level 3 Response",
-            )
-          }
+              "incidentName",
+              "Typhoon Egay - Level 3 Response",
+            );
+          }}
         />
 
         <FormField
@@ -582,6 +877,53 @@ export default function AddCasualtyScreen() {
     }
   }
 
+  if (isLoadingRecord) {
+    return (
+      <View style={styles.centerState}>
+        <ActivityIndicator
+          size="large"
+          color={COLORS.maroon}
+        />
+
+        <Text style={styles.centerStateText}>
+          Loading casualty record...
+        </Text>
+      </View>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <View style={styles.centerState}>
+        <Ionicons
+          name="alert-circle-outline"
+          size={42}
+          color={COLORS.maroon}
+        />
+
+        <Text style={styles.centerStateTitle}>
+          Unable to edit record
+        </Text>
+
+        <Text style={styles.centerStateText}>
+          {loadError}
+        </Text>
+
+        <Pressable
+          onPress={() => router.back()}
+          style={({ pressed }) => [
+            styles.centerStateButton,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Text style={styles.centerStateButtonText}>
+            Go Back
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.screen}>
       <StatusBar
@@ -611,10 +953,10 @@ export default function AddCasualtyScreen() {
 
             <View style={styles.headerTitleWrapper}>
               <Text style={styles.headerTitle}>
-                Add Casualty
+                {screenTitle}
               </Text>
               <Text style={styles.headerSubtitle}>
-                Step {currentStep + 1} of {STEPS.length} —{" "}
+                Step {currentStep + 1} of {STEPS.length} -{" "}
                 {stepName}
               </Text>
             </View>
@@ -683,27 +1025,36 @@ export default function AddCasualtyScreen() {
 
             <Pressable
               onPress={goNext}
+              disabled={isSubmitting}
               style={({ pressed }) => [
                 styles.primaryButton,
                 currentStep === 0 && styles.fullWidthButton,
+                isSubmitting && styles.disabledButton,
                 pressed && styles.primaryButtonPressed,
               ]}
             >
               <Text style={styles.primaryButtonText}>
                 {currentStep === STEPS.length - 1
-                  ? "Submit Casualty"
+                  ? finalActionLabel
                   : "Continue"}
               </Text>
 
-              <Ionicons
-                name={
-                  currentStep === STEPS.length - 1
-                    ? "checkmark-circle-outline"
-                    : "arrow-forward-outline"
-                }
-                size={19}
-                color={COLORS.white}
-              />
+              {isSubmitting ? (
+                <ActivityIndicator
+                  size="small"
+                  color={COLORS.white}
+                />
+              ) : (
+                <Ionicons
+                  name={
+                    currentStep === STEPS.length - 1
+                      ? "checkmark-circle-outline"
+                      : "arrow-forward-outline"
+                  }
+                  size={19}
+                  color={COLORS.white}
+                />
+              )}
             </Pressable>
           </View>
         </SafeAreaView>
@@ -716,6 +1067,40 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  centerState: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 28,
+    backgroundColor: COLORS.background,
+  },
+  centerStateTitle: {
+    color: COLORS.text,
+    fontSize: 17,
+    fontWeight: "900",
+    marginTop: 14,
+  },
+  centerStateText: {
+    color: COLORS.secondaryText,
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: "center",
+    marginTop: 10,
+  },
+  centerStateButton: {
+    minHeight: 43,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 22,
+    borderRadius: 12,
+    marginTop: 18,
+    backgroundColor: COLORS.maroon,
+  },
+  centerStateButtonText: {
+    color: COLORS.white,
+    fontSize: 13,
+    fontWeight: "800",
   },
   keyboardView: {
     flex: 1,
@@ -937,6 +1322,9 @@ const styles = StyleSheet.create({
   primaryButtonPressed: {
     opacity: 0.84,
     transform: [{ scale: 0.99 }],
+  },
+  disabledButton: {
+    opacity: 0.72,
   },
   primaryButtonText: {
     color: COLORS.white,

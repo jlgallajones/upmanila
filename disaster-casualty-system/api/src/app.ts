@@ -9,7 +9,7 @@ import { incidentRouter } from "./routes/incident.routes.js";
 import { casualtyRouter } from "./routes/casualty.routes.js";
 import { dashboardRouter } from "./routes/dashboard.routes.js";
 import { notificationRouter } from "./routes/notification.routes.js";
-
+import { profileRouter } from "./routes/profile.routes.js";
 export const app = express();
 
 app.use(
@@ -41,6 +41,7 @@ app.use("/api/incidents", incidentRouter);
 app.use("/api/casualties", casualtyRouter);
 app.use("/api/dashboard", dashboardRouter);
 app.use("/api/notifications", notificationRouter);
+app.use("/api/profile", profileRouter);
 app.use(
   (
     _request: Request,

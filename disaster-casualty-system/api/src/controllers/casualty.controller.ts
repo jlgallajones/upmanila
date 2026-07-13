@@ -1,7 +1,10 @@
 import type { NextFunction, Request, Response } from "express";
 
 import { supabase } from "../config/supabase.js";
-import type { CreateCasualtyRequest } from "../types/casualty.types.js";
+import type {
+  CreateCasualtyRequest,
+  UpdateCasualtyRequest,
+} from "../types/casualty.types.js";
 
 const casualtyStatuses = [
   "safe",
@@ -28,6 +31,69 @@ const identificationStatuses = [
   "partially_identified",
   "unidentified",
 ];
+
+const casualtyRecordSelect = `
+  id,
+  client_record_id,
+  evacuation_center_id,
+  current_status,
+  severity,
+  verification_status,
+  current_location,
+  hospital_name,
+  visible_injury,
+  medical_condition,
+  assistance_needed,
+  assistance_provided,
+  remarks,
+  reported_at,
+  created_at,
+  updated_at,
+  latitude,
+  longitude,
+  casualty:casualties (
+    id,
+    id_number,
+    id_type,
+    identification_status,
+    first_name,
+    middle_name,
+    last_name,
+    suffix,
+    date_of_birth,
+    estimated_age,
+    sex,
+    contact_number,
+    house_street,
+    barangay,
+    municipality,
+    province,
+    region
+  ),
+  incident:incidents (
+    id,
+    incident_code,
+    incident_name,
+    disaster_type,
+    status
+  ),
+  encoder:users!casualty_incidents_encoded_by_fkey (
+    id,
+    full_name,
+    email,
+    role
+  )
+`;
+
+function trimmedOrNull(
+  value: string | undefined,
+): string | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  return value.trim() || null;
+}
 
 export async function createCasualty(
   request: Request<
@@ -406,54 +472,7 @@ export async function getCasualties(
 
     let query = supabase
       .from("casualty_incidents")
-      .select(`
-        id,
-        client_record_id,
-        current_status,
-        severity,
-        verification_status,
-        current_location,
-        hospital_name,
-        visible_injury,
-        medical_condition,
-        assistance_needed,
-        assistance_provided,
-        remarks,
-        reported_at,
-        created_at,
-        casualty:casualties (
-          id,
-          id_number,
-          id_type,
-          identification_status,
-          first_name,
-          middle_name,
-          last_name,
-          suffix,
-          date_of_birth,
-          estimated_age,
-          sex,
-          contact_number,
-          house_street,
-          barangay,
-          municipality,
-          province,
-          region
-        ),
-        incident:incidents (
-          id,
-          incident_code,
-          incident_name,
-          disaster_type,
-          status
-        ),
-        encoder:users!casualty_incidents_encoded_by_fkey (
-          id,
-          full_name,
-          email,
-          role
-        )
-      `)
+      .select(casualtyRecordSelect)
       .is("deleted_at", null)
       .order("reported_at", { ascending: false });
 
@@ -475,6 +494,302 @@ export async function getCasualties(
       success: true,
       count: data?.length ?? 0,
       data: data ?? [],
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getCasualtyById(
+  request: Request<{ id: string }>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { id } = request.params;
+
+    const { data, error } = await supabase
+      .from("casualty_incidents")
+      .select(casualtyRecordSelect)
+      .eq("id", id)
+      .is("deleted_at", null)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Unable to retrieve casualty: ${error.message}`);
+    }
+
+    if (!data) {
+      response.status(404).json({
+        success: false,
+        message: "Casualty record not found.",
+      });
+      return;
+    }
+
+    response.status(200).json({
+      success: true,
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateCasualty(
+  request: Request<{ id: string }, unknown, UpdateCasualtyRequest>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { id } = request.params;
+    const { incidentId, person, incidentDetails } = request.body;
+
+    if (!person && !incidentDetails && !incidentId) {
+      response.status(400).json({
+        success: false,
+        message: "No casualty updates were provided.",
+      });
+      return;
+    }
+
+    const { data: existingRecord, error: existingError } =
+      await supabase
+        .from("casualty_incidents")
+        .select("id, casualty_id")
+        .eq("id", id)
+        .is("deleted_at", null)
+        .maybeSingle();
+
+    if (existingError) {
+      throw new Error(
+        `Unable to retrieve casualty record: ${existingError.message}`,
+      );
+    }
+
+    if (!existingRecord) {
+      response.status(404).json({
+        success: false,
+        message: "Casualty record not found.",
+      });
+      return;
+    }
+
+    if (
+      person?.identificationStatus !== undefined &&
+      !identificationStatuses.includes(
+        person.identificationStatus,
+      )
+    ) {
+      response.status(400).json({
+        success: false,
+        message: "Invalid identification status.",
+      });
+      return;
+    }
+
+    if (
+      person?.estimatedAge !== undefined &&
+      (
+        !Number.isInteger(person.estimatedAge) ||
+        person.estimatedAge < 0 ||
+        person.estimatedAge > 130
+      )
+    ) {
+      response.status(400).json({
+        success: false,
+        message: "Estimated age must be from 0 to 130.",
+      });
+      return;
+    }
+
+    if (
+      incidentDetails?.currentStatus !== undefined &&
+      !casualtyStatuses.includes(
+        incidentDetails.currentStatus,
+      )
+    ) {
+      response.status(400).json({
+        success: false,
+        message: "Invalid casualty status.",
+      });
+      return;
+    }
+
+    if (
+      incidentDetails?.severity !== undefined &&
+      !casualtySeverities.includes(incidentDetails.severity)
+    ) {
+      response.status(400).json({
+        success: false,
+        message: "Invalid casualty severity.",
+      });
+      return;
+    }
+
+    if (
+      incidentDetails?.latitude !== undefined &&
+      (
+        incidentDetails.latitude < -90 ||
+        incidentDetails.latitude > 90
+      )
+    ) {
+      response.status(400).json({
+        success: false,
+        message: "Latitude must be from -90 to 90.",
+      });
+      return;
+    }
+
+    if (
+      incidentDetails?.longitude !== undefined &&
+      (
+        incidentDetails.longitude < -180 ||
+        incidentDetails.longitude > 180
+      )
+    ) {
+      response.status(400).json({
+        success: false,
+        message: "Longitude must be from -180 to 180.",
+      });
+      return;
+    }
+
+    if (incidentId) {
+      const { data: incident, error: incidentError } =
+        await supabase
+          .from("incidents")
+          .select("id, status")
+          .eq("id", incidentId)
+          .single();
+
+      if (incidentError || !incident) {
+        response.status(404).json({
+          success: false,
+          message: "Incident not found.",
+        });
+        return;
+      }
+
+      if (incident.status !== "active") {
+        response.status(400).json({
+          success: false,
+          message:
+            "Casualties can only be assigned to an active incident.",
+        });
+        return;
+      }
+    }
+
+    if (person) {
+      const casualtyUpdates = {
+        id_number: trimmedOrNull(person.idNumber),
+        id_type: trimmedOrNull(person.idType),
+        identification_status: person.identificationStatus,
+        first_name: trimmedOrNull(person.firstName),
+        middle_name: trimmedOrNull(person.middleName),
+        last_name: trimmedOrNull(person.lastName),
+        suffix: trimmedOrNull(person.suffix),
+        date_of_birth:
+          person.dateOfBirth === undefined
+            ? undefined
+            : person.dateOfBirth || null,
+        estimated_age:
+          person.estimatedAge === undefined
+            ? undefined
+            : person.estimatedAge,
+        sex: trimmedOrNull(person.sex),
+        civil_status: trimmedOrNull(person.civilStatus),
+        nationality: trimmedOrNull(person.nationality),
+        contact_number: trimmedOrNull(person.contactNumber),
+        house_street: trimmedOrNull(person.houseStreet),
+        barangay: trimmedOrNull(person.barangay),
+        municipality: trimmedOrNull(person.municipality),
+        province: trimmedOrNull(person.province),
+        region: trimmedOrNull(person.region),
+      };
+
+      const { error: casualtyError } = await supabase
+        .from("casualties")
+        .update(casualtyUpdates)
+        .eq("id", existingRecord.casualty_id);
+
+      if (casualtyError) {
+        throw new Error(
+          `Unable to update casualty: ${casualtyError.message}`,
+        );
+      }
+    }
+
+    if (incidentDetails || incidentId) {
+      const incidentUpdates = {
+        incident_id: incidentId,
+        evacuation_center_id:
+          incidentDetails?.evacuationCenterId === undefined
+            ? undefined
+            : incidentDetails.evacuationCenterId || null,
+        current_status: incidentDetails?.currentStatus,
+        severity: incidentDetails?.severity,
+        current_location: trimmedOrNull(
+          incidentDetails?.currentLocation,
+        ),
+        hospital_name: trimmedOrNull(
+          incidentDetails?.hospitalName,
+        ),
+        visible_injury: trimmedOrNull(
+          incidentDetails?.visibleInjury,
+        ),
+        medical_condition: trimmedOrNull(
+          incidentDetails?.medicalCondition,
+        ),
+        assistance_needed: trimmedOrNull(
+          incidentDetails?.assistanceNeeded,
+        ),
+        assistance_provided: trimmedOrNull(
+          incidentDetails?.assistanceProvided,
+        ),
+        remarks: trimmedOrNull(incidentDetails?.remarks),
+        latitude:
+          incidentDetails?.latitude === undefined
+            ? undefined
+            : incidentDetails.latitude,
+        longitude:
+          incidentDetails?.longitude === undefined
+            ? undefined
+            : incidentDetails.longitude,
+      };
+
+      const { error: incidentError } = await supabase
+        .from("casualty_incidents")
+        .update(incidentUpdates)
+        .eq("id", id);
+
+      if (incidentError) {
+        throw new Error(
+          `Unable to update casualty incident: ${incidentError.message}`,
+        );
+      }
+    }
+
+    const { data: updatedRecord, error: updatedError } =
+      await supabase
+        .from("casualty_incidents")
+        .select(casualtyRecordSelect)
+        .eq("id", id)
+        .single();
+
+    if (updatedError || !updatedRecord) {
+      throw new Error(
+        `Unable to retrieve updated casualty: ${
+          updatedError?.message ?? "Unknown database error"
+        }`,
+      );
+    }
+
+    response.status(200).json({
+      success: true,
+      message: "Casualty record updated successfully.",
+      data: updatedRecord,
     });
   } catch (error) {
     next(error);

@@ -1,9 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
-import { useState } from "react";
+import Constants from "expo-constants";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Pressable,
+  RefreshControl,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -12,9 +15,13 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import {
+  getProfile,
+  type ProfileData,
+} from "../../api/profile";
+
 const COLORS = {
   maroon: "#7B1113",
-  deepMaroon: "#5E0B0D",
   white: "#FFFFFF",
   background: "#F3F5F9",
   card: "#FFFFFF",
@@ -22,12 +29,22 @@ const COLORS = {
   secondaryText: "#69758C",
   mutedText: "#9AA6BA",
   border: "#E5E9F0",
+
   green: "#28B463",
+  greenDark: "#486B54",
   greenBackground: "#ECFAF1",
+
   red: "#D73333",
   redBackground: "#FFF4F4",
+
   orange: "#E67E22",
+  orangeBackground: "#FFF3E5",
+
+  iconBackground: "#F7F9FC",
 };
+
+const testUserId =
+  process.env.EXPO_PUBLIC_TEST_USER_ID;
 
 type InformationRowProps = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -51,37 +68,163 @@ function InformationRow({
       </View>
 
       <View style={styles.informationContent}>
-        <Text style={styles.informationLabel}>{label}</Text>
-        <Text style={styles.informationValue}>{value}</Text>
+        <Text style={styles.informationLabel}>
+          {label}
+        </Text>
+
+        <Text style={styles.informationValue}>
+          {value}
+        </Text>
       </View>
     </View>
   );
 }
 
 type StatisticProps = {
-  value: string;
+  value: number;
   label: string;
   color: string;
+  loading: boolean;
 };
 
 function Statistic({
   value,
   label,
   color,
+  loading,
 }: StatisticProps) {
   return (
     <View style={styles.statistic}>
-      <Text style={[styles.statisticValue, { color }]}>
-        {value}
-      </Text>
+      {loading ? (
+        <ActivityIndicator
+          size="small"
+          color={color}
+        />
+      ) : (
+        <Text
+          style={[
+            styles.statisticValue,
+            {
+              color,
+            },
+          ]}
+        >
+          {value}
+        </Text>
+      )}
 
-      <Text style={styles.statisticLabel}>{label}</Text>
+      <Text style={styles.statisticLabel}>
+        {label}
+      </Text>
     </View>
   );
 }
 
+function formatRole(role: string): string {
+  return role
+    .split("_")
+    .map(
+      (part) =>
+        part.charAt(0).toUpperCase() +
+        part.slice(1),
+    )
+    .join(" ");
+}
+
+function formatDate(dateString: string): string {
+  const date = new Date(dateString);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Unavailable";
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  }).format(date);
+}
+
+function getInitials(fullName: string): string {
+  const parts = fullName
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  const initials = parts
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("");
+
+  return initials || "U";
+}
+
 export default function ProfileScreen() {
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [profile, setProfile] =
+    useState<ProfileData | null>(null);
+
+  const [isLoading, setIsLoading] =
+    useState(true);
+
+  const [isRefreshing, setIsRefreshing] =
+    useState(false);
+
+  const [isLoggingOut, setIsLoggingOut] =
+    useState(false);
+
+  const [errorMessage, setErrorMessage] =
+    useState<string | null>(null);
+
+  const [lastLoadedAt, setLastLoadedAt] =
+    useState<Date | null>(null);
+
+  const loadProfile = useCallback(async () => {
+    if (!testUserId) {
+      setErrorMessage(
+        "EXPO_PUBLIC_TEST_USER_ID is missing from the mobile .env file.",
+      );
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      setErrorMessage(null);
+
+      const data = await getProfile(testUserId);
+
+      setProfile(data);
+      setLastLoadedAt(new Date());
+    } catch (error) {
+      console.error(
+        "Unable to load profile:",
+        error,
+      );
+
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to load profile information.",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      setIsLoading(true);
+      void loadProfile();
+    }, [loadProfile]),
+  );
+
+  const handleRefresh = useCallback(async () => {
+    try {
+      setIsRefreshing(true);
+      await loadProfile();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [loadProfile]);
 
   function handleLogout() {
     Alert.alert(
@@ -100,7 +243,8 @@ export default function ProfileScreen() {
               setIsLoggingOut(true);
 
               /*
-               * Clear SecureStore authentication data here later.
+               * Supabase sign-out and SecureStore cleanup
+               * will be added when authentication is connected.
                */
 
               router.replace("/login");
@@ -112,6 +256,42 @@ export default function ProfileScreen() {
       ],
     );
   }
+
+  const user = profile?.user;
+
+  const statistics = profile?.statistics ?? {
+    encoded: 0,
+    verified: 0,
+    pending: 0,
+  };
+
+  const fullName =
+    user?.full_name ?? "Loading profile...";
+
+  const role = user
+    ? formatRole(user.role)
+    : "Responder";
+
+  const initials = getInitials(fullName);
+
+  const assignedBarangay =
+    user?.assigned_barangay ??
+    "No assigned barangay";
+
+  const assignedMunicipality =
+    user?.assigned_municipality ??
+    "No assigned municipality";
+
+  const appVersion =
+    Constants.expoConfig?.version ?? "1.0.0";
+
+  const lastSync = lastLoadedAt
+    ? new Intl.DateTimeFormat("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      }).format(lastLoadedAt)
+    : "Not synced";
 
   return (
     <View style={styles.screen}>
@@ -128,49 +308,79 @@ export default function ProfileScreen() {
           <View style={styles.headerDecorationOne} />
           <View style={styles.headerDecorationTwo} />
 
-          <Text style={styles.headerTitle}>My Profile</Text>
+          <Text style={styles.headerTitle}>
+            My Profile
+          </Text>
+
           <Text style={styles.headerSubtitle}>
             Responder Dashboard
           </Text>
         </View>
       </SafeAreaView>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
+      <View style={styles.profileCardWrapper}>
         <View style={styles.profileCard}>
           <View style={styles.profileTopRow}>
             <View style={styles.avatarWrapper}>
               <View style={styles.avatar}>
-                <Text style={styles.avatarText}>M</Text>
+                <Text style={styles.avatarText}>
+                  {initials}
+                </Text>
               </View>
 
               <View style={styles.onlineIndicator}>
-                <View style={styles.onlineIndicatorInner} />
+                <View
+                  style={[
+                    styles.onlineIndicatorInner,
+                    !user?.is_active &&
+                      styles.offlineIndicatorInner,
+                  ]}
+                />
               </View>
             </View>
 
             <View style={styles.profileInformation}>
-              <Text style={styles.profileName}>
-                Carlos Marcos
+              <Text
+                style={styles.profileName}
+                numberOfLines={1}
+              >
+                {fullName}
               </Text>
 
-              <Text style={styles.profileId}>
-                Emergency Responder · ID: ER-2024-0094
+              <Text
+                style={styles.profileId}
+                numberOfLines={2}
+              >
+                {role} · ID:{" "}
+                {user?.id
+                  ? user.id.slice(0, 8).toUpperCase()
+                  : "--------"}
               </Text>
 
               <View style={styles.badgesRow}>
                 <View style={styles.levelBadge}>
                   <Text style={styles.levelBadgeText}>
-                    Level 3 Responder
+                    {role}
                   </Text>
                 </View>
 
-                <View style={styles.activeBadge}>
-                  <Text style={styles.activeBadgeText}>
-                    Active
+                <View
+                  style={[
+                    styles.activeBadge,
+                    !user?.is_active &&
+                      styles.inactiveBadge,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.activeBadgeText,
+                      !user?.is_active &&
+                        styles.inactiveBadgeText,
+                    ]}
+                  >
+                    {user?.is_active
+                      ? "Active"
+                      : "Inactive"}
                   </Text>
                 </View>
               </View>
@@ -181,28 +391,74 @@ export default function ProfileScreen() {
 
           <View style={styles.statisticsRow}>
             <Statistic
-              value="312"
+              value={statistics.encoded}
               label="Encoded"
               color={COLORS.maroon}
+              loading={isLoading}
             />
 
             <View style={styles.statisticDivider} />
 
             <Statistic
-              value="298"
+              value={statistics.verified}
               label="Verified"
-              color="#486B54"
+              color={COLORS.greenDark}
+              loading={isLoading}
             />
 
             <View style={styles.statisticDivider} />
 
             <Statistic
-              value="14"
+              value={statistics.pending}
               label="Pending"
               color={COLORS.orange}
+              loading={isLoading}
             />
           </View>
         </View>
+      </View>
+
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            colors={[COLORS.maroon]}
+            tintColor={COLORS.maroon}
+          />
+        }
+      >
+        {errorMessage ? (
+          <View style={styles.errorCard}>
+            <Ionicons
+              name="alert-circle-outline"
+              size={22}
+              color={COLORS.red}
+            />
+
+            <View style={styles.errorContent}>
+              <Text style={styles.errorTitle}>
+                Unable to load profile
+              </Text>
+
+              <Text style={styles.errorMessage}>
+                {errorMessage}
+              </Text>
+            </View>
+
+            <Pressable
+              onPress={() => void loadProfile()}
+              style={styles.retryButton}
+            >
+              <Text style={styles.retryText}>
+                Retry
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>
@@ -212,75 +468,94 @@ export default function ProfileScreen() {
           <InformationRow
             icon="document-text-outline"
             label="Full Name"
-            value="Carlos P. Marcos"
+            value={user?.full_name ?? "Unavailable"}
           />
 
           <InformationRow
             icon="mail-outline"
             label="Email"
-            value="c.marcos@ndrrmc.gov.ph"
+            value={user?.email ?? "Unavailable"}
           />
 
           <InformationRow
             icon="call-outline"
             label="Mobile"
-            value="+63 917 234 5678"
+            value={
+              user?.phone_number ??
+              "No phone number"
+            }
           />
 
           <InformationRow
             icon="calendar-outline"
             label="Joined"
-            value="March 12, 2024"
+            value={
+              user?.created_at
+                ? formatDate(user.created_at)
+                : "Unavailable"
+            }
           />
         </View>
 
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>ASSIGNMENT</Text>
+          <Text style={styles.sectionTitle}>
+            ASSIGNMENT
+          </Text>
 
           <InformationRow
             icon="location-outline"
             label="Municipality"
-            value="Quezon City"
+            value={assignedMunicipality}
           />
 
           <InformationRow
             icon="map-outline"
-            label="Barangays Covered"
-            value="San Isidro, Batasan, Commonwealth"
+            label="Barangay Covered"
+            value={assignedBarangay}
           />
 
           <InformationRow
-            icon="people-outline"
-            label="Team"
-            value="Alpha Response Team — Unit 4"
+            icon="briefcase-outline"
+            label="Role"
+            value={role}
           />
 
           <InformationRow
-            icon="person-outline"
-            label="Supervisor"
-            value="Insp. Rosario Dizon"
+            icon="shield-checkmark-outline"
+            label="Account Status"
+            value={
+              user?.is_active
+                ? "Active"
+                : "Inactive"
+            }
           />
         </View>
 
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>SYSTEM</Text>
+          <Text style={styles.sectionTitle}>
+            SYSTEM
+          </Text>
 
           <InformationRow
             icon="phone-portrait-outline"
             label="App Version"
-            value="DCMS v2.4.1"
+            value={`DCMS v${appVersion}`}
           />
 
           <InformationRow
             icon="sync-outline"
-            label="Last Sync"
-            value="Today, 02:14 PM"
+            label="Last Profile Sync"
+            value={lastSync}
           />
 
           <InformationRow
-            icon="server-outline"
-            label="Local Storage"
-            value="18.4 MB used"
+            icon="cloud-done-outline"
+            label="Server Connection"
+            value={
+              errorMessage
+                ? "Connection problem"
+                : "Connected"
+            }
           />
         </View>
 
@@ -289,8 +564,10 @@ export default function ProfileScreen() {
           onPress={handleLogout}
           style={({ pressed }) => [
             styles.logoutButton,
-            pressed && styles.logoutButtonPressed,
-            isLoggingOut && styles.logoutButtonDisabled,
+            pressed &&
+              styles.logoutButtonPressed,
+            isLoggingOut &&
+              styles.logoutButtonDisabled,
           ]}
         >
           <Ionicons
@@ -329,13 +606,15 @@ const styles = StyleSheet.create({
   headerSafeArea: {
     backgroundColor: COLORS.maroon,
   },
+
   header: {
-    minHeight: 118,
+    minHeight: 150,
     overflow: "hidden",
     paddingHorizontal: 8,
     paddingTop: 10,
     backgroundColor: COLORS.maroon,
   },
+
   headerDecorationOne: {
     position: "absolute",
     width: 200,
@@ -345,6 +624,7 @@ const styles = StyleSheet.create({
     top: -125,
     backgroundColor: "rgba(255,255,255,0.045)",
   },
+
   headerDecorationTwo: {
     position: "absolute",
     width: 140,
@@ -354,34 +634,33 @@ const styles = StyleSheet.create({
     bottom: -105,
     backgroundColor: "rgba(255,255,255,0.04)",
   },
+
   headerTitle: {
     color: COLORS.white,
     fontSize: 22,
     fontWeight: "800",
   },
+
   headerSubtitle: {
     color: "rgba(255,255,255,0.80)",
     fontSize: 12,
     marginTop: 7,
   },
 
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
+  profileCardWrapper: {
+    marginTop: -52,
     paddingHorizontal: 4,
-    paddingTop: 8,
-    paddingBottom: 20,
+    zIndex: 30,
+    elevation: 30,
   },
 
   profileCard: {
-    marginTop: -22,
     borderRadius: 20,
     paddingHorizontal: 20,
-    paddingTop: 24,
+    paddingTop: 22,
     paddingBottom: 19,
     backgroundColor: COLORS.card,
-    elevation: 4,
+    elevation: 12,
     shadowColor: "#72809A",
     shadowOpacity: 0.13,
     shadowRadius: 12,
@@ -390,14 +669,17 @@ const styles = StyleSheet.create({
       height: 5,
     },
   },
+
   profileTopRow: {
     flexDirection: "row",
     alignItems: "center",
   },
+
   avatarWrapper: {
     position: "relative",
     marginRight: 15,
   },
+
   avatar: {
     width: 70,
     height: 70,
@@ -406,11 +688,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "#6E392C",
   },
+
   avatarText: {
     color: COLORS.white,
-    fontSize: 30,
+    fontSize: 26,
     fontWeight: "900",
   },
+
   onlineIndicator: {
     position: "absolute",
     right: -3,
@@ -422,35 +706,45 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: COLORS.white,
   },
+
   onlineIndicatorInner: {
     width: 15,
     height: 15,
     borderRadius: 8,
     backgroundColor: COLORS.green,
-    borderWidth: 4,
-    borderColor: COLORS.green,
+    borderWidth: 3,
+    borderColor: COLORS.white,
+  },
+
+  offlineIndicatorInner: {
+    backgroundColor: COLORS.red,
   },
 
   profileInformation: {
     flex: 1,
+    minWidth: 0,
   },
+
   profileName: {
     color: COLORS.text,
     fontSize: 19,
     fontWeight: "900",
   },
+
   profileId: {
     color: COLORS.secondaryText,
-    fontSize: 11,
-    lineHeight: 17,
+    fontSize: 10,
+    lineHeight: 16,
     marginTop: 5,
   },
+
   badgesRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 7,
     marginTop: 8,
   },
+
   levelBadge: {
     borderRadius: 7,
     paddingHorizontal: 9,
@@ -459,11 +753,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#F4BFC1",
   },
+
   levelBadgeText: {
     color: COLORS.maroon,
     fontSize: 9,
     fontWeight: "800",
   },
+
   activeBadge: {
     borderRadius: 7,
     paddingHorizontal: 9,
@@ -472,10 +768,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#B9E8C9",
   },
+
   activeBadgeText: {
     color: "#24733E",
     fontSize: 9,
     fontWeight: "800",
+  },
+
+  inactiveBadge: {
+    backgroundColor: COLORS.redBackground,
+    borderColor: "#F3BFC1",
+  },
+
+  inactiveBadgeText: {
+    color: COLORS.red,
   },
 
   divider: {
@@ -490,23 +796,79 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-around",
   },
+
   statistic: {
     flex: 1,
+    minHeight: 52,
     alignItems: "center",
+    justifyContent: "center",
   },
+
   statisticValue: {
     fontSize: 25,
     fontWeight: "900",
   },
+
   statisticLabel: {
     color: COLORS.mutedText,
     fontSize: 10,
     marginTop: 7,
   },
+
   statisticDivider: {
     width: 1,
     height: 47,
     backgroundColor: COLORS.border,
+  },
+
+  scrollView: {
+    flex: 1,
+  },
+
+  scrollContent: {
+    paddingHorizontal: 4,
+    paddingTop: 17,
+    paddingBottom: 20,
+  },
+
+  errorCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 16,
+    padding: 13,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: "#F3C5C7",
+    backgroundColor: COLORS.redBackground,
+  },
+
+  errorContent: {
+    flex: 1,
+    marginLeft: 9,
+  },
+
+  errorTitle: {
+    color: COLORS.red,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
+  errorMessage: {
+    color: COLORS.secondaryText,
+    fontSize: 10,
+    lineHeight: 15,
+    marginTop: 3,
+  },
+
+  retryButton: {
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+
+  retryText: {
+    color: COLORS.maroon,
+    fontSize: 11,
+    fontWeight: "800",
   },
 
   sectionCard: {
@@ -514,7 +876,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 18,
     paddingBottom: 9,
-    marginTop: 17,
+    marginBottom: 17,
     backgroundColor: COLORS.card,
     elevation: 2,
     shadowColor: "#718099",
@@ -525,6 +887,7 @@ const styles = StyleSheet.create({
       height: 4,
     },
   },
+
   sectionTitle: {
     color: COLORS.maroon,
     fontSize: 12,
@@ -538,6 +901,7 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     minHeight: 58,
   },
+
   informationIcon: {
     width: 30,
     height: 30,
@@ -545,18 +909,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginRight: 10,
-    backgroundColor: "#F7F9FC",
+    backgroundColor: COLORS.iconBackground,
     borderWidth: 1,
     borderColor: "#EDF0F5",
   },
+
   informationContent: {
     flex: 1,
     paddingTop: 1,
   },
+
   informationLabel: {
     color: COLORS.mutedText,
     fontSize: 10,
   },
+
   informationValue: {
     color: COLORS.text,
     fontSize: 13,
@@ -570,20 +937,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 18,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "#FFCACA",
     backgroundColor: COLORS.redBackground,
     gap: 9,
   },
+
   logoutButtonPressed: {
     opacity: 0.76,
     transform: [{ scale: 0.99 }],
   },
+
   logoutButtonDisabled: {
     opacity: 0.55,
   },
+
   logoutButtonText: {
     color: COLORS.red,
     fontSize: 15,
@@ -596,12 +965,14 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 24,
   },
+
   footerVersion: {
     color: COLORS.mutedText,
     fontSize: 9,
     textAlign: "center",
     marginTop: 5,
   },
+
   bottomSpacing: {
     height: 25,
   },

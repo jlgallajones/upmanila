@@ -70,3 +70,13 @@ export interface CreateCasualtyRequest {
     reportedAt?: string;
   };
 }
+
+export interface UpdateCasualtyRequest {
+  incidentId?: string;
+
+  person?: Partial<CreateCasualtyRequest["person"]>;
+
+  incidentDetails?: Partial<
+    CreateCasualtyRequest["incidentDetails"]
+  >;
+}

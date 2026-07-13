@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Alert,
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StatusBar,
@@ -10,6 +11,11 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import {
+  getCasualty,
+  type CasualtyRecord,
+} from "../../api/casualties";
 
 const COLORS = {
   maroon: "#7B1113",
@@ -29,6 +35,9 @@ const COLORS = {
 
   blue: "#2582BA",
   blueBackground: "#E4F3FD",
+
+  red: "#C92D32",
+  redBackground: "#FCE6E7",
 
   grayBackground: "#F2F5F9",
 };
@@ -140,42 +149,288 @@ function TimelineItem({
   );
 }
 
+function formatValue(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || value === "") {
+    return "Unavailable";
+  }
+
+  return String(value);
+}
+
+function formatStatus(status: string | null | undefined): string {
+  if (!status) {
+    return "Unknown";
+  }
+
+  return status
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function getFullName(record: CasualtyRecord): string {
+  const parts = [
+    record.casualty.first_name,
+    record.casualty.middle_name,
+    record.casualty.last_name,
+  ].filter(
+    (part): part is string =>
+      typeof part === "string" && part.trim().length > 0,
+  );
+
+  return parts.length > 0
+    ? parts.join(" ")
+    : "Unidentified Casualty";
+}
+
+function getInitials(name: string): string {
+  return (
+    name
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((part) => part.charAt(0).toUpperCase())
+      .join("") || "UC"
+  );
+}
+
+function formatDate(dateString: string | null | undefined): string {
+  if (!dateString) {
+    return "Unavailable";
+  }
+
+  const date = new Date(dateString);
+
+  if (Number.isNaN(date.getTime())) {
+    return dateString;
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  }).format(date);
+}
+
+function formatDateTime(dateString: string | null | undefined): string {
+  if (!dateString) {
+    return "Unavailable";
+  }
+
+  const date = new Date(dateString);
+
+  if (Number.isNaN(date.getTime())) {
+    return dateString;
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(date);
+}
+
+function formatTime(dateString: string | null | undefined): string {
+  if (!dateString) {
+    return "Unavailable";
+  }
+
+  const date = new Date(dateString);
+
+  if (Number.isNaN(date.getTime())) {
+    return dateString;
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(date);
+}
+
+function formatCoordinates(record: CasualtyRecord): string {
+  if (record.latitude === null || record.longitude === null) {
+    return "Unavailable";
+  }
+
+  return `${record.latitude}, ${record.longitude}`;
+}
+
+function getStatusPalette(status: string) {
+  switch (status.toLowerCase()) {
+    case "missing":
+    case "deceased":
+      return {
+        color: COLORS.red,
+        backgroundColor: COLORS.redBackground,
+        borderColor: "#F2B6B8",
+      };
+    case "safe":
+    case "rescued":
+    case "evacuated":
+      return {
+        color: COLORS.green,
+        backgroundColor: COLORS.greenBackground,
+        borderColor: "#A9E7C2",
+      };
+    default:
+      return {
+        color: COLORS.orange,
+        backgroundColor: COLORS.orangeBackground,
+        borderColor: COLORS.orangeBorder,
+      };
+  }
+}
+
 export default function CasualtyDetailScreen() {
   const { id } = useLocalSearchParams<{
     id: string;
   }>();
 
-  const casualty = {
-    id: id ?? "C-2026-001",
-    fullName: "Juan dela Cruz",
-    initials: "J",
-    age: 42,
-    sex: "Male",
-    dateOfBirth: "January 15, 1984",
+  const casualtyId = Array.isArray(id) ? id[0] : id;
+  const [record, setRecord] = useState<CasualtyRecord | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] =
+    useState<string | null>(null);
 
-    street: "123 Rizal Ave., Brgy. San Isidro",
-    municipality: "Quezon City",
-    province: "Metro Manila",
+  const loadCasualty = useCallback(async () => {
+    if (!casualtyId) {
+      setErrorMessage("Casualty record id is missing.");
+      setIsLoading(false);
+      return;
+    }
 
-    incident: "Typhoon Egay",
-    evacuationCenter: "Batasan Elementary School",
-    gpsLocation: "14.6760° N, 121.0437° E",
-    dateTime: "July 10, 2026 · 09:00 AM",
+    try {
+      setErrorMessage(null);
 
-    status: "Injured",
-    injury:
-      "Laceration on right arm, possible fracture — Requires hospital evaluation",
+      const data = await getCasualty(casualtyId);
+      setRecord(data);
+    } catch (error) {
+      console.error("Failed to load casualty detail:", error);
 
-    lastUpdated: "09:14 AM",
-    verified: true,
-  };
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to load casualty details.",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, [casualtyId]);
+
+  useEffect(() => {
+    void loadCasualty();
+  }, [loadCasualty]);
+
+  const casualty = useMemo(() => {
+    if (!record) {
+      return null;
+    }
+
+    const fullName = getFullName(record);
+    const notes = [
+      record.visible_injury,
+      record.medical_condition,
+      record.assistance_needed,
+    ].filter(
+      (part): part is string =>
+        typeof part === "string" && part.trim().length > 0,
+    );
+
+    return {
+      id: record.casualty.id_number ?? record.id.slice(0, 8),
+      recordId: record.id,
+      fullName,
+      initials: getInitials(fullName),
+      age: formatValue(record.casualty.estimated_age),
+      sex: formatValue(record.casualty.sex),
+      dateOfBirth: formatDate(record.casualty.date_of_birth),
+      street: formatValue(record.casualty.house_street),
+      barangay: formatValue(record.casualty.barangay),
+      municipality: formatValue(record.casualty.municipality),
+      province: formatValue(record.casualty.province),
+      region: formatValue(record.casualty.region),
+      incident: record.incident.incident_name,
+      evacuationCenter: formatValue(record.evacuation_center_id),
+      gpsLocation: formatCoordinates(record),
+      dateTime: formatDateTime(record.reported_at),
+      status: formatStatus(record.current_status),
+      severity: formatStatus(record.severity),
+      notes:
+        notes.length > 0
+          ? notes.join("\n")
+          : "No medical notes recorded.",
+      lastUpdated: formatTime(record.updated_at),
+      verified: record.verification_status !== "draft",
+      encoderName: record.encoder.full_name,
+    };
+  }, [record]);
 
   function handleEdit() {
-    Alert.alert(
-      "Edit casualty",
-      `Editing ${casualty.id} will be added later.`,
+    if (!casualty) {
+      return;
+    }
+
+    router.push({
+      pathname: "/add-casualty",
+      params: {
+        editId: casualty.recordId,
+      },
+    } as never);
+  }
+
+  if (isLoading) {
+    return (
+      <View style={styles.centerState}>
+        <ActivityIndicator
+          size="large"
+          color={COLORS.maroon}
+        />
+
+        <Text style={styles.centerStateText}>
+          Loading casualty details...
+        </Text>
+      </View>
     );
   }
+
+  if (errorMessage || !casualty) {
+    return (
+      <View style={styles.centerState}>
+        <Ionicons
+          name="alert-circle-outline"
+          size={42}
+          color={COLORS.maroon}
+        />
+
+        <Text style={styles.centerStateTitle}>
+          Unable to open record
+        </Text>
+
+        <Text style={styles.centerStateText}>
+          {errorMessage ?? "Casualty record unavailable."}
+        </Text>
+
+        <Pressable
+          onPress={() => {
+            setIsLoading(true);
+            void loadCasualty();
+          }}
+          style={({ pressed }) => [
+            styles.retryButton,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  const statusPalette = getStatusPalette(casualty.status);
 
   return (
     <View style={styles.screen}>
@@ -206,7 +461,7 @@ export default function CasualtyDetailScreen() {
           </Pressable>
 
           <Text style={styles.recordCode}>
-            CASUALTY RECORD · {casualty.id}
+            CASUALTY RECORD - {casualty.id}
           </Text>
 
           <Text style={styles.headerName}>
@@ -214,7 +469,15 @@ export default function CasualtyDetailScreen() {
           </Text>
 
           <View style={styles.headerStatusRow}>
-            <View style={styles.headerStatusBadge}>
+            <View
+              style={[
+                styles.headerStatusBadge,
+                {
+                  backgroundColor: statusPalette.color,
+                  borderColor: statusPalette.borderColor,
+                },
+              ]}
+            >
               <View style={styles.headerStatusDot} />
 
               <Text style={styles.headerStatusText}>
@@ -243,7 +506,7 @@ export default function CasualtyDetailScreen() {
             </Text>
 
             <Text style={styles.identityDescription}>
-              {casualty.sex} · {casualty.age} years old ·{" "}
+              {casualty.sex} - {casualty.age} years old -{" "}
               {casualty.dateOfBirth}
             </Text>
 
@@ -276,6 +539,8 @@ export default function CasualtyDetailScreen() {
               styles.editButton,
               pressed && styles.pressed,
             ]}
+            accessibilityRole="button"
+            accessibilityLabel="Edit casualty"
           >
             <Ionicons
               name="create-outline"
@@ -320,6 +585,11 @@ export default function CasualtyDetailScreen() {
           />
 
           <DetailRow
+            label="Barangay"
+            value={casualty.barangay}
+          />
+
+          <DetailRow
             label="Municipality"
             value={casualty.municipality}
           />
@@ -327,6 +597,11 @@ export default function CasualtyDetailScreen() {
           <DetailRow
             label="Province"
             value={casualty.province}
+          />
+
+          <DetailRow
+            label="Region"
+            value={casualty.region}
           />
         </SectionCard>
 
@@ -354,8 +629,23 @@ export default function CasualtyDetailScreen() {
         </SectionCard>
 
         <SectionCard title="MEDICAL STATUS">
-          <View style={styles.medicalStatusCard}>
-            <View style={styles.medicalIcon}>
+          <View
+            style={[
+              styles.medicalStatusCard,
+              {
+                backgroundColor: statusPalette.backgroundColor,
+                borderColor: statusPalette.borderColor,
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.medicalIcon,
+                {
+                  backgroundColor: statusPalette.color,
+                },
+              ]}
+            >
               <Ionicons
                 name="warning-outline"
                 size={26}
@@ -364,12 +654,26 @@ export default function CasualtyDetailScreen() {
             </View>
 
             <View style={styles.medicalContent}>
-              <Text style={styles.medicalTitle}>
-                {casualty.status}
+              <Text
+                style={[
+                  styles.medicalTitle,
+                  {
+                    color: statusPalette.color,
+                  },
+                ]}
+              >
+                {casualty.status} - {casualty.severity}
               </Text>
 
-              <Text style={styles.medicalDescription}>
-                {casualty.injury}
+              <Text
+                style={[
+                  styles.medicalDescription,
+                  {
+                    color: statusPalette.color,
+                  },
+                ]}
+              >
+                {casualty.notes}
               </Text>
             </View>
           </View>
@@ -377,25 +681,25 @@ export default function CasualtyDetailScreen() {
 
         <SectionCard title="STATUS TIMELINE">
           <TimelineItem
-            title="Injured"
-            time="09:14 AM · Jul 10, 2026"
-            user="Responder Marcos"
-            color={COLORS.orange}
-            backgroundColor={COLORS.orangeBackground}
+            title={casualty.status}
+            time={formatDateTime(record?.updated_at)}
+            user={casualty.encoderName}
+            color={statusPalette.color}
+            backgroundColor={statusPalette.backgroundColor}
           />
 
           <TimelineItem
             title="Reported"
-            time="09:05 AM · Jul 10, 2026"
-            user="Responder Marcos"
+            time={casualty.dateTime}
+            user={casualty.encoderName}
             color={COLORS.blue}
             backgroundColor={COLORS.blueBackground}
           />
 
           <TimelineItem
             title="Encoded"
-            time="09:00 AM · Jul 10, 2026"
-            user="Responder Marcos"
+            time={formatDateTime(record?.created_at)}
+            user={casualty.encoderName}
             color={COLORS.green}
             backgroundColor={COLORS.greenBackground}
             isLast
@@ -412,6 +716,45 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+
+  centerState: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 28,
+    backgroundColor: COLORS.background,
+  },
+
+  centerStateTitle: {
+    color: COLORS.text,
+    fontSize: 17,
+    fontWeight: "900",
+    marginTop: 14,
+  },
+
+  centerStateText: {
+    color: COLORS.secondary,
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: "center",
+    marginTop: 9,
+  },
+
+  retryButton: {
+    minHeight: 43,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 22,
+    borderRadius: 12,
+    marginTop: 18,
+    backgroundColor: COLORS.maroon,
+  },
+
+  retryButtonText: {
+    color: COLORS.white,
+    fontSize: 13,
+    fontWeight: "800",
   },
 
   headerSafeArea: {
@@ -471,9 +814,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 12,
     borderRadius: 15,
-    backgroundColor: "#B15A0F",
     borderWidth: 1,
-    borderColor: "#E38E30",
   },
 
   headerStatusDot: {
@@ -539,6 +880,7 @@ const styles = StyleSheet.create({
 
   identityInformation: {
     flex: 1,
+    minWidth: 0,
   },
 
   identityName: {
@@ -663,8 +1005,6 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: COLORS.orangeBorder,
-    backgroundColor: COLORS.orangeBackground,
   },
 
   medicalIcon: {
@@ -674,7 +1014,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
-    backgroundColor: COLORS.orange,
   },
 
   medicalContent: {
@@ -682,13 +1021,11 @@ const styles = StyleSheet.create({
   },
 
   medicalTitle: {
-    color: "#B95307",
     fontSize: 14,
     fontWeight: "900",
   },
 
   medicalDescription: {
-    color: "#C35C0F",
     fontSize: 11,
     lineHeight: 17,
     marginTop: 5,

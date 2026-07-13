@@ -3,23 +3,41 @@ import { api } from "./client";
 export type CasualtyRecord = {
   id: string;
   client_record_id: string;
+  evacuation_center_id: string | null;
   current_status: string;
   severity: string;
   verification_status: string;
   current_location: string | null;
+  hospital_name: string | null;
+  visible_injury: string | null;
+  medical_condition: string | null;
+  assistance_needed: string | null;
+  assistance_provided: string | null;
+  remarks: string | null;
   reported_at: string;
+  created_at: string;
+  updated_at: string;
+  latitude: number | null;
+  longitude: number | null;
 
   casualty: {
     id: string;
     id_number: string | null;
+    id_type: string | null;
+    identification_status: string;
     first_name: string | null;
     middle_name: string | null;
     last_name: string | null;
+    suffix: string | null;
+    date_of_birth: string | null;
     estimated_age: number | null;
     sex: string | null;
+    contact_number: string | null;
+    house_street: string | null;
     barangay: string | null;
     municipality: string | null;
     province: string | null;
+    region: string | null;
   };
 
   incident: {
@@ -44,9 +62,25 @@ type CasualtyListResponse = {
   data: CasualtyRecord[];
 };
 
+type CasualtyResponse = {
+  success: boolean;
+  message?: string;
+  data: CasualtyRecord;
+};
+
 export async function getCasualties(): Promise<CasualtyRecord[]> {
   const response =
     await api.get<CasualtyListResponse>("/casualties");
+
+  return response.data.data;
+}
+
+export async function getCasualty(
+  id: string,
+): Promise<CasualtyRecord> {
+  const response = await api.get<CasualtyResponse>(
+    `/casualties/${encodeURIComponent(id)}`,
+  );
 
   return response.data.data;
 }
@@ -134,4 +168,24 @@ export async function createCasualty(
     );
 
   return response.data;
+}
+
+export type UpdateCasualtyPayload = {
+  incidentId?: string;
+  person?: Partial<CreateCasualtyPayload["person"]>;
+  incidentDetails?: Partial<
+    CreateCasualtyPayload["incidentDetails"]
+  >;
+};
+
+export async function updateCasualty(
+  id: string,
+  payload: UpdateCasualtyPayload,
+): Promise<CasualtyRecord> {
+  const response = await api.put<CasualtyResponse>(
+    `/casualties/${encodeURIComponent(id)}`,
+    payload,
+  );
+
+  return response.data.data;
 }
