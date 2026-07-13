@@ -6,17 +6,19 @@ export default function RootLayout() {
     <>
       <StatusBar style="light" />
 
-      <Stack
-        screenOptions={{
-          headerShown: false,
-        }}
-      >
+      <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="login" />
+
         <Stack.Screen
           name="(tabs)"
+          options={{ animation: "fade" }}
+        />
+
+        <Stack.Screen
+          name="casualty/[id]"
           options={{
-            animation: "fade",
+            animation: "slide_from_right",
           }}
         />
       </Stack>
