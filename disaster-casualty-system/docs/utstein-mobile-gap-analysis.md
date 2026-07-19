@@ -509,8 +509,8 @@ Recommended columns:
 - [x] Add receiving healthcare facility records instead of only free-text hospital names.
 - [x] Add transport tracking: EMS/independent, BLS/ALS, departure time, arrival time, destination.
 - [x] Add incident response timeline fields for notification, activation, EMS arrival, triage, transport, and demobilization.
-- [ ] Add automated SitRep generation from incident, casualty, triage, transport, and facility data.
-- [ ] Add verification/approval workflows for admin and medical personnel.
+- [x] Add automated SitRep generation from incident, casualty, triage, transport, and facility data.
+- [x] Add casualty verification/approval workflows for admin and medical personnel.
 - [ ] Add export support: PDF and CSV.
 
 ### Medium Priority
@@ -616,6 +616,7 @@ The mobile app logs in through the API. The API validates the authenticated user
 - `casualties`
 - `casualty_incidents`
 - `casualty_status_history`
+- `casualty_verification_history`
 - `evacuation_centers`
 - `attachments`
 - `audit_logs`
@@ -634,11 +635,9 @@ The mobile app logs in through the API. The API validates the authenticated user
 ### Main Technical Gaps
 
 - Incident response timeline is now structured for notification, activation, EMS arrival, triage, transport, and demobilization.
-- No structured triage history table yet
-- No structured receiving facility model yet
-- No transport tracking table yet
+- Triage history, receiving facilities, transport tracking, and SitRep generation are now implemented in the prototype.
+- Casualty verification workflow is now implemented for administrators and medical personnel.
 - No ED/hospital resource utilization model yet
-- No automated SitRep generation yet
 - Offline sync only covers casualty creation, not edits, attachments, incidents, or evacuation centers
 
 ## Recommended Next Build Order
@@ -647,6 +646,6 @@ The mobile app logs in through the API. The API validates the authenticated user
 2. Add triage assessment table and mobile triage screen. Done: added `casualty_triage_assessments`, `/api/casualties/:id/triage-history`, mobile Triage step, and casualty detail triage history.
 3. Add transport record table and mobile transport fields. Done: added `casualty_transport_records`, `/api/casualties/:id/transport-history`, mobile Transport step, and casualty detail transport history.
 4. Add incident response timeline screen. Done: added `incident_response_timelines`, `/api/incidents/:id/timeline`, and mobile incident timeline editing.
-5. Add SitRep generation endpoint and dashboard.
-6. Add admin verification and report approval workflow.
+5. Add SitRep generation endpoint and dashboard. Done: added `sitreps`, `/api/incidents/:id/sitreps`, and mobile SitRep generation/viewing from Incident Management.
+6. Add admin verification and report approval workflow. Partially done: casualty verification now supports under-review, approve, reject, notes, and history. SitRep approval and broader user-management workflow still remain.
 7. Expand offline sync to attachments and edits.

@@ -514,6 +514,35 @@ CREATE TABLE public.casualty_status_history (
 );
 
 -- =========================================================
+-- CASUALTY VERIFICATION HISTORY
+-- Review trail for admin and medical approvals/rejections
+-- =========================================================
+
+CREATE TABLE public.casualty_verification_history (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  casualty_incident_id uuid NOT NULL,
+
+  old_status public.verification_status,
+  new_status public.verification_status NOT NULL,
+
+  reviewed_by uuid,
+  review_notes text,
+
+  created_at timestamptz NOT NULL DEFAULT now(),
+
+  CONSTRAINT casualty_verification_history_incident_id_fkey
+    FOREIGN KEY (casualty_incident_id)
+    REFERENCES public.casualty_incidents(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT casualty_verification_history_reviewed_by_fkey
+    FOREIGN KEY (reviewed_by)
+    REFERENCES public.users(id)
+    ON DELETE SET NULL
+);
+
+-- =========================================================
 -- CASUALTY TRIAGE ASSESSMENTS
 -- Stores on-site, facility-arrival, and reassessment triage history
 -- =========================================================
@@ -687,6 +716,53 @@ COMMENT ON COLUMN public.attachments.storage_path IS
 'Path of the uploaded file inside a Supabase Storage bucket.';
 
 -- =========================================================
+-- SITUATION REPORTS
+-- Generated incident snapshots for operational reporting
+-- =========================================================
+
+CREATE TABLE public.sitreps (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  incident_id uuid NOT NULL,
+  report_number varchar(80) UNIQUE NOT NULL,
+
+  period_start timestamptz,
+  period_end timestamptz NOT NULL DEFAULT now(),
+
+  summary text NOT NULL,
+  generated_payload jsonb NOT NULL,
+
+  generated_by uuid,
+  generated_at timestamptz NOT NULL DEFAULT now(),
+
+  status varchar(30) NOT NULL DEFAULT 'generated',
+
+  approved_by uuid,
+  approved_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+
+  CONSTRAINT sitreps_incident_id_fkey
+    FOREIGN KEY (incident_id)
+    REFERENCES public.incidents(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT sitreps_generated_by_fkey
+    FOREIGN KEY (generated_by)
+    REFERENCES public.users(id)
+    ON DELETE SET NULL,
+
+  CONSTRAINT sitreps_approved_by_fkey
+    FOREIGN KEY (approved_by)
+    REFERENCES public.users(id)
+    ON DELETE SET NULL,
+
+  CONSTRAINT sitreps_status_check
+    CHECK (status IN ('generated', 'approved', 'archived'))
+);
+
+-- =========================================================
 -- AUDIT LOGS
 -- =========================================================
 
@@ -808,6 +884,15 @@ CREATE INDEX casualty_status_history_incident_id_idx
 CREATE INDEX casualty_status_history_recorded_at_idx
   ON public.casualty_status_history(recorded_at);
 
+CREATE INDEX casualty_verification_history_incident_idx
+  ON public.casualty_verification_history(
+    casualty_incident_id,
+    created_at DESC
+  );
+
+CREATE INDEX casualty_verification_history_status_idx
+  ON public.casualty_verification_history(new_status);
+
 CREATE INDEX casualty_triage_assessments_incident_idx
   ON public.casualty_triage_assessments(
     casualty_incident_id,
@@ -837,6 +922,12 @@ CREATE INDEX attachments_casualty_incident_id_idx
 
 CREATE INDEX attachments_file_type_idx
   ON public.attachments(file_type);
+
+CREATE INDEX sitreps_incident_generated_idx
+  ON public.sitreps(incident_id, generated_at DESC);
+
+CREATE INDEX sitreps_status_idx
+  ON public.sitreps(status);
 
 CREATE INDEX audit_logs_user_id_idx
   ON public.audit_logs(user_id);
@@ -887,6 +978,11 @@ EXECUTE FUNCTION public.set_updated_at();
 
 CREATE TRIGGER casualties_set_updated_at
 BEFORE UPDATE ON public.casualties
+FOR EACH ROW
+EXECUTE FUNCTION public.set_updated_at();
+
+CREATE TRIGGER sitreps_set_updated_at
+BEFORE UPDATE ON public.sitreps
 FOR EACH ROW
 EXECUTE FUNCTION public.set_updated_at();
 
@@ -996,7 +1092,9 @@ ALTER TABLE public.evacuation_centers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.healthcare_facilities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.casualty_incidents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.casualty_status_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.casualty_verification_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.casualty_triage_assessments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.casualty_transport_records ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.attachments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sitreps ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;

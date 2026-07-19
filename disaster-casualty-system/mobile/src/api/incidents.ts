@@ -36,6 +36,61 @@ export type IncidentResponseTimeline = {
   updated_at: string;
 };
 
+export type IncidentSitrepPayload = {
+  incident: Incident;
+  generatedAt: string;
+  generatedBy: {
+    id: string;
+    fullName: string;
+    role: string;
+  };
+  period: {
+    start: string | null;
+    end: string;
+  };
+  timeline: IncidentResponseTimeline | null;
+  casualtySummary: {
+    total: number;
+    byStatus: Record<string, number>;
+    bySeverity: Record<string, number>;
+    byVerification: Record<string, number>;
+    identified: number;
+    partiallyIdentified: number;
+    unidentified: number;
+  };
+  triageSummary: {
+    totalAssessments: number;
+    latestByCategory: Record<string, number>;
+    latestByStage: Record<string, number>;
+  };
+  transportSummary: {
+    totalRecords: number;
+    required: Record<string, number>;
+    modes: Record<string, number>;
+    emsUnits: Record<string, number>;
+    departedScene: number;
+    arrivedFacility: number;
+  };
+  facilitySummary: {
+    evacuationCenters: Record<string, number>;
+    receivingFacilities: Record<string, number>;
+    activeEvacuationCenterCount?: number;
+  };
+};
+
+export type IncidentSitrep = {
+  id: string;
+  incident_id: string;
+  report_number: string;
+  period_start: string | null;
+  period_end: string;
+  summary: string;
+  generated_payload: IncidentSitrepPayload;
+  generated_by: string | null;
+  generated_at: string;
+  status: string;
+};
+
 type IncidentResponse = {
   success: boolean;
   count: number;
@@ -52,6 +107,12 @@ type IncidentTimelineResponse = {
   success: boolean;
   message?: string;
   data: IncidentResponseTimeline | null;
+};
+
+type IncidentSitrepResponse = {
+  success: boolean;
+  message?: string;
+  data: IncidentSitrep;
 };
 
 export type CreateIncidentPayload = {
@@ -125,6 +186,16 @@ export async function updateIncidentTimeline(
   if (!response.data.data) {
     throw new Error("Incident timeline was not returned.");
   }
+
+  return response.data.data;
+}
+
+export async function generateIncidentSitrep(
+  id: string,
+): Promise<IncidentSitrep> {
+  const response = await api.post<IncidentSitrepResponse>(
+    `/incidents/${encodeURIComponent(id)}/sitreps`,
+  );
 
   return response.data.data;
 }

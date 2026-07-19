@@ -20,10 +20,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import {
   closeIncident,
   createIncident,
+  generateIncidentSitrep,
   getIncidents,
   getIncidentTimeline,
   type Incident,
   type IncidentResponseTimeline,
+  type IncidentSitrep,
   updateIncidentTimeline,
   type UpdateIncidentTimelinePayload,
 } from "../api/incidents";
@@ -157,6 +159,33 @@ function getValidDateTimeInput(value: string): Date | null {
 
 function valueOrEmpty(value: string | null | undefined): string {
   return value ?? "";
+}
+
+function formatCountLabel(value: string): string {
+  return value
+    .split("_")
+    .map(
+      (part) =>
+        part.charAt(0).toUpperCase() + part.slice(1).toLowerCase(),
+    )
+    .join(" ");
+}
+
+function formatCountMap(counts: Record<string, number>): string {
+  const entries = Object.entries(counts).filter(
+    ([, count]) => count > 0,
+  );
+
+  if (entries.length === 0) {
+    return "None recorded";
+  }
+
+  return entries
+    .sort(([first], [second]) => first.localeCompare(second))
+    .map(
+      ([key, count]) => `${formatCountLabel(key)}: ${count}`,
+    )
+    .join("\n");
 }
 
 type TimelineFormState = {
@@ -347,11 +376,15 @@ function IncidentCard({
   canClose,
   onClose,
   onEditTimeline,
+  onGenerateSitrep,
+  isGeneratingSitrep,
 }: {
   incident: Incident;
   canClose: boolean;
   onClose: () => void;
   onEditTimeline: () => void;
+  onGenerateSitrep: () => void;
+  isGeneratingSitrep: boolean;
 }) {
   return (
     <View style={styles.incidentCard}>
@@ -422,6 +455,32 @@ function IncidentCard({
         </Text>
       </Pressable>
 
+      <Pressable
+        disabled={isGeneratingSitrep}
+        onPress={onGenerateSitrep}
+        style={({ pressed }) => [
+          styles.sitrepButton,
+          isGeneratingSitrep && styles.disabledButton,
+          pressed && styles.pressed,
+        ]}
+      >
+        {isGeneratingSitrep ? (
+          <ActivityIndicator
+            size="small"
+            color={COLORS.green}
+          />
+        ) : (
+          <Ionicons
+            name="document-text-outline"
+            size={17}
+            color={COLORS.green}
+          />
+        )}
+        <Text style={styles.sitrepButtonText}>
+          {isGeneratingSitrep ? "Generating..." : "Generate SitRep"}
+        </Text>
+      </Pressable>
+
       {canClose ? (
         <Pressable
           onPress={onClose}
@@ -474,6 +533,11 @@ export default function IncidentsPage() {
     useState<TimelineFormState>(initialTimelineForm);
   const [isLoadingTimeline, setIsLoadingTimeline] = useState(false);
   const [isSavingTimeline, setIsSavingTimeline] = useState(false);
+  const [sitrep, setSitrep] = useState<IncidentSitrep | null>(null);
+  const [isSitrepModalVisible, setIsSitrepModalVisible] =
+    useState(false);
+  const [generatingSitrepIncidentId, setGeneratingSitrepIncidentId] =
+    useState<string | null>(null);
 
   const canCreateIncident = formatRoleAllowed(currentUserRole);
 
@@ -661,6 +725,41 @@ export default function IncidentsPage() {
     } finally {
       setIsLoadingTimeline(false);
     }
+  }
+
+  async function handleGenerateSitrep(incident: Incident) {
+    if (!canCreateIncident && currentUserRole !== "medical_personnel") {
+      Alert.alert(
+        "Permission required",
+        "Your account is not allowed to generate incident SitReps.",
+      );
+      return;
+    }
+
+    try {
+      setGeneratingSitrepIncidentId(incident.id);
+
+      const generated = await generateIncidentSitrep(incident.id);
+
+      setSitrep(generated);
+      setIsSitrepModalVisible(true);
+    } catch (error) {
+      console.error("Unable to generate SitRep:", error);
+
+      Alert.alert(
+        "Unable to generate SitRep",
+        error instanceof Error
+          ? error.message
+          : "Please try again.",
+      );
+    } finally {
+      setGeneratingSitrepIncidentId(null);
+    }
+  }
+
+  function handleCloseSitrepModal() {
+    setIsSitrepModalVisible(false);
+    setSitrep(null);
   }
 
   function handleCloseTimelineModal() {
@@ -880,6 +979,12 @@ export default function IncidentsPage() {
             onEditTimeline={() => {
               void handleOpenTimeline(item);
             }}
+            onGenerateSitrep={() => {
+              void handleGenerateSitrep(item);
+            }}
+            isGeneratingSitrep={
+              generatingSitrepIncidentId === item.id
+            }
           />
         )}
         contentContainerStyle={styles.listContent}
@@ -1221,6 +1326,171 @@ export default function IncidentsPage() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <Modal
+        visible={isSitrepModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCloseSitrepModal}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={handleCloseSitrepModal}
+        >
+          <Pressable style={styles.timelineSheet}>
+            <View style={styles.sheetHandle} />
+
+            <View style={styles.sheetHeader}>
+              <View style={styles.sheetTitleGroup}>
+                <Text style={styles.sheetTitle}>
+                  Generated SitRep
+                </Text>
+                <Text
+                  style={styles.sheetSubtitle}
+                  numberOfLines={1}
+                >
+                  {sitrep?.report_number ?? "Situation report"}
+                </Text>
+              </View>
+              <Pressable
+                onPress={handleCloseSitrepModal}
+                style={styles.sheetCloseButton}
+              >
+                <Ionicons
+                  name="close"
+                  size={20}
+                  color={COLORS.secondaryText}
+                />
+              </Pressable>
+            </View>
+
+            {sitrep ? (
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.timelineScrollContent}
+              >
+                <View style={styles.sitrepSummaryBlock}>
+                  <Text style={styles.sitrepReportNumber}>
+                    {sitrep.report_number}
+                  </Text>
+                  <Text style={styles.sitrepSummaryText}>
+                    {sitrep.summary}
+                  </Text>
+                  <Text style={styles.sitrepMetaText}>
+                    Generated {formatDateTime(sitrep.generated_at)}
+                  </Text>
+                </View>
+
+                <View style={styles.sitrepMetricGrid}>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {sitrep.generated_payload.casualtySummary.total}
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      Casualties
+                    </Text>
+                  </View>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {
+                        sitrep.generated_payload.triageSummary
+                          .totalAssessments
+                      }
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      Triage
+                    </Text>
+                  </View>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {
+                        sitrep.generated_payload.transportSummary
+                          .totalRecords
+                      }
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      Transport
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={styles.fieldLabel}>CASUALTY STATUS</Text>
+                <Text style={styles.sitrepSectionText}>
+                  {formatCountMap(
+                    sitrep.generated_payload.casualtySummary.byStatus,
+                  )}
+                </Text>
+
+                <Text style={styles.fieldLabel}>SEVERITY</Text>
+                <Text style={styles.sitrepSectionText}>
+                  {formatCountMap(
+                    sitrep.generated_payload.casualtySummary
+                      .bySeverity,
+                  )}
+                </Text>
+
+                <Text style={styles.fieldLabel}>LATEST TRIAGE</Text>
+                <Text style={styles.sitrepSectionText}>
+                  {formatCountMap(
+                    sitrep.generated_payload.triageSummary
+                      .latestByCategory,
+                  )}
+                </Text>
+
+                <Text style={styles.fieldLabel}>TRANSPORT MODES</Text>
+                <Text style={styles.sitrepSectionText}>
+                  {formatCountMap(
+                    sitrep.generated_payload.transportSummary.modes,
+                  )}
+                </Text>
+
+                <Text style={styles.fieldLabel}>EMS UNITS</Text>
+                <Text style={styles.sitrepSectionText}>
+                  {formatCountMap(
+                    sitrep.generated_payload.transportSummary
+                      .emsUnits,
+                  )}
+                </Text>
+
+                <Text style={styles.fieldLabel}>
+                  RECEIVING FACILITIES
+                </Text>
+                <Text style={styles.sitrepSectionText}>
+                  {formatCountMap(
+                    sitrep.generated_payload.facilitySummary
+                      .receivingFacilities,
+                  )}
+                </Text>
+
+                <Text style={styles.fieldLabel}>
+                  EVACUATION CENTERS
+                </Text>
+                <Text style={styles.sitrepSectionText}>
+                  {formatCountMap(
+                    sitrep.generated_payload.facilitySummary
+                      .evacuationCenters,
+                  )}
+                </Text>
+
+                <Pressable
+                  onPress={handleCloseSitrepModal}
+                  style={({ pressed }) => [
+                    styles.createButton,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={styles.createButtonText}>Done</Text>
+                  <Ionicons
+                    name="checkmark-circle-outline"
+                    size={19}
+                    color={COLORS.white}
+                  />
+                </Pressable>
+              </ScrollView>
+            ) : null}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -1430,6 +1700,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "800",
   },
+  sitrepButton: {
+    minHeight: 38,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: "#D6E7DE",
+    marginTop: 9,
+    backgroundColor: "#F4FBF7",
+    gap: 7,
+  },
+  sitrepButtonText: {
+    color: COLORS.green,
+    fontSize: 12,
+    fontWeight: "800",
+  },
   emptyState: {
     flex: 1,
     alignItems: "center",
@@ -1592,6 +1879,66 @@ const styles = StyleSheet.create({
   },
   timelineOptionTextActive: {
     color: COLORS.maroon,
+  },
+  sitrepSummaryBlock: {
+    padding: 13,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.fieldBackground,
+  },
+  sitrepReportNumber: {
+    color: COLORS.maroon,
+    fontSize: 12,
+    fontWeight: "900",
+    marginBottom: 7,
+  },
+  sitrepSummaryText: {
+    color: COLORS.text,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: "700",
+  },
+  sitrepMetaText: {
+    color: COLORS.secondaryText,
+    fontSize: 11,
+    marginTop: 9,
+  },
+  sitrepMetricGrid: {
+    flexDirection: "row",
+    gap: 9,
+    marginTop: 12,
+  },
+  sitrepMetric: {
+    flex: 1,
+    minHeight: 70,
+    justifyContent: "center",
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: 10,
+    backgroundColor: COLORS.white,
+  },
+  sitrepMetricValue: {
+    color: COLORS.maroon,
+    fontSize: 22,
+    fontWeight: "900",
+  },
+  sitrepMetricLabel: {
+    color: COLORS.secondaryText,
+    fontSize: 11,
+    fontWeight: "700",
+    marginTop: 3,
+  },
+  sitrepSectionText: {
+    color: COLORS.text,
+    fontSize: 13,
+    lineHeight: 20,
+    padding: 12,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.fieldBackground,
   },
   typeGrid: {
     flexDirection: "row",

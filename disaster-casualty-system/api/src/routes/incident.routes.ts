@@ -3,6 +3,7 @@ import { Router } from "express";
 import {
   closeIncident,
   createIncident,
+  generateIncidentSitrep,
   getIncidents,
   getIncidentTimeline,
   updateIncidentTimeline,
@@ -22,6 +23,17 @@ incidentRouter.put(
   requireAuth,
   requireRole(["super_admin", "administrator", "encoder"]),
   updateIncidentTimeline,
+);
+incidentRouter.post(
+  "/:id/sitreps",
+  requireAuth,
+  requireRole([
+    "super_admin",
+    "administrator",
+    "encoder",
+    "medical_personnel",
+  ]),
+  generateIncidentSitrep,
 );
 incidentRouter.post(
   "/",

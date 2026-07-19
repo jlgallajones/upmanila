@@ -8,6 +8,8 @@ export type CasualtyRecord = {
   current_status: string;
   severity: string;
   verification_status: string;
+  verified_by: string | null;
+  verified_at: string | null;
   current_location: string | null;
   hospital_name: string | null;
   visible_injury: string | null;
@@ -146,6 +148,22 @@ export type CasualtyTransportHistoryItem = {
   } | null;
 };
 
+export type CasualtyVerificationHistoryItem = {
+  id: string;
+  casualty_incident_id: string;
+  old_status: string | null;
+  new_status: string;
+  reviewed_by: string | null;
+  review_notes: string | null;
+  created_at: string;
+  reviewed_by_user: {
+    id: string;
+    full_name: string;
+    email: string;
+    role: string;
+  } | null;
+};
+
 type CasualtyResponse = {
   success: boolean;
   message?: string;
@@ -168,6 +186,17 @@ type CasualtyTransportHistoryResponse = {
   success: boolean;
   count: number;
   data: CasualtyTransportHistoryItem[];
+};
+
+type CasualtyVerificationHistoryResponse = {
+  success: boolean;
+  count: number;
+  data: CasualtyVerificationHistoryItem[];
+};
+
+export type UpdateCasualtyVerificationPayload = {
+  status: "submitted" | "under_review" | "verified" | "rejected";
+  notes?: string;
 };
 
 export type CasualtyTriageAssessmentPayload = {
@@ -255,6 +284,29 @@ export async function getCasualtyTransportHistory(
 ): Promise<CasualtyTransportHistoryItem[]> {
   const response = await api.get<CasualtyTransportHistoryResponse>(
     `/casualties/${encodeURIComponent(id)}/transport-history`,
+  );
+
+  return response.data.data;
+}
+
+export async function getCasualtyVerificationHistory(
+  id: string,
+): Promise<CasualtyVerificationHistoryItem[]> {
+  const response =
+    await api.get<CasualtyVerificationHistoryResponse>(
+      `/casualties/${encodeURIComponent(id)}/verification-history`,
+    );
+
+  return response.data.data;
+}
+
+export async function updateCasualtyVerification(
+  id: string,
+  payload: UpdateCasualtyVerificationPayload,
+): Promise<CasualtyRecord> {
+  const response = await api.patch<CasualtyResponse>(
+    `/casualties/${encodeURIComponent(id)}/verification`,
+    payload,
   );
 
   return response.data.data;

@@ -75,6 +75,20 @@ const transportModes = [
 
 const emsUnitTypes = ["bls", "als", "other", "unknown"];
 
+const verificationStatuses = [
+  "submitted",
+  "under_review",
+  "verified",
+  "rejected",
+] as const;
+
+type VerificationStatus = (typeof verificationStatuses)[number];
+
+type UpdateCasualtyVerificationRequest = {
+  status: VerificationStatus;
+  notes?: string;
+};
+
 type CreateCasualtyRpcResult = {
   casualty: unknown;
   casualtyIncident: {
@@ -101,6 +115,8 @@ const casualtyRecordSelect = `
   current_status,
   severity,
   verification_status,
+  verified_by,
+  verified_at,
   current_location,
   hospital_name,
   visible_injury,
@@ -896,6 +912,218 @@ export async function getCasualtyStatusHistory(
       success: true,
       count: history.length,
       data: history,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getCasualtyVerificationHistory(
+  request: Request<{ id: string }>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { id } = request.params;
+
+    const { data: existingRecord, error: existingError } =
+      await supabase
+        .from("casualty_incidents")
+        .select("id")
+        .eq("id", id)
+        .is("deleted_at", null)
+        .maybeSingle();
+
+    if (existingError) {
+      throw new Error(
+        `Unable to retrieve casualty record: ${existingError.message}`,
+      );
+    }
+
+    if (!existingRecord) {
+      response.status(404).json({
+        success: false,
+        message: "Casualty record not found.",
+      });
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("casualty_verification_history")
+      .select(
+        "id, casualty_incident_id, old_status, new_status, reviewed_by, review_notes, created_at",
+      )
+      .eq("casualty_incident_id", id)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      throw new Error(
+        `Unable to retrieve verification history: ${error.message}`,
+      );
+    }
+
+    const reviewerIds = [
+      ...new Set(
+        (data ?? [])
+          .map((item) => item.reviewed_by)
+          .filter(
+            (reviewedBy): reviewedBy is string =>
+              typeof reviewedBy === "string" &&
+              reviewedBy.trim().length > 0,
+          ),
+      ),
+    ];
+
+    const usersById = new Map<
+      string,
+      {
+        id: string;
+        full_name: string;
+        email: string;
+        role: string;
+      }
+    >();
+
+    if (reviewerIds.length > 0) {
+      const { data: users, error: usersError } = await supabase
+        .from("users")
+        .select("id, full_name, email, role")
+        .in("id", reviewerIds);
+
+      if (usersError) {
+        throw new Error(
+          `Unable to retrieve verification reviewers: ${usersError.message}`,
+        );
+      }
+
+      for (const user of users ?? []) {
+        usersById.set(user.id, user);
+      }
+    }
+
+    const history = (data ?? []).map((item) => ({
+      ...item,
+      reviewed_by_user: item.reviewed_by
+        ? usersById.get(item.reviewed_by) ?? null
+        : null,
+    }));
+
+    response.status(200).json({
+      success: true,
+      count: history.length,
+      data: history,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateCasualtyVerification(
+  request: Request<
+    { id: string },
+    unknown,
+    UpdateCasualtyVerificationRequest
+  >,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { id } = request.params;
+    const { status, notes } = request.body;
+    const user = getAuthenticatedUser(request);
+
+    if (!verificationStatuses.includes(status)) {
+      response.status(400).json({
+        success: false,
+        message: "Invalid verification status.",
+      });
+      return;
+    }
+
+    if (status === "rejected" && !notes?.trim()) {
+      response.status(400).json({
+        success: false,
+        message: "Review notes are required when rejecting a record.",
+      });
+      return;
+    }
+
+    const { data: existingRecord, error: existingError } =
+      await supabase
+        .from("casualty_incidents")
+        .select("id, verification_status")
+        .eq("id", id)
+        .is("deleted_at", null)
+        .maybeSingle();
+
+    if (existingError) {
+      throw new Error(
+        `Unable to retrieve casualty record: ${existingError.message}`,
+      );
+    }
+
+    if (!existingRecord) {
+      response.status(404).json({
+        success: false,
+        message: "Casualty record not found.",
+      });
+      return;
+    }
+
+    const verificationUpdates = {
+      verification_status: status,
+      verified_by: status === "verified" ? user.id : null,
+      verified_at:
+        status === "verified" ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error: updateError } = await supabase
+      .from("casualty_incidents")
+      .update(verificationUpdates)
+      .eq("id", id);
+
+    if (updateError) {
+      throw new Error(
+        `Unable to update verification status: ${updateError.message}`,
+      );
+    }
+
+    const { error: historyError } = await supabase
+      .from("casualty_verification_history")
+      .insert({
+        casualty_incident_id: id,
+        old_status: existingRecord.verification_status,
+        new_status: status,
+        reviewed_by: user.id,
+        review_notes: notes?.trim() || null,
+      });
+
+    if (historyError) {
+      throw new Error(
+        `Unable to record verification history: ${historyError.message}`,
+      );
+    }
+
+    const { data: updatedRecord, error: updatedError } =
+      await supabase
+        .from("casualty_incidents")
+        .select(casualtyRecordSelect)
+        .eq("id", id)
+        .single();
+
+    if (updatedError || !updatedRecord) {
+      throw new Error(
+        `Unable to retrieve updated casualty: ${
+          updatedError?.message ?? "Unknown database error"
+        }`,
+      );
+    }
+
+    response.status(200).json({
+      success: true,
+      message: "Verification status updated successfully.",
+      data: updatedRecord,
     });
   } catch (error) {
     next(error);

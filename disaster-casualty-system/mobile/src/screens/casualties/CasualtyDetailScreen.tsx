@@ -3,12 +3,15 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Image,
+  Modal,
   Pressable,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -18,15 +21,20 @@ import {
   getCasualtyStatusHistory,
   getCasualtyTriageHistory,
   getCasualtyTransportHistory,
+  getCasualtyVerificationHistory,
+  updateCasualtyVerification,
   type CasualtyRecord,
   type CasualtyStatusHistoryItem,
   type CasualtyTriageHistoryItem,
   type CasualtyTransportHistoryItem,
+  type CasualtyVerificationHistoryItem,
+  type UpdateCasualtyVerificationPayload,
 } from "../../api/casualties";
 import {
   getAttachments,
   type Attachment,
 } from "../../api/attachments";
+import { getCurrentUser } from "../../auth/session";
 
 const COLORS = {
   maroon: "#7B1113",
@@ -107,6 +115,9 @@ type TimelineItemProps = {
   backgroundColor: string;
   isLast?: boolean;
 };
+
+type VerificationAction =
+  UpdateCasualtyVerificationPayload["status"];
 
 function TimelineItem({
   title,
@@ -210,6 +221,39 @@ function formatStatus(status: string | null | undefined): string {
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function getVerificationPalette(status: string | null | undefined) {
+  switch (status) {
+    case "verified":
+      return {
+        color: COLORS.green,
+        backgroundColor: COLORS.greenBackground,
+      };
+    case "rejected":
+      return {
+        color: COLORS.red,
+        backgroundColor: COLORS.redBackground,
+      };
+    case "under_review":
+      return {
+        color: COLORS.blue,
+        backgroundColor: COLORS.blueBackground,
+      };
+    default:
+      return {
+        color: COLORS.orange,
+        backgroundColor: COLORS.orangeBackground,
+      };
+  }
+}
+
+function canReviewRecords(role: string | null): boolean {
+  return (
+    role === "super_admin" ||
+    role === "administrator" ||
+    role === "medical_personnel"
+  );
 }
 
 function formatTriageSystem(value: string | null | undefined): string {
@@ -422,6 +466,18 @@ export default function CasualtyDetailScreen() {
   const [transportHistory, setTransportHistory] = useState<
     CasualtyTransportHistoryItem[]
   >([]);
+  const [verificationHistory, setVerificationHistory] = useState<
+    CasualtyVerificationHistoryItem[]
+  >([]);
+  const [currentUserRole, setCurrentUserRole] = useState<
+    string | null
+  >(null);
+  const [reviewAction, setReviewAction] =
+    useState<VerificationAction | null>(null);
+  const [reviewNotes, setReviewNotes] = useState("");
+  const [isReviewModalVisible, setIsReviewModalVisible] =
+    useState(false);
+  const [isSavingReview, setIsSavingReview] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] =
     useState<string | null>(null);
@@ -437,25 +493,31 @@ export default function CasualtyDetailScreen() {
       setErrorMessage(null);
 
       const [
+        currentUser,
         data,
         attachmentData,
         historyData,
         triageData,
         transportData,
+        verificationData,
       ] =
         await Promise.all([
+          getCurrentUser(),
           getCasualty(casualtyId),
           getAttachments(casualtyId),
           getCasualtyStatusHistory(casualtyId),
           getCasualtyTriageHistory(casualtyId),
           getCasualtyTransportHistory(casualtyId),
+          getCasualtyVerificationHistory(casualtyId),
         ]);
 
+      setCurrentUserRole(currentUser?.role ?? null);
       setRecord(data);
       setAttachments(attachmentData);
       setStatusHistory(historyData);
       setTriageHistory(triageData);
       setTransportHistory(transportData);
+      setVerificationHistory(verificationData);
     } catch (error) {
       console.error("Failed to load casualty detail:", error);
 
@@ -514,12 +576,15 @@ export default function CasualtyDetailScreen() {
       dateTime: formatDateTime(record.reported_at),
       status: formatStatus(record.current_status),
       severity: formatStatus(record.severity),
+      verificationStatus: formatStatus(record.verification_status),
+      verificationStatusRaw: record.verification_status,
+      verifiedAt: formatDateTime(record.verified_at),
       notes:
         notes.length > 0
           ? notes.join("\n")
           : "No medical notes recorded.",
       lastUpdated: formatTime(record.updated_at),
-      verified: record.verification_status !== "draft",
+      verified: record.verification_status === "verified",
       encoderName: record.encoder.full_name,
       latestTriage: triageHistory[0],
       latestTransport: transportHistory[0],
@@ -537,6 +602,72 @@ export default function CasualtyDetailScreen() {
         editId: casualty.recordId,
       },
     } as never);
+  }
+
+  function openReviewModal(action: VerificationAction) {
+    setReviewAction(action);
+    setReviewNotes("");
+    setIsReviewModalVisible(true);
+  }
+
+  function closeReviewModal() {
+    if (isSavingReview) {
+      return;
+    }
+
+    setIsReviewModalVisible(false);
+    setReviewAction(null);
+    setReviewNotes("");
+  }
+
+  async function handleSaveReview() {
+    if (!casualtyId || !reviewAction) {
+      return;
+    }
+
+    if (reviewAction === "rejected" && !reviewNotes.trim()) {
+      Alert.alert(
+        "Review note required",
+        "Please enter a reason before rejecting this casualty record.",
+      );
+      return;
+    }
+
+    try {
+      setIsSavingReview(true);
+
+      const updatedRecord = await updateCasualtyVerification(
+        casualtyId,
+        {
+          status: reviewAction,
+          notes: reviewNotes.trim() || undefined,
+        },
+      );
+      const updatedHistory =
+        await getCasualtyVerificationHistory(casualtyId);
+
+      setRecord(updatedRecord);
+      setVerificationHistory(updatedHistory);
+      setIsReviewModalVisible(false);
+      setReviewAction(null);
+      setReviewNotes("");
+
+      Alert.alert(
+        "Review saved",
+        "The casualty verification status has been updated.",
+      );
+    } catch (error) {
+      console.error("Unable to save verification review:", error);
+
+      Alert.alert(
+        "Unable to save review",
+        error instanceof Error
+          ? error.message
+          : "Please try again.",
+      );
+    } finally {
+      setIsSavingReview(false);
+    }
   }
 
   if (isLoading) {
@@ -588,6 +719,10 @@ export default function CasualtyDetailScreen() {
   }
 
   const statusPalette = getStatusPalette(casualty.status);
+  const verificationPalette = getVerificationPalette(
+    casualty.verificationStatusRaw,
+  );
+  const canReview = canReviewRecords(currentUserRole);
 
   return (
     <View style={styles.screen}>
@@ -687,6 +822,27 @@ export default function CasualtyDetailScreen() {
                   </Text>
                 </View>
               ) : null}
+
+              <View
+                style={[
+                  styles.verificationBadge,
+                  {
+                    backgroundColor:
+                      verificationPalette.backgroundColor,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.verificationBadgeText,
+                    {
+                      color: verificationPalette.color,
+                    },
+                  ]}
+                >
+                  {casualty.verificationStatus}
+                </Text>
+              </View>
             </View>
           </View>
 
@@ -788,6 +944,167 @@ export default function CasualtyDetailScreen() {
             label="Date & Time"
             value={casualty.dateTime}
           />
+        </SectionCard>
+
+        <SectionCard title="VERIFICATION REVIEW">
+          <View
+            style={[
+              styles.reviewStatusCard,
+              {
+                borderColor: verificationPalette.color,
+                backgroundColor: verificationPalette.backgroundColor,
+              },
+            ]}
+          >
+            <Ionicons
+              name={
+                casualty.verificationStatusRaw === "verified"
+                  ? "shield-checkmark-outline"
+                  : casualty.verificationStatusRaw === "rejected"
+                    ? "close-circle-outline"
+                    : "hourglass-outline"
+              }
+              size={25}
+              color={verificationPalette.color}
+            />
+            <View style={styles.reviewStatusContent}>
+              <Text
+                style={[
+                  styles.reviewStatusTitle,
+                  {
+                    color: verificationPalette.color,
+                  },
+                ]}
+              >
+                {casualty.verificationStatus}
+              </Text>
+              <Text
+                style={[
+                  styles.reviewStatusText,
+                  {
+                    color: verificationPalette.color,
+                  },
+                ]}
+              >
+                {casualty.verified
+                  ? `Verified at ${casualty.verifiedAt}`
+                  : "Record is waiting for review or revision."}
+              </Text>
+            </View>
+          </View>
+
+          {canReview ? (
+            <View style={styles.reviewActions}>
+              <Pressable
+                onPress={() => openReviewModal("under_review")}
+                style={({ pressed }) => [
+                  styles.reviewActionButton,
+                  styles.reviewActionNeutral,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Ionicons
+                  name="eye-outline"
+                  size={17}
+                  color={COLORS.blue}
+                />
+                <Text
+                  style={[
+                    styles.reviewActionText,
+                    {
+                      color: COLORS.blue,
+                    },
+                  ]}
+                >
+                  Review
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => openReviewModal("verified")}
+                style={({ pressed }) => [
+                  styles.reviewActionButton,
+                  styles.reviewActionApprove,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Ionicons
+                  name="checkmark-circle-outline"
+                  size={17}
+                  color={COLORS.green}
+                />
+                <Text
+                  style={[
+                    styles.reviewActionText,
+                    {
+                      color: COLORS.green,
+                    },
+                  ]}
+                >
+                  Approve
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => openReviewModal("rejected")}
+                style={({ pressed }) => [
+                  styles.reviewActionButton,
+                  styles.reviewActionReject,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Ionicons
+                  name="close-circle-outline"
+                  size={17}
+                  color={COLORS.red}
+                />
+                <Text
+                  style={[
+                    styles.reviewActionText,
+                    {
+                      color: COLORS.red,
+                    },
+                  ]}
+                >
+                  Reject
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
+
+          {verificationHistory.length > 0 ? (
+            <View style={styles.triageTimeline}>
+              {verificationHistory.map((review, index) => {
+                const palette = getVerificationPalette(
+                  review.new_status,
+                );
+                const oldStatus = review.old_status
+                  ? `${formatStatus(review.old_status)} to `
+                  : "";
+
+                return (
+                  <TimelineItem
+                    key={review.id}
+                    title={`${oldStatus}${formatStatus(review.new_status)}`}
+                    time={formatDateTime(review.created_at)}
+                    user={
+                      review.reviewed_by_user?.full_name ??
+                      "System"
+                    }
+                    color={palette.color}
+                    backgroundColor={palette.backgroundColor}
+                    isLast={
+                      index === verificationHistory.length - 1
+                    }
+                  />
+                );
+              })}
+            </View>
+          ) : (
+            <Text style={styles.emptyAttachmentText}>
+              No verification review has been recorded yet.
+            </Text>
+          )}
         </SectionCard>
 
         <SectionCard title="MEDICAL STATUS">
@@ -1048,6 +1365,102 @@ export default function CasualtyDetailScreen() {
 
         <View style={styles.bottomSpacing} />
       </ScrollView>
+
+      <Modal
+        visible={isReviewModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={closeReviewModal}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={closeReviewModal}
+        >
+          <Pressable style={styles.reviewModal}>
+            <View style={styles.reviewModalHeader}>
+              <View>
+                <Text style={styles.reviewModalTitle}>
+                  {reviewAction === "verified"
+                    ? "Approve Record"
+                    : reviewAction === "rejected"
+                      ? "Reject Record"
+                      : "Mark Under Review"}
+                </Text>
+                <Text style={styles.reviewModalSubtitle}>
+                  {casualty.fullName}
+                </Text>
+              </View>
+              <Pressable
+                onPress={closeReviewModal}
+                style={styles.reviewModalClose}
+              >
+                <Ionicons
+                  name="close"
+                  size={20}
+                  color={COLORS.secondary}
+                />
+              </Pressable>
+            </View>
+
+            <Text style={styles.reviewNoteLabel}>
+              REVIEW NOTES
+            </Text>
+            <TextInput
+              value={reviewNotes}
+              onChangeText={setReviewNotes}
+              style={styles.reviewNoteInput}
+              placeholder={
+                reviewAction === "rejected"
+                  ? "Required reason for rejection"
+                  : "Optional reviewer note"
+              }
+              placeholderTextColor={COLORS.secondary}
+              multiline
+              textAlignVertical="top"
+            />
+
+            <View style={styles.reviewModalActions}>
+              <Pressable
+                onPress={closeReviewModal}
+                style={({ pressed }) => [
+                  styles.reviewCancelButton,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.reviewCancelText}>Cancel</Text>
+              </Pressable>
+
+              <Pressable
+                disabled={isSavingReview}
+                onPress={() => {
+                  void handleSaveReview();
+                }}
+                style={({ pressed }) => [
+                  styles.reviewSaveButton,
+                  isSavingReview && styles.disabledButton,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.reviewSaveText}>
+                  {isSavingReview ? "Saving..." : "Save Review"}
+                </Text>
+                {isSavingReview ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={COLORS.white}
+                  />
+                ) : (
+                  <Ionicons
+                    name="checkmark-circle-outline"
+                    size={18}
+                    color={COLORS.white}
+                  />
+                )}
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -1271,6 +1684,17 @@ const styles = StyleSheet.create({
     marginLeft: 3,
   },
 
+  verificationBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 7,
+  },
+
+  verificationBadgeText: {
+    fontSize: 9,
+    fontWeight: "800",
+  },
+
   editButton: {
     width: 38,
     height: 38,
@@ -1345,6 +1769,68 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 14,
     borderWidth: 1,
+  },
+
+  reviewStatusCard: {
+    minHeight: 74,
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+
+  reviewStatusContent: {
+    flex: 1,
+    marginLeft: 12,
+  },
+
+  reviewStatusTitle: {
+    fontSize: 14,
+    fontWeight: "900",
+  },
+
+  reviewStatusText: {
+    fontSize: 11,
+    lineHeight: 17,
+    marginTop: 5,
+  },
+
+  reviewActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 12,
+  },
+
+  reviewActionButton: {
+    flex: 1,
+    minHeight: 42,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 5,
+  },
+
+  reviewActionNeutral: {
+    borderColor: "#B9D8EE",
+    backgroundColor: COLORS.blueBackground,
+  },
+
+  reviewActionApprove: {
+    borderColor: "#A9E7C2",
+    backgroundColor: COLORS.greenBackground,
+  },
+
+  reviewActionReject: {
+    borderColor: "#F2B6B8",
+    backgroundColor: COLORS.redBackground,
+  },
+
+  reviewActionText: {
+    fontSize: 11,
+    fontWeight: "900",
   },
 
   medicalIcon: {
@@ -1503,6 +1989,115 @@ const styles = StyleSheet.create({
     lineHeight: 15,
     textAlign: "center",
     marginTop: 5,
+  },
+
+  modalBackdrop: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(23,33,58,0.38)",
+  },
+
+  reviewModal: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 22,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    backgroundColor: COLORS.white,
+  },
+
+  reviewModalHeader: {
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+
+  reviewModalTitle: {
+    color: COLORS.text,
+    fontSize: 17,
+    fontWeight: "900",
+  },
+
+  reviewModalSubtitle: {
+    color: COLORS.secondary,
+    fontSize: 12,
+    marginTop: 4,
+  },
+
+  reviewModalClose: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.grayBackground,
+  },
+
+  reviewNoteLabel: {
+    color: COLORS.text,
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.3,
+    marginBottom: 8,
+  },
+
+  reviewNoteInput: {
+    minHeight: 110,
+    paddingHorizontal: 13,
+    paddingVertical: 12,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.grayBackground,
+    color: COLORS.text,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+
+  reviewModalActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 16,
+  },
+
+  reviewCancelButton: {
+    flex: 1,
+    minHeight: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.white,
+  },
+
+  reviewCancelText: {
+    color: COLORS.secondary,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+
+  reviewSaveButton: {
+    flex: 1.4,
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 13,
+    backgroundColor: COLORS.maroon,
+    gap: 8,
+  },
+
+  reviewSaveText: {
+    color: COLORS.white,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+
+  disabledButton: {
+    opacity: 0.7,
   },
 
   pressed: {

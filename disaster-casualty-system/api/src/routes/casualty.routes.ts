@@ -9,7 +9,9 @@ import {
   getCasualtyStatusHistory,
   getCasualtyTriageHistory,
   getCasualtyTransportHistory,
+  getCasualtyVerificationHistory,
   updateCasualty,
+  updateCasualtyVerification,
 } from "../controllers/casualty.controller.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 
@@ -20,6 +22,21 @@ casualtyRouter.get(
   "/:id/status-history",
   requireAuth,
   getCasualtyStatusHistory,
+);
+casualtyRouter.get(
+  "/:id/verification-history",
+  requireAuth,
+  getCasualtyVerificationHistory,
+);
+casualtyRouter.patch(
+  "/:id/verification",
+  requireAuth,
+  requireRole([
+    "super_admin",
+    "administrator",
+    "medical_personnel",
+  ]),
+  updateCasualtyVerification,
 );
 casualtyRouter.get(
   "/:id/triage-history",
