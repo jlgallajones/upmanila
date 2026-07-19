@@ -1,4 +1,8 @@
+import * as FileSystem from "expo-file-system/legacy";
+
+import { getAccessToken } from "../auth/session";
 import { api } from "./client";
+import { API_BASE_URL } from "./client";
 
 export type Incident = {
   id: string;
@@ -198,4 +202,58 @@ export async function generateIncidentSitrep(
   );
 
   return response.data.data;
+}
+
+type IncidentExportKind = "sitrep-pdf" | "sitrep-csv" | "casualties-csv";
+
+const exportPaths: Record<IncidentExportKind, string> = {
+  "sitrep-pdf": "sitrep.pdf",
+  "sitrep-csv": "sitrep.csv",
+  "casualties-csv": "casualties.csv",
+};
+
+const exportExtensions: Record<IncidentExportKind, string> = {
+  "sitrep-pdf": "pdf",
+  "sitrep-csv": "csv",
+  "casualties-csv": "csv",
+};
+
+function sanitizeFileName(value: string): string {
+  return value.replace(/[^a-z0-9._-]+/gi, "-").replace(/^-|-$/g, "");
+}
+
+export async function downloadIncidentExport(
+  incidentId: string,
+  kind: IncidentExportKind,
+): Promise<string> {
+  const token = await getAccessToken();
+  const encodedIncidentId = encodeURIComponent(incidentId);
+  const endpoint = `${API_BASE_URL.replace(/\/$/, "")}/incidents/${encodedIncidentId}/export/${exportPaths[kind]}`;
+  const fileName = sanitizeFileName(
+    `dcms-${incidentId}-${kind}.${exportExtensions[kind]}`,
+  );
+  const directory =
+    FileSystem.documentDirectory ?? FileSystem.cacheDirectory;
+
+  if (!directory) {
+    throw new Error("No writable file directory is available.");
+  }
+
+  const result = await FileSystem.downloadAsync(
+    endpoint,
+    `${directory}${fileName}`,
+    {
+      headers: token
+        ? {
+            Authorization: `Bearer ${token}`,
+          }
+        : undefined,
+    },
+  );
+
+  if (result.status < 200 || result.status >= 300) {
+    throw new Error("Unable to download export file.");
+  }
+
+  return result.uri;
 }

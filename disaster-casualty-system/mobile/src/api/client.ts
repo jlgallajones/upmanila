@@ -8,6 +8,8 @@ if (!apiUrl) {
   throw new Error("EXPO_PUBLIC_API_URL is missing.");
 }
 
+export const API_BASE_URL = apiUrl;
+
 export const api = axios.create({
   baseURL: apiUrl,
   timeout: 15000,

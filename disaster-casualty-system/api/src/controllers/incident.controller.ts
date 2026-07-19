@@ -146,6 +146,35 @@ type FacilityRow = {
   province: string | null;
 };
 
+type ExportCasualtyRow = {
+  id: string;
+  current_status: string | null;
+  severity: string | null;
+  verification_status: string | null;
+  current_location: string | null;
+  reported_at: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  casualty: {
+    id_number: string | null;
+    identification_status: string | null;
+    first_name: string | null;
+    middle_name: string | null;
+    last_name: string | null;
+    estimated_age: number | null;
+    sex: string | null;
+    barangay: string | null;
+    municipality: string | null;
+    province: string | null;
+  } | null;
+  evacuation_center: {
+    center_name: string | null;
+  } | null;
+  healthcare_facility: {
+    facility_name: string | null;
+  } | null;
+};
+
 const incidentManagerRoles = new Set([
   "super_admin",
   "administrator",
@@ -338,6 +367,230 @@ function buildSitrepSummary(
   ]
     .filter((part): part is string => Boolean(part))
     .join("; ");
+}
+
+function escapeCsvValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  const text = String(value);
+
+  if (/[",\r\n]/.test(text)) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+
+  return text;
+}
+
+function buildCsv(headers: string[], rows: unknown[][]): string {
+  return [
+    headers.map(escapeCsvValue).join(","),
+    ...rows.map((row) => row.map(escapeCsvValue).join(",")),
+  ].join("\r\n");
+}
+
+function sendCsv(
+  response: Response,
+  filename: string,
+  csv: string,
+): void {
+  response.setHeader("Content-Type", "text/csv; charset=utf-8");
+  response.setHeader(
+    "Content-Disposition",
+    `attachment; filename="${filename}"`,
+  );
+  response.status(200).send(`\uFEFF${csv}`);
+}
+
+function escapePdfText(value: string): string {
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/\(/g, "\\(")
+    .replace(/\)/g, "\\)");
+}
+
+function wrapText(value: string, maxLength = 92): string[] {
+  const words = value.split(/\s+/);
+  const lines: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+
+    if (next.length > maxLength && current) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = next;
+    }
+  }
+
+  if (current) {
+    lines.push(current);
+  }
+
+  return lines.length > 0 ? lines : [""];
+}
+
+function buildSimplePdf(title: string, lines: string[]): Buffer {
+  const wrappedLines = [
+    title,
+    "",
+    ...lines.flatMap((line) => wrapText(line)),
+  ];
+  const pages: string[][] = [];
+
+  for (let index = 0; index < wrappedLines.length; index += 48) {
+    pages.push(wrappedLines.slice(index, index + 48));
+  }
+
+  const objects: string[] = [];
+  const addObject = (content: string): number => {
+    objects.push(content);
+    return objects.length;
+  };
+
+  const catalogId = addObject("<< /Type /Catalog /Pages 2 0 R >>");
+  const pagesId = addObject("");
+  const fontId = addObject(
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+  );
+  const pageIds: number[] = [];
+
+  for (const pageLines of pages) {
+    const content = [
+      "BT",
+      "/F1 10 Tf",
+      "50 790 Td",
+      "14 TL",
+      ...pageLines.map((line) => `(${escapePdfText(line)}) Tj T*`),
+      "ET",
+    ].join("\n");
+    const contentId = addObject(
+      `<< /Length ${Buffer.byteLength(content, "utf8")} >>\nstream\n${content}\nendstream`,
+    );
+    const pageId = addObject(
+      `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${contentId} 0 R >>`,
+    );
+
+    pageIds.push(pageId);
+  }
+
+  objects[pagesId - 1] =
+    `<< /Type /Pages /Kids [${pageIds
+      .map((id) => `${id} 0 R`)
+      .join(" ")}] /Count ${pageIds.length} >>`;
+
+  const parts = ["%PDF-1.4\n"];
+  const offsets: number[] = [];
+
+  objects.forEach((object, index) => {
+    offsets.push(Buffer.byteLength(parts.join(""), "utf8"));
+    parts.push(`${index + 1} 0 obj\n${object}\nendobj\n`);
+  });
+
+  const xrefOffset = Buffer.byteLength(parts.join(""), "utf8");
+  parts.push(`xref\n0 ${objects.length + 1}\n`);
+  parts.push("0000000000 65535 f \n");
+
+  for (const offset of offsets) {
+    parts.push(`${String(offset).padStart(10, "0")} 00000 n \n`);
+  }
+
+  parts.push(
+    `trailer\n<< /Size ${objects.length + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`,
+  );
+
+  return Buffer.from(parts.join(""), "utf8");
+}
+
+function sendPdf(
+  response: Response,
+  filename: string,
+  pdf: Buffer,
+): void {
+  response.setHeader("Content-Type", "application/pdf");
+  response.setHeader(
+    "Content-Disposition",
+    `attachment; filename="${filename}"`,
+  );
+  response.status(200).send(pdf);
+}
+
+function countMapLines(
+  title: string,
+  counts: Record<string, number>,
+): string[] {
+  const entries = Object.entries(counts);
+
+  if (entries.length === 0) {
+    return [`${title}: none recorded`];
+  }
+
+  return [
+    `${title}:`,
+    ...entries
+      .sort(([first], [second]) => first.localeCompare(second))
+      .map(([key, count]) => `  ${key}: ${count}`),
+  ];
+}
+
+function buildSitrepLines(sitrep: SitrepResponseRecord): string[] {
+  const payload = sitrep.generated_payload;
+
+  return [
+    `Report Number: ${sitrep.report_number}`,
+    `Status: ${sitrep.status}`,
+    `Generated At: ${sitrep.generated_at}`,
+    `Generated By: ${payload.generatedBy.fullName} (${payload.generatedBy.role})`,
+    `Period: ${payload.period.start ?? "Unavailable"} to ${payload.period.end}`,
+    "",
+    "Summary",
+    sitrep.summary,
+    "",
+    "Casualties",
+    `Total: ${payload.casualtySummary.total}`,
+    `Identified: ${payload.casualtySummary.identified}`,
+    `Partially Identified: ${payload.casualtySummary.partiallyIdentified}`,
+    `Unidentified: ${payload.casualtySummary.unidentified}`,
+    ...countMapLines(
+      "By Status",
+      payload.casualtySummary.byStatus,
+    ),
+    ...countMapLines(
+      "By Severity",
+      payload.casualtySummary.bySeverity,
+    ),
+    ...countMapLines(
+      "By Verification",
+      payload.casualtySummary.byVerification,
+    ),
+    "",
+    "Triage",
+    `Total Assessments: ${payload.triageSummary.totalAssessments}`,
+    ...countMapLines(
+      "Latest Categories",
+      payload.triageSummary.latestByCategory,
+    ),
+    "",
+    "Transport",
+    `Total Records: ${payload.transportSummary.totalRecords}`,
+    `Departed Scene: ${payload.transportSummary.departedScene}`,
+    `Arrived Facility: ${payload.transportSummary.arrivedFacility}`,
+    ...countMapLines("Modes", payload.transportSummary.modes),
+    ...countMapLines("EMS Units", payload.transportSummary.emsUnits),
+    "",
+    "Facilities",
+    ...countMapLines(
+      "Evacuation Centers",
+      payload.facilitySummary.evacuationCenters,
+    ),
+    ...countMapLines(
+      "Receiving Facilities",
+      payload.facilitySummary.receivingFacilities,
+    ),
+  ];
 }
 
 export async function getIncidents(
@@ -1162,6 +1415,248 @@ export async function generateIncidentSitrep(
       message: "SitRep generated successfully.",
       data: sitrepData as SitrepResponseRecord,
     });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function exportIncidentCasualtiesCsv(
+  request: Request<{ id: string }>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { id } = request.params;
+
+    const { data: incident, error: incidentError } = await supabase
+      .from("incidents")
+      .select("id, incident_code")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (incidentError) {
+      throw new Error(
+        `Unable to retrieve incident: ${incidentError.message}`,
+      );
+    }
+
+    if (!incident) {
+      response.status(404).json({
+        success: false,
+        message: "Incident not found.",
+      });
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("casualty_incidents")
+      .select(`
+        id,
+        current_status,
+        severity,
+        verification_status,
+        current_location,
+        reported_at,
+        latitude,
+        longitude,
+        casualty:casualties (
+          id_number,
+          identification_status,
+          first_name,
+          middle_name,
+          last_name,
+          estimated_age,
+          sex,
+          barangay,
+          municipality,
+          province
+        ),
+        evacuation_center:evacuation_centers (
+          center_name
+        ),
+        healthcare_facility:healthcare_facilities (
+          facility_name
+        )
+      `)
+      .eq("incident_id", id)
+      .is("deleted_at", null)
+      .order("reported_at", { ascending: true });
+
+    if (error) {
+      throw new Error(
+        `Unable to export casualties: ${error.message}`,
+      );
+    }
+
+    const records = (data ?? []) as unknown as ExportCasualtyRow[];
+    const csv = buildCsv(
+      [
+        "record_id",
+        "id_number",
+        "identification_status",
+        "first_name",
+        "middle_name",
+        "last_name",
+        "estimated_age",
+        "sex",
+        "barangay",
+        "municipality",
+        "province",
+        "current_status",
+        "severity",
+        "verification_status",
+        "evacuation_center",
+        "receiving_facility",
+        "current_location",
+        "latitude",
+        "longitude",
+        "reported_at",
+      ],
+      records.map((record) => [
+        record.id,
+        record.casualty?.id_number,
+        record.casualty?.identification_status,
+        record.casualty?.first_name,
+        record.casualty?.middle_name,
+        record.casualty?.last_name,
+        record.casualty?.estimated_age,
+        record.casualty?.sex,
+        record.casualty?.barangay,
+        record.casualty?.municipality,
+        record.casualty?.province,
+        record.current_status,
+        record.severity,
+        record.verification_status,
+        record.evacuation_center?.center_name,
+        record.healthcare_facility?.facility_name,
+        record.current_location,
+        record.latitude,
+        record.longitude,
+        record.reported_at,
+      ]),
+    );
+
+    sendCsv(
+      response,
+      `${incident.incident_code}-casualties.csv`,
+      csv,
+    );
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getLatestSitrep(
+  incidentId: string,
+): Promise<SitrepResponseRecord | null> {
+  const { data, error } = await supabase
+    .from("sitreps")
+    .select(sitrepSelect)
+    .eq("incident_id", incidentId)
+    .order("generated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Unable to retrieve latest SitRep: ${error.message}`);
+  }
+
+  return data
+    ? ({
+        ...data,
+        generated_payload:
+          data.generated_payload as IncidentSitrepPayload,
+      } as SitrepResponseRecord)
+    : null;
+}
+
+export async function exportLatestSitrepCsv(
+  request: Request<{ id: string }>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const sitrep = await getLatestSitrep(request.params.id);
+
+    if (!sitrep) {
+      response.status(404).json({
+        success: false,
+        message: "Generate a SitRep before exporting.",
+      });
+      return;
+    }
+
+    const payload = sitrep.generated_payload;
+    const csv = buildCsv(
+      ["section", "metric", "value"],
+      [
+        ["report", "report_number", sitrep.report_number],
+        ["report", "generated_at", sitrep.generated_at],
+        ["report", "summary", sitrep.summary],
+        ["casualties", "total", payload.casualtySummary.total],
+        ["casualties", "identified", payload.casualtySummary.identified],
+        [
+          "casualties",
+          "partially_identified",
+          payload.casualtySummary.partiallyIdentified,
+        ],
+        [
+          "casualties",
+          "unidentified",
+          payload.casualtySummary.unidentified,
+        ],
+        ...Object.entries(payload.casualtySummary.byStatus).map(
+          ([key, value]) => ["casualty_status", key, value],
+        ),
+        ...Object.entries(payload.casualtySummary.bySeverity).map(
+          ([key, value]) => ["casualty_severity", key, value],
+        ),
+        ...Object.entries(payload.triageSummary.latestByCategory).map(
+          ([key, value]) => ["triage_category", key, value],
+        ),
+        ...Object.entries(payload.transportSummary.modes).map(
+          ([key, value]) => ["transport_mode", key, value],
+        ),
+        ...Object.entries(payload.transportSummary.emsUnits).map(
+          ([key, value]) => ["ems_unit", key, value],
+        ),
+        ...Object.entries(payload.facilitySummary.evacuationCenters).map(
+          ([key, value]) => ["evacuation_center", key, value],
+        ),
+        ...Object.entries(payload.facilitySummary.receivingFacilities).map(
+          ([key, value]) => ["receiving_facility", key, value],
+        ),
+      ],
+    );
+
+    sendCsv(response, `${sitrep.report_number}.csv`, csv);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function exportLatestSitrepPdf(
+  request: Request<{ id: string }>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const sitrep = await getLatestSitrep(request.params.id);
+
+    if (!sitrep) {
+      response.status(404).json({
+        success: false,
+        message: "Generate a SitRep before exporting.",
+      });
+      return;
+    }
+
+    const pdf = buildSimplePdf(
+      `Situation Report - ${sitrep.report_number}`,
+      buildSitrepLines(sitrep),
+    );
+
+    sendPdf(response, `${sitrep.report_number}.pdf`, pdf);
   } catch (error) {
     next(error);
   }

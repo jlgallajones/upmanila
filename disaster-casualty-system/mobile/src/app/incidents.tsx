@@ -20,6 +20,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import {
   closeIncident,
   createIncident,
+  downloadIncidentExport,
   generateIncidentSitrep,
   getIncidents,
   getIncidentTimeline,
@@ -44,6 +45,7 @@ const COLORS = {
   fieldBorder: "#D9E0EA",
   green: "#2E7D4F",
   orange: "#D96D12",
+  blue: "#267ABD",
   red: "#C92D32",
 };
 
@@ -538,6 +540,9 @@ export default function IncidentsPage() {
     useState(false);
   const [generatingSitrepIncidentId, setGeneratingSitrepIncidentId] =
     useState<string | null>(null);
+  const [exportingKind, setExportingKind] = useState<string | null>(
+    null,
+  );
 
   const canCreateIncident = formatRoleAllowed(currentUserRole);
 
@@ -760,6 +765,36 @@ export default function IncidentsPage() {
   function handleCloseSitrepModal() {
     setIsSitrepModalVisible(false);
     setSitrep(null);
+  }
+
+  async function handleDownloadExport(
+    kind: "sitrep-pdf" | "sitrep-csv" | "casualties-csv",
+  ) {
+    if (!sitrep) {
+      return;
+    }
+
+    try {
+      setExportingKind(kind);
+
+      const uri = await downloadIncidentExport(
+        sitrep.incident_id,
+        kind,
+      );
+
+      Alert.alert("Export saved", uri);
+    } catch (error) {
+      console.error("Unable to download export:", error);
+
+      Alert.alert(
+        "Unable to export",
+        error instanceof Error
+          ? error.message
+          : "Please try again.",
+      );
+    } finally {
+      setExportingKind(null);
+    }
   }
 
   function handleCloseTimelineModal() {
@@ -1414,6 +1449,107 @@ export default function IncidentsPage() {
                   </View>
                 </View>
 
+                <View style={styles.exportActions}>
+                  <Pressable
+                    disabled={exportingKind !== null}
+                    onPress={() => {
+                      void handleDownloadExport("sitrep-pdf");
+                    }}
+                    style={({ pressed }) => [
+                      styles.exportButton,
+                      exportingKind === "sitrep-pdf" &&
+                        styles.disabledButton,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    {exportingKind === "sitrep-pdf" ? (
+                      <ActivityIndicator
+                        size="small"
+                        color={COLORS.maroon}
+                      />
+                    ) : (
+                      <Ionicons
+                        name="document-outline"
+                        size={16}
+                        color={COLORS.maroon}
+                      />
+                    )}
+                    <Text style={styles.exportButtonText}>PDF</Text>
+                  </Pressable>
+
+                  <Pressable
+                    disabled={exportingKind !== null}
+                    onPress={() => {
+                      void handleDownloadExport("sitrep-csv");
+                    }}
+                    style={({ pressed }) => [
+                      styles.exportButton,
+                      exportingKind === "sitrep-csv" &&
+                        styles.disabledButton,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    {exportingKind === "sitrep-csv" ? (
+                      <ActivityIndicator
+                        size="small"
+                        color={COLORS.green}
+                      />
+                    ) : (
+                      <Ionicons
+                        name="grid-outline"
+                        size={16}
+                        color={COLORS.green}
+                      />
+                    )}
+                    <Text
+                      style={[
+                        styles.exportButtonText,
+                        {
+                          color: COLORS.green,
+                        },
+                      ]}
+                    >
+                      SitRep CSV
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    disabled={exportingKind !== null}
+                    onPress={() => {
+                      void handleDownloadExport("casualties-csv");
+                    }}
+                    style={({ pressed }) => [
+                      styles.exportButton,
+                      exportingKind === "casualties-csv" &&
+                        styles.disabledButton,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    {exportingKind === "casualties-csv" ? (
+                      <ActivityIndicator
+                        size="small"
+                        color={COLORS.blue}
+                      />
+                    ) : (
+                      <Ionicons
+                        name="people-outline"
+                        size={16}
+                        color={COLORS.blue}
+                      />
+                    )}
+                    <Text
+                      style={[
+                        styles.exportButtonText,
+                        {
+                          color: COLORS.blue,
+                        },
+                      ]}
+                    >
+                      Records CSV
+                    </Text>
+                  </Pressable>
+                </View>
+
                 <Text style={styles.fieldLabel}>CASUALTY STATUS</Text>
                 <Text style={styles.sitrepSectionText}>
                   {formatCountMap(
@@ -1929,6 +2065,28 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
     marginTop: 3,
+  },
+  exportActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 12,
+  },
+  exportButton: {
+    flex: 1,
+    minHeight: 40,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.white,
+    gap: 5,
+  },
+  exportButtonText: {
+    color: COLORS.maroon,
+    fontSize: 11,
+    fontWeight: "900",
   },
   sitrepSectionText: {
     color: COLORS.text,

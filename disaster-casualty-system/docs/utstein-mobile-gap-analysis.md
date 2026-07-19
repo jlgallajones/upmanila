@@ -511,7 +511,7 @@ Recommended columns:
 - [x] Add incident response timeline fields for notification, activation, EMS arrival, triage, transport, and demobilization.
 - [x] Add automated SitRep generation from incident, casualty, triage, transport, and facility data.
 - [x] Add casualty verification/approval workflows for admin and medical personnel.
-- [ ] Add export support: PDF and CSV.
+- [x] Add export support: PDF and CSV.
 
 ### Medium Priority
 
@@ -648,4 +648,5 @@ The mobile app logs in through the API. The API validates the authenticated user
 4. Add incident response timeline screen. Done: added `incident_response_timelines`, `/api/incidents/:id/timeline`, and mobile incident timeline editing.
 5. Add SitRep generation endpoint and dashboard. Done: added `sitreps`, `/api/incidents/:id/sitreps`, and mobile SitRep generation/viewing from Incident Management.
 6. Add admin verification and report approval workflow. Partially done: casualty verification now supports under-review, approve, reject, notes, and history. SitRep approval and broader user-management workflow still remain.
-7. Expand offline sync to attachments and edits.
+7. Add PDF and CSV export support. Done: added incident casualty CSV, latest SitRep CSV, latest SitRep PDF, and mobile export downloads.
+8. Expand offline sync to attachments and edits.
