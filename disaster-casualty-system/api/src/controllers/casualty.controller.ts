@@ -3,6 +3,8 @@ import type { NextFunction, Request, Response } from "express";
 import { supabase } from "../config/supabase.js";
 import { getAuthenticatedUser } from "../middleware/auth.js";
 import type {
+  CasualtyTransportRecordRequest,
+  CasualtyTriageAssessmentRequest,
   CreateCasualtyRequest,
   UpdateCasualtyRequest,
 } from "../types/casualty.types.js";
@@ -33,6 +35,46 @@ const identificationStatuses = [
   "unidentified",
 ];
 
+const triageSystems = [
+  "urgent_non_urgent",
+  "nato",
+  "start",
+  "sieve_sort",
+  "smart",
+  "care_flight",
+  "mass",
+  "salt",
+  "ed_triage",
+  "other",
+];
+
+const triageCategories = [
+  "immediate",
+  "delayed",
+  "minimal",
+  "expectant",
+  "unknown",
+];
+
+const triageStages = [
+  "on_site",
+  "facility_arrival",
+  "reassessment",
+];
+
+const transportRequiredValues = ["yes", "no", "unknown"];
+
+const transportModes = [
+  "ems",
+  "private_vehicle",
+  "independent",
+  "walk_in",
+  "other",
+  "unknown",
+];
+
+const emsUnitTypes = ["bls", "als", "other", "unknown"];
+
 type CreateCasualtyRpcResult = {
   casualty: unknown;
   casualtyIncident: {
@@ -47,12 +89,15 @@ type CreateCasualtyRpcResult = {
     id: string;
     fullName: string;
   };
+  triageAssessment: unknown;
+  transportRecord: unknown;
 };
 
 const casualtyRecordSelect = `
   id,
   client_record_id,
   evacuation_center_id,
+  healthcare_facility_id,
   current_status,
   severity,
   verification_status,
@@ -97,6 +142,15 @@ const casualtyRecordSelect = `
   evacuation_center:evacuation_centers (
     id,
     center_name,
+    address,
+    barangay,
+    municipality,
+    province
+  ),
+  healthcare_facility:healthcare_facilities (
+    id,
+    facility_name,
+    facility_level,
     address,
     barangay,
     municipality,
@@ -152,6 +206,239 @@ async function ensureUniqueIdNumber(
   return data?.[0]?.id ?? null;
 }
 
+function validateTriageAssessment(
+  triageAssessment: CasualtyTriageAssessmentRequest | undefined,
+  response: Response,
+): boolean {
+  if (!triageAssessment) {
+    return true;
+  }
+
+  if (!triageSystems.includes(triageAssessment.triageSystem)) {
+    response.status(400).json({
+      success: false,
+      message: "Invalid triage system.",
+    });
+    return false;
+  }
+
+  if (!triageCategories.includes(triageAssessment.triageCategory)) {
+    response.status(400).json({
+      success: false,
+      message: "Invalid triage category.",
+    });
+    return false;
+  }
+
+  if (
+    triageAssessment.triageStage !== undefined &&
+    !triageStages.includes(triageAssessment.triageStage)
+  ) {
+    response.status(400).json({
+      success: false,
+      message: "Invalid triage stage.",
+    });
+    return false;
+  }
+
+  if (triageAssessment.triagedAt) {
+    const triagedAt = new Date(triageAssessment.triagedAt);
+
+    if (Number.isNaN(triagedAt.getTime())) {
+      response.status(400).json({
+        success: false,
+        message: "Invalid triage time.",
+      });
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function validateTransportRecord(
+  transportRecord: CasualtyTransportRecordRequest | undefined,
+  response: Response,
+): boolean {
+  if (!transportRecord) {
+    return true;
+  }
+
+  if (
+    !transportRequiredValues.includes(
+      transportRecord.transportRequired,
+    )
+  ) {
+    response.status(400).json({
+      success: false,
+      message: "Invalid transport required value.",
+    });
+    return false;
+  }
+
+  const transportMode = transportRecord.transportMode ?? "unknown";
+
+  if (!transportModes.includes(transportMode)) {
+    response.status(400).json({
+      success: false,
+      message: "Invalid transport mode.",
+    });
+    return false;
+  }
+
+  const emsUnitType = transportRecord.emsUnitType ?? "unknown";
+
+  if (!emsUnitTypes.includes(emsUnitType)) {
+    response.status(400).json({
+      success: false,
+      message: "Invalid EMS unit type.",
+    });
+    return false;
+  }
+
+  if (
+    transportRecord.transportRequired === "yes" &&
+    !transportRecord.receivingFacilityId
+  ) {
+    response.status(400).json({
+      success: false,
+      message:
+        "Receiving facility is required when transport is required.",
+    });
+    return false;
+  }
+
+  const departedSceneAt = transportRecord.departedSceneAt
+    ? new Date(transportRecord.departedSceneAt)
+    : null;
+  const arrivedFacilityAt = transportRecord.arrivedFacilityAt
+    ? new Date(transportRecord.arrivedFacilityAt)
+    : null;
+
+  if (
+    departedSceneAt &&
+    Number.isNaN(departedSceneAt.getTime())
+  ) {
+    response.status(400).json({
+      success: false,
+      message: "Invalid departed scene time.",
+    });
+    return false;
+  }
+
+  if (
+    arrivedFacilityAt &&
+    Number.isNaN(arrivedFacilityAt.getTime())
+  ) {
+    response.status(400).json({
+      success: false,
+      message: "Invalid arrived facility time.",
+    });
+    return false;
+  }
+
+  if (
+    departedSceneAt &&
+    arrivedFacilityAt &&
+    arrivedFacilityAt < departedSceneAt
+  ) {
+    response.status(400).json({
+      success: false,
+      message:
+        "Arrived facility time cannot be before departed scene time.",
+    });
+    return false;
+  }
+
+  return true;
+}
+
+async function ensureActiveHealthcareFacility(
+  facilityId: string | undefined,
+  response: Response,
+): Promise<boolean> {
+  if (!facilityId) {
+    return true;
+  }
+
+  const { data: facility, error: facilityError } = await supabase
+    .from("healthcare_facilities")
+    .select("id, is_active")
+    .eq("id", facilityId)
+    .maybeSingle();
+
+  if (facilityError || !facility) {
+    response.status(404).json({
+      success: false,
+      message: "Healthcare facility not found.",
+    });
+    return false;
+  }
+
+  if (!facility.is_active) {
+    response.status(400).json({
+      success: false,
+      message: "Healthcare facility is inactive.",
+    });
+    return false;
+  }
+
+  return true;
+}
+
+async function insertTriageAssessment(
+  casualtyIncidentId: string,
+  userId: string,
+  triageAssessment: CasualtyTriageAssessmentRequest,
+): Promise<void> {
+  const { error } = await supabase
+    .from("casualty_triage_assessments")
+    .insert({
+      casualty_incident_id: casualtyIncidentId,
+      triage_system: triageAssessment.triageSystem,
+      triage_category: triageAssessment.triageCategory,
+      triage_stage: triageAssessment.triageStage ?? "on_site",
+      triaged_at:
+        triageAssessment.triagedAt ?? new Date().toISOString(),
+      triaged_by: userId,
+      location: triageAssessment.location?.trim() || null,
+      notes: triageAssessment.notes?.trim() || null,
+    });
+
+  if (error) {
+    throw new Error(
+      `Unable to record triage assessment: ${error.message}`,
+    );
+  }
+}
+
+async function insertTransportRecord(
+  casualtyIncidentId: string,
+  userId: string,
+  transportRecord: CasualtyTransportRecordRequest,
+): Promise<void> {
+  const { error } = await supabase
+    .from("casualty_transport_records")
+    .insert({
+      casualty_incident_id: casualtyIncidentId,
+      transport_required: transportRecord.transportRequired,
+      transport_mode: transportRecord.transportMode ?? "unknown",
+      ems_unit_type: transportRecord.emsUnitType ?? "unknown",
+      departed_scene_at: transportRecord.departedSceneAt ?? null,
+      arrived_facility_at: transportRecord.arrivedFacilityAt ?? null,
+      receiving_facility_id:
+        transportRecord.receivingFacilityId ?? null,
+      recorded_by: userId,
+      notes: transportRecord.notes?.trim() || null,
+    });
+
+  if (error) {
+    throw new Error(
+      `Unable to record transport details: ${error.message}`,
+    );
+  }
+}
+
 export async function createCasualty(
   request: Request<
     Record<string, never>,
@@ -167,6 +454,8 @@ export async function createCasualty(
       incidentId,
       person,
       incidentDetails,
+      triageAssessment,
+      transportRecord,
     } = request.body;
     const user = getAuthenticatedUser(request);
 
@@ -302,6 +591,14 @@ export async function createCasualty(
       return;
     }
 
+    if (!validateTriageAssessment(triageAssessment, response)) {
+      return;
+    }
+
+    if (!validateTransportRecord(transportRecord, response)) {
+      return;
+    }
+
     const existingIdNumber = await ensureUniqueIdNumber(
       person.idNumber,
     );
@@ -342,6 +639,24 @@ export async function createCasualty(
       return;
     }
 
+    if (
+      !(await ensureActiveHealthcareFacility(
+        incidentDetails.healthcareFacilityId,
+        response,
+      ))
+    ) {
+      return;
+    }
+
+    if (
+      !(await ensureActiveHealthcareFacility(
+        transportRecord?.receivingFacilityId,
+        response,
+      ))
+    ) {
+      return;
+    }
+
     /*
      * Confirm that the authenticated encoder exists and is active.
      */
@@ -379,6 +694,8 @@ export async function createCasualty(
           ...incidentDetails,
           severity,
         },
+        p_triage_assessment: triageAssessment ?? null,
+        p_transport_record: transportRecord ?? null,
       },
     );
 
@@ -585,6 +902,377 @@ export async function getCasualtyStatusHistory(
   }
 }
 
+export async function getCasualtyTriageHistory(
+  request: Request<{ id: string }>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { id } = request.params;
+
+    const { data: existingRecord, error: existingError } =
+      await supabase
+        .from("casualty_incidents")
+        .select("id")
+        .eq("id", id)
+        .is("deleted_at", null)
+        .maybeSingle();
+
+    if (existingError) {
+      throw new Error(
+        `Unable to retrieve casualty record: ${existingError.message}`,
+      );
+    }
+
+    if (!existingRecord) {
+      response.status(404).json({
+        success: false,
+        message: "Casualty record not found.",
+      });
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("casualty_triage_assessments")
+      .select(
+        "id, casualty_incident_id, triage_system, triage_category, triage_stage, triaged_at, triaged_by, location, notes, created_at",
+      )
+      .eq("casualty_incident_id", id)
+      .order("triaged_at", { ascending: false });
+
+    if (error) {
+      throw new Error(
+        `Unable to retrieve triage history: ${error.message}`,
+      );
+    }
+
+    const triagedByIds = [
+      ...new Set(
+        (data ?? [])
+          .map((item) => item.triaged_by)
+          .filter(
+            (triagedBy): triagedBy is string =>
+              typeof triagedBy === "string" &&
+              triagedBy.trim().length > 0,
+          ),
+      ),
+    ];
+
+    const usersById = new Map<
+      string,
+      {
+        id: string;
+        full_name: string;
+        email: string;
+        role: string;
+      }
+    >();
+
+    if (triagedByIds.length > 0) {
+      const { data: users, error: usersError } = await supabase
+        .from("users")
+        .select("id, full_name, email, role")
+        .in("id", triagedByIds);
+
+      if (usersError) {
+        throw new Error(
+          `Unable to retrieve triage history users: ${usersError.message}`,
+        );
+      }
+
+      for (const user of users ?? []) {
+        usersById.set(user.id, user);
+      }
+    }
+
+    const history = (data ?? []).map((item) => ({
+      ...item,
+      triaged_by_user: item.triaged_by
+        ? usersById.get(item.triaged_by) ?? null
+        : null,
+    }));
+
+    response.status(200).json({
+      success: true,
+      count: history.length,
+      data: history,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function createCasualtyTriageAssessment(
+  request: Request<
+    { id: string },
+    unknown,
+    CasualtyTriageAssessmentRequest
+  >,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { id } = request.params;
+    const user = getAuthenticatedUser(request);
+
+    if (!request.body) {
+      response.status(400).json({
+        success: false,
+        message: "Triage assessment is required.",
+      });
+      return;
+    }
+
+    if (!validateTriageAssessment(request.body, response)) {
+      return;
+    }
+
+    const { data: existingRecord, error: existingError } =
+      await supabase
+        .from("casualty_incidents")
+        .select("id")
+        .eq("id", id)
+        .is("deleted_at", null)
+        .maybeSingle();
+
+    if (existingError) {
+      throw new Error(
+        `Unable to retrieve casualty record: ${existingError.message}`,
+      );
+    }
+
+    if (!existingRecord) {
+      response.status(404).json({
+        success: false,
+        message: "Casualty record not found.",
+      });
+      return;
+    }
+
+    await insertTriageAssessment(id, user.id, request.body);
+
+    response.status(201).json({
+      success: true,
+      message: "Triage assessment recorded successfully.",
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getCasualtyTransportHistory(
+  request: Request<{ id: string }>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { id } = request.params;
+
+    const { data: existingRecord, error: existingError } =
+      await supabase
+        .from("casualty_incidents")
+        .select("id")
+        .eq("id", id)
+        .is("deleted_at", null)
+        .maybeSingle();
+
+    if (existingError) {
+      throw new Error(
+        `Unable to retrieve casualty record: ${existingError.message}`,
+      );
+    }
+
+    if (!existingRecord) {
+      response.status(404).json({
+        success: false,
+        message: "Casualty record not found.",
+      });
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("casualty_transport_records")
+      .select(
+        "id, casualty_incident_id, transport_required, transport_mode, ems_unit_type, departed_scene_at, arrived_facility_at, receiving_facility_id, recorded_by, notes, created_at",
+      )
+      .eq("casualty_incident_id", id)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      throw new Error(
+        `Unable to retrieve transport history: ${error.message}`,
+      );
+    }
+
+    const recordedByIds = [
+      ...new Set(
+        (data ?? [])
+          .map((item) => item.recorded_by)
+          .filter(
+            (recordedBy): recordedBy is string =>
+              typeof recordedBy === "string" &&
+              recordedBy.trim().length > 0,
+          ),
+      ),
+    ];
+    const facilityIds = [
+      ...new Set(
+        (data ?? [])
+          .map((item) => item.receiving_facility_id)
+          .filter(
+            (facilityId): facilityId is string =>
+              typeof facilityId === "string" &&
+              facilityId.trim().length > 0,
+          ),
+      ),
+    ];
+
+    const usersById = new Map<
+      string,
+      {
+        id: string;
+        full_name: string;
+        email: string;
+        role: string;
+      }
+    >();
+    const facilitiesById = new Map<
+      string,
+      {
+        id: string;
+        facility_name: string;
+        facility_level: string;
+        address: string | null;
+        barangay: string | null;
+        municipality: string | null;
+        province: string | null;
+      }
+    >();
+
+    if (recordedByIds.length > 0) {
+      const { data: users, error: usersError } = await supabase
+        .from("users")
+        .select("id, full_name, email, role")
+        .in("id", recordedByIds);
+
+      if (usersError) {
+        throw new Error(
+          `Unable to retrieve transport history users: ${usersError.message}`,
+        );
+      }
+
+      for (const user of users ?? []) {
+        usersById.set(user.id, user);
+      }
+    }
+
+    if (facilityIds.length > 0) {
+      const { data: facilities, error: facilitiesError } =
+        await supabase
+          .from("healthcare_facilities")
+          .select(
+            "id, facility_name, facility_level, address, barangay, municipality, province",
+          )
+          .in("id", facilityIds);
+
+      if (facilitiesError) {
+        throw new Error(
+          `Unable to retrieve transport facilities: ${facilitiesError.message}`,
+        );
+      }
+
+      for (const facility of facilities ?? []) {
+        facilitiesById.set(facility.id, facility);
+      }
+    }
+
+    const history = (data ?? []).map((item) => ({
+      ...item,
+      recorded_by_user: item.recorded_by
+        ? usersById.get(item.recorded_by) ?? null
+        : null,
+      receiving_facility: item.receiving_facility_id
+        ? facilitiesById.get(item.receiving_facility_id) ?? null
+        : null,
+    }));
+
+    response.status(200).json({
+      success: true,
+      count: history.length,
+      data: history,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function createCasualtyTransportRecord(
+  request: Request<
+    { id: string },
+    unknown,
+    CasualtyTransportRecordRequest
+  >,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { id } = request.params;
+    const user = getAuthenticatedUser(request);
+
+    if (!request.body) {
+      response.status(400).json({
+        success: false,
+        message: "Transport record is required.",
+      });
+      return;
+    }
+
+    if (!validateTransportRecord(request.body, response)) {
+      return;
+    }
+
+    if (
+      !(await ensureActiveHealthcareFacility(
+        request.body.receivingFacilityId,
+        response,
+      ))
+    ) {
+      return;
+    }
+
+    const { data: existingRecord, error: existingError } =
+      await supabase
+        .from("casualty_incidents")
+        .select("id")
+        .eq("id", id)
+        .is("deleted_at", null)
+        .maybeSingle();
+
+    if (existingError) {
+      throw new Error(
+        `Unable to retrieve casualty record: ${existingError.message}`,
+      );
+    }
+
+    if (!existingRecord) {
+      response.status(404).json({
+        success: false,
+        message: "Casualty record not found.",
+      });
+      return;
+    }
+
+    await insertTransportRecord(id, user.id, request.body);
+
+    response.status(201).json({
+      success: true,
+      message: "Transport record saved successfully.",
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function updateCasualty(
   request: Request<{ id: string }, unknown, UpdateCasualtyRequest>,
   response: Response,
@@ -592,14 +1280,34 @@ export async function updateCasualty(
 ): Promise<void> {
   try {
     const { id } = request.params;
-    const { incidentId, person, incidentDetails } = request.body;
+    const {
+      incidentId,
+      person,
+      incidentDetails,
+      triageAssessment,
+      transportRecord,
+    } = request.body;
     const user = getAuthenticatedUser(request);
 
-    if (!person && !incidentDetails && !incidentId) {
+    if (
+      !person &&
+      !incidentDetails &&
+      !incidentId &&
+      !triageAssessment &&
+      !transportRecord
+    ) {
       response.status(400).json({
         success: false,
         message: "No casualty updates were provided.",
       });
+      return;
+    }
+
+    if (!validateTriageAssessment(triageAssessment, response)) {
+      return;
+    }
+
+    if (!validateTransportRecord(transportRecord, response)) {
       return;
     }
 
@@ -731,6 +1439,24 @@ export async function updateCasualty(
       }
     }
 
+    if (
+      !(await ensureActiveHealthcareFacility(
+        incidentDetails?.healthcareFacilityId,
+        response,
+      ))
+    ) {
+      return;
+    }
+
+    if (
+      !(await ensureActiveHealthcareFacility(
+        transportRecord?.receivingFacilityId,
+        response,
+      ))
+    ) {
+      return;
+    }
+
     if (person) {
       const existingIdNumber = await ensureUniqueIdNumber(
         person.idNumber,
@@ -792,6 +1518,10 @@ export async function updateCasualty(
           incidentDetails?.evacuationCenterId === undefined
             ? undefined
             : incidentDetails.evacuationCenterId || null,
+        healthcare_facility_id:
+          incidentDetails?.healthcareFacilityId === undefined
+            ? undefined
+            : incidentDetails.healthcareFacilityId || null,
         current_status: incidentDetails?.currentStatus,
         severity: incidentDetails?.severity,
         current_location: trimmedOrNull(
@@ -853,6 +1583,14 @@ export async function updateCasualty(
           );
         }
       }
+    }
+
+    if (triageAssessment) {
+      await insertTriageAssessment(id, user.id, triageAssessment);
+    }
+
+    if (transportRecord) {
+      await insertTransportRecord(id, user.id, transportRecord);
     }
 
     const { data: updatedRecord, error: updatedError } =

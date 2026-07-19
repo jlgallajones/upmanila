@@ -4,6 +4,7 @@ export type CasualtyRecord = {
   id: string;
   client_record_id: string;
   evacuation_center_id: string | null;
+  healthcare_facility_id: string | null;
   current_status: string;
   severity: string;
   verification_status: string;
@@ -57,6 +58,16 @@ export type CasualtyRecord = {
     province: string | null;
   } | null;
 
+  healthcare_facility: {
+    id: string;
+    facility_name: string;
+    facility_level: string;
+    address: string | null;
+    barangay: string | null;
+    municipality: string | null;
+    province: string | null;
+  } | null;
+
   encoder: {
     id: string;
     full_name: string;
@@ -87,6 +98,54 @@ export type CasualtyStatusHistoryItem = {
   } | null;
 };
 
+export type CasualtyTriageHistoryItem = {
+  id: string;
+  casualty_incident_id: string;
+  triage_system: string;
+  triage_category: string;
+  triage_stage: string;
+  triaged_at: string;
+  triaged_by: string | null;
+  location: string | null;
+  notes: string | null;
+  created_at: string;
+  triaged_by_user: {
+    id: string;
+    full_name: string;
+    email: string;
+    role: string;
+  } | null;
+};
+
+export type CasualtyTransportHistoryItem = {
+  id: string;
+  casualty_incident_id: string;
+  transport_required: string;
+  transport_mode: string;
+  ems_unit_type: string;
+  departed_scene_at: string | null;
+  arrived_facility_at: string | null;
+  receiving_facility_id: string | null;
+  recorded_by: string | null;
+  notes: string | null;
+  created_at: string;
+  recorded_by_user: {
+    id: string;
+    full_name: string;
+    email: string;
+    role: string;
+  } | null;
+  receiving_facility: {
+    id: string;
+    facility_name: string;
+    facility_level: string;
+    address: string | null;
+    barangay: string | null;
+    municipality: string | null;
+    province: string | null;
+  } | null;
+};
+
 type CasualtyResponse = {
   success: boolean;
   message?: string;
@@ -97,6 +156,61 @@ type CasualtyStatusHistoryResponse = {
   success: boolean;
   count: number;
   data: CasualtyStatusHistoryItem[];
+};
+
+type CasualtyTriageHistoryResponse = {
+  success: boolean;
+  count: number;
+  data: CasualtyTriageHistoryItem[];
+};
+
+type CasualtyTransportHistoryResponse = {
+  success: boolean;
+  count: number;
+  data: CasualtyTransportHistoryItem[];
+};
+
+export type CasualtyTriageAssessmentPayload = {
+  triageSystem:
+    | "urgent_non_urgent"
+    | "nato"
+    | "start"
+    | "sieve_sort"
+    | "smart"
+    | "care_flight"
+    | "mass"
+    | "salt"
+    | "ed_triage"
+    | "other";
+  triageCategory:
+    | "immediate"
+    | "delayed"
+    | "minimal"
+    | "expectant"
+    | "unknown";
+  triageStage?:
+    | "on_site"
+    | "facility_arrival"
+    | "reassessment";
+  triagedAt?: string;
+  location?: string;
+  notes?: string;
+};
+
+export type CasualtyTransportRecordPayload = {
+  transportRequired: "yes" | "no" | "unknown";
+  transportMode?:
+    | "ems"
+    | "private_vehicle"
+    | "independent"
+    | "walk_in"
+    | "other"
+    | "unknown";
+  emsUnitType?: "bls" | "als" | "other" | "unknown";
+  departedSceneAt?: string;
+  arrivedFacilityAt?: string;
+  receivingFacilityId?: string;
+  notes?: string;
 };
 
 export async function getCasualties(): Promise<CasualtyRecord[]> {
@@ -121,6 +235,26 @@ export async function getCasualtyStatusHistory(
 ): Promise<CasualtyStatusHistoryItem[]> {
   const response = await api.get<CasualtyStatusHistoryResponse>(
     `/casualties/${encodeURIComponent(id)}/status-history`,
+  );
+
+  return response.data.data;
+}
+
+export async function getCasualtyTriageHistory(
+  id: string,
+): Promise<CasualtyTriageHistoryItem[]> {
+  const response = await api.get<CasualtyTriageHistoryResponse>(
+    `/casualties/${encodeURIComponent(id)}/triage-history`,
+  );
+
+  return response.data.data;
+}
+
+export async function getCasualtyTransportHistory(
+  id: string,
+): Promise<CasualtyTransportHistoryItem[]> {
+  const response = await api.get<CasualtyTransportHistoryResponse>(
+    `/casualties/${encodeURIComponent(id)}/transport-history`,
   );
 
   return response.data.data;
@@ -178,6 +312,7 @@ export type CreateCasualtyPayload = {
       | "critical";
 
     evacuationCenterId?: string;
+    healthcareFacilityId?: string;
     currentLocation?: string;
     hospitalName?: string;
     visibleInjury?: string;
@@ -190,6 +325,9 @@ export type CreateCasualtyPayload = {
     longitude?: number;
     reportedAt?: string;
   };
+
+  triageAssessment?: CasualtyTriageAssessmentPayload;
+  transportRecord?: CasualtyTransportRecordPayload;
 };
 
 type CreateCasualtyResponse = {
@@ -223,6 +361,8 @@ export type UpdateCasualtyPayload = {
   incidentDetails?: Partial<
     CreateCasualtyPayload["incidentDetails"]
   >;
+  triageAssessment?: CasualtyTriageAssessmentPayload;
+  transportRecord?: CasualtyTransportRecordPayload;
 };
 
 export async function updateCasualty(

@@ -29,7 +29,9 @@ CREATE OR REPLACE FUNCTION public.create_casualty_record_transaction(
   p_incident_id uuid,
   p_encoded_by uuid,
   p_person jsonb,
-  p_incident_details jsonb
+  p_incident_details jsonb,
+  p_triage_assessment jsonb DEFAULT NULL,
+  p_transport_record jsonb DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -41,7 +43,11 @@ DECLARE
   v_encoder public.users%ROWTYPE;
   v_casualty public.casualties%ROWTYPE;
   v_casualty_incident public.casualty_incidents%ROWTYPE;
+  v_triage public.casualty_triage_assessments%ROWTYPE;
+  v_transport public.casualty_transport_records%ROWTYPE;
   v_evacuation_center_id uuid;
+  v_healthcare_facility_id uuid;
+  v_receiving_facility_id uuid;
   v_reported_at timestamptz;
 BEGIN
   SELECT *
@@ -72,6 +78,9 @@ BEGIN
 
   v_evacuation_center_id :=
     NULLIF(p_incident_details ->> 'evacuationCenterId', '')::uuid;
+
+  v_healthcare_facility_id :=
+    NULLIF(p_incident_details ->> 'healthcareFacilityId', '')::uuid;
 
   v_reported_at :=
     COALESCE(
@@ -126,6 +135,7 @@ BEGIN
     casualty_id,
     incident_id,
     evacuation_center_id,
+    healthcare_facility_id,
     current_status,
     severity,
     verification_status,
@@ -146,6 +156,7 @@ BEGIN
     v_casualty.id,
     p_incident_id,
     v_evacuation_center_id,
+    v_healthcare_facility_id,
     (p_incident_details ->> 'currentStatus')::public.casualty_status,
     COALESCE(
       NULLIF(p_incident_details ->> 'severity', ''),
@@ -166,9 +177,95 @@ BEGIN
   )
   RETURNING * INTO v_casualty_incident;
 
+  IF p_triage_assessment IS NOT NULL
+    AND NULLIF(p_triage_assessment ->> 'triageCategory', '') IS NOT NULL THEN
+    INSERT INTO public.casualty_triage_assessments (
+      casualty_incident_id,
+      triage_system,
+      triage_category,
+      triage_stage,
+      triaged_at,
+      triaged_by,
+      location,
+      notes
+    )
+    VALUES (
+      v_casualty_incident.id,
+      COALESCE(
+        NULLIF(p_triage_assessment ->> 'triageSystem', ''),
+        'start'
+      ),
+      NULLIF(p_triage_assessment ->> 'triageCategory', ''),
+      COALESCE(
+        NULLIF(p_triage_assessment ->> 'triageStage', ''),
+        'on_site'
+      ),
+      COALESCE(
+        NULLIF(p_triage_assessment ->> 'triagedAt', '')::timestamptz,
+        v_reported_at
+      ),
+      p_encoded_by,
+      NULLIF(p_triage_assessment ->> 'location', ''),
+      NULLIF(p_triage_assessment ->> 'notes', '')
+    )
+    RETURNING * INTO v_triage;
+  END IF;
+
+  IF p_transport_record IS NOT NULL
+    AND NULLIF(p_transport_record ->> 'transportRequired', '') IS NOT NULL THEN
+    v_receiving_facility_id :=
+      COALESCE(
+        NULLIF(p_transport_record ->> 'receivingFacilityId', '')::uuid,
+        v_healthcare_facility_id
+      );
+
+    INSERT INTO public.casualty_transport_records (
+      casualty_incident_id,
+      transport_required,
+      transport_mode,
+      ems_unit_type,
+      departed_scene_at,
+      arrived_facility_at,
+      receiving_facility_id,
+      recorded_by,
+      notes
+    )
+    VALUES (
+      v_casualty_incident.id,
+      COALESCE(
+        NULLIF(p_transport_record ->> 'transportRequired', ''),
+        'unknown'
+      ),
+      COALESCE(
+        NULLIF(p_transport_record ->> 'transportMode', ''),
+        'unknown'
+      ),
+      COALESCE(
+        NULLIF(p_transport_record ->> 'emsUnitType', ''),
+        'unknown'
+      ),
+      NULLIF(p_transport_record ->> 'departedSceneAt', '')::timestamptz,
+      NULLIF(p_transport_record ->> 'arrivedFacilityAt', '')::timestamptz,
+      v_receiving_facility_id,
+      p_encoded_by,
+      NULLIF(p_transport_record ->> 'notes', '')
+    )
+    RETURNING * INTO v_transport;
+  END IF;
+
   RETURN jsonb_build_object(
     'casualty', to_jsonb(v_casualty),
     'casualtyIncident', to_jsonb(v_casualty_incident),
+    'triageAssessment',
+      CASE
+        WHEN v_triage.id IS NULL THEN NULL
+        ELSE to_jsonb(v_triage)
+      END,
+    'transportRecord',
+      CASE
+        WHEN v_transport.id IS NULL THEN NULL
+        ELSE to_jsonb(v_transport)
+      END,
     'incident', jsonb_build_object(
       'id', v_incident.id,
       'incidentCode', v_incident.incident_code,

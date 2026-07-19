@@ -23,7 +23,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import {
   createCasualty,
   getCasualty,
+  getCasualtyTriageHistory,
+  getCasualtyTransportHistory,
   updateCasualty,
+  type CasualtyTransportHistoryItem,
+  type CasualtyTriageHistoryItem,
   type CasualtyRecord,
   type CreateCasualtyPayload,
   type UpdateCasualtyPayload,
@@ -39,6 +43,11 @@ import {
   getEvacuationCenters,
   type EvacuationCenter,
 } from "../../api/evacuation-centers";
+import {
+  createHealthcareFacility,
+  getHealthcareFacilities,
+  type HealthcareFacility,
+} from "../../api/healthcare-facilities";
 import { getCurrentUser } from "../../auth/session";
 import {
   isNetworkSubmissionError,
@@ -62,6 +71,8 @@ const STEPS = [
   "Personal",
   "Address",
   "Incident",
+  "Triage",
+  "Transport",
   "Status",
   "Remarks",
 ] as const;
@@ -99,6 +110,63 @@ const SEVERITY_OPTIONS = [
   "Critical",
 ] as const;
 
+const TRIAGE_SYSTEM_OPTIONS = [
+  "START",
+  "NATO",
+  "SIEVE/SORT",
+  "SMART",
+  "Care Flight",
+  "MASS",
+  "SALT",
+  "ED Triage",
+  "Urgent/Non-urgent",
+  "Other",
+] as const;
+
+const TRIAGE_CATEGORY_OPTIONS = [
+  "Immediate",
+  "Delayed",
+  "Minimal",
+  "Expectant",
+  "Unknown",
+] as const;
+
+const TRIAGE_STAGE_OPTIONS = [
+  "On-site",
+  "Facility Arrival",
+  "Reassessment",
+] as const;
+
+const TRANSPORT_REQUIRED_OPTIONS = [
+  "Yes",
+  "No",
+  "Unknown",
+] as const;
+
+const TRANSPORT_MODE_OPTIONS = [
+  "EMS",
+  "Private Vehicle",
+  "Independent",
+  "Walk-in",
+  "Other",
+  "Unknown",
+] as const;
+
+const EMS_UNIT_TYPE_OPTIONS = [
+  "BLS",
+  "ALS",
+  "Other",
+  "Unknown",
+] as const;
+
+const FACILITY_LEVEL_OPTIONS = [
+  "Primary",
+  "Secondary",
+  "Tertiary",
+  "Specialized",
+  "Unknown",
+] as const;
+
 const REFERENCE_MANAGER_ROLES = [
   "super_admin",
   "administrator",
@@ -111,7 +179,15 @@ type ChoiceSheetName =
   | "sex"
   | "incident"
   | "evacuationCenter"
+  | "healthcareFacility"
   | "disasterType"
+  | "facilityLevel"
+  | "triageSystem"
+  | "triageCategory"
+  | "triageStage"
+  | "transportRequired"
+  | "transportMode"
+  | "emsUnitType"
   | "casualtyStatus"
   | "severity";
 
@@ -153,8 +229,24 @@ type FormState = {
   latitude: string;
   longitude: string;
 
+  triageSystem: string;
+  triageCategory: string;
+  triageStage: string;
+  triageTime: string;
+  triageLocation: string;
+  triageNotes: string;
+
+  transportRequired: string;
+  transportMode: string;
+  emsUnitType: string;
+  departedSceneTime: string;
+  arrivedFacilityTime: string;
+  transportNotes: string;
+
   casualtyStatus: string;
   severity: string;
+  healthcareFacilityId: string;
+  healthcareFacility: string;
   hospitalName: string;
   visibleInjury: string;
   medicalCondition: string;
@@ -174,6 +266,11 @@ type SelectedPhoto = {
 type EvacuationCenterLabelSource = Pick<
   EvacuationCenter,
   "center_name" | "barangay" | "municipality"
+>;
+
+type HealthcareFacilityLabelSource = Pick<
+  HealthcareFacility,
+  "facility_name" | "facility_level" | "municipality"
 >;
 
 const initialForm: FormState = {
@@ -199,8 +296,24 @@ const initialForm: FormState = {
   latitude: "",
   longitude: "",
 
+  triageSystem: "",
+  triageCategory: "",
+  triageStage: "",
+  triageTime: "",
+  triageLocation: "",
+  triageNotes: "",
+
+  transportRequired: "",
+  transportMode: "",
+  emsUnitType: "",
+  departedSceneTime: "",
+  arrivedFacilityTime: "",
+  transportNotes: "",
+
   casualtyStatus: "",
   severity: "",
+  healthcareFacilityId: "",
+  healthcareFacility: "",
   hospitalName: "",
   visibleInjury: "",
   medicalCondition: "",
@@ -215,6 +328,18 @@ type CasualtyStatus =
 
 type CasualtySeverity =
   NonNullable<CreateCasualtyPayload["incidentDetails"]["severity"]>;
+
+type TriageAssessment =
+  NonNullable<CreateCasualtyPayload["triageAssessment"]>;
+
+type TriageSystem = TriageAssessment["triageSystem"];
+type TriageCategory = TriageAssessment["triageCategory"];
+type TriageStage = NonNullable<TriageAssessment["triageStage"]>;
+type TransportRecord =
+  NonNullable<CreateCasualtyPayload["transportRecord"]>;
+type TransportRequired = TransportRecord["transportRequired"];
+type TransportMode = NonNullable<TransportRecord["transportMode"]>;
+type EmsUnitType = NonNullable<TransportRecord["emsUnitType"]>;
 
 function valueOrEmpty(value: string | number | null | undefined): string {
   if (value === null || value === undefined) {
@@ -248,6 +373,21 @@ function formatEvacuationCenterLabel(
   return location
     ? `${center.center_name} - ${location}`
     : center.center_name;
+}
+
+function formatHealthcareFacilityLabel(
+  facility: HealthcareFacilityLabelSource,
+): string {
+  const details = [titleCase(facility.facility_level), facility.municipality]
+    .filter(
+      (part): part is string =>
+        typeof part === "string" && part.trim().length > 0,
+    )
+    .join(", ");
+
+  return details
+    ? `${facility.facility_name} - ${details}`
+    : facility.facility_name;
 }
 
 function normalizeEnumValue(value: string): string {
@@ -286,6 +426,192 @@ function normalizeSeverity(value: string): CasualtySeverity {
   return allowed.includes(normalized as CasualtySeverity)
     ? (normalized as CasualtySeverity)
     : "none";
+}
+
+function normalizeTriageSystem(value: string): TriageSystem {
+  switch (value.trim().toLowerCase()) {
+    case "urgent/non-urgent":
+    case "urgent / non-urgent":
+      return "urgent_non_urgent";
+    case "nato":
+      return "nato";
+    case "sieve/sort":
+    case "sieve / sort":
+      return "sieve_sort";
+    case "smart":
+      return "smart";
+    case "care flight":
+      return "care_flight";
+    case "mass":
+      return "mass";
+    case "salt":
+      return "salt";
+    case "ed triage":
+      return "ed_triage";
+    case "other":
+      return "other";
+    case "start":
+    default:
+      return "start";
+  }
+}
+
+function normalizeTriageCategory(value: string): TriageCategory {
+  const normalized = normalizeEnumValue(value);
+  const allowed: TriageCategory[] = [
+    "immediate",
+    "delayed",
+    "minimal",
+    "expectant",
+    "unknown",
+  ];
+
+  return allowed.includes(normalized as TriageCategory)
+    ? (normalized as TriageCategory)
+    : "unknown";
+}
+
+function normalizeTriageStage(value: string): TriageStage {
+  switch (value.trim().toLowerCase()) {
+    case "facility arrival":
+      return "facility_arrival";
+    case "reassessment":
+      return "reassessment";
+    case "on-site":
+    default:
+      return "on_site";
+  }
+}
+
+function formatTriageSystem(value: string | null | undefined): string {
+  switch (value) {
+    case "urgent_non_urgent":
+      return "Urgent/Non-urgent";
+    case "nato":
+      return "NATO";
+    case "start":
+      return "START";
+    case "sieve_sort":
+      return "SIEVE/SORT";
+    case "smart":
+      return "SMART";
+    case "care_flight":
+      return "Care Flight";
+    case "mass":
+      return "MASS";
+    case "salt":
+      return "SALT";
+    case "ed_triage":
+      return "ED Triage";
+    case "other":
+      return "Other";
+    default:
+      return "";
+  }
+}
+
+function formatTriageStage(value: string | null | undefined): string {
+  switch (value) {
+    case "facility_arrival":
+      return "Facility Arrival";
+    case "reassessment":
+      return "Reassessment";
+    case "on_site":
+      return "On-site";
+    default:
+      return "";
+  }
+}
+
+function normalizeTransportRequired(value: string): TransportRequired {
+  const normalized = normalizeEnumValue(value);
+  const allowed: TransportRequired[] = ["yes", "no", "unknown"];
+
+  return allowed.includes(normalized as TransportRequired)
+    ? (normalized as TransportRequired)
+    : "unknown";
+}
+
+function normalizeTransportMode(value: string): TransportMode {
+  switch (value.trim().toLowerCase()) {
+    case "ems":
+      return "ems";
+    case "private vehicle":
+      return "private_vehicle";
+    case "independent":
+      return "independent";
+    case "walk-in":
+    case "walk in":
+      return "walk_in";
+    case "other":
+      return "other";
+    case "unknown":
+    default:
+      return "unknown";
+  }
+}
+
+function normalizeEmsUnitType(value: string): EmsUnitType {
+  switch (value.trim().toLowerCase()) {
+    case "bls":
+      return "bls";
+    case "als":
+      return "als";
+    case "other":
+      return "other";
+    case "unknown":
+    default:
+      return "unknown";
+  }
+}
+
+function formatTransportRequired(
+  value: string | null | undefined,
+): string {
+  switch (value) {
+    case "yes":
+      return "Yes";
+    case "no":
+      return "No";
+    case "unknown":
+      return "Unknown";
+    default:
+      return "";
+  }
+}
+
+function formatTransportMode(value: string | null | undefined): string {
+  switch (value) {
+    case "ems":
+      return "EMS";
+    case "private_vehicle":
+      return "Private Vehicle";
+    case "independent":
+      return "Independent";
+    case "walk_in":
+      return "Walk-in";
+    case "other":
+      return "Other";
+    case "unknown":
+      return "Unknown";
+    default:
+      return "";
+  }
+}
+
+function formatEmsUnitType(value: string | null | undefined): string {
+  switch (value) {
+    case "bls":
+      return "BLS";
+    case "als":
+      return "ALS";
+    case "other":
+      return "Other";
+    case "unknown":
+      return "Unknown";
+    default:
+      return "";
+  }
 }
 
 function parseOptionalInteger(value: string): number | undefined {
@@ -342,6 +668,93 @@ function formatDateForInput(date: Date): string {
 
 function formatTodayForInput(): string {
   return formatDateForInput(new Date());
+}
+
+function formatDateTimeForInput(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const year = date.getFullYear();
+  const hour = String(date.getHours()).padStart(2, "0");
+  const minute = String(date.getMinutes()).padStart(2, "0");
+
+  return `${month}/${day}/${year} ${hour}:${minute}`;
+}
+
+function parseDateTimeInput(value: string): string | undefined {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const isoDate = new Date(trimmed);
+
+  if (!Number.isNaN(isoDate.getTime())) {
+    return isoDate.toISOString();
+  }
+
+  const match =
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})$/.exec(
+      trimmed,
+    );
+
+  if (!match) {
+    return trimmed;
+  }
+
+  const [, month, day, year, hour, minute] = match;
+  const date = new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+  );
+
+  return Number.isNaN(date.getTime()) ? trimmed : date.toISOString();
+}
+
+function getValidDateTimeInput(value: string): Date | null {
+  const parsed = parseDateTimeInput(value);
+
+  if (!parsed) {
+    return null;
+  }
+
+  const date = new Date(parsed);
+
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function getTriageFormSignature(form: FormState): string {
+  if (!form.triageCategory.trim()) {
+    return "";
+  }
+
+  return JSON.stringify({
+    system: normalizeTriageSystem(form.triageSystem),
+    category: normalizeTriageCategory(form.triageCategory),
+    stage: normalizeTriageStage(form.triageStage),
+    time: parseDateTimeInput(form.triageTime) ?? "",
+    location: form.triageLocation.trim(),
+    notes: form.triageNotes.trim(),
+  });
+}
+
+function getTransportFormSignature(form: FormState): string {
+  if (!form.transportRequired.trim()) {
+    return "";
+  }
+
+  return JSON.stringify({
+    required: normalizeTransportRequired(form.transportRequired),
+    mode: normalizeTransportMode(form.transportMode),
+    emsUnitType: normalizeEmsUnitType(form.emsUnitType),
+    departed: parseDateTimeInput(form.departedSceneTime) ?? "",
+    arrived: parseDateTimeInput(form.arrivedFacilityTime) ?? "",
+    receivingFacilityId: form.healthcareFacilityId.trim(),
+    notes: form.transportNotes.trim(),
+  });
 }
 
 function parseDateInput(value: string): Date {
@@ -414,7 +827,11 @@ function generateUuid(): string {
   );
 }
 
-function mapRecordToForm(record: CasualtyRecord): FormState {
+function mapRecordToForm(
+  record: CasualtyRecord,
+  latestTriage?: CasualtyTriageHistoryItem,
+  latestTransport?: CasualtyTransportHistoryItem,
+): FormState {
   return {
     idNumber: valueOrEmpty(record.casualty.id_number),
     age: valueOrEmpty(record.casualty.estimated_age),
@@ -442,8 +859,47 @@ function mapRecordToForm(record: CasualtyRecord): FormState {
     latitude: valueOrEmpty(record.latitude),
     longitude: valueOrEmpty(record.longitude),
 
+    triageSystem: formatTriageSystem(latestTriage?.triage_system),
+    triageCategory: titleCase(latestTriage?.triage_category),
+    triageStage: formatTriageStage(latestTriage?.triage_stage),
+    triageTime: latestTriage?.triaged_at
+      ? formatDateTimeForInput(new Date(latestTriage.triaged_at))
+      : "",
+    triageLocation: valueOrEmpty(latestTriage?.location),
+    triageNotes: valueOrEmpty(latestTriage?.notes),
+
+    transportRequired: formatTransportRequired(
+      latestTransport?.transport_required,
+    ),
+    transportMode: formatTransportMode(latestTransport?.transport_mode),
+    emsUnitType: formatEmsUnitType(latestTransport?.ems_unit_type),
+    departedSceneTime: latestTransport?.departed_scene_at
+      ? formatDateTimeForInput(
+          new Date(latestTransport.departed_scene_at),
+        )
+      : "",
+    arrivedFacilityTime: latestTransport?.arrived_facility_at
+      ? formatDateTimeForInput(
+          new Date(latestTransport.arrived_facility_at),
+        )
+      : "",
+    transportNotes: valueOrEmpty(latestTransport?.notes),
+
     casualtyStatus: titleCase(record.current_status),
     severity: titleCase(record.severity),
+    healthcareFacilityId: valueOrEmpty(
+      latestTransport?.receiving_facility_id ??
+        record.healthcare_facility_id,
+    ),
+    healthcareFacility: valueOrEmpty(
+      latestTransport?.receiving_facility
+        ? formatHealthcareFacilityLabel(
+            latestTransport.receiving_facility,
+          )
+        : record.healthcare_facility
+          ? formatHealthcareFacilityLabel(record.healthcare_facility)
+          : record.healthcare_facility_id,
+    ),
     hospitalName: valueOrEmpty(record.hospital_name),
     visibleInjury: valueOrEmpty(record.visible_injury),
     medicalCondition: valueOrEmpty(record.medical_condition),
@@ -848,9 +1304,19 @@ export default function AddCasualtyScreen() {
   const [form, setForm] = useState<FormState>(() => ({
     ...initialForm,
     idNumber: isEditing ? "" : generateCasualtyIdNumber(),
+    triageSystem: isEditing ? "" : "START",
+    triageStage: isEditing ? "" : "On-site",
+    triageTime: isEditing ? "" : formatDateTimeForInput(new Date()),
+    transportRequired: isEditing ? "" : "Unknown",
+    transportMode: isEditing ? "" : "Unknown",
+    emsUnitType: isEditing ? "" : "Unknown",
   }));
   const [isLoadingRecord, setIsLoadingRecord] =
     useState(isEditing);
+  const [initialTriageSignature, setInitialTriageSignature] =
+    useState("");
+  const [initialTransportSignature, setInitialTransportSignature] =
+    useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeChoiceSheet, setActiveChoiceSheet] =
@@ -884,6 +1350,25 @@ export default function AddCasualtyScreen() {
   ] = useState("");
   const [isCreatingEvacuationCenter, setIsCreatingEvacuationCenter] =
     useState(false);
+  const [healthcareFacilities, setHealthcareFacilities] = useState<
+    HealthcareFacility[]
+  >([]);
+  const [isLoadingHealthcareFacilities, setIsLoadingHealthcareFacilities] =
+    useState(false);
+  const [healthcareFacilityError, setHealthcareFacilityError] =
+    useState<string | null>(null);
+  const [newHealthcareFacilityName, setNewHealthcareFacilityName] =
+    useState("");
+  const [newHealthcareFacilityLevel, setNewHealthcareFacilityLevel] =
+    useState("");
+  const [
+    newHealthcareFacilityAddress,
+    setNewHealthcareFacilityAddress,
+  ] = useState("");
+  const [
+    isCreatingHealthcareFacility,
+    setIsCreatingHealthcareFacility,
+  ] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(
     null,
   );
@@ -942,6 +1427,8 @@ export default function AddCasualtyScreen() {
       severity: normalizeSeverity(form.severity),
       evacuationCenterId:
         form.evacuationCenterId || undefined,
+      healthcareFacilityId:
+        form.healthcareFacilityId || undefined,
       currentLocation: form.currentLocation,
       hospitalName: form.hospitalName,
       visibleInjury: form.visibleInjury,
@@ -955,13 +1442,72 @@ export default function AddCasualtyScreen() {
     [form],
   );
 
+  const triageAssessmentPayload = useMemo<
+    CreateCasualtyPayload["triageAssessment"]
+  >(() => {
+    if (!form.triageCategory.trim()) {
+      return undefined;
+    }
+
+    if (
+      isEditing &&
+      getTriageFormSignature(form) === initialTriageSignature
+    ) {
+      return undefined;
+    }
+
+    return {
+      triageSystem: normalizeTriageSystem(form.triageSystem),
+      triageCategory: normalizeTriageCategory(form.triageCategory),
+      triageStage: normalizeTriageStage(form.triageStage),
+      triagedAt: parseDateTimeInput(form.triageTime),
+      location: form.triageLocation || form.currentLocation,
+      notes: form.triageNotes,
+    };
+  }, [form, initialTriageSignature, isEditing]);
+
+  const transportRecordPayload = useMemo<
+    CreateCasualtyPayload["transportRecord"]
+  >(() => {
+    if (!form.transportRequired.trim()) {
+      return undefined;
+    }
+
+    if (
+      isEditing &&
+      getTransportFormSignature(form) === initialTransportSignature
+    ) {
+      return undefined;
+    }
+
+    return {
+      transportRequired: normalizeTransportRequired(
+        form.transportRequired,
+      ),
+      transportMode: normalizeTransportMode(form.transportMode),
+      emsUnitType: normalizeEmsUnitType(form.emsUnitType),
+      departedSceneAt: parseDateTimeInput(form.departedSceneTime),
+      arrivedFacilityAt: parseDateTimeInput(form.arrivedFacilityTime),
+      receivingFacilityId: form.healthcareFacilityId || undefined,
+      notes: form.transportNotes,
+    };
+  }, [form, initialTransportSignature, isEditing]);
+
   const updatePayload = useMemo<UpdateCasualtyPayload>(
     () => ({
       incidentId: form.incidentId || undefined,
       person: personPayload,
       incidentDetails: incidentDetailsPayload,
+      triageAssessment: triageAssessmentPayload,
+      transportRecord: transportRecordPayload,
     }),
-    [form.incidentId, incidentDetailsPayload, personPayload],
+    [
+      form.incidentId,
+      incidentDetailsPayload,
+      personPayload,
+      triageAssessmentPayload,
+      transportRecordPayload,
+    ],
   );
 
   useEffect(() => {
@@ -1066,6 +1612,43 @@ export default function AddCasualtyScreen() {
   useEffect(() => {
     let isMounted = true;
 
+    async function loadHealthcareFacilityOptions() {
+      try {
+        setIsLoadingHealthcareFacilities(true);
+        setHealthcareFacilityError(null);
+
+        const data = await getHealthcareFacilities();
+
+        if (isMounted) {
+          setHealthcareFacilities(data);
+        }
+      } catch (error) {
+        console.error("Failed to load healthcare facilities:", error);
+
+        if (isMounted) {
+          setHealthcareFacilityError(
+            error instanceof Error
+              ? error.message
+              : "Unable to load healthcare facilities.",
+          );
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingHealthcareFacilities(false);
+        }
+      }
+    }
+
+    void loadHealthcareFacilityOptions();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
     async function loadEditableRecord() {
       if (!casualtyId) {
         setIsLoadingRecord(false);
@@ -1076,10 +1659,26 @@ export default function AddCasualtyScreen() {
         setIsLoadingRecord(true);
         setLoadError(null);
 
-        const record = await getCasualty(casualtyId);
+        const [record, triageHistory, transportHistory] =
+          await Promise.all([
+            getCasualty(casualtyId),
+            getCasualtyTriageHistory(casualtyId),
+            getCasualtyTransportHistory(casualtyId),
+          ]);
 
         if (isMounted) {
-          setForm(mapRecordToForm(record));
+          const mappedForm = mapRecordToForm(
+            record,
+            triageHistory[0],
+            transportHistory[0],
+          );
+          setForm(mappedForm);
+          setInitialTriageSignature(
+            getTriageFormSignature(mappedForm),
+          );
+          setInitialTransportSignature(
+            getTransportFormSignature(mappedForm),
+          );
         }
       } catch (error) {
         console.error("Failed to load casualty for editing:", error);
@@ -1123,7 +1722,8 @@ export default function AddCasualtyScreen() {
   function isActiveChoiceSheetSearchable(): boolean {
     return (
       activeChoiceSheet === "incident" ||
-      activeChoiceSheet === "evacuationCenter"
+      activeChoiceSheet === "evacuationCenter" ||
+      activeChoiceSheet === "healthcareFacility"
     );
   }
 
@@ -1213,6 +1813,134 @@ export default function AddCasualtyScreen() {
         }
 
         return true;
+
+      case "Triage":
+        if (!form.triageSystem.trim()) {
+          Alert.alert(
+            "Triage system required",
+            "Select the triage system used for this casualty.",
+          );
+          return false;
+        }
+
+        if (!form.triageCategory.trim()) {
+          Alert.alert(
+            "Triage category required",
+            "Select the casualty triage category before continuing.",
+          );
+          return false;
+        }
+
+        if (!form.triageStage.trim()) {
+          Alert.alert(
+            "Triage stage required",
+            "Select whether this triage was on-site, facility arrival, or reassessment.",
+          );
+          return false;
+        }
+
+        if (!form.triageTime.trim()) {
+          Alert.alert(
+            "Triage time required",
+            "Enter the time this triage assessment was performed.",
+          );
+          return false;
+        }
+
+        if (!getValidDateTimeInput(form.triageTime)) {
+          Alert.alert(
+            "Invalid triage time",
+            "Enter triage time using mm/dd/yyyy hh:mm.",
+          );
+          return false;
+        }
+
+        return true;
+
+      case "Transport": {
+        if (!form.transportRequired.trim()) {
+          Alert.alert(
+            "Transport status required",
+            "Select whether this casualty requires transport.",
+          );
+          return false;
+        }
+
+        const transportRequired = normalizeTransportRequired(
+          form.transportRequired,
+        );
+        const transportMode = normalizeTransportMode(form.transportMode);
+
+        if (
+          transportRequired === "yes" &&
+          transportMode === "unknown"
+        ) {
+          Alert.alert(
+            "Transport mode required",
+            "Select EMS, private vehicle, independent, walk-in, or other.",
+          );
+          return false;
+        }
+
+        if (
+          transportRequired === "yes" &&
+          !form.healthcareFacilityId
+        ) {
+          Alert.alert(
+            "Receiving facility required",
+            "Select or create the receiving healthcare facility before continuing.",
+          );
+          return false;
+        }
+
+        if (
+          transportMode === "ems" &&
+          !form.emsUnitType.trim()
+        ) {
+          Alert.alert(
+            "EMS unit type required",
+            "Select BLS, ALS, other, or unknown for EMS transport.",
+          );
+          return false;
+        }
+
+        const departedSceneAt = form.departedSceneTime.trim()
+          ? getValidDateTimeInput(form.departedSceneTime)
+          : null;
+        const arrivedFacilityAt = form.arrivedFacilityTime.trim()
+          ? getValidDateTimeInput(form.arrivedFacilityTime)
+          : null;
+
+        if (form.departedSceneTime.trim() && !departedSceneAt) {
+          Alert.alert(
+            "Invalid departed time",
+            "Enter departed scene time using mm/dd/yyyy hh:mm.",
+          );
+          return false;
+        }
+
+        if (form.arrivedFacilityTime.trim() && !arrivedFacilityAt) {
+          Alert.alert(
+            "Invalid arrival time",
+            "Enter arrived facility time using mm/dd/yyyy hh:mm.",
+          );
+          return false;
+        }
+
+        if (
+          departedSceneAt &&
+          arrivedFacilityAt &&
+          arrivedFacilityAt < departedSceneAt
+        ) {
+          Alert.alert(
+            "Invalid transport times",
+            "Arrived facility time cannot be before departed scene time.",
+          );
+          return false;
+        }
+
+        return true;
+      }
 
       case "Status":
         if (!form.casualtyStatus.trim()) {
@@ -1389,6 +2117,86 @@ export default function AddCasualtyScreen() {
     }
   }
 
+  async function handleCreateHealthcareFacility() {
+    const facilityName = newHealthcareFacilityName.trim();
+    const facilityLevel =
+      normalizeEnumValue(newHealthcareFacilityLevel) || "unknown";
+
+    if (!currentUserId) {
+      Alert.alert(
+        "Unable to create healthcare facility",
+        "Please log in again before creating a healthcare facility.",
+      );
+      return;
+    }
+
+    if (!canManageReferenceData) {
+      Alert.alert(
+        "Permission required",
+        "Your account is not allowed to create healthcare facilities.",
+      );
+      return;
+    }
+
+    if (!facilityName) {
+      Alert.alert(
+        "Enter facility name",
+        "Add the healthcare facility name before creating it.",
+      );
+      return;
+    }
+
+    try {
+      setIsCreatingHealthcareFacility(true);
+      setHealthcareFacilityError(null);
+
+      const facility = await createHealthcareFacility({
+        facilityName,
+        facilityLevel,
+        address: newHealthcareFacilityAddress || undefined,
+        barangay: form.barangay || undefined,
+        municipality: form.municipality || undefined,
+        province: form.province || undefined,
+      });
+
+      setHealthcareFacilities((current) => {
+        const exists = current.some((item) => item.id === facility.id);
+
+        return exists
+          ? current.map((item) =>
+              item.id === facility.id ? facility : item,
+            )
+          : [facility, ...current];
+      });
+
+      updateField("healthcareFacilityId", facility.id);
+      updateField(
+        "healthcareFacility",
+        formatHealthcareFacilityLabel(facility),
+      );
+      updateField("hospitalName", facility.facility_name);
+      setNewHealthcareFacilityName("");
+      setNewHealthcareFacilityLevel("");
+      setNewHealthcareFacilityAddress("");
+
+      Alert.alert(
+        "Healthcare facility ready",
+        "The healthcare facility has been added and selected for this casualty.",
+      );
+    } catch (error) {
+      console.error("Failed to create healthcare facility:", error);
+
+      Alert.alert(
+        "Unable to create healthcare facility",
+        error instanceof Error
+          ? error.message
+          : "Please review the facility details and try again.",
+      );
+    } finally {
+      setIsCreatingHealthcareFacility(false);
+    }
+  }
+
   async function setPhotoFromPickerResult(
     result: ImagePicker.ImagePickerResult,
   ) {
@@ -1559,8 +2367,24 @@ export default function AddCasualtyScreen() {
         return "Select Disaster Incident";
       case "evacuationCenter":
         return "Select Evacuation Center";
+      case "healthcareFacility":
+        return "Select Healthcare Facility";
       case "disasterType":
         return "Select Disaster Type";
+      case "facilityLevel":
+        return "Select Facility Level";
+      case "triageSystem":
+        return "Select Triage System";
+      case "triageCategory":
+        return "Select Triage Category";
+      case "triageStage":
+        return "Select Triage Stage";
+      case "transportRequired":
+        return "Select Transport Status";
+      case "transportMode":
+        return "Select Transport Mode";
+      case "emsUnitType":
+        return "Select EMS Unit Type";
       case "casualtyStatus":
         return "Select Casualty Status";
       case "severity":
@@ -1655,12 +2479,113 @@ export default function AddCasualtyScreen() {
         }));
       }
 
+      case "healthcareFacility": {
+        const facilityOptions =
+          healthcareFacilities.length > 0
+            ? healthcareFacilities
+            : form.healthcareFacilityId && form.healthcareFacility
+              ? [
+                  {
+                    id: form.healthcareFacilityId,
+                    facility_name: form.healthcareFacility,
+                    facility_level: "unknown",
+                    address: null,
+                    barangay: null,
+                    municipality: null,
+                    province: null,
+                    contact_person: null,
+                    contact_number: null,
+                    latitude: null,
+                    longitude: null,
+                    is_active: true,
+                    created_at: "",
+                    updated_at: "",
+                  },
+                ]
+              : [];
+
+        return facilityOptions.map((facility) => ({
+          key: facility.id,
+          label: formatHealthcareFacilityLabel(facility),
+          selected: form.healthcareFacilityId === facility.id,
+          onSelect: () => {
+            updateField("healthcareFacilityId", facility.id);
+            updateField(
+              "healthcareFacility",
+              formatHealthcareFacilityLabel(facility),
+            );
+            updateField("hospitalName", facility.facility_name);
+          },
+        }));
+      }
+
       case "disasterType":
         return DISASTER_TYPE_OPTIONS.map((option) => ({
           label: option,
           selected:
             newIncidentType.toLowerCase() === option.toLowerCase(),
           onSelect: () => setNewIncidentType(option),
+        }));
+
+      case "facilityLevel":
+        return FACILITY_LEVEL_OPTIONS.map((option) => ({
+          label: option,
+          selected:
+            newHealthcareFacilityLevel.toLowerCase() ===
+            option.toLowerCase(),
+          onSelect: () => setNewHealthcareFacilityLevel(option),
+        }));
+
+      case "triageSystem":
+        return TRIAGE_SYSTEM_OPTIONS.map((option) => ({
+          label: option,
+          selected:
+            form.triageSystem.toLowerCase() ===
+            option.toLowerCase(),
+          onSelect: () => updateField("triageSystem", option),
+        }));
+
+      case "triageCategory":
+        return TRIAGE_CATEGORY_OPTIONS.map((option) => ({
+          label: option,
+          selected:
+            form.triageCategory.toLowerCase() ===
+            option.toLowerCase(),
+          onSelect: () => updateField("triageCategory", option),
+        }));
+
+      case "triageStage":
+        return TRIAGE_STAGE_OPTIONS.map((option) => ({
+          label: option,
+          selected:
+            form.triageStage.toLowerCase() === option.toLowerCase(),
+          onSelect: () => updateField("triageStage", option),
+        }));
+
+      case "transportRequired":
+        return TRANSPORT_REQUIRED_OPTIONS.map((option) => ({
+          label: option,
+          selected:
+            form.transportRequired.toLowerCase() ===
+            option.toLowerCase(),
+          onSelect: () => updateField("transportRequired", option),
+        }));
+
+      case "transportMode":
+        return TRANSPORT_MODE_OPTIONS.map((option) => ({
+          label: option,
+          selected:
+            form.transportMode.toLowerCase() ===
+            option.toLowerCase(),
+          onSelect: () => updateField("transportMode", option),
+        }));
+
+      case "emsUnitType":
+        return EMS_UNIT_TYPE_OPTIONS.map((option) => ({
+          label: option,
+          selected:
+            form.emsUnitType.toLowerCase() === option.toLowerCase(),
+          onSelect: () => updateField("emsUnitType", option),
         }));
 
       case "casualtyStatus":
@@ -1712,6 +2637,8 @@ export default function AddCasualtyScreen() {
           incidentId: form.incidentId,
           person: personPayload,
           incidentDetails: incidentDetailsPayload,
+          triageAssessment: triageAssessmentPayload,
+          transportRecord: transportRecordPayload,
         };
 
         const response = await createCasualty(payload);
@@ -1746,6 +2673,8 @@ export default function AddCasualtyScreen() {
             incidentId: form.incidentId,
             person: personPayload,
             incidentDetails: incidentDetailsPayload,
+            triageAssessment: triageAssessmentPayload,
+            transportRecord: transportRecordPayload,
           });
 
           Alert.alert(
@@ -2209,6 +3138,274 @@ export default function AddCasualtyScreen() {
     );
   }
 
+  function renderTriageStep() {
+    return (
+      <>
+        <SelectField
+          label="TRIAGE SYSTEM"
+          value={form.triageSystem}
+          placeholder="Select triage system"
+          onPress={() => openChoiceSheet("triageSystem")}
+        />
+
+        <SelectField
+          label="TRIAGE CATEGORY"
+          value={form.triageCategory}
+          placeholder="Select triage category"
+          onPress={() => openChoiceSheet("triageCategory")}
+        />
+
+        <SelectField
+          label="TRIAGE STAGE"
+          value={form.triageStage}
+          placeholder="Select triage stage"
+          onPress={() => openChoiceSheet("triageStage")}
+        />
+
+        <FormField
+          label="TRIAGE TIME"
+          value={form.triageTime}
+          placeholder="mm/dd/yyyy hh:mm"
+          onChangeText={(value) =>
+            updateField("triageTime", value)
+          }
+        />
+
+        <Pressable
+          onPress={() =>
+            updateField(
+              "triageTime",
+              formatDateTimeForInput(new Date()),
+            )
+          }
+          style={({ pressed }) => [
+            styles.locationButton,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Ionicons
+            name="time-outline"
+            size={19}
+            color={COLORS.maroon}
+          />
+          <Text style={styles.locationButtonText}>
+            Use current triage time
+          </Text>
+        </Pressable>
+
+        <FormField
+          label="TRIAGE LOCATION"
+          value={form.triageLocation}
+          placeholder="Where triage was performed"
+          onChangeText={(value) =>
+            updateField("triageLocation", value)
+          }
+        />
+
+        <FormField
+          label="TRIAGE NOTES"
+          value={form.triageNotes}
+          placeholder="Additional triage observations"
+          multiline
+          onChangeText={(value) =>
+            updateField("triageNotes", value)
+          }
+        />
+      </>
+    );
+  }
+
+  function renderTransportStep() {
+    return (
+      <>
+        <SelectField
+          label="TRANSPORT REQUIRED"
+          value={form.transportRequired}
+          placeholder="Select transport status"
+          onPress={() => openChoiceSheet("transportRequired")}
+        />
+
+        <SelectField
+          label="TRANSPORT MODE"
+          value={form.transportMode}
+          placeholder="EMS, private vehicle, or other"
+          onPress={() => openChoiceSheet("transportMode")}
+        />
+
+        <SelectField
+          label="EMS UNIT TYPE"
+          value={form.emsUnitType}
+          placeholder="BLS, ALS, other, or unknown"
+          onPress={() => openChoiceSheet("emsUnitType")}
+        />
+
+        <FormField
+          label="DEPARTED SCENE TIME"
+          value={form.departedSceneTime}
+          placeholder="mm/dd/yyyy hh:mm"
+          onChangeText={(value) =>
+            updateField("departedSceneTime", value)
+          }
+        />
+
+        <Pressable
+          onPress={() =>
+            updateField(
+              "departedSceneTime",
+              formatDateTimeForInput(new Date()),
+            )
+          }
+          style={({ pressed }) => [
+            styles.locationButton,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Ionicons
+            name="exit-outline"
+            size={19}
+            color={COLORS.maroon}
+          />
+          <Text style={styles.locationButtonText}>
+            Use current departure time
+          </Text>
+        </Pressable>
+
+        <FormField
+          label="ARRIVED FACILITY TIME"
+          value={form.arrivedFacilityTime}
+          placeholder="mm/dd/yyyy hh:mm"
+          onChangeText={(value) =>
+            updateField("arrivedFacilityTime", value)
+          }
+        />
+
+        <Pressable
+          onPress={() =>
+            updateField(
+              "arrivedFacilityTime",
+              formatDateTimeForInput(new Date()),
+            )
+          }
+          style={({ pressed }) => [
+            styles.locationButton,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Ionicons
+            name="enter-outline"
+            size={19}
+            color={COLORS.maroon}
+          />
+          <Text style={styles.locationButtonText}>
+            Use current arrival time
+          </Text>
+        </Pressable>
+
+        <SelectField
+          label="RECEIVING FACILITY"
+          value={form.healthcareFacility}
+          placeholder={
+            isLoadingHealthcareFacilities
+              ? "Loading healthcare facilities..."
+              : "Select receiving facility"
+          }
+          onPress={() => openChoiceSheet("healthcareFacility")}
+        />
+
+        {healthcareFacilityError ? (
+          <View style={styles.inlineWarning}>
+            <Ionicons
+              name="alert-circle-outline"
+              size={18}
+              color={COLORS.maroon}
+            />
+            <Text style={styles.inlineWarningText}>
+              {healthcareFacilityError}
+            </Text>
+          </View>
+        ) : null}
+
+        {canManageReferenceData ? (
+          <View style={styles.quickCreateCard}>
+            <View style={styles.quickCreateHeader}>
+              <Ionicons
+                name="medkit-outline"
+                size={20}
+                color={COLORS.maroon}
+              />
+              <Text style={styles.quickCreateTitle}>
+                Quick create healthcare facility
+              </Text>
+            </View>
+
+            <FormField
+              label="FACILITY NAME"
+              value={newHealthcareFacilityName}
+              placeholder="e.g. Philippine General Hospital"
+              onChangeText={setNewHealthcareFacilityName}
+            />
+
+            <SelectField
+              label="FACILITY LEVEL"
+              value={newHealthcareFacilityLevel}
+              placeholder="Select facility level"
+              onPress={() => openChoiceSheet("facilityLevel")}
+            />
+
+            <FormField
+              label="ADDRESS"
+              value={newHealthcareFacilityAddress}
+              placeholder="Street, building, or landmark"
+              onChangeText={setNewHealthcareFacilityAddress}
+            />
+
+            <Pressable
+              disabled={isCreatingHealthcareFacility}
+              onPress={() => {
+                void handleCreateHealthcareFacility();
+              }}
+              style={({ pressed }) => [
+                styles.createIncidentButton,
+                isCreatingHealthcareFacility &&
+                  styles.disabledButton,
+                pressed && styles.primaryButtonPressed,
+              ]}
+            >
+              <Text style={styles.createIncidentButtonText}>
+                {isCreatingHealthcareFacility
+                  ? "Creating facility..."
+                  : "Create and select facility"}
+              </Text>
+
+              {isCreatingHealthcareFacility ? (
+                <ActivityIndicator
+                  size="small"
+                  color={COLORS.white}
+                />
+              ) : (
+                <Ionicons
+                  name="checkmark-circle-outline"
+                  size={18}
+                  color={COLORS.white}
+                />
+              )}
+            </Pressable>
+          </View>
+        ) : null}
+
+        <FormField
+          label="TRANSPORT NOTES"
+          value={form.transportNotes}
+          placeholder="Unit, vehicle, transfer, or transport notes"
+          multiline
+          onChangeText={(value) =>
+            updateField("transportNotes", value)
+          }
+        />
+      </>
+    );
+  }
+
   function renderStatusStep() {
     return (
       <>
@@ -2357,6 +3554,12 @@ export default function AddCasualtyScreen() {
 
       case "Incident":
         return renderIncidentStep();
+
+      case "Triage":
+        return renderTriageStep();
+
+      case "Transport":
+        return renderTransportStep();
 
       case "Status":
         return renderStatusStep();

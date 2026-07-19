@@ -16,8 +16,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import {
   getCasualty,
   getCasualtyStatusHistory,
+  getCasualtyTriageHistory,
+  getCasualtyTransportHistory,
   type CasualtyRecord,
   type CasualtyStatusHistoryItem,
+  type CasualtyTriageHistoryItem,
+  type CasualtyTransportHistoryItem,
 } from "../../api/casualties";
 import {
   getAttachments,
@@ -208,6 +212,82 @@ function formatStatus(status: string | null | undefined): string {
     .join(" ");
 }
 
+function formatTriageSystem(value: string | null | undefined): string {
+  switch (value) {
+    case "urgent_non_urgent":
+      return "Urgent/Non-urgent";
+    case "nato":
+      return "NATO";
+    case "start":
+      return "START";
+    case "sieve_sort":
+      return "SIEVE/SORT";
+    case "smart":
+      return "SMART";
+    case "care_flight":
+      return "Care Flight";
+    case "mass":
+      return "MASS";
+    case "salt":
+      return "SALT";
+    case "ed_triage":
+      return "ED Triage";
+    case "other":
+      return "Other";
+    default:
+      return "Unknown";
+  }
+}
+
+function formatTransportRequired(
+  value: string | null | undefined,
+): string {
+  switch (value) {
+    case "yes":
+      return "Yes";
+    case "no":
+      return "No";
+    case "unknown":
+      return "Unknown";
+    default:
+      return "Unavailable";
+  }
+}
+
+function formatTransportMode(value: string | null | undefined): string {
+  switch (value) {
+    case "ems":
+      return "EMS";
+    case "private_vehicle":
+      return "Private Vehicle";
+    case "independent":
+      return "Independent";
+    case "walk_in":
+      return "Walk-in";
+    case "other":
+      return "Other";
+    case "unknown":
+      return "Unknown";
+    default:
+      return "Unavailable";
+  }
+}
+
+function formatEmsUnitType(value: string | null | undefined): string {
+  switch (value) {
+    case "bls":
+      return "BLS";
+    case "als":
+      return "ALS";
+    case "other":
+      return "Other";
+    case "unknown":
+      return "Unknown";
+    default:
+      return "Unavailable";
+  }
+}
+
 function getFullName(record: CasualtyRecord): string {
   const parts = [
     record.casualty.first_name,
@@ -336,6 +416,12 @@ export default function CasualtyDetailScreen() {
   const [statusHistory, setStatusHistory] = useState<
     CasualtyStatusHistoryItem[]
   >([]);
+  const [triageHistory, setTriageHistory] = useState<
+    CasualtyTriageHistoryItem[]
+  >([]);
+  const [transportHistory, setTransportHistory] = useState<
+    CasualtyTransportHistoryItem[]
+  >([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] =
     useState<string | null>(null);
@@ -350,16 +436,26 @@ export default function CasualtyDetailScreen() {
     try {
       setErrorMessage(null);
 
-      const [data, attachmentData, historyData] =
+      const [
+        data,
+        attachmentData,
+        historyData,
+        triageData,
+        transportData,
+      ] =
         await Promise.all([
           getCasualty(casualtyId),
           getAttachments(casualtyId),
           getCasualtyStatusHistory(casualtyId),
+          getCasualtyTriageHistory(casualtyId),
+          getCasualtyTransportHistory(casualtyId),
         ]);
 
       setRecord(data);
       setAttachments(attachmentData);
       setStatusHistory(historyData);
+      setTriageHistory(triageData);
+      setTransportHistory(transportData);
     } catch (error) {
       console.error("Failed to load casualty detail:", error);
 
@@ -410,6 +506,10 @@ export default function CasualtyDetailScreen() {
         record.evacuation_center?.center_name ??
           record.evacuation_center_id,
       ),
+      receivingFacility: formatValue(
+        record.healthcare_facility?.facility_name ??
+          record.hospital_name,
+      ),
       gpsLocation: formatCoordinates(record),
       dateTime: formatDateTime(record.reported_at),
       status: formatStatus(record.current_status),
@@ -421,8 +521,10 @@ export default function CasualtyDetailScreen() {
       lastUpdated: formatTime(record.updated_at),
       verified: record.verification_status !== "draft",
       encoderName: record.encoder.full_name,
+      latestTriage: triageHistory[0],
+      latestTransport: transportHistory[0],
     };
-  }, [record]);
+  }, [record, triageHistory, transportHistory]);
 
   function handleEdit() {
     if (!casualty) {
@@ -672,6 +774,11 @@ export default function CasualtyDetailScreen() {
           />
 
           <DetailRow
+            label="Receiving Facility"
+            value={casualty.receivingFacility}
+          />
+
+          <DetailRow
             label="GPS Location"
             value={casualty.gpsLocation}
             valueColor={COLORS.maroon}
@@ -732,6 +839,141 @@ export default function CasualtyDetailScreen() {
               </Text>
             </View>
           </View>
+        </SectionCard>
+
+        <SectionCard title="TRIAGE">
+          {casualty.latestTriage ? (
+            <>
+              <DetailRow
+                label="System"
+                value={formatTriageSystem(
+                  casualty.latestTriage.triage_system,
+                )}
+              />
+
+              <DetailRow
+                label="Category"
+                value={formatStatus(
+                  casualty.latestTriage.triage_category,
+                )}
+                valueColor={COLORS.maroon}
+              />
+
+              <DetailRow
+                label="Stage"
+                value={formatStatus(
+                  casualty.latestTriage.triage_stage,
+                )}
+              />
+
+              <DetailRow
+                label="Triage Time"
+                value={formatDateTime(
+                  casualty.latestTriage.triaged_at,
+                )}
+              />
+
+              <DetailRow
+                label="Location"
+                value={formatValue(casualty.latestTriage.location)}
+              />
+            </>
+          ) : (
+            <Text style={styles.emptyAttachmentText}>
+              No triage assessment recorded.
+            </Text>
+          )}
+
+          {triageHistory.length > 0 ? (
+            <View style={styles.triageTimeline}>
+              {triageHistory.map((triage, index) => (
+                <TimelineItem
+                  key={triage.id}
+                  title={`${formatStatus(triage.triage_category)} - ${formatTriageSystem(triage.triage_system)}`}
+                  time={formatDateTime(triage.triaged_at)}
+                  user={
+                    triage.triaged_by_user?.full_name ?? "System"
+                  }
+                  color={COLORS.blue}
+                  backgroundColor={COLORS.blueBackground}
+                  isLast={index === triageHistory.length - 1}
+                />
+              ))}
+            </View>
+          ) : null}
+        </SectionCard>
+
+        <SectionCard title="TRANSPORT">
+          {casualty.latestTransport ? (
+            <>
+              <DetailRow
+                label="Required"
+                value={formatTransportRequired(
+                  casualty.latestTransport.transport_required,
+                )}
+              />
+
+              <DetailRow
+                label="Mode"
+                value={formatTransportMode(
+                  casualty.latestTransport.transport_mode,
+                )}
+              />
+
+              <DetailRow
+                label="EMS Unit"
+                value={formatEmsUnitType(
+                  casualty.latestTransport.ems_unit_type,
+                )}
+              />
+
+              <DetailRow
+                label="Departed Scene"
+                value={formatDateTime(
+                  casualty.latestTransport.departed_scene_at,
+                )}
+              />
+
+              <DetailRow
+                label="Arrived Facility"
+                value={formatDateTime(
+                  casualty.latestTransport.arrived_facility_at,
+                )}
+              />
+
+              <DetailRow
+                label="Receiving Facility"
+                value={formatValue(
+                  casualty.latestTransport.receiving_facility
+                    ?.facility_name,
+                )}
+                valueColor={COLORS.maroon}
+              />
+            </>
+          ) : (
+            <Text style={styles.emptyAttachmentText}>
+              No transport record saved.
+            </Text>
+          )}
+
+          {transportHistory.length > 0 ? (
+            <View style={styles.triageTimeline}>
+              {transportHistory.map((transport, index) => (
+                <TimelineItem
+                  key={transport.id}
+                  title={`${formatTransportRequired(transport.transport_required)} - ${formatTransportMode(transport.transport_mode)}`}
+                  time={formatDateTime(transport.created_at)}
+                  user={
+                    transport.recorded_by_user?.full_name ??
+                    "System"
+                  }
+                  color={COLORS.green}
+                  backgroundColor={COLORS.greenBackground}
+                  isLast={index === transportHistory.length - 1}
+                />
+              ))}
+            </View>
+          ) : null}
         </SectionCard>
 
         <SectionCard title="STATUS TIMELINE">
@@ -1165,6 +1407,10 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingLeft: 6,
     paddingBottom: 20,
+  },
+
+  triageTimeline: {
+    marginTop: 14,
   },
 
   timelineTitle: {

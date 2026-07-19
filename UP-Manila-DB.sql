@@ -248,6 +248,63 @@ CREATE TABLE public.evacuation_centers (
 );
 
 -- =========================================================
+-- HEALTHCARE FACILITIES
+-- Receiving hospitals and medical facilities for casualties
+-- =========================================================
+
+CREATE TABLE public.healthcare_facilities (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  facility_name varchar(200) NOT NULL,
+  facility_level varchar(50) NOT NULL DEFAULT 'unknown',
+  address text,
+
+  barangay varchar(150),
+  municipality varchar(150),
+  province varchar(150),
+
+  contact_person varchar(150),
+  contact_number varchar(30),
+
+  latitude decimal(10,7),
+  longitude decimal(10,7),
+
+  is_active boolean NOT NULL DEFAULT true,
+  created_by uuid,
+
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+
+  CONSTRAINT healthcare_facilities_created_by_fkey
+    FOREIGN KEY (created_by)
+    REFERENCES public.users(id)
+    ON DELETE SET NULL,
+
+  CONSTRAINT healthcare_facilities_level_check
+    CHECK (
+      facility_level IN (
+        'primary',
+        'secondary',
+        'tertiary',
+        'specialized',
+        'unknown'
+      )
+    ),
+
+  CONSTRAINT healthcare_facilities_latitude_check
+    CHECK (
+      latitude IS NULL
+      OR latitude BETWEEN -90 AND 90
+    ),
+
+  CONSTRAINT healthcare_facilities_longitude_check
+    CHECK (
+      longitude IS NULL
+      OR longitude BETWEEN -180 AND 180
+    )
+);
+
+-- =========================================================
 -- CASUALTY INCIDENT RECORDS
 -- Connects a person to a specific disaster
 -- =========================================================
@@ -260,6 +317,7 @@ CREATE TABLE public.casualty_incidents (
   casualty_id uuid NOT NULL,
   incident_id uuid NOT NULL,
   evacuation_center_id uuid,
+  healthcare_facility_id uuid,
 
   current_status public.casualty_status NOT NULL,
 
@@ -309,6 +367,11 @@ CREATE TABLE public.casualty_incidents (
   CONSTRAINT casualty_incidents_evacuation_center_id_fkey
     FOREIGN KEY (evacuation_center_id)
     REFERENCES public.evacuation_centers(id)
+    ON DELETE SET NULL,
+
+  CONSTRAINT casualty_incidents_healthcare_facility_id_fkey
+    FOREIGN KEY (healthcare_facility_id)
+    REFERENCES public.healthcare_facilities(id)
     ON DELETE SET NULL,
 
   CONSTRAINT casualty_incidents_encoded_by_fkey
@@ -394,6 +457,139 @@ CREATE TABLE public.casualty_status_history (
     CHECK (
       longitude IS NULL
       OR longitude BETWEEN -180 AND 180
+    )
+);
+
+-- =========================================================
+-- CASUALTY TRIAGE ASSESSMENTS
+-- Stores on-site, facility-arrival, and reassessment triage history
+-- =========================================================
+
+CREATE TABLE public.casualty_triage_assessments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  casualty_incident_id uuid NOT NULL,
+
+  triage_system varchar(50) NOT NULL,
+  triage_category varchar(50) NOT NULL,
+  triage_stage varchar(50) NOT NULL DEFAULT 'on_site',
+
+  triaged_at timestamptz NOT NULL DEFAULT now(),
+  triaged_by uuid,
+
+  location text,
+  notes text,
+
+  created_at timestamptz NOT NULL DEFAULT now(),
+
+  CONSTRAINT casualty_triage_assessments_incident_id_fkey
+    FOREIGN KEY (casualty_incident_id)
+    REFERENCES public.casualty_incidents(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT casualty_triage_assessments_triaged_by_fkey
+    FOREIGN KEY (triaged_by)
+    REFERENCES public.users(id)
+    ON DELETE SET NULL,
+
+  CONSTRAINT casualty_triage_assessments_system_check
+    CHECK (
+      triage_system IN (
+        'urgent_non_urgent',
+        'nato',
+        'start',
+        'sieve_sort',
+        'smart',
+        'care_flight',
+        'mass',
+        'salt',
+        'ed_triage',
+        'other'
+      )
+    ),
+
+  CONSTRAINT casualty_triage_assessments_category_check
+    CHECK (
+      triage_category IN (
+        'immediate',
+        'delayed',
+        'minimal',
+        'expectant',
+        'unknown'
+      )
+    ),
+
+  CONSTRAINT casualty_triage_assessments_stage_check
+    CHECK (
+      triage_stage IN (
+        'on_site',
+        'facility_arrival',
+        'reassessment'
+      )
+    )
+);
+
+-- =========================================================
+-- CASUALTY TRANSPORT RECORDS
+-- Stores scene clearance, EMS/private transport, and facility arrival
+-- =========================================================
+
+CREATE TABLE public.casualty_transport_records (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  casualty_incident_id uuid NOT NULL,
+
+  transport_required varchar(20) NOT NULL DEFAULT 'unknown',
+  transport_mode varchar(50) NOT NULL DEFAULT 'unknown',
+  ems_unit_type varchar(50) NOT NULL DEFAULT 'unknown',
+
+  departed_scene_at timestamptz,
+  arrived_facility_at timestamptz,
+  receiving_facility_id uuid,
+
+  recorded_by uuid,
+  notes text,
+
+  created_at timestamptz NOT NULL DEFAULT now(),
+
+  CONSTRAINT casualty_transport_records_incident_id_fkey
+    FOREIGN KEY (casualty_incident_id)
+    REFERENCES public.casualty_incidents(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT casualty_transport_records_receiving_facility_id_fkey
+    FOREIGN KEY (receiving_facility_id)
+    REFERENCES public.healthcare_facilities(id)
+    ON DELETE SET NULL,
+
+  CONSTRAINT casualty_transport_records_recorded_by_fkey
+    FOREIGN KEY (recorded_by)
+    REFERENCES public.users(id)
+    ON DELETE SET NULL,
+
+  CONSTRAINT casualty_transport_records_required_check
+    CHECK (transport_required IN ('yes', 'no', 'unknown')),
+
+  CONSTRAINT casualty_transport_records_mode_check
+    CHECK (
+      transport_mode IN (
+        'ems',
+        'private_vehicle',
+        'independent',
+        'walk_in',
+        'other',
+        'unknown'
+      )
+    ),
+
+  CONSTRAINT casualty_transport_records_ems_unit_check
+    CHECK (ems_unit_type IN ('bls', 'als', 'other', 'unknown')),
+
+  CONSTRAINT casualty_transport_records_valid_times_check
+    CHECK (
+      arrived_facility_at IS NULL
+      OR departed_scene_at IS NULL
+      OR arrived_facility_at >= departed_scene_at
     )
 );
 
@@ -503,11 +699,31 @@ CREATE INDEX evacuation_centers_incident_id_idx
 CREATE INDEX evacuation_centers_municipality_idx
   ON public.evacuation_centers(municipality);
 
+CREATE INDEX healthcare_facilities_name_idx
+  ON public.healthcare_facilities(facility_name);
+
+CREATE INDEX healthcare_facilities_location_idx
+  ON public.healthcare_facilities(province, municipality, barangay);
+
+CREATE INDEX healthcare_facilities_active_idx
+  ON public.healthcare_facilities(is_active);
+
+CREATE UNIQUE INDEX healthcare_facilities_active_name_location_unique_idx
+  ON public.healthcare_facilities(
+    lower(facility_name),
+    coalesce(lower(municipality), ''),
+    coalesce(lower(province), '')
+  )
+  WHERE is_active IS TRUE;
+
 CREATE INDEX casualty_incidents_casualty_id_idx
   ON public.casualty_incidents(casualty_id);
 
 CREATE INDEX casualty_incidents_incident_id_idx
   ON public.casualty_incidents(incident_id);
+
+CREATE INDEX casualty_incidents_healthcare_facility_idx
+  ON public.casualty_incidents(healthcare_facility_id);
 
 CREATE INDEX casualty_incidents_current_status_idx
   ON public.casualty_incidents(current_status);
@@ -532,6 +748,30 @@ CREATE INDEX casualty_status_history_incident_id_idx
 
 CREATE INDEX casualty_status_history_recorded_at_idx
   ON public.casualty_status_history(recorded_at);
+
+CREATE INDEX casualty_triage_assessments_incident_idx
+  ON public.casualty_triage_assessments(
+    casualty_incident_id,
+    triaged_at DESC
+  );
+
+CREATE INDEX casualty_triage_assessments_category_idx
+  ON public.casualty_triage_assessments(triage_category);
+
+CREATE INDEX casualty_triage_assessments_stage_idx
+  ON public.casualty_triage_assessments(triage_stage);
+
+CREATE INDEX casualty_transport_records_incident_idx
+  ON public.casualty_transport_records(
+    casualty_incident_id,
+    created_at DESC
+  );
+
+CREATE INDEX casualty_transport_records_facility_idx
+  ON public.casualty_transport_records(receiving_facility_id);
+
+CREATE INDEX casualty_transport_records_mode_idx
+  ON public.casualty_transport_records(transport_mode);
 
 CREATE INDEX attachments_casualty_incident_id_idx
   ON public.attachments(casualty_incident_id);
@@ -688,7 +928,10 @@ ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.incidents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.casualties ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.evacuation_centers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.healthcare_facilities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.casualty_incidents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.casualty_status_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.casualty_triage_assessments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.casualty_transport_records ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.attachments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
