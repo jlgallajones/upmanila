@@ -130,6 +130,59 @@ CREATE TABLE public.incidents (
 );
 
 -- =========================================================
+-- INCIDENT RESPONSE TIMELINE
+-- Utstein-style operational timeline for each incident
+-- =========================================================
+
+CREATE TABLE public.incident_response_timelines (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  incident_id uuid NOT NULL UNIQUE,
+
+  event_notification_at timestamptz,
+  dmmp_activated boolean,
+  dmmp_activation_trigger text,
+  dmmp_activated_at timestamptz,
+  medical_coordinator_notified_at timestamptz,
+  first_ems_on_scene_at timestamptz,
+  triage_ordered_at timestamptz,
+  first_site_triage_at timestamptz,
+  last_site_triage_at timestamptz,
+  first_transport_from_scene_at timestamptz,
+  last_transport_from_scene_at timestamptz,
+  scene_demobilized_at timestamptz,
+
+  updated_by uuid,
+
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+
+  CONSTRAINT incident_response_timelines_incident_id_fkey
+    FOREIGN KEY (incident_id)
+    REFERENCES public.incidents(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT incident_response_timelines_updated_by_fkey
+    FOREIGN KEY (updated_by)
+    REFERENCES public.users(id)
+    ON DELETE SET NULL,
+
+  CONSTRAINT incident_response_timelines_triage_order_check
+    CHECK (
+      first_site_triage_at IS NULL
+      OR last_site_triage_at IS NULL
+      OR last_site_triage_at >= first_site_triage_at
+    ),
+
+  CONSTRAINT incident_response_timelines_transport_order_check
+    CHECK (
+      first_transport_from_scene_at IS NULL
+      OR last_transport_from_scene_at IS NULL
+      OR last_transport_from_scene_at >= first_transport_from_scene_at
+    )
+);
+
+-- =========================================================
 -- CASUALTIES / PERSON REGISTRY
 -- =========================================================
 
@@ -670,6 +723,12 @@ CREATE INDEX incidents_started_at_idx
 CREATE INDEX incidents_location_idx
   ON public.incidents(province, municipality, barangay);
 
+CREATE INDEX incident_response_timelines_incident_idx
+  ON public.incident_response_timelines(incident_id);
+
+CREATE INDEX incident_response_timelines_notification_idx
+  ON public.incident_response_timelines(event_notification_at);
+
 CREATE INDEX casualties_id_number_idx
   ON public.casualties(id_number);
 
@@ -821,6 +880,11 @@ BEFORE UPDATE ON public.incidents
 FOR EACH ROW
 EXECUTE FUNCTION public.set_updated_at();
 
+CREATE TRIGGER incident_response_timelines_set_updated_at
+BEFORE UPDATE ON public.incident_response_timelines
+FOR EACH ROW
+EXECUTE FUNCTION public.set_updated_at();
+
 CREATE TRIGGER casualties_set_updated_at
 BEFORE UPDATE ON public.casualties
 FOR EACH ROW
@@ -926,6 +990,7 @@ EXECUTE FUNCTION public.create_initial_casualty_status_history();
 
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.incidents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.incident_response_timelines ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.casualties ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.evacuation_centers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.healthcare_facilities ENABLE ROW LEVEL SECURITY;

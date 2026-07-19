@@ -4,12 +4,25 @@ import {
   closeIncident,
   createIncident,
   getIncidents,
+  getIncidentTimeline,
+  updateIncidentTimeline,
 } from "../controllers/incident.controller.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 
 export const incidentRouter = Router();
 
 incidentRouter.get("/", requireAuth, getIncidents);
+incidentRouter.get(
+  "/:id/timeline",
+  requireAuth,
+  getIncidentTimeline,
+);
+incidentRouter.put(
+  "/:id/timeline",
+  requireAuth,
+  requireRole(["super_admin", "administrator", "encoder"]),
+  updateIncidentTimeline,
+);
 incidentRouter.post(
   "/",
   requireAuth,

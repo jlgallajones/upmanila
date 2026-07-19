@@ -64,6 +64,7 @@ type SummaryCardProps = {
   iconBackground: string;
   iconColor: string;
   loading?: boolean;
+  onPress?: () => void;
 };
 
 function SummaryCard({
@@ -75,9 +76,10 @@ function SummaryCard({
   iconBackground,
   iconColor,
   loading = false,
+  onPress,
 }: SummaryCardProps) {
-  return (
-    <View style={styles.summaryCard}>
+  const content = (
+    <>
       <View
         style={[
           styles.summaryIcon,
@@ -114,8 +116,25 @@ function SummaryCard({
 
       <Text style={styles.summaryLabel}>{label}</Text>
       <Text style={styles.summaryCaption}>{caption}</Text>
-    </View>
+    </>
   );
+
+  if (onPress) {
+    return (
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => [
+          styles.summaryCard,
+          pressed && styles.pressed,
+        ]}
+        accessibilityRole="button"
+      >
+        {content}
+      </Pressable>
+    );
+  }
+
+  return <View style={styles.summaryCard}>{content}</View>;
 }
 
 type QuickActionProps = {
@@ -643,6 +662,7 @@ export default function HomeDashboardScreen() {
             iconBackground={COLORS.paleBlue}
             iconColor={COLORS.blue}
             loading={isLoading}
+            onPress={() => router.push("/incidents")}
           />
         </View>
 

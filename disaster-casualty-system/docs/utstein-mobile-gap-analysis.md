@@ -508,7 +508,7 @@ Recommended columns:
 - [x] Add a true triage module with triage system, category, stage, timestamp, and reassessment history.
 - [x] Add receiving healthcare facility records instead of only free-text hospital names.
 - [x] Add transport tracking: EMS/independent, BLS/ALS, departure time, arrival time, destination.
-- [ ] Add incident response timeline fields for notification, activation, EMS arrival, triage, transport, and demobilization.
+- [x] Add incident response timeline fields for notification, activation, EMS arrival, triage, transport, and demobilization.
 - [ ] Add automated SitRep generation from incident, casualty, triage, transport, and facility data.
 - [ ] Add verification/approval workflows for admin and medical personnel.
 - [ ] Add export support: PDF and CSV.
@@ -633,7 +633,7 @@ The mobile app logs in through the API. The API validates the authenticated user
 
 ### Main Technical Gaps
 
-- No full Utstein operational timeline model yet
+- Incident response timeline is now structured for notification, activation, EMS arrival, triage, transport, and demobilization.
 - No structured triage history table yet
 - No structured receiving facility model yet
 - No transport tracking table yet
@@ -646,7 +646,7 @@ The mobile app logs in through the API. The API validates the authenticated user
 1. Add healthcare facilities table and API. Done: added `healthcare_facilities`, `/api/healthcare-facilities`, and mobile facility selection/quick-create.
 2. Add triage assessment table and mobile triage screen. Done: added `casualty_triage_assessments`, `/api/casualties/:id/triage-history`, mobile Triage step, and casualty detail triage history.
 3. Add transport record table and mobile transport fields. Done: added `casualty_transport_records`, `/api/casualties/:id/transport-history`, mobile Transport step, and casualty detail transport history.
-4. Add incident response timeline screen.
+4. Add incident response timeline screen. Done: added `incident_response_timelines`, `/api/incidents/:id/timeline`, and mobile incident timeline editing.
 5. Add SitRep generation endpoint and dashboard.
 6. Add admin verification and report approval workflow.
 7. Expand offline sync to attachments and edits.
