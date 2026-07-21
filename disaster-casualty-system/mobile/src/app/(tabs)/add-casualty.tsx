@@ -52,6 +52,7 @@ import { getCurrentUser } from "../../auth/session";
 import {
   isNetworkSubmissionError,
   queueCasualtySubmission,
+  type QueuedCasualtyPayload,
 } from "../../offline/casualtyQueue";
 
 const COLORS = {
@@ -1533,6 +1534,17 @@ export default function AddCasualtyScreen() {
     let isMounted = true;
 
     async function loadIncidentOptions() {
+      const user = await getCurrentUser();
+
+      if (!user) {
+        if (isMounted) {
+          setIncidents([]);
+          setIncidentError(null);
+          setIsLoadingIncidents(false);
+        }
+        return;
+      }
+
       try {
         setIsLoadingIncidents(true);
         setIncidentError(null);
@@ -1570,7 +1582,9 @@ export default function AddCasualtyScreen() {
     let isMounted = true;
 
     async function loadEvacuationCenterOptions() {
-      if (!form.incidentId) {
+      const user = await getCurrentUser();
+
+      if (!user || !form.incidentId) {
         setEvacuationCenters([]);
         setEvacuationCenterError(null);
         return;
@@ -1613,6 +1627,17 @@ export default function AddCasualtyScreen() {
     let isMounted = true;
 
     async function loadHealthcareFacilityOptions() {
+      const user = await getCurrentUser();
+
+      if (!user) {
+        if (isMounted) {
+          setHealthcareFacilities([]);
+          setHealthcareFacilityError(null);
+          setIsLoadingHealthcareFacilities(false);
+        }
+        return;
+      }
+
       try {
         setIsLoadingHealthcareFacilities(true);
         setHealthcareFacilityError(null);
@@ -1780,7 +1805,7 @@ export default function AddCasualtyScreen() {
         return true;
 
       case "Incident":
-        if (!form.incidentId) {
+        if (!form.incidentId && (currentUserId || isEditing)) {
           Alert.alert(
             "Incident required",
             "Choose or create a disaster incident before continuing.",
@@ -2612,11 +2637,44 @@ export default function AddCasualtyScreen() {
 
   async function handleSubmit() {
     if (!isEditing || !casualtyId) {
+      const clientRecordId = generateUuid();
+      const queuedPayload: QueuedCasualtyPayload = {
+        clientRecordId,
+        incidentId: form.incidentId || undefined,
+        offlineIncidentName: form.incidentName || undefined,
+        person: personPayload,
+        incidentDetails: incidentDetailsPayload,
+        triageAssessment: triageAssessmentPayload,
+        transportRecord: transportRecordPayload,
+      };
+
       if (!currentUserId) {
-        Alert.alert(
-          "Unable to submit casualty",
-          "Please log in again before submitting this casualty.",
-        );
+        try {
+          setIsSubmitting(true);
+
+          await queueCasualtySubmission(queuedPayload);
+
+          Alert.alert(
+            "Saved on this device",
+            "The casualty record was saved locally. Log in from Profile later to sync records to DCMS.",
+            [
+              {
+                text: "OK",
+                onPress: () => router.replace("/home"),
+              },
+            ],
+          );
+        } catch (error) {
+          Alert.alert(
+            "Unable to save offline",
+            error instanceof Error
+              ? error.message
+              : "Please try saving the record again.",
+          );
+        } finally {
+          setIsSubmitting(false);
+        }
+
         return;
       }
 
@@ -2633,7 +2691,7 @@ export default function AddCasualtyScreen() {
         setIsSubmitting(true);
 
         const payload: CreateCasualtyPayload = {
-          clientRecordId: generateUuid(),
+          clientRecordId,
           incidentId: form.incidentId,
           person: personPayload,
           incidentDetails: incidentDetailsPayload,
@@ -2668,14 +2726,7 @@ export default function AddCasualtyScreen() {
         console.error("Failed to submit casualty:", error);
 
         if (isNetworkSubmissionError(error)) {
-          await queueCasualtySubmission({
-            clientRecordId: generateUuid(),
-            incidentId: form.incidentId,
-            person: personPayload,
-            incidentDetails: incidentDetailsPayload,
-            triageAssessment: triageAssessmentPayload,
-            transportRecord: transportRecordPayload,
-          });
+          await queueCasualtySubmission(queuedPayload);
 
           Alert.alert(
             "Saved offline",
@@ -2892,12 +2943,27 @@ export default function AddCasualtyScreen() {
           label="DISASTER INCIDENT"
           value={form.incidentName || form.incidentId}
           placeholder={
-            isLoadingIncidents
+            !currentUserId && !isEditing
+              ? "Optional while offline"
+              : isLoadingIncidents
               ? "Loading active incidents..."
               : "Select active incident"
           }
           onPress={() => openChoiceSheet("incident")}
         />
+
+        {!currentUserId && !isEditing ? (
+          <View style={styles.inlineWarning}>
+            <Ionicons
+              name="cloud-offline-outline"
+              size={18}
+              color={COLORS.maroon}
+            />
+            <Text style={styles.inlineWarningText}>
+              You are capturing as a guest. This record will stay on this device until you log in and assign it to an active incident.
+            </Text>
+          </View>
+        ) : null}
 
         {incidentError ? (
           <View style={styles.inlineWarning}>

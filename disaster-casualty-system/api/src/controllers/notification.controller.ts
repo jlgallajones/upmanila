@@ -5,6 +5,7 @@ import type {
 } from "express";
 
 import { supabase } from "../config/supabase.js";
+import { getAuthenticatedUser } from "../middleware/auth.js";
 
 export async function getNotifications(
   request: Request,
@@ -12,10 +13,7 @@ export async function getNotifications(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const userId =
-      typeof request.query.userId === "string"
-        ? request.query.userId
-        : undefined;
+    const user = getAuthenticatedUser(request);
 
     let query = supabase
       .from("notifications")
@@ -33,11 +31,8 @@ export async function getNotifications(
       `)
       .order("created_at", {
         ascending: false,
-      });
-
-    if (userId) {
-      query = query.eq("user_id", userId);
-    }
+      })
+      .or(`user_id.is.null,user_id.eq.${user.id}`);
 
     const { data, error } = await query;
 
@@ -65,6 +60,7 @@ export async function markNotificationAsRead(
 ): Promise<void> {
   try {
     const { id } = request.params;
+    const user = getAuthenticatedUser(request);
 
     const { data, error } = await supabase
       .from("notifications")
@@ -73,11 +69,20 @@ export async function markNotificationAsRead(
         read_at: new Date().toISOString(),
       })
       .eq("id", id)
+      .eq("user_id", user.id)
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) {
       throw new Error(error.message);
+    }
+
+    if (!data) {
+      response.status(404).json({
+        success: false,
+        message: "Notification was not found for this account.",
+      });
+      return;
     }
 
     response.status(200).json({
@@ -95,18 +100,7 @@ export async function markAllNotificationsAsRead(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const userId =
-      typeof request.body.userId === "string"
-        ? request.body.userId
-        : undefined;
-
-    if (!userId) {
-      response.status(400).json({
-        success: false,
-        message: "userId is required.",
-      });
-      return;
-    }
+    const user = getAuthenticatedUser(request);
 
     const { error } = await supabase
       .from("notifications")
@@ -114,7 +108,7 @@ export async function markAllNotificationsAsRead(
         is_read: true,
         read_at: new Date().toISOString(),
       })
-      .eq("user_id", userId)
+      .eq("user_id", user.id)
       .eq("is_read", false);
 
     if (error) {

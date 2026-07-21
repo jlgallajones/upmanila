@@ -19,6 +19,8 @@ import {
   type DashboardSummary,
   type RecentActivity,
 } from "../../api/dashboard";
+import { isAuthenticationTokenError } from "../../api/client";
+import { getAccessToken } from "../../auth/session";
 import {
   getQueuedCasualtyCount,
   syncQueuedCasualtySubmissions,
@@ -416,10 +418,24 @@ export default function HomeDashboardScreen() {
     useState<string | null>(null);
   const [queuedCasualtyCount, setQueuedCasualtyCount] =
     useState(0);
+  const [isGuestMode, setIsGuestMode] = useState(false);
 
   const loadDashboard = useCallback(async () => {
     try {
       setErrorMessage(null);
+
+      const token = await getAccessToken();
+
+      if (!token) {
+        const queuedCount = await getQueuedCasualtyCount();
+        setQueuedCasualtyCount(queuedCount);
+        setSummary(initialSummary);
+        setActivities([]);
+        setIsGuestMode(true);
+        return;
+      }
+
+      setIsGuestMode(false);
 
       const syncResult = await syncQueuedCasualtySubmissions();
       setQueuedCasualtyCount(syncResult.remaining);
@@ -437,6 +453,16 @@ export default function HomeDashboardScreen() {
         "Failed to load dashboard:",
         error,
       );
+
+      if (isAuthenticationTokenError(error)) {
+        const queuedCount = await getQueuedCasualtyCount();
+        setQueuedCasualtyCount(queuedCount);
+        setSummary(initialSummary);
+        setActivities([]);
+        setIsGuestMode(true);
+        setErrorMessage(null);
+        return;
+      }
 
       setErrorMessage(
         error instanceof Error
@@ -509,10 +535,17 @@ export default function HomeDashboardScreen() {
               </Text>
 
               <View style={styles.activeRow}>
-                <View style={styles.activeDot} />
+                <View
+                  style={[
+                    styles.activeDot,
+                    isGuestMode && styles.guestDot,
+                  ]}
+                />
 
                 <Text style={styles.activeText}>
-                  Connected to DCMS
+                  {isGuestMode
+                    ? "Guest capture mode"
+                    : "Connected to DCMS"}
                 </Text>
               </View>
             </View>
@@ -611,6 +644,19 @@ export default function HomeDashboardScreen() {
             <Text style={styles.offlineBannerText}>
               {queuedCasualtyCount} casualty record
               {queuedCasualtyCount === 1 ? "" : "s"} waiting to sync.
+            </Text>
+          </View>
+        ) : null}
+
+        {isGuestMode ? (
+          <View style={styles.offlineBanner}>
+            <Ionicons
+              name="person-circle-outline"
+              size={19}
+              color={COLORS.orange}
+            />
+            <Text style={styles.offlineBannerText}>
+              Guest capture mode. Add casualty records offline, then log in from Profile to sync and view cloud data.
             </Text>
           </View>
         ) : null}
@@ -841,6 +887,10 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: "#31D46D",
     marginRight: 6,
+  },
+
+  guestDot: {
+    backgroundColor: "#FFBE4D",
   },
 
   activeText: {

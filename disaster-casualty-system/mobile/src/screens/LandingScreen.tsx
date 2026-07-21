@@ -30,13 +30,13 @@ export default function LandingScreen() {
   const entrance = useRef(new Animated.Value(0)).current;
   const hasNavigated = useRef(false);
 
-  function continueToLogin() {
+  function continueToApp() {
     if (hasNavigated.current) {
       return;
     }
 
     hasNavigated.current = true;
-    router.replace("/login");
+    router.replace("/home");
   }
 
   useEffect(() => {
@@ -185,9 +185,9 @@ export default function LandingScreen() {
               styles.continueButton,
               pressed && styles.continueButtonPressed,
             ]}
-            onPress={continueToLogin}
+            onPress={continueToApp}
             accessibilityRole="button"
-            accessibilityLabel="Continue to login"
+            accessibilityLabel="Continue to app"
           >
             <Text style={styles.continueButtonText}>Continue</Text>
           </Pressable>

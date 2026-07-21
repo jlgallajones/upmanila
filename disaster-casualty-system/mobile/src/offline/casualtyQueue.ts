@@ -4,12 +4,21 @@ import {
   createCasualty,
   type CreateCasualtyPayload,
 } from "../api/casualties";
+import { getAccessToken } from "../auth/session";
 
 const queueKey = "dcms.offlineCasualtyQueue";
 
+export type QueuedCasualtyPayload = Omit<
+  CreateCasualtyPayload,
+  "incidentId"
+> & {
+  incidentId?: string;
+  offlineIncidentName?: string;
+};
+
 type QueuedCasualtySubmission = {
   id: string;
-  payload: CreateCasualtyPayload;
+  payload: QueuedCasualtyPayload;
   createdAt: string;
 };
 
@@ -51,7 +60,7 @@ export function isNetworkSubmissionError(error: unknown): boolean {
 }
 
 export async function queueCasualtySubmission(
-  payload: CreateCasualtyPayload,
+  payload: QueuedCasualtyPayload,
 ): Promise<void> {
   const queue = await readQueue();
 
@@ -75,12 +84,29 @@ export async function syncQueuedCasualtySubmissions(): Promise<{
   remaining: number;
 }> {
   const queue = await readQueue();
+  const token = await getAccessToken();
+
+  if (!token || queue.length === 0) {
+    return {
+      synced: 0,
+      remaining: queue.length,
+    };
+  }
+
   const remaining: QueuedCasualtySubmission[] = [];
   let synced = 0;
 
   for (const item of queue) {
+    if (!item.payload.incidentId) {
+      remaining.push(item);
+      continue;
+    }
+
     try {
-      await createCasualty(item.payload);
+      await createCasualty({
+        ...item.payload,
+        incidentId: item.payload.incidentId,
+      });
       synced += 1;
     } catch {
       remaining.push(item);

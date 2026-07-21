@@ -4,6 +4,7 @@ export type NotificationType =
   | "emergency"
   | "sync"
   | "verification"
+  | "verified"
   | "incident"
   | "scheduled"
   | "system";
@@ -28,19 +29,10 @@ type NotificationListResponse = {
   data: NotificationRecord[];
 };
 
-export async function getNotifications(
-  userId?: string,
-): Promise<NotificationListResponse> {
+export async function getNotifications(): Promise<NotificationListResponse> {
   const response =
     await api.get<NotificationListResponse>(
       "/notifications",
-      {
-        params: userId
-          ? {
-              userId,
-            }
-          : undefined,
-      },
     );
 
   return response.data;
@@ -52,10 +44,6 @@ export async function markNotificationAsRead(
   await api.patch(`/notifications/${id}/read`);
 }
 
-export async function markAllNotificationsAsRead(
-  userId: string,
-): Promise<void> {
-  await api.patch("/notifications/read-all", {
-    userId,
-  });
+export async function markAllNotificationsAsRead(): Promise<void> {
+  await api.patch("/notifications/read-all");
 }

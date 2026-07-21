@@ -18,6 +18,8 @@ import {
   getCasualties,
   type CasualtyRecord,
 } from "../../api/casualties";
+import { isAuthenticationTokenError } from "../../api/client";
+import { getAccessToken } from "../../auth/session";
 
 const COLORS = {
   maroon: "#7B1113",
@@ -289,15 +291,33 @@ export default function RecordsScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] =
     useState<string | null>(null);
+  const [isGuestMode, setIsGuestMode] = useState(false);
 
   const loadRecords = useCallback(async () => {
     try {
       setErrorMessage(null);
 
+      const token = await getAccessToken();
+
+      if (!token) {
+        setRecords([]);
+        setIsGuestMode(true);
+        return;
+      }
+
+      setIsGuestMode(false);
+
       const data = await getCasualties();
       setRecords(data);
     } catch (error) {
       console.error("Failed to load casualty records:", error);
+
+      if (isAuthenticationTokenError(error)) {
+        setRecords([]);
+        setIsGuestMode(true);
+        setErrorMessage(null);
+        return;
+      }
 
       setErrorMessage(
         error instanceof Error
@@ -315,6 +335,21 @@ export default function RecordsScreen() {
       try {
         setIsLoading(true);
 
+        const token = await getAccessToken();
+
+        if (!token) {
+          if (isMounted) {
+            setRecords([]);
+            setErrorMessage(null);
+            setIsGuestMode(true);
+          }
+          return;
+        }
+
+        if (isMounted) {
+          setIsGuestMode(false);
+        }
+
         const data = await getCasualties();
 
         if (isMounted) {
@@ -325,6 +360,13 @@ export default function RecordsScreen() {
         console.error("Failed to initialize casualty records:", error);
 
         if (isMounted) {
+          if (isAuthenticationTokenError(error)) {
+            setRecords([]);
+            setErrorMessage(null);
+            setIsGuestMode(true);
+            return;
+          }
+
           setErrorMessage(
             error instanceof Error
               ? error.message
@@ -541,18 +583,25 @@ export default function RecordsScreen() {
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Ionicons
-              name="people-outline"
+              name={
+                isGuestMode
+                  ? "lock-closed-outline"
+                  : "people-outline"
+              }
               size={48}
               color={COLORS.secondaryText}
             />
 
             <Text style={styles.emptyTitle}>
-              No casualty records found
+              {isGuestMode
+                ? "Login required to view records"
+                : "No casualty records found"}
             </Text>
 
             <Text style={styles.emptyDescription}>
-              Pull down to refresh or change the search and
-              selected status.
+              {isGuestMode
+                ? "You can add casualties offline now. Log in from Profile to view synced database records."
+                : "Pull down to refresh or change the search and selected status."}
             </Text>
           </View>
         }

@@ -19,6 +19,7 @@ import {
   getProfile,
   type ProfileData,
 } from "../../api/profile";
+import { isAuthenticationTokenError } from "../../api/client";
 import { clearSession, getCurrentUserId } from "../../auth/session";
 
 const COLORS = {
@@ -182,9 +183,9 @@ export default function ProfileScreen() {
     const currentUserId = await getCurrentUserId();
 
     if (!currentUserId) {
-      setErrorMessage(
-        "No active session found. Please log in again.",
-      );
+      setProfile(null);
+      setErrorMessage(null);
+      setLastLoadedAt(null);
       setIsLoading(false);
       return;
     }
@@ -201,6 +202,13 @@ export default function ProfileScreen() {
         "Unable to load profile:",
         error,
       );
+
+      if (isAuthenticationTokenError(error)) {
+        setProfile(null);
+        setErrorMessage(null);
+        setLastLoadedAt(null);
+        return;
+      }
 
       setErrorMessage(
         error instanceof Error
@@ -246,7 +254,9 @@ export default function ProfileScreen() {
 
               await clearSession();
 
-              router.replace("/login");
+              setProfile(null);
+              setErrorMessage(null);
+              setLastLoadedAt(null);
             } finally {
               setIsLoggingOut(false);
             }
@@ -265,11 +275,11 @@ export default function ProfileScreen() {
   };
 
   const fullName =
-    user?.full_name ?? "Loading profile...";
+    user?.full_name ?? "Guest Responder";
 
   const role = user
     ? formatRole(user.role)
-    : "Responder";
+    : "Offline Capture";
 
   const initials = getInitials(fullName);
 
@@ -379,7 +389,7 @@ export default function ProfileScreen() {
                   >
                     {user?.is_active
                       ? "Active"
-                      : "Inactive"}
+                      : "Guest"}
                   </Text>
                 </View>
               </View>
@@ -459,6 +469,26 @@ export default function ProfileScreen() {
           </View>
         ) : null}
 
+        {!user ? (
+          <View style={styles.guestCard}>
+            <Ionicons
+              name="cloud-offline-outline"
+              size={22}
+              color={COLORS.orange}
+            />
+
+            <View style={styles.guestContent}>
+              <Text style={styles.guestTitle}>
+                Guest capture mode
+              </Text>
+
+              <Text style={styles.guestMessage}>
+                You can add casualty records offline. Log in to sync, view cloud records, and manage incidents.
+              </Text>
+            </View>
+          </View>
+        ) : null}
+
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>
             RESPONDER INFORMATION
@@ -523,9 +553,11 @@ export default function ProfileScreen() {
             icon="shield-checkmark-outline"
             label="Account Status"
             value={
-              user?.is_active
-                ? "Active"
-                : "Inactive"
+              user
+                ? user.is_active
+                  ? "Active"
+                  : "Inactive"
+                : "Guest mode"
             }
           />
         </View>
@@ -551,7 +583,9 @@ export default function ProfileScreen() {
             icon="cloud-done-outline"
             label="Server Connection"
             value={
-              errorMessage
+              !user
+                ? "Login required"
+                : errorMessage
                 ? "Connection problem"
                 : "Connected"
             }
@@ -560,9 +594,16 @@ export default function ProfileScreen() {
 
         <Pressable
           disabled={isLoggingOut}
-          onPress={handleLogout}
+          onPress={() => {
+            if (user) {
+              handleLogout();
+              return;
+            }
+
+            router.push("/login");
+          }}
           style={({ pressed }) => [
-            styles.logoutButton,
+            user ? styles.logoutButton : styles.loginButton,
             pressed &&
               styles.logoutButtonPressed,
             isLoggingOut &&
@@ -570,15 +611,23 @@ export default function ProfileScreen() {
           ]}
         >
           <Ionicons
-            name="log-out-outline"
+            name={user ? "log-out-outline" : "log-in-outline"}
             size={21}
-            color={COLORS.red}
+            color={user ? COLORS.red : COLORS.white}
           />
 
-          <Text style={styles.logoutButtonText}>
-            {isLoggingOut
-              ? "Logging out..."
-              : "Logout from DCMS"}
+          <Text
+            style={
+              user
+                ? styles.logoutButtonText
+                : styles.loginButtonText
+            }
+          >
+            {user
+              ? isLoggingOut
+                ? "Logging out..."
+                : "Logout from DCMS"
+              : "Login to DCMS"}
           </Text>
         </Pressable>
 
@@ -859,6 +908,36 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
 
+  guestCard: {
+    minHeight: 72,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 16,
+    padding: 13,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: "#F4D3AF",
+    backgroundColor: COLORS.orangeBackground,
+  },
+
+  guestContent: {
+    flex: 1,
+    marginLeft: 9,
+  },
+
+  guestTitle: {
+    color: COLORS.orange,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
+  guestMessage: {
+    color: COLORS.secondaryText,
+    fontSize: 10,
+    lineHeight: 15,
+    marginTop: 3,
+  },
+
   retryButton: {
     paddingHorizontal: 9,
     paddingVertical: 5,
@@ -954,6 +1033,22 @@ const styles = StyleSheet.create({
 
   logoutButtonText: {
     color: COLORS.red,
+    fontSize: 15,
+    fontWeight: "800",
+  },
+
+  loginButton: {
+    minHeight: 57,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    backgroundColor: COLORS.maroon,
+    gap: 9,
+  },
+
+  loginButtonText: {
+    color: COLORS.white,
     fontSize: 15,
     fontWeight: "800",
   },
