@@ -143,6 +143,15 @@ type TransportRecordRow = {
   receiving_facility_id: string | null;
 };
 
+type TreatmentRecordRow = {
+  casualty_incident_id: string;
+  treatment_strategy: string | null;
+  treatment_area_name: string | null;
+  stabilization_started_at: string | null;
+  stabilized_at: string | null;
+  created_at: string | null;
+};
+
 type FacilityRow = {
   id: string;
   facility_name: string | null;
@@ -1336,6 +1345,221 @@ export async function getIncidentOnsiteTriageSummary(
           "(number of first on-site triaged category survivors by interval / total survivors) x 100",
         accuracyFormula:
           "(number of true category survivors assigned to listed categories / number of true category survivors) x 100",
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getIncidentOnsiteCareSummary(
+  request: Request<{ id: string }>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { id } = request.params;
+
+    const { data: incident, error: incidentError } = await supabase
+      .from("incidents")
+      .select("id, started_at")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (incidentError) {
+      throw new Error(
+        `Unable to retrieve incident: ${incidentError.message}`,
+      );
+    }
+
+    if (!incident) {
+      response.status(404).json({
+        success: false,
+        message: "Incident not found.",
+      });
+      return;
+    }
+
+    const { data: timeline, error: timelineError } = await supabase
+      .from("incident_response_timelines")
+      .select("dmmp_activated_at")
+      .eq("incident_id", id)
+      .maybeSingle();
+
+    if (timelineError) {
+      throw new Error(
+        `Unable to retrieve incident timeline: ${timelineError.message}`,
+      );
+    }
+
+    const { data: casualties, error: casualtiesError } =
+      await supabase
+        .from("casualty_incidents")
+        .select("id")
+        .eq("incident_id", id)
+        .is("deleted_at", null);
+
+    if (casualtiesError) {
+      throw new Error(
+        `Unable to retrieve incident casualties: ${casualtiesError.message}`,
+      );
+    }
+
+    const casualtyIncidentIds = (casualties ?? []).map(
+      (item) => item.id,
+    );
+
+    const triageResult =
+      casualtyIncidentIds.length > 0
+        ? await supabase
+            .from("casualty_triage_assessments")
+            .select(
+              "casualty_incident_id, triage_category, triage_stage, triaged_at",
+            )
+            .in("casualty_incident_id", casualtyIncidentIds)
+            .eq("triage_stage", "on_site")
+            .order("triaged_at", { ascending: true })
+        : { data: [], error: null };
+
+    if (triageResult.error) {
+      throw new Error(
+        `Unable to retrieve on-site triage data: ${triageResult.error.message}`,
+      );
+    }
+
+    const treatmentResult =
+      casualtyIncidentIds.length > 0
+        ? await supabase
+            .from("casualty_treatments")
+            .select(
+              "casualty_incident_id, treatment_strategy, treatment_area_name, stabilization_started_at, stabilized_at, created_at",
+            )
+            .in("casualty_incident_id", casualtyIncidentIds)
+            .order("created_at", { ascending: true })
+        : { data: [], error: null };
+
+    if (treatmentResult.error) {
+      throw new Error(
+        `Unable to retrieve on-site care data: ${treatmentResult.error.message}`,
+      );
+    }
+
+    const firstTriageByCasualty = new Map<
+      string,
+      TriageAssessmentRow
+    >();
+
+    for (const row of (triageResult.data ?? []) as TriageAssessmentRow[]) {
+      if (!firstTriageByCasualty.has(row.casualty_incident_id)) {
+        firstTriageByCasualty.set(row.casualty_incident_id, row);
+      }
+    }
+
+    const firstTreatmentByCasualty = new Map<
+      string,
+      TreatmentRecordRow
+    >();
+
+    for (const row of (treatmentResult.data ?? []) as TreatmentRecordRow[]) {
+      if (!firstTreatmentByCasualty.has(row.casualty_incident_id)) {
+        firstTreatmentByCasualty.set(row.casualty_incident_id, row);
+      }
+    }
+
+    const treatmentRows = Array.from(firstTreatmentByCasualty.values());
+    const responseInitiatedAt =
+      timeline?.dmmp_activated_at ?? incident.started_at ?? null;
+    const responseInitiatedDate = responseInitiatedAt
+      ? new Date(responseInitiatedAt)
+      : null;
+    const intervalMinutes = [1, 5, 10, 15, 30, 60];
+    const totalSurvivors = casualtyIncidentIds.length;
+
+    const buildIntervalRows = (category: string) =>
+      intervalMinutes.map((minutes) => {
+        const cutoff =
+          responseInitiatedDate && !Number.isNaN(responseInitiatedDate.getTime())
+            ? new Date(
+                responseInitiatedDate.getTime() + minutes * 60 * 1000,
+              )
+            : null;
+        const count =
+          cutoff === null
+            ? 0
+            : treatmentRows.filter((treatment) => {
+                const triage = firstTriageByCasualty.get(
+                  treatment.casualty_incident_id,
+                );
+
+                if (
+                  triage?.triage_category !== category ||
+                  !treatment.stabilized_at
+                ) {
+                  return false;
+                }
+
+                const stabilizedAt = new Date(treatment.stabilized_at);
+
+                return (
+                  !Number.isNaN(stabilizedAt.getTime()) &&
+                  stabilizedAt <= cutoff
+                );
+              }).length;
+
+        return {
+          minutes,
+          cutoffAt: cutoff?.toISOString() ?? null,
+          count,
+          totalSurvivors,
+          percentage:
+            totalSurvivors > 0
+              ? Number(((count / totalSurvivors) * 100).toFixed(2))
+              : 0,
+        };
+      });
+
+    const stabilizedT1Total = treatmentRows.filter((treatment) => {
+      const triage = firstTriageByCasualty.get(
+        treatment.casualty_incident_id,
+      );
+
+      return (
+        triage?.triage_category === "immediate" &&
+        Boolean(treatment.stabilized_at)
+      );
+    }).length;
+    const stabilizedT2Total = treatmentRows.filter((treatment) => {
+      const triage = firstTriageByCasualty.get(
+        treatment.casualty_incident_id,
+      );
+
+      return (
+        triage?.triage_category === "delayed" &&
+        Boolean(treatment.stabilized_at)
+      );
+    }).length;
+
+    response.status(200).json({
+      success: true,
+      data: {
+        incidentId: id,
+        totalSurvivors,
+        treatmentRecordedTotal: treatmentRows.length,
+        stabilizedT1Total,
+        stabilizedT2Total,
+        treatmentStrategyCounts: countBy(
+          treatmentRows,
+          (row) => row.treatment_strategy,
+        ),
+        responseInitiatedAt,
+        responseInitiationSource: timeline?.dmmp_activated_at
+          ? "dmmp_activated_at"
+          : "incident_started_at",
+        intervalMinutes,
+        categories: {
+          immediate: buildIntervalRows("immediate"),
+          delayed: buildIntervalRows("delayed"),
+        },
       },
     });
   } catch (error) {

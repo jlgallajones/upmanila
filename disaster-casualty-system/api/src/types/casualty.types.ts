@@ -79,6 +79,22 @@ export interface CasualtyTransportRecordRequest {
   notes?: string;
 }
 
+export type TreatmentStrategy =
+  | "scoop_and_run"
+  | "scooter"
+  | "stay_and_play"
+  | "play_and_run"
+  | "unknown";
+
+export interface CasualtyTreatmentRecordRequest {
+  treatmentStrategy: TreatmentStrategy;
+  treatmentAreaName?: string;
+  stabilizationStartedAt?: string;
+  stabilizedAt?: string;
+  treatmentDetails?: Record<string, unknown>;
+  notes?: string;
+}
+
 export interface CreateCasualtyRequest {
   clientRecordId: string;
   incidentId: string;
@@ -130,6 +146,7 @@ export interface CreateCasualtyRequest {
 
   triageAssessment?: CasualtyTriageAssessmentRequest;
   transportRecord?: CasualtyTransportRecordRequest;
+  treatmentRecord?: CasualtyTreatmentRecordRequest;
 }
 
 export interface UpdateCasualtyRequest {
@@ -143,4 +160,5 @@ export interface UpdateCasualtyRequest {
 
   triageAssessment?: CasualtyTriageAssessmentRequest;
   transportRecord?: CasualtyTransportRecordRequest;
+  treatmentRecord?: CasualtyTreatmentRecordRequest;
 }

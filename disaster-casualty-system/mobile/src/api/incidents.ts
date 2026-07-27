@@ -128,6 +128,30 @@ export type OnsiteTriageSummary = {
   accuracyFormula: string;
 };
 
+export type OnsiteCareIntervalMetric = {
+  minutes: number;
+  cutoffAt: string | null;
+  count: number;
+  totalSurvivors: number;
+  percentage: number;
+};
+
+export type OnsiteCareSummary = {
+  incidentId: string;
+  totalSurvivors: number;
+  treatmentRecordedTotal: number;
+  stabilizedT1Total: number;
+  stabilizedT2Total: number;
+  treatmentStrategyCounts: Record<string, number>;
+  responseInitiatedAt: string | null;
+  responseInitiationSource: string;
+  intervalMinutes: number[];
+  categories: {
+    immediate: OnsiteCareIntervalMetric[];
+    delayed: OnsiteCareIntervalMetric[];
+  };
+};
+
 export type CoordinationAssessmentPayload = {
   initialActionsRating?: CoordinationRating | null;
   sceneCoordinationRating?: CoordinationRating | null;
@@ -236,6 +260,11 @@ type CoordinationAssessmentResponse = {
 type OnsiteTriageSummaryResponse = {
   success: boolean;
   data: OnsiteTriageSummary;
+};
+
+type OnsiteCareSummaryResponse = {
+  success: boolean;
+  data: OnsiteCareSummary;
 };
 
 type IncidentSitrepResponse = {
@@ -399,6 +428,16 @@ export async function getOnsiteTriageSummary(
 ): Promise<OnsiteTriageSummary> {
   const response = await api.get<OnsiteTriageSummaryResponse>(
     `/incidents/${encodeURIComponent(id)}/onsite-triage-summary`,
+  );
+
+  return response.data.data;
+}
+
+export async function getOnsiteCareSummary(
+  id: string,
+): Promise<OnsiteCareSummary> {
+  const response = await api.get<OnsiteCareSummaryResponse>(
+    `/incidents/${encodeURIComponent(id)}/onsite-care-summary`,
   );
 
   return response.data.data;

@@ -251,6 +251,20 @@ export type CasualtyTransportRecordPayload = {
   notes?: string;
 };
 
+export type CasualtyTreatmentRecordPayload = {
+  treatmentStrategy:
+    | "scoop_and_run"
+    | "scooter"
+    | "stay_and_play"
+    | "play_and_run"
+    | "unknown";
+  treatmentAreaName?: string;
+  stabilizationStartedAt?: string;
+  stabilizedAt?: string;
+  treatmentDetails?: Record<string, unknown>;
+  notes?: string;
+};
+
 export async function getCasualties(): Promise<CasualtyRecord[]> {
   const response =
     await api.get<CasualtyListResponse>("/casualties");
@@ -389,6 +403,7 @@ export type CreateCasualtyPayload = {
 
   triageAssessment?: CasualtyTriageAssessmentPayload;
   transportRecord?: CasualtyTransportRecordPayload;
+  treatmentRecord?: CasualtyTreatmentRecordPayload;
 };
 
 type CreateCasualtyResponse = {
@@ -424,6 +439,7 @@ export type UpdateCasualtyPayload = {
   >;
   triageAssessment?: CasualtyTriageAssessmentPayload;
   transportRecord?: CasualtyTransportRecordPayload;
+  treatmentRecord?: CasualtyTreatmentRecordPayload;
 };
 
 export async function updateCasualty(

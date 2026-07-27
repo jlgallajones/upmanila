@@ -398,6 +398,14 @@ const EMS_UNIT_TYPE_OPTIONS = [
   "Unknown",
 ] as const;
 
+const TREATMENT_STRATEGY_OPTIONS = [
+  "No (Scoop and Run)",
+  "No (SCOOTER)",
+  "Yes (Stay and Play)",
+  "Partly (Play and Run)",
+  "Unknown",
+] as const;
+
 const FACILITY_LEVEL_OPTIONS = [
   "Primary",
   "Secondary",
@@ -427,6 +435,7 @@ type ChoiceSheetName =
   | "transportRequired"
   | "transportMode"
   | "emsUnitType"
+  | "treatmentStrategy"
   | "casualtyStatus"
   | "severity";
 
@@ -482,6 +491,12 @@ type FormState = {
   departedSceneTime: string;
   arrivedFacilityTime: string;
   transportNotes: string;
+
+  treatmentStrategy: string;
+  treatmentAreaName: string;
+  stabilizationStartedTime: string;
+  stabilizedTime: string;
+  treatmentNotes: string;
 
   casualtyStatus: string;
   severity: string;
@@ -551,6 +566,12 @@ const initialForm: FormState = {
   arrivedFacilityTime: "",
   transportNotes: "",
 
+  treatmentStrategy: "",
+  treatmentAreaName: "",
+  stabilizationStartedTime: "",
+  stabilizedTime: "",
+  treatmentNotes: "",
+
   casualtyStatus: "",
   severity: "",
   healthcareFacilityId: "",
@@ -581,6 +602,9 @@ type TransportRecord =
 type TransportRequired = TransportRecord["transportRequired"];
 type TransportMode = NonNullable<TransportRecord["transportMode"]>;
 type EmsUnitType = NonNullable<TransportRecord["emsUnitType"]>;
+type TreatmentRecord =
+  NonNullable<CreateCasualtyPayload["treatmentRecord"]>;
+type TreatmentStrategy = TreatmentRecord["treatmentStrategy"];
 
 function valueOrEmpty(value: string | number | null | undefined): string {
   if (value === null || value === undefined) {
@@ -814,6 +838,28 @@ function normalizeEmsUnitType(value: string): EmsUnitType {
   }
 }
 
+function normalizeTreatmentStrategy(
+  value: string,
+): TreatmentStrategy {
+  switch (value.trim().toLowerCase()) {
+    case "no (scoop and run)":
+    case "scoop and run":
+      return "scoop_and_run";
+    case "no (scooter)":
+    case "scooter":
+      return "scooter";
+    case "yes (stay and play)":
+    case "stay and play":
+      return "stay_and_play";
+    case "partly (play and run)":
+    case "play and run":
+      return "play_and_run";
+    case "unknown":
+    default:
+      return "unknown";
+  }
+}
+
 function formatTransportRequired(
   value: string | null | undefined,
 ): string {
@@ -856,6 +902,25 @@ function formatEmsUnitType(value: string | null | undefined): string {
       return "ALS";
     case "other":
       return "Other";
+    case "unknown":
+      return "Unknown";
+    default:
+      return "";
+  }
+}
+
+function formatTreatmentStrategy(
+  value: string | null | undefined,
+): string {
+  switch (value) {
+    case "scoop_and_run":
+      return "No (Scoop and Run)";
+    case "scooter":
+      return "No (SCOOTER)";
+    case "stay_and_play":
+      return "Yes (Stay and Play)";
+    case "play_and_run":
+      return "Partly (Play and Run)";
     case "unknown":
       return "Unknown";
     default:
@@ -1072,6 +1137,21 @@ function getTransportFormSignature(form: FormState): string {
   });
 }
 
+function getTreatmentFormSignature(form: FormState): string {
+  if (!form.treatmentStrategy.trim()) {
+    return "";
+  }
+
+  return JSON.stringify({
+    strategy: normalizeTreatmentStrategy(form.treatmentStrategy),
+    treatmentAreaName: form.treatmentAreaName.trim(),
+    stabilizationStarted:
+      parseDateTimeInput(form.stabilizationStartedTime) ?? "",
+    stabilized: parseDateTimeInput(form.stabilizedTime) ?? "",
+    notes: form.treatmentNotes.trim(),
+  });
+}
+
 function parseDateInput(value: string): Date {
   const normalized = normalizeDate(value);
 
@@ -1211,6 +1291,12 @@ function mapRecordToForm(
         )
       : "",
     transportNotes: valueOrEmpty(latestTransport?.notes),
+
+    treatmentStrategy: "",
+    treatmentAreaName: "",
+    stabilizationStartedTime: "",
+    stabilizedTime: "",
+    treatmentNotes: "",
 
     casualtyStatus: titleCase(record.current_status),
     severity: titleCase(record.severity),
@@ -1724,12 +1810,15 @@ export default function AddCasualtyScreen() {
     transportRequired: isEditing ? "" : "Unknown",
     transportMode: isEditing ? "" : "Unknown",
     emsUnitType: isEditing ? "" : "Unknown",
+    treatmentStrategy: isEditing ? "" : "Unknown",
   }));
   const [isLoadingRecord, setIsLoadingRecord] =
     useState(isEditing);
   const [initialTriageSignature, setInitialTriageSignature] =
     useState("");
   const [initialTransportSignature, setInitialTransportSignature] =
+    useState("");
+  const [initialTreatmentSignature, setInitialTreatmentSignature] =
     useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -1908,6 +1997,33 @@ export default function AddCasualtyScreen() {
     };
   }, [form, initialTransportSignature, isEditing]);
 
+  const treatmentRecordPayload = useMemo<
+    CreateCasualtyPayload["treatmentRecord"]
+  >(() => {
+    if (!form.treatmentStrategy.trim()) {
+      return undefined;
+    }
+
+    if (
+      isEditing &&
+      getTreatmentFormSignature(form) === initialTreatmentSignature
+    ) {
+      return undefined;
+    }
+
+    return {
+      treatmentStrategy: normalizeTreatmentStrategy(
+        form.treatmentStrategy,
+      ),
+      treatmentAreaName: form.treatmentAreaName || undefined,
+      stabilizationStartedAt: parseDateTimeInput(
+        form.stabilizationStartedTime,
+      ),
+      stabilizedAt: parseDateTimeInput(form.stabilizedTime),
+      notes: form.treatmentNotes,
+    };
+  }, [form, initialTreatmentSignature, isEditing]);
+
   const updatePayload = useMemo<UpdateCasualtyPayload>(
     () => ({
       incidentId: form.incidentId || undefined,
@@ -1915,11 +2031,13 @@ export default function AddCasualtyScreen() {
       incidentDetails: incidentDetailsPayload,
       triageAssessment: triageAssessmentPayload,
       transportRecord: transportRecordPayload,
+      treatmentRecord: treatmentRecordPayload,
     }),
     [
       form.incidentId,
       incidentDetailsPayload,
       personPayload,
+      treatmentRecordPayload,
       triageAssessmentPayload,
       transportRecordPayload,
     ],
@@ -2117,6 +2235,9 @@ export default function AddCasualtyScreen() {
           );
           setInitialTransportSignature(
             getTransportFormSignature(mappedForm),
+          );
+          setInitialTreatmentSignature(
+            getTreatmentFormSignature(mappedForm),
           );
         }
       } catch (error) {
@@ -2420,6 +2541,69 @@ export default function AddCasualtyScreen() {
           Alert.alert(
             "Casualty status required",
             "Select the casualty status before continuing.",
+          );
+          return false;
+        }
+
+        if (!form.treatmentStrategy.trim()) {
+          Alert.alert(
+            "On-site care required",
+            "Select the on-site stabilization or treatment type.",
+          );
+          return false;
+        }
+
+        const treatmentStrategy = normalizeTreatmentStrategy(
+          form.treatmentStrategy,
+        );
+        const stabilizationStartedAt =
+          form.stabilizationStartedTime.trim()
+            ? getValidDateTimeInput(form.stabilizationStartedTime)
+            : null;
+        const stabilizedAt = form.stabilizedTime.trim()
+          ? getValidDateTimeInput(form.stabilizedTime)
+          : null;
+
+        if (
+          form.stabilizationStartedTime.trim() &&
+          !stabilizationStartedAt
+        ) {
+          Alert.alert(
+            "Invalid care start time",
+            "Enter stabilization start time using mm/dd/yyyy hh:mm.",
+          );
+          return false;
+        }
+
+        if (form.stabilizedTime.trim() && !stabilizedAt) {
+          Alert.alert(
+            "Invalid stabilized time",
+            "Enter stabilized time using mm/dd/yyyy hh:mm.",
+          );
+          return false;
+        }
+
+        if (
+          ["stay_and_play", "play_and_run"].includes(
+            treatmentStrategy,
+          ) &&
+          !stabilizedAt
+        ) {
+          Alert.alert(
+            "Stabilized time required",
+            "Enter the time this casualty was stabilized in the treatment area.",
+          );
+          return false;
+        }
+
+        if (
+          stabilizationStartedAt &&
+          stabilizedAt &&
+          stabilizedAt < stabilizationStartedAt
+        ) {
+          Alert.alert(
+            "Invalid care times",
+            "Stabilized time cannot be before the stabilization start time.",
           );
           return false;
         }
@@ -2858,6 +3042,8 @@ export default function AddCasualtyScreen() {
         return "Select Transport Mode";
       case "emsUnitType":
         return "Select EMS Unit Type";
+      case "treatmentStrategy":
+        return "Select On-site Care";
       case "casualtyStatus":
         return "Select Casualty Status";
       case "severity":
@@ -3061,6 +3247,15 @@ export default function AddCasualtyScreen() {
           onSelect: () => updateField("emsUnitType", option),
         }));
 
+      case "treatmentStrategy":
+        return TREATMENT_STRATEGY_OPTIONS.map((option) => ({
+          label: option,
+          selected:
+            form.treatmentStrategy.toLowerCase() ===
+            option.toLowerCase(),
+          onSelect: () => updateField("treatmentStrategy", option),
+        }));
+
       case "casualtyStatus":
         return STATUS_OPTIONS.map((option) => ({
           label: option,
@@ -3094,6 +3289,7 @@ export default function AddCasualtyScreen() {
         incidentDetails: incidentDetailsPayload,
         triageAssessment: triageAssessmentPayload,
         transportRecord: transportRecordPayload,
+        treatmentRecord: treatmentRecordPayload,
       };
 
       if (!currentUserId) {
@@ -3145,6 +3341,7 @@ export default function AddCasualtyScreen() {
           incidentDetails: incidentDetailsPayload,
           triageAssessment: triageAssessmentPayload,
           transportRecord: transportRecordPayload,
+          treatmentRecord: treatmentRecordPayload,
         };
 
         const response = await createCasualty(payload);
@@ -4009,6 +4206,94 @@ export default function AddCasualtyScreen() {
           value={form.severity}
           placeholder="Select severity"
           onPress={() => openChoiceSheet("severity")}
+        />
+
+        <SelectField
+          label="ON-SITE STABILIZATION / TREATMENT"
+          value={form.treatmentStrategy}
+          placeholder="Select treatment type"
+          onPress={() => openChoiceSheet("treatmentStrategy")}
+        />
+
+        <FormField
+          label="TREATMENT AREA"
+          value={form.treatmentAreaName}
+          placeholder="Treatment area name"
+          onChangeText={(value) =>
+            updateField("treatmentAreaName", value)
+          }
+        />
+
+        <FormField
+          label="STABILIZATION START TIME"
+          value={form.stabilizationStartedTime}
+          placeholder="mm/dd/yyyy hh:mm"
+          onChangeText={(value) =>
+            updateField("stabilizationStartedTime", value)
+          }
+        />
+
+        <Pressable
+          onPress={() =>
+            updateField(
+              "stabilizationStartedTime",
+              formatDateTimeForInput(new Date()),
+            )
+          }
+          style={({ pressed }) => [
+            styles.locationButton,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Ionicons
+            name="time-outline"
+            size={19}
+            color={COLORS.maroon}
+          />
+          <Text style={styles.locationButtonText}>
+            Use current care start time
+          </Text>
+        </Pressable>
+
+        <FormField
+          label="STABILIZED TIME"
+          value={form.stabilizedTime}
+          placeholder="mm/dd/yyyy hh:mm"
+          onChangeText={(value) =>
+            updateField("stabilizedTime", value)
+          }
+        />
+
+        <Pressable
+          onPress={() =>
+            updateField(
+              "stabilizedTime",
+              formatDateTimeForInput(new Date()),
+            )
+          }
+          style={({ pressed }) => [
+            styles.locationButton,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Ionicons
+            name="checkmark-circle-outline"
+            size={19}
+            color={COLORS.maroon}
+          />
+          <Text style={styles.locationButtonText}>
+            Use current stabilized time
+          </Text>
+        </Pressable>
+
+        <FormField
+          label="TREATMENT NOTES"
+          value={form.treatmentNotes}
+          placeholder="On-site treatment or stabilization details"
+          multiline
+          onChangeText={(value) =>
+            updateField("treatmentNotes", value)
+          }
         />
 
         <FormField

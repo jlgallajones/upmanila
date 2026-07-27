@@ -29,6 +29,7 @@ import {
   getDmmpStaffSummary,
   getIncidents,
   getIncidentTimeline,
+  getOnsiteCareSummary,
   getOnsiteTriageSummary,
   saveCoordinationAssessment,
   type Incident,
@@ -36,6 +37,7 @@ import {
   type DmmpStaffRecord,
   type DmmpStaffSummary,
   type MedicalCoordinationAssessment,
+  type OnsiteCareSummary,
   type OnsiteTriageSummary,
   type OnsiteTriageAccuracyMetric,
   type IncidentResponseTimeline,
@@ -574,6 +576,42 @@ function formatTriageSystemCounts(counts: Record<string, number>): string {
     .join("\n");
 }
 
+function formatTreatmentStrategyLabel(
+  value: string | null | undefined,
+): string {
+  switch (value) {
+    case "scoop_and_run":
+      return "No (Scoop and Run)";
+    case "scooter":
+      return "No (SCOOTER)";
+    case "stay_and_play":
+      return "Yes (Stay and Play)";
+    case "play_and_run":
+      return "Partly (Play and Run)";
+    case "unknown":
+      return "Unknown";
+    default:
+      return value ?? "Not recorded";
+  }
+}
+
+function formatTreatmentStrategyCounts(
+  counts: Record<string, number>,
+): string {
+  const entries = Object.entries(counts).filter(([, count]) => count > 0);
+
+  if (entries.length === 0) {
+    return "No on-site care type recorded.";
+  }
+
+  return entries
+    .sort(([first], [second]) => first.localeCompare(second))
+    .map(
+      ([key, count]) => `${formatTreatmentStrategyLabel(key)}: ${count}`,
+    )
+    .join("\n");
+}
+
 function IncidentCard({
   incident,
   canClose,
@@ -582,6 +620,7 @@ function IncidentCard({
   onManageStaff,
   onEditCoordination,
   onViewOnsiteTriage,
+  onViewOnsiteCare,
   onGenerateSitrep,
   isGeneratingSitrep,
 }: {
@@ -592,6 +631,7 @@ function IncidentCard({
   onManageStaff: () => void;
   onEditCoordination: () => void;
   onViewOnsiteTriage: () => void;
+  onViewOnsiteCare: () => void;
   onGenerateSitrep: () => void;
   isGeneratingSitrep: boolean;
 }) {
@@ -714,6 +754,21 @@ function IncidentCard({
       </Pressable>
 
       <Pressable
+        onPress={onViewOnsiteCare}
+        style={({ pressed }) => [
+          styles.triageButton,
+          pressed && styles.pressed,
+        ]}
+      >
+        <Ionicons
+          name="bandage-outline"
+          size={17}
+          color={COLORS.maroon}
+        />
+        <Text style={styles.timelineButtonText}>On-site Care</Text>
+      </Pressable>
+
+      <Pressable
         disabled={isGeneratingSitrep}
         onPress={onGenerateSitrep}
         style={({ pressed }) => [
@@ -831,6 +886,14 @@ export default function IncidentsPage() {
   const [onsiteTriageSummary, setOnsiteTriageSummary] =
     useState<OnsiteTriageSummary | null>(null);
   const [isLoadingOnsiteTriage, setIsLoadingOnsiteTriage] =
+    useState(false);
+  const [isOnsiteCareModalVisible, setIsOnsiteCareModalVisible] =
+    useState(false);
+  const [selectedOnsiteCareIncident, setSelectedOnsiteCareIncident] =
+    useState<Incident | null>(null);
+  const [onsiteCareSummary, setOnsiteCareSummary] =
+    useState<OnsiteCareSummary | null>(null);
+  const [isLoadingOnsiteCare, setIsLoadingOnsiteCare] =
     useState(false);
   const [sitrep, setSitrep] = useState<IncidentSitrep | null>(null);
   const [isSitrepModalVisible, setIsSitrepModalVisible] =
@@ -1516,6 +1579,36 @@ export default function IncidentsPage() {
     setOnsiteTriageSummary(null);
   }
 
+  async function handleOpenOnsiteCare(incident: Incident) {
+    setSelectedOnsiteCareIncident(incident);
+    setOnsiteCareSummary(null);
+    setIsOnsiteCareModalVisible(true);
+    setIsLoadingOnsiteCare(true);
+
+    try {
+      const summary = await getOnsiteCareSummary(incident.id);
+
+      setOnsiteCareSummary(summary);
+    } catch (error) {
+      console.error("Unable to load on-site care summary:", error);
+
+      Alert.alert(
+        "Unable to load on-site care",
+        error instanceof Error
+          ? error.message
+          : "Please try again.",
+      );
+    } finally {
+      setIsLoadingOnsiteCare(false);
+    }
+  }
+
+  function handleCloseOnsiteCareModal() {
+    setIsOnsiteCareModalVisible(false);
+    setSelectedOnsiteCareIncident(null);
+    setOnsiteCareSummary(null);
+  }
+
   function renderTimelineDateField(
     label: string,
     key: keyof TimelineFormState,
@@ -1653,7 +1746,12 @@ export default function IncidentsPage() {
 
   function renderTriageIntervalSection(
     title: string,
-    rows: OnsiteTriageSummary["categories"]["immediate"],
+    rows: Array<{
+      minutes: number;
+      count: number;
+      totalSurvivors: number;
+      percentage: number;
+    }>,
   ) {
     return (
       <View style={styles.triageIntervalSection}>
@@ -1815,6 +1913,9 @@ export default function IncidentsPage() {
             }}
             onViewOnsiteTriage={() => {
               void handleOpenOnsiteTriage(item);
+            }}
+            onViewOnsiteCare={() => {
+              void handleOpenOnsiteCare(item);
             }}
             onGenerateSitrep={() => {
               void handleGenerateSitrep(item);
@@ -2825,6 +2926,128 @@ export default function IncidentsPage() {
 
                 <Pressable
                   onPress={handleCloseOnsiteTriageModal}
+                  style={({ pressed }) => [
+                    styles.createButton,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={styles.createButtonText}>Done</Text>
+                  <Ionicons
+                    name="checkmark-circle-outline"
+                    size={19}
+                    color={COLORS.white}
+                  />
+                </Pressable>
+              </ScrollView>
+            ) : null}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={isOnsiteCareModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCloseOnsiteCareModal}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={handleCloseOnsiteCareModal}
+        >
+          <Pressable style={styles.timelineSheet}>
+            <View style={styles.sheetHandle} />
+
+            <View style={styles.sheetHeader}>
+              <View style={styles.sheetTitleGroup}>
+                <Text style={styles.sheetTitle}>On-site Care</Text>
+                <Text
+                  style={styles.sheetSubtitle}
+                  numberOfLines={1}
+                >
+                  {selectedOnsiteCareIncident?.incident_name ??
+                    "Incident"}
+                </Text>
+              </View>
+              <Pressable
+                onPress={handleCloseOnsiteCareModal}
+                style={styles.sheetCloseButton}
+              >
+                <Ionicons
+                  name="close"
+                  size={20}
+                  color={COLORS.secondaryText}
+                />
+              </Pressable>
+            </View>
+
+            {isLoadingOnsiteCare ? (
+              <View style={styles.timelineLoading}>
+                <ActivityIndicator
+                  size="small"
+                  color={COLORS.maroon}
+                />
+                <Text style={styles.timelineLoadingText}>
+                  Loading on-site care...
+                </Text>
+              </View>
+            ) : onsiteCareSummary ? (
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.timelineScrollContent}
+              >
+                <View style={styles.sitrepMetricGrid}>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {onsiteCareSummary.totalSurvivors}
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      Survivors
+                    </Text>
+                  </View>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {onsiteCareSummary.treatmentRecordedTotal}
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      Care Records
+                    </Text>
+                  </View>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {onsiteCareSummary.stabilizedT1Total}
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      Stabilized T1
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={styles.fieldLabel}>
+                  ON-SITE STABILIZATION / TREATMENT
+                </Text>
+                <Text style={styles.sitrepSectionText}>
+                  {formatTreatmentStrategyCounts(
+                    onsiteCareSummary.treatmentStrategyCounts,
+                  )}
+                </Text>
+
+                <Text style={styles.fieldLabel}>CARE TIMES</Text>
+                <Text style={styles.sitrepSectionText}>
+                  Response initiation:{" "}
+                  {formatDateTime(onsiteCareSummary.responseInitiatedAt)}
+                </Text>
+
+                {renderTriageIntervalSection(
+                  "T1 IMMEDIATE STABILIZED BY INTERVAL",
+                  onsiteCareSummary.categories.immediate,
+                )}
+                {renderTriageIntervalSection(
+                  "T2 DELAYED STABILIZED BY INTERVAL",
+                  onsiteCareSummary.categories.delayed,
+                )}
+
+                <Pressable
+                  onPress={handleCloseOnsiteCareModal}
                   style={({ pressed }) => [
                     styles.createButton,
                     pressed && styles.pressed,

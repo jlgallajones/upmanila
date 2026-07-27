@@ -5,6 +5,7 @@ import { getAuthenticatedUser } from "../middleware/auth.js";
 import { calculateTriageCategory } from "../services/triage/calculate-triage.js";
 import { compareTriageCategories } from "../services/triage/compare-triage.js";
 import type {
+  CasualtyTreatmentRecordRequest,
   CasualtyTransportRecordRequest,
   CasualtyTriageAssessmentRequest,
   CreateCasualtyRequest,
@@ -82,6 +83,14 @@ const transportModes = [
 ];
 
 const emsUnitTypes = ["bls", "als", "other", "unknown"];
+
+const treatmentStrategies = [
+  "scoop_and_run",
+  "scooter",
+  "stay_and_play",
+  "play_and_run",
+  "unknown",
+];
 
 const verificationStatuses = [
   "submitted",
@@ -398,6 +407,78 @@ function validateTransportRecord(
   return true;
 }
 
+function validateTreatmentRecord(
+  treatmentRecord: CasualtyTreatmentRecordRequest | undefined,
+  response: Response,
+): boolean {
+  if (!treatmentRecord) {
+    return true;
+  }
+
+  if (
+    !treatmentStrategies.includes(treatmentRecord.treatmentStrategy)
+  ) {
+    response.status(400).json({
+      success: false,
+      message: "Invalid on-site treatment strategy.",
+    });
+    return false;
+  }
+
+  if (treatmentRecord.stabilizationStartedAt) {
+    const stabilizationStartedAt = new Date(
+      treatmentRecord.stabilizationStartedAt,
+    );
+
+    if (Number.isNaN(stabilizationStartedAt.getTime())) {
+      response.status(400).json({
+        success: false,
+        message: "Invalid stabilization start time.",
+      });
+      return false;
+    }
+  }
+
+  if (treatmentRecord.stabilizedAt) {
+    const stabilizedAt = new Date(treatmentRecord.stabilizedAt);
+
+    if (Number.isNaN(stabilizedAt.getTime())) {
+      response.status(400).json({
+        success: false,
+        message: "Invalid stabilized time.",
+      });
+      return false;
+    }
+  }
+
+  if (
+    treatmentRecord.stabilizationStartedAt &&
+    treatmentRecord.stabilizedAt &&
+    new Date(treatmentRecord.stabilizedAt) <
+      new Date(treatmentRecord.stabilizationStartedAt)
+  ) {
+    response.status(400).json({
+      success: false,
+      message:
+        "Stabilized time cannot be before stabilization start time.",
+    });
+    return false;
+  }
+
+  if (
+    treatmentRecord.treatmentDetails !== undefined &&
+    !isObject(treatmentRecord.treatmentDetails)
+  ) {
+    response.status(400).json({
+      success: false,
+      message: "treatmentDetails must be an object.",
+    });
+    return false;
+  }
+
+  return true;
+}
+
 async function ensureActiveHealthcareFacility(
   facilityId: string | undefined,
   response: Response,
@@ -517,6 +598,33 @@ async function insertTransportRecord(
   }
 }
 
+async function insertTreatmentRecord(
+  casualtyIncidentId: string,
+  userId: string,
+  treatmentRecord: CasualtyTreatmentRecordRequest,
+): Promise<void> {
+  const { error } = await supabase
+    .from("casualty_treatments")
+    .insert({
+      casualty_incident_id: casualtyIncidentId,
+      treatment_strategy: treatmentRecord.treatmentStrategy,
+      treatment_area_name:
+        treatmentRecord.treatmentAreaName?.trim() || null,
+      stabilization_started_at:
+        treatmentRecord.stabilizationStartedAt ?? null,
+      stabilized_at: treatmentRecord.stabilizedAt ?? null,
+      treatment_details: treatmentRecord.treatmentDetails ?? {},
+      notes: treatmentRecord.notes?.trim() || null,
+      performed_by: userId,
+    });
+
+  if (error) {
+    throw new Error(
+      `Unable to record on-site treatment: ${error.message}`,
+    );
+  }
+}
+
 export async function createCasualty(
   request: Request<
     Record<string, never>,
@@ -534,6 +642,7 @@ export async function createCasualty(
       incidentDetails,
       triageAssessment,
       transportRecord,
+      treatmentRecord,
     } = request.body;
     const user = getAuthenticatedUser(request);
 
@@ -677,6 +786,10 @@ export async function createCasualty(
       return;
     }
 
+    if (!validateTreatmentRecord(treatmentRecord, response)) {
+      return;
+    }
+
     const existingIdNumber = await ensureUniqueIdNumber(
       person.idNumber,
     );
@@ -785,6 +898,14 @@ export async function createCasualty(
         `Unable to create casualty record: ${
           transactionError?.message ?? "Unknown database error"
         }`,
+      );
+    }
+
+    if (treatmentRecord) {
+      await insertTreatmentRecord(
+        transactionResult.casualtyIncident.id,
+        user.id,
+        treatmentRecord,
       );
     }
 
@@ -1576,6 +1697,7 @@ export async function updateCasualty(
       incidentDetails,
       triageAssessment,
       transportRecord,
+      treatmentRecord,
     } = request.body;
     const user = getAuthenticatedUser(request);
 
@@ -1584,7 +1706,8 @@ export async function updateCasualty(
       !incidentDetails &&
       !incidentId &&
       !triageAssessment &&
-      !transportRecord
+      !transportRecord &&
+      !treatmentRecord
     ) {
       response.status(400).json({
         success: false,
@@ -1598,6 +1721,10 @@ export async function updateCasualty(
     }
 
     if (!validateTransportRecord(transportRecord, response)) {
+      return;
+    }
+
+    if (!validateTreatmentRecord(treatmentRecord, response)) {
       return;
     }
 
@@ -1881,6 +2008,10 @@ export async function updateCasualty(
 
     if (transportRecord) {
       await insertTransportRecord(id, user.id, transportRecord);
+    }
+
+    if (treatmentRecord) {
+      await insertTreatmentRecord(id, user.id, treatmentRecord);
     }
 
     const { data: updatedRecord, error: updatedError } =
