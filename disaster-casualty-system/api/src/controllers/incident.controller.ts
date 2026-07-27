@@ -14,6 +14,7 @@ type CreateIncidentRequest = {
 };
 
 type UpdateIncidentTimelineRequest = {
+  disasterOccurredAt?: string | null;
   eventNotificationAt?: string | null;
   dmmpActivated?: boolean | null;
   dmmpActivationTrigger?: string | null;
@@ -933,6 +934,10 @@ export async function updateIncidentTimeline(
       );
     }
 
+    const disasterOccurredAt = parseNullableTimestamp(
+      request.body.disasterOccurredAt,
+      "Disaster occurrence time",
+    );
     const eventNotificationAt = pickTimelineValue(
       parseNullableTimestamp(
         request.body.eventNotificationAt,
@@ -1014,6 +1019,30 @@ export async function updateIncidentTimeline(
       lastTransportFromSceneAt,
       "Last transport from scene time cannot be before first transport from scene time.",
     );
+
+    if (disasterOccurredAt !== undefined) {
+      if (disasterOccurredAt === null) {
+        response.status(400).json({
+          success: false,
+          message: "Disaster occurrence time cannot be blank.",
+        });
+        return;
+      }
+
+      const { error: incidentUpdateError } = await supabase
+        .from("incidents")
+        .update({
+          started_at: disasterOccurredAt,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id);
+
+      if (incidentUpdateError) {
+        throw new Error(
+          `Unable to update disaster occurrence time: ${incidentUpdateError.message}`,
+        );
+      }
+    }
 
     const timelineUpdates = {
       incident_id: id,

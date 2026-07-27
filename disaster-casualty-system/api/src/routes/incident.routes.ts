@@ -39,7 +39,13 @@ incidentRouter.get(
 incidentRouter.put(
   "/:id/timeline",
   requireAuth,
-  requireRole(["super_admin", "administrator", "encoder"]),
+  requireRole([
+    "super_admin",
+    "administrator",
+    "responder",
+    "encoder",
+    "medical_personnel",
+  ]),
   updateIncidentTimeline,
 );
 incidentRouter.post(

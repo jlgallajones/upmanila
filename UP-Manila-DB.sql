@@ -144,6 +144,7 @@ CREATE TABLE public.incident_response_timelines (
   dmmp_activation_trigger text,
   dmmp_activated_at timestamptz,
   medical_coordinator_notified_at timestamptz,
+  last_dmmp_staff_arrived_at timestamptz,
   first_ems_on_scene_at timestamptz,
   triage_ordered_at timestamptz,
   first_site_triage_at timestamptz,
@@ -179,6 +180,79 @@ CREATE TABLE public.incident_response_timelines (
       first_transport_from_scene_at IS NULL
       OR last_transport_from_scene_at IS NULL
       OR last_transport_from_scene_at >= first_transport_from_scene_at
+    )
+);
+
+-- =========================================================
+-- DMMP STAFF CALL-DOWNS
+-- Staff notification and arrival tracking for Utstein reporting
+-- =========================================================
+
+CREATE TABLE public.dmmp_staff_call_downs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  incident_id uuid NOT NULL,
+
+  staff_name varchar(150),
+  role_name varchar(150),
+  was_contacted boolean NOT NULL DEFAULT false,
+  contacted_at timestamptz,
+  required_arrival_at timestamptz,
+  arrived_at timestamptz,
+  arrived_within_standard boolean,
+
+  recorded_by uuid,
+
+  created_at timestamptz NOT NULL DEFAULT now(),
+
+  CONSTRAINT dmmp_staff_call_downs_incident_id_fkey
+    FOREIGN KEY (incident_id)
+    REFERENCES public.incidents(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT dmmp_staff_call_downs_recorded_by_fkey
+    FOREIGN KEY (recorded_by)
+    REFERENCES public.users(id)
+    ON DELETE SET NULL
+);
+
+-- =========================================================
+-- MEDICAL COORDINATION ASSESSMENTS
+-- Utstein 1-7 adequacy ratings for medical operations coordination
+-- =========================================================
+
+CREATE TABLE public.medical_coordination_assessments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  incident_id uuid NOT NULL UNIQUE,
+
+  initial_actions_rating smallint,
+  scene_coordination_rating smallint,
+  system_coordination_rating smallint,
+  communications_rating smallint,
+  resource_management_rating smallint,
+
+  notes text,
+  assessed_by uuid,
+  assessed_at timestamptz NOT NULL DEFAULT now(),
+
+  CONSTRAINT medical_coordination_assessments_incident_id_fkey
+    FOREIGN KEY (incident_id)
+    REFERENCES public.incidents(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT medical_coordination_assessments_assessed_by_fkey
+    FOREIGN KEY (assessed_by)
+    REFERENCES public.users(id)
+    ON DELETE SET NULL,
+
+  CONSTRAINT medical_coordination_assessments_rating_check
+    CHECK (
+      (initial_actions_rating IS NULL OR initial_actions_rating BETWEEN 1 AND 7)
+      AND (scene_coordination_rating IS NULL OR scene_coordination_rating BETWEEN 1 AND 7)
+      AND (system_coordination_rating IS NULL OR system_coordination_rating BETWEEN 1 AND 7)
+      AND (communications_rating IS NULL OR communications_rating BETWEEN 1 AND 7)
+      AND (resource_management_rating IS NULL OR resource_management_rating BETWEEN 1 AND 7)
     )
 );
 
@@ -805,6 +879,15 @@ CREATE INDEX incident_response_timelines_incident_idx
 CREATE INDEX incident_response_timelines_notification_idx
   ON public.incident_response_timelines(event_notification_at);
 
+CREATE INDEX dmmp_staff_call_downs_incident_idx
+  ON public.dmmp_staff_call_downs(incident_id);
+
+CREATE INDEX dmmp_staff_call_downs_arrived_idx
+  ON public.dmmp_staff_call_downs(arrived_at);
+
+CREATE INDEX medical_coordination_assessments_incident_idx
+  ON public.medical_coordination_assessments(incident_id);
+
 CREATE INDEX casualties_id_number_idx
   ON public.casualties(id_number);
 
@@ -1087,6 +1170,8 @@ EXECUTE FUNCTION public.create_initial_casualty_status_history();
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.incidents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.incident_response_timelines ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.dmmp_staff_call_downs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.medical_coordination_assessments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.casualties ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.evacuation_centers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.healthcare_facilities ENABLE ROW LEVEL SECURITY;

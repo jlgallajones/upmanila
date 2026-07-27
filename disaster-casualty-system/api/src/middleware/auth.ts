@@ -1,6 +1,13 @@
-import type { NextFunction, Request, Response } from "express";
+import type {
+  NextFunction,
+  Request,
+  Response,
+} from "express";
 
-import { supabase, supabaseAuth } from "../config/supabase.js";
+import {
+  supabase,
+  supabaseAuth,
+} from "../config/supabase.js";
 
 export type UserRole =
   | "super_admin"
@@ -31,14 +38,24 @@ const userSelect = `
   is_active
 `;
 
-function getBearerToken(request: Request): string | null {
-  const header = request.headers.authorization;
+function getBearerToken(
+  request: Request,
+): string | null {
+  const authorizationHeader =
+    request.headers.authorization;
 
-  if (!header?.startsWith("Bearer ")) {
+  if (
+    !authorizationHeader ||
+    !authorizationHeader.startsWith("Bearer ")
+  ) {
     return null;
   }
 
-  return header.slice("Bearer ".length).trim() || null;
+  const token = authorizationHeader
+    .slice("Bearer ".length)
+    .trim();
+
+  return token || null;
 }
 
 export async function requireAuth(
@@ -52,26 +69,39 @@ export async function requireAuth(
     if (!token) {
       response.status(401).json({
         success: false,
-        message: "Authentication token is required.",
+        message:
+          "Authentication token is required.",
       });
       return;
     }
 
-    const { data: authData, error: authError } =
-      await supabaseAuth.auth.getUser(token);
+    const {
+      data: authenticationData,
+      error: authenticationError,
+    } = await supabaseAuth.auth.getUser(token);
 
-    if (authError || !authData.user) {
+    if (
+      authenticationError ||
+      !authenticationData.user
+    ) {
       response.status(401).json({
         success: false,
-        message: "Invalid or expired authentication token.",
+        message:
+          "Invalid or expired authentication token.",
       });
       return;
     }
 
-    let { data: profile, error: profileError } = await supabase
+    const authenticatedAuthUser =
+      authenticationData.user;
+
+    let {
+      data: profile,
+      error: profileError,
+    } = await supabase
       .from("users")
       .select(userSelect)
-      .eq("id", authData.user.id)
+      .eq("id", authenticatedAuthUser.id)
       .maybeSingle();
 
     if (profileError) {
@@ -80,26 +110,36 @@ export async function requireAuth(
       );
     }
 
-    if (!profile && authData.user.email) {
-      const result = await supabase
+    if (
+      !profile &&
+      authenticatedAuthUser.email
+    ) {
+      const {
+        data: emailProfile,
+        error: emailProfileError,
+      } = await supabase
         .from("users")
         .select(userSelect)
-        .ilike("email", authData.user.email)
+        .ilike(
+          "email",
+          authenticatedAuthUser.email,
+        )
         .maybeSingle();
 
-      if (result.error) {
+      if (emailProfileError) {
         throw new Error(
-          `Unable to load authenticated profile: ${result.error.message}`,
+          `Unable to load authenticated profile: ${emailProfileError.message}`,
         );
       }
 
-      profile = result.data;
+      profile = emailProfile;
     }
 
     if (!profile) {
       response.status(403).json({
         success: false,
-        message: "Authenticated user profile was not found.",
+        message:
+          "Authenticated user profile was not found.",
       });
       return;
     }
@@ -112,14 +152,18 @@ export async function requireAuth(
       return;
     }
 
-    (request as AuthenticatedRequest).user = {
+    const authenticatedUser: AuthenticatedUser = {
       id: profile.id,
-      authUserId: authData.user.id,
+      authUserId: authenticatedAuthUser.id,
       fullName: profile.full_name,
       email: profile.email,
       role: profile.role as UserRole,
       isActive: profile.is_active,
     };
+
+    (
+      request as AuthenticatedRequest
+    ).user = authenticatedUser;
 
     next();
   } catch (error) {
@@ -127,26 +171,36 @@ export async function requireAuth(
   }
 }
 
-export function requireRole(roles: UserRole[]) {
+export function requireRole(
+  roles: UserRole[],
+) {
   return (
     request: Request,
     response: Response,
     next: NextFunction,
   ): void => {
-    const user = (request as Partial<AuthenticatedRequest>).user;
+    const authenticatedUser = (
+      request as Partial<AuthenticatedRequest>
+    ).user;
 
-    if (!user) {
+    if (!authenticatedUser) {
       response.status(401).json({
         success: false,
-        message: "Authentication token is required.",
+        message:
+          "Authentication token is required.",
       });
       return;
     }
 
-    if (!roles.includes(user.role)) {
+    if (
+      !roles.includes(
+        authenticatedUser.role,
+      )
+    ) {
       response.status(403).json({
         success: false,
-        message: "Your account is not allowed to perform this action.",
+        message:
+          "Your account is not allowed to perform this action.",
       });
       return;
     }
@@ -158,5 +212,15 @@ export function requireRole(roles: UserRole[]) {
 export function getAuthenticatedUser(
   request: Request,
 ): AuthenticatedUser {
-  return (request as AuthenticatedRequest).user;
+  const authenticatedUser = (
+    request as Partial<AuthenticatedRequest>
+  ).user;
+
+  if (!authenticatedUser) {
+    throw new Error(
+      "Authenticated user was not attached to the request.",
+    );
+  }
+
+  return authenticatedUser;
 }

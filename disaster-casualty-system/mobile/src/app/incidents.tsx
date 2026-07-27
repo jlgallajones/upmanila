@@ -20,13 +20,24 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import {
   closeIncident,
   createIncident,
+  createDmmpStaff,
+  deleteDmmpStaff,
   downloadIncidentExport,
   generateIncidentSitrep,
+  getCoordinationAssessment,
+  getDmmpStaff,
+  getDmmpStaffSummary,
   getIncidents,
   getIncidentTimeline,
+  saveCoordinationAssessment,
   type Incident,
+  type CoordinationRating,
+  type DmmpStaffRecord,
+  type DmmpStaffSummary,
+  type MedicalCoordinationAssessment,
   type IncidentResponseTimeline,
   type IncidentSitrep,
+  updateDmmpStaff,
   updateIncidentTimeline,
   type UpdateIncidentTimelinePayload,
 } from "../api/incidents";
@@ -56,6 +67,48 @@ const REFERENCE_MANAGER_ROLES = [
   "administrator",
   "encoder",
 ] as const;
+
+const OPERATION_WRITER_ROLES = [
+  "super_admin",
+  "administrator",
+  "responder",
+  "encoder",
+  "medical_personnel",
+] as const;
+
+const COORDINATION_RATING_OPTIONS: Array<{
+  value: CoordinationRating;
+  label: string;
+}> = [
+  {
+    value: 1,
+    label: "Not Done",
+  },
+  {
+    value: 2,
+    label: "Inadequate",
+  },
+  {
+    value: 3,
+    label: "Somewhat Adequate",
+  },
+  {
+    value: 4,
+    label: "Mostly Adequate",
+  },
+  {
+    value: 5,
+    label: "Completely Adequate",
+  },
+  {
+    value: 6,
+    label: "N/S",
+  },
+  {
+    value: 7,
+    label: "N/D",
+  },
+];
 
 const DISASTER_TYPES = [
   "Typhoon",
@@ -191,6 +244,7 @@ function formatCountMap(counts: Record<string, number>): string {
 }
 
 type TimelineFormState = {
+  disasterOccurredAt: string;
   eventNotificationAt: string;
   dmmpActivated: "yes" | "no" | "unknown";
   dmmpActivationTrigger: string;
@@ -206,6 +260,7 @@ type TimelineFormState = {
 };
 
 const initialTimelineForm: TimelineFormState = {
+  disasterOccurredAt: "",
   eventNotificationAt: "",
   dmmpActivated: "unknown",
   dmmpActivationTrigger: "",
@@ -226,12 +281,17 @@ function formatTimelineInput(value: string | null | undefined): string {
 
 function mapTimelineToForm(
   timeline: IncidentResponseTimeline | null,
+  incident: Incident,
 ): TimelineFormState {
   if (!timeline) {
-    return initialTimelineForm;
+    return {
+      ...initialTimelineForm,
+      disasterOccurredAt: formatTimelineInput(incident.started_at),
+    };
   }
 
   return {
+    disasterOccurredAt: formatTimelineInput(incident.started_at),
     eventNotificationAt: formatTimelineInput(
       timeline.event_notification_at,
     ),
@@ -274,6 +334,7 @@ function buildTimelinePayload(
   form: TimelineFormState,
 ): UpdateIncidentTimelinePayload {
   return {
+    disasterOccurredAt: parseDateTimeInput(form.disasterOccurredAt),
     eventNotificationAt: parseDateTimeInput(form.eventNotificationAt),
     dmmpActivated:
       form.dmmpActivated === "unknown"
@@ -300,6 +361,7 @@ function buildTimelinePayload(
 
 function validateTimelineForm(form: TimelineFormState): string | null {
   const dateFields: Array<[keyof TimelineFormState, string]> = [
+    ["disasterOccurredAt", "Disaster occurrence"],
     ["eventNotificationAt", "Event notification"],
     ["dmmpActivatedAt", "DMMP activation"],
     [
@@ -373,11 +435,103 @@ function formatRoleAllowed(role: string | null): boolean {
   );
 }
 
+function formatOperationAllowed(role: string | null): boolean {
+  return (
+    role !== null &&
+    OPERATION_WRITER_ROLES.includes(
+      role as (typeof OPERATION_WRITER_ROLES)[number],
+    )
+  );
+}
+
+type StaffFormState = {
+  staffName: string;
+  roleName: string;
+  wasContacted: "yes" | "no";
+  contactedAt: string;
+  requiredArrivalAt: string;
+  arrivedAt: string;
+};
+
+const initialStaffForm: StaffFormState = {
+  staffName: "",
+  roleName: "",
+  wasContacted: "yes",
+  contactedAt: "",
+  requiredArrivalAt: "",
+  arrivedAt: "",
+};
+
+type CoordinationFormState = {
+  initialActionsRating: CoordinationRating | null;
+  sceneCoordinationRating: CoordinationRating | null;
+  systemCoordinationRating: CoordinationRating | null;
+  communicationsRating: CoordinationRating | null;
+  resourceManagementRating: CoordinationRating | null;
+  notes: string;
+  assessedAt: string;
+};
+
+const initialCoordinationForm: CoordinationFormState = {
+  initialActionsRating: null,
+  sceneCoordinationRating: null,
+  systemCoordinationRating: null,
+  communicationsRating: null,
+  resourceManagementRating: null,
+  notes: "",
+  assessedAt: "",
+};
+
+function mapStaffToForm(record: DmmpStaffRecord): StaffFormState {
+  return {
+    staffName: valueOrEmpty(record.staff_name),
+    roleName: valueOrEmpty(record.role_name),
+    wasContacted: record.was_contacted ? "yes" : "no",
+    contactedAt: formatTimelineInput(record.contacted_at),
+    requiredArrivalAt: formatTimelineInput(record.required_arrival_at),
+    arrivedAt: formatTimelineInput(record.arrived_at),
+  };
+}
+
+function mapCoordinationToForm(
+  assessment: MedicalCoordinationAssessment | null,
+): CoordinationFormState {
+  if (!assessment) {
+    return {
+      ...initialCoordinationForm,
+      assessedAt: formatDateTimeForInput(new Date()),
+    };
+  }
+
+  return {
+    initialActionsRating: assessment.initial_actions_rating,
+    sceneCoordinationRating: assessment.scene_coordination_rating,
+    systemCoordinationRating: assessment.system_coordination_rating,
+    communicationsRating: assessment.communications_rating,
+    resourceManagementRating: assessment.resource_management_rating,
+    notes: valueOrEmpty(assessment.notes),
+    assessedAt: formatTimelineInput(assessment.assessed_at),
+  };
+}
+
+function getRatingLabel(value: CoordinationRating | null): string {
+  if (!value) {
+    return "Not rated";
+  }
+
+  return (
+    COORDINATION_RATING_OPTIONS.find((option) => option.value === value)
+      ?.label ?? "Not rated"
+  );
+}
+
 function IncidentCard({
   incident,
   canClose,
   onClose,
   onEditTimeline,
+  onManageStaff,
+  onEditCoordination,
   onGenerateSitrep,
   isGeneratingSitrep,
 }: {
@@ -385,6 +539,8 @@ function IncidentCard({
   canClose: boolean;
   onClose: () => void;
   onEditTimeline: () => void;
+  onManageStaff: () => void;
+  onEditCoordination: () => void;
   onGenerateSitrep: () => void;
   isGeneratingSitrep: boolean;
 }) {
@@ -456,6 +612,40 @@ function IncidentCard({
           Response Timeline
         </Text>
       </Pressable>
+
+      <View style={styles.operationActionRow}>
+        <Pressable
+          onPress={onManageStaff}
+          style={({ pressed }) => [
+            styles.operationActionButton,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Ionicons
+            name="people-outline"
+            size={16}
+            color={COLORS.blue}
+          />
+          <Text style={styles.operationActionText}>DMMP Staff</Text>
+        </Pressable>
+
+        <Pressable
+          onPress={onEditCoordination}
+          style={({ pressed }) => [
+            styles.operationActionButton,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Ionicons
+            name="clipboard-outline"
+            size={16}
+            color={COLORS.orange}
+          />
+          <Text style={styles.operationActionText}>
+            Coordination
+          </Text>
+        </Pressable>
+      </View>
 
       <Pressable
         disabled={isGeneratingSitrep}
@@ -535,6 +725,39 @@ export default function IncidentsPage() {
     useState<TimelineFormState>(initialTimelineForm);
   const [isLoadingTimeline, setIsLoadingTimeline] = useState(false);
   const [isSavingTimeline, setIsSavingTimeline] = useState(false);
+  const [isStaffModalVisible, setIsStaffModalVisible] =
+    useState(false);
+  const [selectedStaffIncident, setSelectedStaffIncident] =
+    useState<Incident | null>(null);
+  const [staffRecords, setStaffRecords] = useState<
+    DmmpStaffRecord[]
+  >([]);
+  const [staffSummary, setStaffSummary] =
+    useState<DmmpStaffSummary | null>(null);
+  const [staffForm, setStaffForm] =
+    useState<StaffFormState>(initialStaffForm);
+  const [editingStaffId, setEditingStaffId] = useState<string | null>(
+    null,
+  );
+  const [isLoadingStaff, setIsLoadingStaff] = useState(false);
+  const [isSavingStaff, setIsSavingStaff] = useState(false);
+  const [deletingStaffId, setDeletingStaffId] = useState<
+    string | null
+  >(null);
+  const [
+    isCoordinationModalVisible,
+    setIsCoordinationModalVisible,
+  ] = useState(false);
+  const [
+    selectedCoordinationIncident,
+    setSelectedCoordinationIncident,
+  ] = useState<Incident | null>(null);
+  const [coordinationForm, setCoordinationForm] =
+    useState<CoordinationFormState>(initialCoordinationForm);
+  const [isLoadingCoordination, setIsLoadingCoordination] =
+    useState(false);
+  const [isSavingCoordination, setIsSavingCoordination] =
+    useState(false);
   const [sitrep, setSitrep] = useState<IncidentSitrep | null>(null);
   const [isSitrepModalVisible, setIsSitrepModalVisible] =
     useState(false);
@@ -545,6 +768,7 @@ export default function IncidentsPage() {
   );
 
   const canCreateIncident = formatRoleAllowed(currentUserRole);
+  const canUpdateOperations = formatOperationAllowed(currentUserRole);
 
   const loadIncidents = useCallback(async () => {
     try {
@@ -717,7 +941,7 @@ export default function IncidentsPage() {
     try {
       const timeline = await getIncidentTimeline(incident.id);
 
-      setTimelineForm(mapTimelineToForm(timeline));
+      setTimelineForm(mapTimelineToForm(timeline, incident));
     } catch (error) {
       console.error("Unable to load incident timeline:", error);
 
@@ -826,7 +1050,7 @@ export default function IncidentsPage() {
       return;
     }
 
-    if (!canCreateIncident) {
+    if (!canUpdateOperations) {
       Alert.alert(
         "Permission required",
         "Your account is not allowed to update incident timelines.",
@@ -849,7 +1073,24 @@ export default function IncidentsPage() {
         buildTimelinePayload(timelineForm),
       );
 
-      setTimelineForm(mapTimelineToForm(saved));
+      const disasterOccurredAt = parseDateTimeInput(
+        timelineForm.disasterOccurredAt,
+      );
+
+      if (disasterOccurredAt) {
+        setIncidents((current) =>
+          current.map((incident) =>
+            incident.id === selectedTimelineIncident.id
+              ? {
+                  ...incident,
+                  started_at: disasterOccurredAt,
+                }
+              : incident,
+          ),
+        );
+      }
+
+      setTimelineForm(mapTimelineToForm(saved, selectedTimelineIncident));
       setIsTimelineModalVisible(false);
       setSelectedTimelineIncident(null);
 
@@ -871,6 +1112,306 @@ export default function IncidentsPage() {
     }
   }
 
+  async function refreshStaffData(incidentId: string) {
+    const [records, summary] = await Promise.all([
+      getDmmpStaff(incidentId),
+      getDmmpStaffSummary(incidentId),
+    ]);
+
+    setStaffRecords(records);
+    setStaffSummary(summary);
+  }
+
+  async function handleOpenStaff(incident: Incident) {
+    setSelectedStaffIncident(incident);
+    setStaffRecords([]);
+    setStaffSummary(null);
+    setStaffForm(initialStaffForm);
+    setEditingStaffId(null);
+    setIsStaffModalVisible(true);
+    setIsLoadingStaff(true);
+
+    try {
+      await refreshStaffData(incident.id);
+    } catch (error) {
+      console.error("Unable to load DMMP staff:", error);
+
+      Alert.alert(
+        "Unable to load staff call-down",
+        error instanceof Error
+          ? error.message
+          : "Please try again.",
+      );
+    } finally {
+      setIsLoadingStaff(false);
+    }
+  }
+
+  function handleCloseStaffModal() {
+    if (isSavingStaff) {
+      return;
+    }
+
+    setIsStaffModalVisible(false);
+    setSelectedStaffIncident(null);
+    setStaffRecords([]);
+    setStaffSummary(null);
+    setStaffForm(initialStaffForm);
+    setEditingStaffId(null);
+  }
+
+  function updateStaffField<K extends keyof StaffFormState>(
+    key: K,
+    value: StaffFormState[K],
+  ) {
+    setStaffForm((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  }
+
+  function setStaffFieldToNow(key: keyof StaffFormState) {
+    updateStaffField(key, formatDateTimeForInput(new Date()));
+  }
+
+  function validateStaffForm(form: StaffFormState): string | null {
+    const dateFields: Array<[keyof StaffFormState, string]> = [
+      ["contactedAt", "Contacted time"],
+      ["requiredArrivalAt", "Required arrival time"],
+      ["arrivedAt", "Arrived time"],
+    ];
+
+    for (const [key, label] of dateFields) {
+      const value = String(form[key]).trim();
+
+      if (value && !getValidDateTimeInput(value)) {
+        return `${label} must use mm/dd/yyyy hh:mm.`;
+      }
+    }
+
+    return null;
+  }
+
+  async function handleSaveStaff() {
+    if (!selectedStaffIncident) {
+      return;
+    }
+
+    if (!canUpdateOperations) {
+      Alert.alert(
+        "Permission required",
+        "Your account is not allowed to update DMMP staff records.",
+      );
+      return;
+    }
+
+    const validationError = validateStaffForm(staffForm);
+
+    if (validationError) {
+      Alert.alert("Check staff record", validationError);
+      return;
+    }
+
+    try {
+      setIsSavingStaff(true);
+
+      const payload = {
+        staffName: staffForm.staffName.trim() || null,
+        roleName: staffForm.roleName.trim() || null,
+        wasContacted: staffForm.wasContacted === "yes",
+        contactedAt: parseDateTimeInput(staffForm.contactedAt),
+        requiredArrivalAt: parseDateTimeInput(
+          staffForm.requiredArrivalAt,
+        ),
+        arrivedAt: parseDateTimeInput(staffForm.arrivedAt),
+      };
+
+      if (editingStaffId) {
+        await updateDmmpStaff(editingStaffId, payload);
+      } else {
+        await createDmmpStaff(selectedStaffIncident.id, payload);
+      }
+
+      setStaffForm(initialStaffForm);
+      setEditingStaffId(null);
+      await refreshStaffData(selectedStaffIncident.id);
+    } catch (error) {
+      console.error("Unable to save DMMP staff:", error);
+
+      Alert.alert(
+        "Unable to save staff record",
+        error instanceof Error
+          ? error.message
+          : "Please review the staff record and try again.",
+      );
+    } finally {
+      setIsSavingStaff(false);
+    }
+  }
+
+  function handleEditStaff(record: DmmpStaffRecord) {
+    setEditingStaffId(record.id);
+    setStaffForm(mapStaffToForm(record));
+  }
+
+  function handleCancelStaffEdit() {
+    setEditingStaffId(null);
+    setStaffForm(initialStaffForm);
+  }
+
+  function handleDeleteStaff(record: DmmpStaffRecord) {
+    if (!selectedStaffIncident) {
+      return;
+    }
+
+    Alert.alert(
+      "Delete staff record",
+      `Remove ${record.staff_name ?? "this staff record"} from the call-down list?`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setDeletingStaffId(record.id);
+              await deleteDmmpStaff(record.id);
+              await refreshStaffData(selectedStaffIncident.id);
+
+              if (editingStaffId === record.id) {
+                handleCancelStaffEdit();
+              }
+            } catch (error) {
+              console.error("Unable to delete DMMP staff:", error);
+
+              Alert.alert(
+                "Unable to delete staff record",
+                error instanceof Error
+                  ? error.message
+                  : "Please try again.",
+              );
+            } finally {
+              setDeletingStaffId(null);
+            }
+          },
+        },
+      ],
+    );
+  }
+
+  async function handleOpenCoordination(incident: Incident) {
+    setSelectedCoordinationIncident(incident);
+    setCoordinationForm(initialCoordinationForm);
+    setIsCoordinationModalVisible(true);
+    setIsLoadingCoordination(true);
+
+    try {
+      const assessment = await getCoordinationAssessment(incident.id);
+
+      setCoordinationForm(mapCoordinationToForm(assessment));
+    } catch (error) {
+      console.error("Unable to load coordination assessment:", error);
+
+      Alert.alert(
+        "Unable to load coordination assessment",
+        error instanceof Error
+          ? error.message
+          : "Please try again.",
+      );
+    } finally {
+      setIsLoadingCoordination(false);
+    }
+  }
+
+  function handleCloseCoordinationModal() {
+    if (isSavingCoordination) {
+      return;
+    }
+
+    setIsCoordinationModalVisible(false);
+    setSelectedCoordinationIncident(null);
+    setCoordinationForm(initialCoordinationForm);
+  }
+
+  function updateCoordinationField<K extends keyof CoordinationFormState>(
+    key: K,
+    value: CoordinationFormState[K],
+  ) {
+    setCoordinationForm((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  }
+
+  async function handleSaveCoordination() {
+    if (!selectedCoordinationIncident) {
+      return;
+    }
+
+    if (!canUpdateOperations) {
+      Alert.alert(
+        "Permission required",
+        "Your account is not allowed to update coordination ratings.",
+      );
+      return;
+    }
+
+    const assessedAt = coordinationForm.assessedAt.trim();
+
+    if (assessedAt && !getValidDateTimeInput(assessedAt)) {
+      Alert.alert(
+        "Check assessment time",
+        "Assessment time must use mm/dd/yyyy hh:mm.",
+      );
+      return;
+    }
+
+    try {
+      setIsSavingCoordination(true);
+
+      const saved = await saveCoordinationAssessment(
+        selectedCoordinationIncident.id,
+        {
+          initialActionsRating:
+            coordinationForm.initialActionsRating,
+          sceneCoordinationRating:
+            coordinationForm.sceneCoordinationRating,
+          systemCoordinationRating:
+            coordinationForm.systemCoordinationRating,
+          communicationsRating:
+            coordinationForm.communicationsRating,
+          resourceManagementRating:
+            coordinationForm.resourceManagementRating,
+          notes: coordinationForm.notes.trim() || null,
+          assessedAt: parseDateTimeInput(coordinationForm.assessedAt),
+        },
+      );
+
+      setCoordinationForm(mapCoordinationToForm(saved));
+      setIsCoordinationModalVisible(false);
+      setSelectedCoordinationIncident(null);
+
+      Alert.alert(
+        "Coordination saved",
+        "Medical operations coordination ratings have been updated.",
+      );
+    } catch (error) {
+      console.error("Unable to save coordination assessment:", error);
+
+      Alert.alert(
+        "Unable to save coordination",
+        error instanceof Error
+          ? error.message
+          : "Please review the ratings and try again.",
+      );
+    } finally {
+      setIsSavingCoordination(false);
+    }
+  }
+
   function renderTimelineDateField(
     label: string,
     key: keyof TimelineFormState,
@@ -879,7 +1420,7 @@ export default function IncidentsPage() {
       <View style={styles.timelineFieldGroup}>
         <View style={styles.timelineLabelRow}>
           <Text style={styles.fieldLabel}>{label}</Text>
-          {canCreateIncident ? (
+          {canUpdateOperations ? (
             <Pressable
               onPress={() => setTimelineFieldToNow(key)}
               style={({ pressed }) => [
@@ -902,8 +1443,106 @@ export default function IncidentsPage() {
           style={styles.input}
           placeholder="mm/dd/yyyy hh:mm"
           placeholderTextColor={COLORS.mutedText}
-          editable={canCreateIncident}
+          editable={canUpdateOperations}
         />
+      </View>
+    );
+  }
+
+  function renderStaffDateField(
+    label: string,
+    key: keyof StaffFormState,
+  ) {
+    return (
+      <View style={styles.timelineFieldGroup}>
+        <View style={styles.timelineLabelRow}>
+          <Text style={styles.fieldLabel}>{label}</Text>
+          {canUpdateOperations ? (
+            <Pressable
+              onPress={() => setStaffFieldToNow(key)}
+              style={({ pressed }) => [
+                styles.nowButton,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Ionicons
+                name="time-outline"
+                size={14}
+                color={COLORS.maroon}
+              />
+              <Text style={styles.nowButtonText}>Now</Text>
+            </Pressable>
+          ) : null}
+        </View>
+        <TextInput
+          value={String(staffForm[key])}
+          onChangeText={(value) => updateStaffField(key, value)}
+          style={styles.input}
+          placeholder="mm/dd/yyyy hh:mm"
+          placeholderTextColor={COLORS.mutedText}
+          editable={canUpdateOperations}
+        />
+      </View>
+    );
+  }
+
+  function renderCoordinationRatingField(
+    label: string,
+    key: keyof Pick<
+      CoordinationFormState,
+      | "initialActionsRating"
+      | "sceneCoordinationRating"
+      | "systemCoordinationRating"
+      | "communicationsRating"
+      | "resourceManagementRating"
+    >,
+  ) {
+    const currentValue = coordinationForm[key];
+
+    return (
+      <View style={styles.coordinationFieldGroup}>
+        <Text style={styles.fieldLabel}>{label}</Text>
+        <View style={styles.ratingGrid}>
+          {COORDINATION_RATING_OPTIONS.map((option) => {
+            const selected = currentValue === option.value;
+
+            return (
+              <Pressable
+                key={option.value}
+                disabled={!canUpdateOperations}
+                onPress={() =>
+                  updateCoordinationField(
+                    key,
+                    selected ? null : option.value,
+                  )
+                }
+                style={({ pressed }) => [
+                  styles.ratingChip,
+                  selected && styles.ratingChipActive,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.ratingChipValue,
+                    selected && styles.ratingChipValueActive,
+                  ]}
+                >
+                  {option.value}
+                </Text>
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    styles.ratingChipText,
+                    selected && styles.ratingChipTextActive,
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
     );
   }
@@ -1013,6 +1652,12 @@ export default function IncidentsPage() {
             onClose={() => handleCloseIncident(item)}
             onEditTimeline={() => {
               void handleOpenTimeline(item);
+            }}
+            onManageStaff={() => {
+              void handleOpenStaff(item);
+            }}
+            onEditCoordination={() => {
+              void handleOpenCoordination(item);
             }}
             onGenerateSitrep={() => {
               void handleGenerateSitrep(item);
@@ -1209,6 +1854,10 @@ export default function IncidentsPage() {
                 contentContainerStyle={styles.timelineScrollContent}
               >
                 {renderTimelineDateField(
+                  "DISASTER OCCURRENCE",
+                  "disasterOccurredAt",
+                )}
+                {renderTimelineDateField(
                   "EVENT NOTIFICATION",
                   "eventNotificationAt",
                 )}
@@ -1223,7 +1872,7 @@ export default function IncidentsPage() {
                       return (
                         <Pressable
                           key={option}
-                          disabled={!canCreateIncident}
+                          disabled={!canUpdateOperations}
                           onPress={() =>
                             updateTimelineField(
                               "dmmpActivated",
@@ -1270,7 +1919,7 @@ export default function IncidentsPage() {
                   style={styles.input}
                   placeholder="e.g. mass casualty declaration"
                   placeholderTextColor={COLORS.mutedText}
-                  editable={canCreateIncident}
+                  editable={canUpdateOperations}
                 />
 
                 {renderTimelineDateField(
@@ -1323,7 +1972,7 @@ export default function IncidentsPage() {
                     </Text>
                   </Pressable>
 
-                  {canCreateIncident ? (
+                  {canUpdateOperations ? (
                     <Pressable
                       disabled={isSavingTimeline}
                       onPress={() => {
@@ -1342,6 +1991,519 @@ export default function IncidentsPage() {
                           : "Save Timeline"}
                       </Text>
                       {isSavingTimeline ? (
+                        <ActivityIndicator
+                          size="small"
+                          color={COLORS.white}
+                        />
+                      ) : (
+                        <Ionicons
+                          name="checkmark-circle-outline"
+                          size={19}
+                          color={COLORS.white}
+                        />
+                      )}
+                    </Pressable>
+                  ) : null}
+                </View>
+              </ScrollView>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={isStaffModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCloseStaffModal}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={handleCloseStaffModal}
+        >
+          <Pressable style={styles.timelineSheet}>
+            <View style={styles.sheetHandle} />
+
+            <View style={styles.sheetHeader}>
+              <View style={styles.sheetTitleGroup}>
+                <Text style={styles.sheetTitle}>
+                  DMMP Staff Call-down
+                </Text>
+                <Text
+                  style={styles.sheetSubtitle}
+                  numberOfLines={1}
+                >
+                  {selectedStaffIncident?.incident_name ?? "Incident"}
+                </Text>
+              </View>
+              <Pressable
+                onPress={handleCloseStaffModal}
+                style={styles.sheetCloseButton}
+              >
+                <Ionicons
+                  name="close"
+                  size={20}
+                  color={COLORS.secondaryText}
+                />
+              </Pressable>
+            </View>
+
+            {isLoadingStaff ? (
+              <View style={styles.timelineLoading}>
+                <ActivityIndicator
+                  size="small"
+                  color={COLORS.maroon}
+                />
+                <Text style={styles.timelineLoadingText}>
+                  Loading staff call-down...
+                </Text>
+              </View>
+            ) : (
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.timelineScrollContent}
+              >
+                <View style={styles.sitrepMetricGrid}>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {staffSummary?.reportingPercentage ?? 0}%
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      Within Standard
+                    </Text>
+                  </View>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {staffSummary?.totalContacted ?? 0}
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      Contacted
+                    </Text>
+                  </View>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {staffSummary?.totalArrived ?? 0}
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      Arrived
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={styles.staffFormulaText}>
+                  {staffSummary
+                    ? `${staffSummary.totalArrivedWithinStandard} within standard / ${staffSummary.totalContacted} contacted`
+                    : "No staff call-down records yet"}
+                </Text>
+
+                <Text style={styles.fieldLabel}>STAFF NAME</Text>
+                <TextInput
+                  value={staffForm.staffName}
+                  onChangeText={(value) =>
+                    updateStaffField("staffName", value)
+                  }
+                  style={styles.input}
+                  placeholder="Name or identifier"
+                  placeholderTextColor={COLORS.mutedText}
+                  editable={canUpdateOperations}
+                />
+
+                <Text style={styles.fieldLabel}>ROLE</Text>
+                <TextInput
+                  value={staffForm.roleName}
+                  onChangeText={(value) =>
+                    updateStaffField("roleName", value)
+                  }
+                  style={styles.input}
+                  placeholder="e.g. EMS lead, nurse, logistics"
+                  placeholderTextColor={COLORS.mutedText}
+                  editable={canUpdateOperations}
+                />
+
+                <Text style={styles.fieldLabel}>CONTACTED</Text>
+                <View style={styles.timelineOptionRow}>
+                  {(["yes", "no"] as const).map((option) => {
+                    const selected = staffForm.wasContacted === option;
+
+                    return (
+                      <Pressable
+                        key={option}
+                        disabled={!canUpdateOperations}
+                        onPress={() =>
+                          updateStaffField("wasContacted", option)
+                        }
+                        style={({ pressed }) => [
+                          styles.timelineOptionChip,
+                          selected &&
+                            styles.timelineOptionChipActive,
+                          pressed && styles.pressed,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.timelineOptionText,
+                            selected &&
+                              styles.timelineOptionTextActive,
+                          ]}
+                        >
+                          {option === "yes" ? "Yes" : "No"}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                {renderStaffDateField("CONTACTED AT", "contactedAt")}
+                {renderStaffDateField(
+                  "REQUIRED ARRIVAL",
+                  "requiredArrivalAt",
+                )}
+                {renderStaffDateField("ARRIVED AT", "arrivedAt")}
+
+                {canUpdateOperations ? (
+                  <View style={styles.timelineActions}>
+                    {editingStaffId ? (
+                      <Pressable
+                        onPress={handleCancelStaffEdit}
+                        style={({ pressed }) => [
+                          styles.secondaryButton,
+                          pressed && styles.pressed,
+                        ]}
+                      >
+                        <Text style={styles.secondaryButtonText}>
+                          Clear
+                        </Text>
+                      </Pressable>
+                    ) : null}
+
+                    <Pressable
+                      disabled={isSavingStaff}
+                      onPress={() => {
+                        void handleSaveStaff();
+                      }}
+                      style={({ pressed }) => [
+                        styles.createButton,
+                        styles.timelineSaveButton,
+                        isSavingStaff && styles.disabledButton,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <Text style={styles.createButtonText}>
+                        {isSavingStaff
+                          ? "Saving..."
+                          : editingStaffId
+                            ? "Update Staff"
+                            : "Add Staff"}
+                      </Text>
+                      {isSavingStaff ? (
+                        <ActivityIndicator
+                          size="small"
+                          color={COLORS.white}
+                        />
+                      ) : (
+                        <Ionicons
+                          name="checkmark-circle-outline"
+                          size={19}
+                          color={COLORS.white}
+                        />
+                      )}
+                    </Pressable>
+                  </View>
+                ) : null}
+
+                <Text style={styles.fieldLabel}>CALL-DOWN LIST</Text>
+                {staffRecords.length === 0 ? (
+                  <Text style={styles.sitrepSectionText}>
+                    No DMMP staff records have been entered.
+                  </Text>
+                ) : (
+                  staffRecords.map((record) => (
+                    <View
+                      key={record.id}
+                      style={styles.staffRecordCard}
+                    >
+                      <View style={styles.staffRecordHeader}>
+                        <View style={styles.cardMain}>
+                          <Text style={styles.staffRecordName}>
+                            {record.staff_name ?? "Unnamed staff"}
+                          </Text>
+                          <Text style={styles.staffRecordMeta}>
+                            {record.role_name ?? "Role not set"}
+                          </Text>
+                        </View>
+                        <View
+                          style={[
+                            styles.staffStatusPill,
+                            record.arrived_within_standard === true
+                              ? styles.staffStatusPillGood
+                              : record.arrived_at
+                                ? styles.staffStatusPillLate
+                                : null,
+                          ]}
+                        >
+                          <Text style={styles.staffStatusPillText}>
+                            {record.arrived_within_standard === true
+                              ? "On time"
+                              : record.arrived_at
+                                ? "Arrived"
+                                : record.was_contacted
+                                  ? "Contacted"
+                                  : "Pending"}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <Text style={styles.staffRecordTimes}>
+                        Contacted {formatDateTime(record.contacted_at)}
+                        {"\n"}Required{" "}
+                        {formatDateTime(record.required_arrival_at)}
+                        {"\n"}Arrived{" "}
+                        {formatDateTime(record.arrived_at)}
+                      </Text>
+
+                      {canUpdateOperations ? (
+                        <View style={styles.staffRecordActions}>
+                          <Pressable
+                            onPress={() => handleEditStaff(record)}
+                            style={({ pressed }) => [
+                              styles.smallActionButton,
+                              pressed && styles.pressed,
+                            ]}
+                          >
+                            <Ionicons
+                              name="create-outline"
+                              size={15}
+                              color={COLORS.blue}
+                            />
+                            <Text style={styles.smallActionText}>
+                              Edit
+                            </Text>
+                          </Pressable>
+                          <Pressable
+                            disabled={deletingStaffId === record.id}
+                            onPress={() => handleDeleteStaff(record)}
+                            style={({ pressed }) => [
+                              styles.smallActionButton,
+                              styles.smallDeleteButton,
+                              deletingStaffId === record.id &&
+                                styles.disabledButton,
+                              pressed && styles.pressed,
+                            ]}
+                          >
+                            {deletingStaffId === record.id ? (
+                              <ActivityIndicator
+                                size="small"
+                                color={COLORS.red}
+                              />
+                            ) : (
+                              <Ionicons
+                                name="trash-outline"
+                                size={15}
+                                color={COLORS.red}
+                              />
+                            )}
+                            <Text
+                              style={[
+                                styles.smallActionText,
+                                {
+                                  color: COLORS.red,
+                                },
+                              ]}
+                            >
+                              Delete
+                            </Text>
+                          </Pressable>
+                        </View>
+                      ) : null}
+                    </View>
+                  ))
+                )}
+              </ScrollView>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={isCoordinationModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCloseCoordinationModal}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={handleCloseCoordinationModal}
+        >
+          <Pressable style={styles.timelineSheet}>
+            <View style={styles.sheetHandle} />
+
+            <View style={styles.sheetHeader}>
+              <View style={styles.sheetTitleGroup}>
+                <Text style={styles.sheetTitle}>
+                  Coordination Assessment
+                </Text>
+                <Text
+                  style={styles.sheetSubtitle}
+                  numberOfLines={1}
+                >
+                  {selectedCoordinationIncident?.incident_name ??
+                    "Incident"}
+                </Text>
+              </View>
+              <Pressable
+                onPress={handleCloseCoordinationModal}
+                style={styles.sheetCloseButton}
+              >
+                <Ionicons
+                  name="close"
+                  size={20}
+                  color={COLORS.secondaryText}
+                />
+              </Pressable>
+            </View>
+
+            {isLoadingCoordination ? (
+              <View style={styles.timelineLoading}>
+                <ActivityIndicator
+                  size="small"
+                  color={COLORS.maroon}
+                />
+                <Text style={styles.timelineLoadingText}>
+                  Loading coordination ratings...
+                </Text>
+              </View>
+            ) : (
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.timelineScrollContent}
+              >
+                {renderCoordinationRatingField(
+                  "ON-SCENE INITIAL ACTIONS",
+                  "initialActionsRating",
+                )}
+                {renderCoordinationRatingField(
+                  "ON-SCENE MEDICAL CONTROL AND COORDINATION",
+                  "sceneCoordinationRating",
+                )}
+                {renderCoordinationRatingField(
+                  "SYSTEM-LEVEL MEDICAL COORDINATION",
+                  "systemCoordinationRating",
+                )}
+                {renderCoordinationRatingField(
+                  "MEDICAL COMMUNICATIONS AND INFORMATION MANAGEMENT",
+                  "communicationsRating",
+                )}
+                {renderCoordinationRatingField(
+                  "MEDICAL RESOURCE MANAGEMENT",
+                  "resourceManagementRating",
+                )}
+
+                <Text style={styles.fieldLabel}>ASSESSMENT SUMMARY</Text>
+                <Text style={styles.sitrepSectionText}>
+                  Initial actions:{" "}
+                  {getRatingLabel(
+                    coordinationForm.initialActionsRating,
+                  )}
+                  {"\n"}Scene coordination:{" "}
+                  {getRatingLabel(
+                    coordinationForm.sceneCoordinationRating,
+                  )}
+                  {"\n"}System coordination:{" "}
+                  {getRatingLabel(
+                    coordinationForm.systemCoordinationRating,
+                  )}
+                  {"\n"}Communications:{" "}
+                  {getRatingLabel(
+                    coordinationForm.communicationsRating,
+                  )}
+                  {"\n"}Resource management:{" "}
+                  {getRatingLabel(
+                    coordinationForm.resourceManagementRating,
+                  )}
+                </Text>
+
+                <View style={styles.timelineFieldGroup}>
+                  <View style={styles.timelineLabelRow}>
+                    <Text style={styles.fieldLabel}>ASSESSED AT</Text>
+                    {canUpdateOperations ? (
+                      <Pressable
+                        onPress={() =>
+                          updateCoordinationField(
+                            "assessedAt",
+                            formatDateTimeForInput(new Date()),
+                          )
+                        }
+                        style={({ pressed }) => [
+                          styles.nowButton,
+                          pressed && styles.pressed,
+                        ]}
+                      >
+                        <Ionicons
+                          name="time-outline"
+                          size={14}
+                          color={COLORS.maroon}
+                        />
+                        <Text style={styles.nowButtonText}>Now</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                  <TextInput
+                    value={coordinationForm.assessedAt}
+                    onChangeText={(value) =>
+                      updateCoordinationField("assessedAt", value)
+                    }
+                    style={styles.input}
+                    placeholder="mm/dd/yyyy hh:mm"
+                    placeholderTextColor={COLORS.mutedText}
+                    editable={canUpdateOperations}
+                  />
+                </View>
+
+                <Text style={styles.fieldLabel}>NOTES</Text>
+                <TextInput
+                  value={coordinationForm.notes}
+                  onChangeText={(value) =>
+                    updateCoordinationField("notes", value)
+                  }
+                  style={[styles.input, styles.notesInput]}
+                  placeholder="Optional coordination notes"
+                  placeholderTextColor={COLORS.mutedText}
+                  editable={canUpdateOperations}
+                  multiline
+                />
+
+                <View style={styles.timelineActions}>
+                  <Pressable
+                    onPress={handleCloseCoordinationModal}
+                    style={({ pressed }) => [
+                      styles.secondaryButton,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Text style={styles.secondaryButtonText}>
+                      Cancel
+                    </Text>
+                  </Pressable>
+
+                  {canUpdateOperations ? (
+                    <Pressable
+                      disabled={isSavingCoordination}
+                      onPress={() => {
+                        void handleSaveCoordination();
+                      }}
+                      style={({ pressed }) => [
+                        styles.createButton,
+                        styles.timelineSaveButton,
+                        isSavingCoordination && styles.disabledButton,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <Text style={styles.createButtonText}>
+                        {isSavingCoordination
+                          ? "Saving..."
+                          : "Save Ratings"}
+                      </Text>
+                      {isSavingCoordination ? (
                         <ActivityIndicator
                           size="small"
                           color={COLORS.white}
@@ -1836,6 +2998,28 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "800",
   },
+  operationActionRow: {
+    flexDirection: "row",
+    gap: 9,
+    marginTop: 9,
+  },
+  operationActionButton: {
+    flex: 1,
+    minHeight: 38,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.white,
+    gap: 6,
+  },
+  operationActionText: {
+    color: COLORS.text,
+    fontSize: 11,
+    fontWeight: "800",
+  },
   sitrepButton: {
     minHeight: 38,
     flexDirection: "row",
@@ -2015,6 +3199,130 @@ const styles = StyleSheet.create({
   },
   timelineOptionTextActive: {
     color: COLORS.maroon,
+  },
+  staffFormulaText: {
+    color: COLORS.secondaryText,
+    fontSize: 11,
+    fontWeight: "700",
+    marginTop: 9,
+    marginBottom: 4,
+  },
+  staffRecordCard: {
+    padding: 12,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.white,
+    marginBottom: 9,
+  },
+  staffRecordHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+  },
+  staffRecordName: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  staffRecordMeta: {
+    color: COLORS.secondaryText,
+    fontSize: 11,
+    marginTop: 3,
+    fontWeight: "700",
+  },
+  staffStatusPill: {
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    backgroundColor: "#F1F4F8",
+  },
+  staffStatusPillGood: {
+    backgroundColor: "#EAF7EF",
+  },
+  staffStatusPillLate: {
+    backgroundColor: "#FFF3E8",
+  },
+  staffStatusPillText: {
+    color: COLORS.secondaryText,
+    fontSize: 9,
+    fontWeight: "900",
+  },
+  staffRecordTimes: {
+    color: COLORS.secondaryText,
+    fontSize: 11,
+    lineHeight: 17,
+    marginTop: 8,
+  },
+  staffRecordActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 10,
+  },
+  smallActionButton: {
+    flex: 1,
+    minHeight: 34,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.fieldBackground,
+    gap: 5,
+  },
+  smallDeleteButton: {
+    borderColor: "#F4C3C5",
+    backgroundColor: "#FFF4F4",
+  },
+  smallActionText: {
+    color: COLORS.blue,
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  coordinationFieldGroup: {
+    marginTop: 2,
+  },
+  ratingGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  ratingChip: {
+    width: "31.5%",
+    minHeight: 58,
+    justifyContent: "center",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.fieldBorder,
+    paddingHorizontal: 8,
+    backgroundColor: COLORS.fieldBackground,
+  },
+  ratingChipActive: {
+    borderColor: COLORS.maroon,
+    backgroundColor: "#FFF2F2",
+  },
+  ratingChipValue: {
+    color: COLORS.secondaryText,
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  ratingChipValueActive: {
+    color: COLORS.maroon,
+  },
+  ratingChipText: {
+    color: COLORS.secondaryText,
+    fontSize: 9,
+    fontWeight: "800",
+    marginTop: 3,
+  },
+  ratingChipTextActive: {
+    color: COLORS.maroon,
+  },
+  notesInput: {
+    minHeight: 90,
+    paddingTop: 12,
+    textAlignVertical: "top",
   },
   sitrepSummaryBlock: {
     padding: 13,

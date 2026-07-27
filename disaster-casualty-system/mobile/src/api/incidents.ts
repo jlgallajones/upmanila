@@ -40,6 +40,63 @@ export type IncidentResponseTimeline = {
   updated_at: string;
 };
 
+export type DmmpStaffRecord = {
+  id: string;
+  incident_id: string;
+  staff_name: string | null;
+  role_name: string | null;
+  was_contacted: boolean;
+  contacted_at: string | null;
+  required_arrival_at: string | null;
+  arrived_at: string | null;
+  arrived_within_standard: boolean | null;
+  recorded_by: string | null;
+  created_at: string;
+};
+
+export type DmmpStaffSummary = {
+  totalStaffRecords: number;
+  totalContacted: number;
+  totalArrived: number;
+  totalArrivedWithinStandard: number;
+  reportingPercentage: number;
+  formula: string;
+};
+
+export type DmmpStaffPayload = {
+  staffName?: string | null;
+  roleName?: string | null;
+  wasContacted?: boolean | null;
+  contactedAt?: string | null;
+  requiredArrivalAt?: string | null;
+  arrivedAt?: string | null;
+};
+
+export type CoordinationRating = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+
+export type MedicalCoordinationAssessment = {
+  id: string;
+  incident_id: string;
+  initial_actions_rating: CoordinationRating | null;
+  scene_coordination_rating: CoordinationRating | null;
+  system_coordination_rating: CoordinationRating | null;
+  communications_rating: CoordinationRating | null;
+  resource_management_rating: CoordinationRating | null;
+  notes: string | null;
+  assessed_by: string | null;
+  assessed_at: string;
+};
+
+export type CoordinationAssessmentPayload = {
+  initialActionsRating?: CoordinationRating | null;
+  sceneCoordinationRating?: CoordinationRating | null;
+  systemCoordinationRating?: CoordinationRating | null;
+  communicationsRating?: CoordinationRating | null;
+  resourceManagementRating?: CoordinationRating | null;
+  notes?: string | null;
+  assessedAt?: string | null;
+};
+
 export type IncidentSitrepPayload = {
   incident: Incident;
   generatedAt: string;
@@ -113,6 +170,28 @@ type IncidentTimelineResponse = {
   data: IncidentResponseTimeline | null;
 };
 
+type DmmpStaffResponse = {
+  success: boolean;
+  data: DmmpStaffRecord[];
+};
+
+type SingleDmmpStaffResponse = {
+  success: boolean;
+  message?: string;
+  data: DmmpStaffRecord;
+};
+
+type DmmpStaffSummaryResponse = {
+  success: boolean;
+  data: DmmpStaffSummary;
+};
+
+type CoordinationAssessmentResponse = {
+  success: boolean;
+  message?: string;
+  data: MedicalCoordinationAssessment | null;
+};
+
 type IncidentSitrepResponse = {
   success: boolean;
   message?: string;
@@ -130,6 +209,7 @@ export type CreateIncidentPayload = {
 };
 
 export type UpdateIncidentTimelinePayload = {
+  disasterOccurredAt?: string | null;
   eventNotificationAt?: string | null;
   dmmpActivated?: boolean | null;
   dmmpActivationTrigger?: string | null;
@@ -189,6 +269,80 @@ export async function updateIncidentTimeline(
 
   if (!response.data.data) {
     throw new Error("Incident timeline was not returned.");
+  }
+
+  return response.data.data;
+}
+
+export async function getDmmpStaff(
+  id: string,
+): Promise<DmmpStaffRecord[]> {
+  const response = await api.get<DmmpStaffResponse>(
+    `/incidents/${encodeURIComponent(id)}/dmmp-staff`,
+  );
+
+  return response.data.data;
+}
+
+export async function createDmmpStaff(
+  id: string,
+  payload: DmmpStaffPayload,
+): Promise<DmmpStaffRecord> {
+  const response = await api.post<SingleDmmpStaffResponse>(
+    `/incidents/${encodeURIComponent(id)}/dmmp-staff`,
+    payload,
+  );
+
+  return response.data.data;
+}
+
+export async function updateDmmpStaff(
+  staffId: string,
+  payload: DmmpStaffPayload,
+): Promise<DmmpStaffRecord> {
+  const response = await api.patch<SingleDmmpStaffResponse>(
+    `/dmmp-staff/${encodeURIComponent(staffId)}`,
+    payload,
+  );
+
+  return response.data.data;
+}
+
+export async function deleteDmmpStaff(staffId: string): Promise<void> {
+  await api.delete(`/dmmp-staff/${encodeURIComponent(staffId)}`);
+}
+
+export async function getDmmpStaffSummary(
+  id: string,
+): Promise<DmmpStaffSummary> {
+  const response = await api.get<DmmpStaffSummaryResponse>(
+    `/incidents/${encodeURIComponent(id)}/dmmp-staff-summary`,
+  );
+
+  return response.data.data;
+}
+
+export async function getCoordinationAssessment(
+  id: string,
+): Promise<MedicalCoordinationAssessment | null> {
+  const response = await api.get<CoordinationAssessmentResponse>(
+    `/incidents/${encodeURIComponent(id)}/coordination-assessment`,
+  );
+
+  return response.data.data;
+}
+
+export async function saveCoordinationAssessment(
+  id: string,
+  payload: CoordinationAssessmentPayload,
+): Promise<MedicalCoordinationAssessment> {
+  const response = await api.put<CoordinationAssessmentResponse>(
+    `/incidents/${encodeURIComponent(id)}/coordination-assessment`,
+    payload,
+  );
+
+  if (!response.data.data) {
+    throw new Error("Coordination assessment was not returned.");
   }
 
   return response.data.data;

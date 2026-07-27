@@ -1,0 +1,5 @@
+ALTER TABLE public.incident_response_timelines
+ADD COLUMN last_dmmp_staff_arrived_at timestamptz,
+ADD COLUMN last_facility_deactivated_at timestamptz,
+ADD COLUMN acute_response_started_at timestamptz,
+ADD COLUMN acute_response_ended_at timestamptz;

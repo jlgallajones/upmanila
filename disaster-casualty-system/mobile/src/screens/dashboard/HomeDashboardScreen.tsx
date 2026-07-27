@@ -449,11 +449,6 @@ export default function HomeDashboardScreen() {
       setSummary(summaryData);
       setActivities(activityData);
     } catch (error) {
-      console.error(
-        "Failed to load dashboard:",
-        error,
-      );
-
       if (isAuthenticationTokenError(error)) {
         const queuedCount = await getQueuedCasualtyCount();
         setQueuedCasualtyCount(queuedCount);
@@ -463,6 +458,11 @@ export default function HomeDashboardScreen() {
         setErrorMessage(null);
         return;
       }
+
+      console.error(
+        "Failed to load dashboard:",
+        error,
+      );
 
       setErrorMessage(
         error instanceof Error
@@ -744,6 +744,15 @@ export default function HomeDashboardScreen() {
             iconColor={COLORS.orange}
             iconBackground={COLORS.paleOrange}
             onPress={() => void handleRefresh()}
+          />
+
+          <QuickAction
+            icon="warning-outline"
+            label="Incidents"
+            caption="Manage"
+            iconColor={COLORS.blue}
+            iconBackground={COLORS.paleBlue}
+            onPress={() => router.push("/incidents")}
           />
 
           <QuickAction
