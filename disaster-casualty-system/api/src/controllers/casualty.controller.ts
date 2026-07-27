@@ -2,12 +2,18 @@ import type { NextFunction, Request, Response } from "express";
 
 import { supabase } from "../config/supabase.js";
 import { getAuthenticatedUser } from "../middleware/auth.js";
+import { calculateTriageCategory } from "../services/triage/calculate-triage.js";
+import { compareTriageCategories } from "../services/triage/compare-triage.js";
 import type {
   CasualtyTransportRecordRequest,
   CasualtyTriageAssessmentRequest,
   CreateCasualtyRequest,
   UpdateCasualtyRequest,
 } from "../types/casualty.types.js";
+import type {
+  TriageCategory,
+  TriageSystem,
+} from "../types/triage.types.js";
 
 const casualtyStatuses = [
   "safe",
@@ -39,7 +45,9 @@ const triageSystems = [
   "urgent_non_urgent",
   "nato",
   "start",
+  "sieve",
   "sieve_sort",
+  "sort",
   "smart",
   "care_flight",
   "mass",
@@ -81,6 +89,16 @@ const verificationStatuses = [
   "verified",
   "rejected",
 ] as const;
+
+function isObject(
+  value: unknown,
+): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value)
+  );
+}
 
 type VerificationStatus = (typeof verificationStatuses)[number];
 
@@ -269,6 +287,17 @@ function validateTriageAssessment(
     }
   }
 
+  if (
+    triageAssessment.assessmentAnswers !== undefined &&
+    !isObject(triageAssessment.assessmentAnswers)
+  ) {
+    response.status(400).json({
+      success: false,
+      message: "assessmentAnswers must be an object.",
+    });
+    return false;
+  }
+
   return true;
 }
 
@@ -407,18 +436,51 @@ async function insertTriageAssessment(
   userId: string,
   triageAssessment: CasualtyTriageAssessmentRequest,
 ): Promise<void> {
+  const assessmentAnswers = triageAssessment.assessmentAnswers;
+  const hasAssessmentAnswers =
+    assessmentAnswers !== undefined &&
+    Object.keys(assessmentAnswers).length > 0;
+  const responderCategory =
+    triageAssessment.triageCategory as TriageCategory;
+  let calculatedCategory: TriageCategory | null = null;
+  let isOverTriage = false;
+  let isUnderTriage = false;
+  let algorithmVersion: string | null = null;
+
+  if (hasAssessmentAnswers) {
+    calculatedCategory = calculateTriageCategory(
+      triageAssessment.triageSystem as TriageSystem,
+      assessmentAnswers,
+    );
+    algorithmVersion = `${triageAssessment.triageSystem}-v1`;
+
+    const comparison = compareTriageCategories(
+      responderCategory,
+      calculatedCategory,
+    );
+
+    isOverTriage = comparison.isOverTriage;
+    isUnderTriage = comparison.isUnderTriage;
+  }
+
   const { error } = await supabase
     .from("casualty_triage_assessments")
     .insert({
       casualty_incident_id: casualtyIncidentId,
       triage_system: triageAssessment.triageSystem,
       triage_category: triageAssessment.triageCategory,
+      responder_category: responderCategory,
+      calculated_category: calculatedCategory,
       triage_stage: triageAssessment.triageStage ?? "on_site",
       triaged_at:
         triageAssessment.triagedAt ?? new Date().toISOString(),
       triaged_by: userId,
       location: triageAssessment.location?.trim() || null,
       notes: triageAssessment.notes?.trim() || null,
+      assessment_answers: assessmentAnswers ?? null,
+      algorithm_version: algorithmVersion,
+      is_over_triage: isOverTriage,
+      is_under_triage: isUnderTriage,
     });
 
   if (error) {
@@ -1163,7 +1225,7 @@ export async function getCasualtyTriageHistory(
     const { data, error } = await supabase
       .from("casualty_triage_assessments")
       .select(
-        "id, casualty_incident_id, triage_system, triage_category, triage_stage, triaged_at, triaged_by, location, notes, created_at",
+        "id, casualty_incident_id, triage_system, triage_category, responder_category, calculated_category, assessment_answers, algorithm_version, is_over_triage, is_under_triage, triage_stage, triaged_at, triaged_by, location, notes, created_at",
       )
       .eq("casualty_incident_id", id)
       .order("triaged_at", { ascending: false });

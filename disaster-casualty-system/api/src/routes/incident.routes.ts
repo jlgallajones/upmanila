@@ -9,6 +9,7 @@ import {
   generateIncidentSitrep,
   getIncidents,
   getIncidentTimeline,
+  getIncidentOnsiteTriageSummary,
   updateIncidentTimeline,
 } from "../controllers/incident.controller.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
@@ -35,6 +36,11 @@ incidentRouter.get(
   "/:id/timeline",
   requireAuth,
   getIncidentTimeline,
+);
+incidentRouter.get(
+  "/:id/onsite-triage-summary",
+  requireAuth,
+  getIncidentOnsiteTriageSummary,
 );
 incidentRouter.put(
   "/:id/timeline",

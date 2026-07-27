@@ -25,7 +25,9 @@ export type TriageSystem =
   | "urgent_non_urgent"
   | "nato"
   | "start"
+  | "sieve"
   | "sieve_sort"
+  | "sort"
   | "smart"
   | "care_flight"
   | "mass"
@@ -52,6 +54,7 @@ export interface CasualtyTriageAssessmentRequest {
   triagedAt?: string;
   location?: string;
   notes?: string;
+  assessmentAnswers?: Record<string, unknown>;
 }
 
 export type TransportRequired = "yes" | "no" | "unknown";

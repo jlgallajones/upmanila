@@ -29,12 +29,15 @@ import {
   getDmmpStaffSummary,
   getIncidents,
   getIncidentTimeline,
+  getOnsiteTriageSummary,
   saveCoordinationAssessment,
   type Incident,
   type CoordinationRating,
   type DmmpStaffRecord,
   type DmmpStaffSummary,
   type MedicalCoordinationAssessment,
+  type OnsiteTriageSummary,
+  type OnsiteTriageAccuracyMetric,
   type IncidentResponseTimeline,
   type IncidentSitrep,
   updateDmmpStaff,
@@ -525,6 +528,52 @@ function getRatingLabel(value: CoordinationRating | null): string {
   );
 }
 
+function formatTriageSystemLabel(value: string | null | undefined): string {
+  switch (value) {
+    case "urgent_non_urgent":
+      return "Urgent/non-urgent";
+    case "nato":
+      return "NATO";
+    case "start":
+      return "START";
+    case "sieve_sort":
+      return "SIEVE/SORT";
+    case "sieve":
+      return "SIEVE";
+    case "sort":
+      return "SORT";
+    case "smart":
+      return "SMART";
+    case "care_flight":
+      return "Care Flight";
+    case "mass":
+      return "MASS";
+    case "salt":
+      return "SALT";
+    case "other":
+      return "Other";
+    case "unknown":
+      return "Unknown";
+    default:
+      return value ?? "Not recorded";
+  }
+}
+
+function formatTriageSystemCounts(counts: Record<string, number>): string {
+  const entries = Object.entries(counts).filter(([, count]) => count > 0);
+
+  if (entries.length === 0) {
+    return "No on-site triage system recorded.";
+  }
+
+  return entries
+    .sort(([first], [second]) => first.localeCompare(second))
+    .map(
+      ([key, count]) => `${formatTriageSystemLabel(key)}: ${count}`,
+    )
+    .join("\n");
+}
+
 function IncidentCard({
   incident,
   canClose,
@@ -532,6 +581,7 @@ function IncidentCard({
   onEditTimeline,
   onManageStaff,
   onEditCoordination,
+  onViewOnsiteTriage,
   onGenerateSitrep,
   isGeneratingSitrep,
 }: {
@@ -541,6 +591,7 @@ function IncidentCard({
   onEditTimeline: () => void;
   onManageStaff: () => void;
   onEditCoordination: () => void;
+  onViewOnsiteTriage: () => void;
   onGenerateSitrep: () => void;
   isGeneratingSitrep: boolean;
 }) {
@@ -646,6 +697,21 @@ function IncidentCard({
           </Text>
         </Pressable>
       </View>
+
+      <Pressable
+        onPress={onViewOnsiteTriage}
+        style={({ pressed }) => [
+          styles.triageButton,
+          pressed && styles.pressed,
+        ]}
+      >
+        <Ionicons
+          name="medkit-outline"
+          size={17}
+          color={COLORS.maroon}
+        />
+        <Text style={styles.timelineButtonText}>On-site Triage</Text>
+      </Pressable>
 
       <Pressable
         disabled={isGeneratingSitrep}
@@ -757,6 +823,14 @@ export default function IncidentsPage() {
   const [isLoadingCoordination, setIsLoadingCoordination] =
     useState(false);
   const [isSavingCoordination, setIsSavingCoordination] =
+    useState(false);
+  const [isOnsiteTriageModalVisible, setIsOnsiteTriageModalVisible] =
+    useState(false);
+  const [selectedOnsiteTriageIncident, setSelectedOnsiteTriageIncident] =
+    useState<Incident | null>(null);
+  const [onsiteTriageSummary, setOnsiteTriageSummary] =
+    useState<OnsiteTriageSummary | null>(null);
+  const [isLoadingOnsiteTriage, setIsLoadingOnsiteTriage] =
     useState(false);
   const [sitrep, setSitrep] = useState<IncidentSitrep | null>(null);
   const [isSitrepModalVisible, setIsSitrepModalVisible] =
@@ -1412,6 +1486,36 @@ export default function IncidentsPage() {
     }
   }
 
+  async function handleOpenOnsiteTriage(incident: Incident) {
+    setSelectedOnsiteTriageIncident(incident);
+    setOnsiteTriageSummary(null);
+    setIsOnsiteTriageModalVisible(true);
+    setIsLoadingOnsiteTriage(true);
+
+    try {
+      const summary = await getOnsiteTriageSummary(incident.id);
+
+      setOnsiteTriageSummary(summary);
+    } catch (error) {
+      console.error("Unable to load on-site triage summary:", error);
+
+      Alert.alert(
+        "Unable to load on-site triage",
+        error instanceof Error
+          ? error.message
+          : "Please try again.",
+      );
+    } finally {
+      setIsLoadingOnsiteTriage(false);
+    }
+  }
+
+  function handleCloseOnsiteTriageModal() {
+    setIsOnsiteTriageModalVisible(false);
+    setSelectedOnsiteTriageIncident(null);
+    setOnsiteTriageSummary(null);
+  }
+
   function renderTimelineDateField(
     label: string,
     key: keyof TimelineFormState,
@@ -1547,6 +1651,56 @@ export default function IncidentsPage() {
     );
   }
 
+  function renderTriageIntervalSection(
+    title: string,
+    rows: OnsiteTriageSummary["categories"]["immediate"],
+  ) {
+    return (
+      <View style={styles.triageIntervalSection}>
+        <Text style={styles.fieldLabel}>{title}</Text>
+        <View style={styles.triageIntervalHeader}>
+          <Text style={styles.triageIntervalHeaderText}>Interval</Text>
+          <Text style={styles.triageIntervalHeaderText}>Count</Text>
+          <Text style={styles.triageIntervalHeaderText}>%</Text>
+        </View>
+
+        {rows.map((row) => (
+          <View key={row.minutes} style={styles.triageIntervalRow}>
+            <Text style={styles.triageIntervalText}>
+              {row.minutes === 60 ? "1 hour" : `${row.minutes} min`}
+            </Text>
+            <Text style={styles.triageIntervalText}>
+              {row.count}/{row.totalSurvivors}
+            </Text>
+            <Text style={styles.triageIntervalValue}>
+              {row.percentage}%
+            </Text>
+          </View>
+        ))}
+      </View>
+    );
+  }
+
+  function renderTriageAccuracyRow(
+    title: string,
+    metric: OnsiteTriageAccuracyMetric,
+  ) {
+    return (
+      <View style={styles.triageAccuracyRow}>
+        <View style={styles.triageAccuracyTextGroup}>
+          <Text style={styles.triageAccuracyTitle}>{title}</Text>
+          <Text style={styles.triageAccuracyDescription}>
+            {metric.label}
+          </Text>
+        </View>
+        <Text style={styles.triageAccuracyValue}>
+          {metric.numerator}/{metric.denominator} -{" "}
+          {metric.percentage}%
+        </Text>
+      </View>
+    );
+  }
+
   if (isLoading) {
     return (
       <View style={styles.centerState}>
@@ -1658,6 +1812,9 @@ export default function IncidentsPage() {
             }}
             onEditCoordination={() => {
               void handleOpenCoordination(item);
+            }}
+            onViewOnsiteTriage={() => {
+              void handleOpenOnsiteTriage(item);
             }}
             onGenerateSitrep={() => {
               void handleGenerateSitrep(item);
@@ -2525,6 +2682,168 @@ export default function IncidentsPage() {
       </Modal>
 
       <Modal
+        visible={isOnsiteTriageModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCloseOnsiteTriageModal}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={handleCloseOnsiteTriageModal}
+        >
+          <Pressable style={styles.timelineSheet}>
+            <View style={styles.sheetHandle} />
+
+            <View style={styles.sheetHeader}>
+              <View style={styles.sheetTitleGroup}>
+                <Text style={styles.sheetTitle}>On-site Triage</Text>
+                <Text
+                  style={styles.sheetSubtitle}
+                  numberOfLines={1}
+                >
+                  {selectedOnsiteTriageIncident?.incident_name ??
+                    "Incident"}
+                </Text>
+              </View>
+              <Pressable
+                onPress={handleCloseOnsiteTriageModal}
+                style={styles.sheetCloseButton}
+              >
+                <Ionicons
+                  name="close"
+                  size={20}
+                  color={COLORS.secondaryText}
+                />
+              </Pressable>
+            </View>
+
+            {isLoadingOnsiteTriage ? (
+              <View style={styles.timelineLoading}>
+                <ActivityIndicator
+                  size="small"
+                  color={COLORS.maroon}
+                />
+                <Text style={styles.timelineLoadingText}>
+                  Loading on-site triage...
+                </Text>
+              </View>
+            ) : onsiteTriageSummary ? (
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.timelineScrollContent}
+              >
+                <View style={styles.sitrepMetricGrid}>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {onsiteTriageSummary.totalSurvivors}
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      Survivors
+                    </Text>
+                  </View>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {onsiteTriageSummary.onSiteTriagedTotal}
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      On-site Triaged
+                    </Text>
+                  </View>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {
+                        onsiteTriageSummary.categories.immediate[
+                          onsiteTriageSummary.categories.immediate.length - 1
+                        ]?.percentage ?? 0
+                      }
+                      %
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      T1 by 1 hour
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={styles.fieldLabel}>
+                  TYPE OF FIRST TRIAGE USED
+                </Text>
+                <Text style={styles.sitrepSectionText}>
+                  Primary:{" "}
+                  {formatTriageSystemLabel(
+                    onsiteTriageSummary.triageSystemUsed,
+                  )}
+                  {"\n"}
+                  {formatTriageSystemCounts(
+                    onsiteTriageSummary.firstTriageSystemCounts,
+                  )}
+                </Text>
+
+                <Text style={styles.fieldLabel}>TRIAGE TIMES</Text>
+                <Text style={styles.sitrepSectionText}>
+                  Response initiation:{" "}
+                  {formatDateTime(
+                    onsiteTriageSummary.responseInitiatedAt,
+                  )}
+                  {"\n"}Triage ordered:{" "}
+                  {formatDateTime(onsiteTriageSummary.triageOrderedAt)}
+                  {"\n"}First on-site triage:{" "}
+                  {formatDateTime(
+                    onsiteTriageSummary.firstSiteTriageAt,
+                  )}
+                  {"\n"}Last on-site triage:{" "}
+                  {formatDateTime(onsiteTriageSummary.lastSiteTriageAt)}
+                </Text>
+
+                {renderTriageIntervalSection(
+                  "T1 IMMEDIATE TRIAGED BY INTERVAL",
+                  onsiteTriageSummary.categories.immediate,
+                )}
+                {renderTriageIntervalSection(
+                  "T2 DELAYED TRIAGED BY INTERVAL",
+                  onsiteTriageSummary.categories.delayed,
+                )}
+
+                <Text style={styles.fieldLabel}>TRIAGE ACCURACY</Text>
+                <View style={styles.triageAccuracyList}>
+                  {renderTriageAccuracyRow(
+                    "UNDERTRIAGED T1",
+                    onsiteTriageSummary.accuracy.undertriagedT1,
+                  )}
+                  {renderTriageAccuracyRow(
+                    "UNDERTRIAGED T2",
+                    onsiteTriageSummary.accuracy.undertriagedT2,
+                  )}
+                  {renderTriageAccuracyRow(
+                    "OVERTRIAGED T2",
+                    onsiteTriageSummary.accuracy.overtriagedT2,
+                  )}
+                  {renderTriageAccuracyRow(
+                    "OVERTRIAGED T3",
+                    onsiteTriageSummary.accuracy.overtriagedT3,
+                  )}
+                </View>
+
+                <Pressable
+                  onPress={handleCloseOnsiteTriageModal}
+                  style={({ pressed }) => [
+                    styles.createButton,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={styles.createButtonText}>Done</Text>
+                  <Ionicons
+                    name="checkmark-circle-outline"
+                    size={19}
+                    color={COLORS.white}
+                  />
+                </Pressable>
+              </ScrollView>
+            ) : null}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
         visible={isSitrepModalVisible}
         transparent
         animationType="fade"
@@ -3020,6 +3339,18 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "800",
   },
+  triageButton: {
+    minHeight: 38,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: "#E7D4D5",
+    marginTop: 9,
+    backgroundColor: "#FFF8F8",
+    gap: 7,
+  },
   sitrepButton: {
     minHeight: 38,
     flexDirection: "row",
@@ -3323,6 +3654,88 @@ const styles = StyleSheet.create({
     minHeight: 90,
     paddingTop: 12,
     textAlignVertical: "top",
+  },
+  triageIntervalSection: {
+    marginTop: 4,
+  },
+  triageIntervalHeader: {
+    minHeight: 34,
+    flexDirection: "row",
+    alignItems: "center",
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.fieldBackground,
+  },
+  triageIntervalHeaderText: {
+    flex: 1,
+    color: COLORS.secondaryText,
+    fontSize: 10,
+    fontWeight: "900",
+    textAlign: "center",
+  },
+  triageIntervalRow: {
+    minHeight: 38,
+    flexDirection: "row",
+    alignItems: "center",
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.white,
+  },
+  triageIntervalText: {
+    flex: 1,
+    color: COLORS.text,
+    fontSize: 12,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  triageIntervalValue: {
+    flex: 1,
+    color: COLORS.maroon,
+    fontSize: 12,
+    fontWeight: "900",
+    textAlign: "center",
+  },
+  triageAccuracyList: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: COLORS.white,
+  },
+  triageAccuracyRow: {
+    minHeight: 58,
+    flexDirection: "row",
+    alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+    gap: 10,
+  },
+  triageAccuracyTextGroup: {
+    flex: 1,
+  },
+  triageAccuracyTitle: {
+    color: COLORS.text,
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  triageAccuracyDescription: {
+    color: COLORS.secondaryText,
+    fontSize: 10,
+    lineHeight: 14,
+    marginTop: 2,
+  },
+  triageAccuracyValue: {
+    minWidth: 74,
+    color: COLORS.maroon,
+    fontSize: 12,
+    fontWeight: "900",
+    textAlign: "right",
   },
   sitrepSummaryBlock: {
     padding: 13,

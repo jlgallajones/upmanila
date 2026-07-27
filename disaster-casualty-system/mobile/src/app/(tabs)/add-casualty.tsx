@@ -114,6 +114,8 @@ const SEVERITY_OPTIONS = [
 const TRIAGE_SYSTEM_OPTIONS = [
   "START",
   "NATO",
+  "SIEVE",
+  "SORT",
   "SIEVE/SORT",
   "SMART",
   "Care Flight",
@@ -131,6 +133,242 @@ const TRIAGE_CATEGORY_OPTIONS = [
   "Expectant",
   "Unknown",
 ] as const;
+
+const FINAL_TRIAGE_OPTIONS = [
+  "Green",
+  "Black",
+  "Red",
+  "Yellow",
+] as const;
+
+type AppendixAnswerOption = {
+  label: string;
+  value: string;
+};
+
+type AppendixQuestion = {
+  key: string;
+  label: string;
+  options: AppendixAnswerOption[];
+};
+
+const YES_NO_OPTIONS: AppendixAnswerOption[] = [
+  { label: "Yes", value: "yes" },
+  { label: "No", value: "no" },
+];
+
+const PRESENT_ABSENT_OPTIONS: AppendixAnswerOption[] = [
+  { label: "Present", value: "present" },
+  { label: "Absent", value: "absent" },
+];
+
+const FINAL_TRIAGE_COLOR_OPTIONS: AppendixAnswerOption[] =
+  FINAL_TRIAGE_OPTIONS.map((option) => ({
+    label: option,
+    value: option.toLowerCase(),
+  }));
+
+const APPENDIX_TRIAGE_FIELDS: Record<string, AppendixQuestion[]> = {
+  start: [
+    { key: "canWalk", label: "Can walk?", options: YES_NO_OPTIONS },
+    {
+      key: "respirations",
+      label: "Respirations",
+      options: [
+        { label: "Absent", value: "absent" },
+        { label: "More than 30", value: "more_than_30" },
+        { label: "30 or below", value: "less_than_or_equal_to_30" },
+      ],
+    },
+    {
+      key: "capillaryRefill",
+      label: "Capillary refill",
+      options: [
+        { label: "More than 2 sec", value: "more_than_2_seconds" },
+        {
+          label: "2 sec or less",
+          value: "less_than_or_equal_to_2_seconds",
+        },
+      ],
+    },
+    {
+      key: "followsSimpleCommands",
+      label: "Mental status",
+      options: [
+        { label: "Follows commands", value: "yes" },
+        { label: "Cannot follow", value: "no" },
+      ],
+    },
+    {
+      key: "finalTriage",
+      label: "Final triage",
+      options: FINAL_TRIAGE_COLOR_OPTIONS,
+    },
+  ],
+  nato: [
+    { key: "canWalk", label: "Can walk?", options: YES_NO_OPTIONS },
+    {
+      key: "minorSelfCare",
+      label: "Minor injuries, can self-care?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "lowSurvivalComplexTreatment",
+      label: "Complex treatment with low survival chance?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "lifeSavingSurgeryHighSurvival",
+      label: "Life-saving surgery, high survival chance?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "delayedSurgeryPermitted",
+      label: "Surgery can be delayed safely?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "finalTriage",
+      label: "Final triage",
+      options: FINAL_TRIAGE_COLOR_OPTIONS,
+    },
+  ],
+  sieve: [
+    { key: "canWalk", label: "Can walk?", options: YES_NO_OPTIONS },
+    {
+      key: "respirations",
+      label: "Respirations",
+      options: [
+        { label: "Absent", value: "absent" },
+        { label: "Less than 10", value: "less_than_10" },
+        { label: "More than 29", value: "more_than_29" },
+        { label: "10-29", value: "ten_to_twenty_nine" },
+      ],
+    },
+    {
+      key: "heartRate",
+      label: "Heart rate",
+      options: [
+        { label: ">120 bpm", value: "more_than_120" },
+        { label: "<120 bpm", value: "less_than_120" },
+      ],
+    },
+    {
+      key: "capillaryRefill",
+      label: "Capillary refill",
+      options: [
+        { label: "More than 2 sec", value: "more_than_2_seconds" },
+        { label: "Less than 2 sec", value: "less_than_2_seconds" },
+      ],
+    },
+    {
+      key: "finalTriage",
+      label: "Final triage",
+      options: FINAL_TRIAGE_COLOR_OPTIONS,
+    },
+  ],
+  sort: [
+    {
+      key: "gcs",
+      label: "Glasgow Coma Scale",
+      options: [
+        { label: "13-15", value: "13_to_15" },
+        { label: "9-12", value: "9_to_12" },
+        { label: "6-8", value: "6_to_8" },
+        { label: "4-5", value: "4_to_5" },
+        { label: "3", value: "3" },
+      ],
+    },
+    {
+      key: "respiratoryRate",
+      label: "Respiratory rate",
+      options: [
+        { label: "10-29", value: "10_to_29" },
+        { label: ">=30", value: "more_than_or_equal_to_30" },
+        { label: "6-9", value: "6_to_9" },
+        { label: "1-5", value: "1_to_5" },
+        { label: "0", value: "0" },
+      ],
+    },
+    {
+      key: "systolicBp",
+      label: "Systolic BP",
+      options: [
+        { label: ">80", value: "more_than_80" },
+        { label: "76-80", value: "76_to_80" },
+        { label: "50-75", value: "50_to_75" },
+        { label: "1-49", value: "1_to_49" },
+        { label: "0", value: "0" },
+      ],
+    },
+    {
+      key: "finalTriage",
+      label: "Final triage",
+      options: FINAL_TRIAGE_COLOR_OPTIONS,
+    },
+  ],
+  care_flight: [
+    { key: "canWalk", label: "Can walk?", options: YES_NO_OPTIONS },
+    {
+      key: "canObeyCommands",
+      label: "Can obey commands?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "palpableRadialPulse",
+      label: "Palpable radial pulse",
+      options: PRESENT_ABSENT_OPTIONS,
+    },
+    {
+      key: "breathingWithOpenAirway",
+      label: "Breathing with open airway",
+      options: PRESENT_ABSENT_OPTIONS,
+    },
+    {
+      key: "finalTriage",
+      label: "Final triage",
+      options: FINAL_TRIAGE_COLOR_OPTIONS,
+    },
+  ],
+  salt: [
+    { key: "breathing", label: "Breathing?", options: YES_NO_OPTIONS },
+    {
+      key: "obeysCommandsOrPurposefulMovement",
+      label: "Obeys commands or purposeful movement?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "hasPeripheralPulse",
+      label: "Has peripheral pulse?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "respiratoryDistress",
+      label: "In respiratory distress?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "majorHemorrhageControlled",
+      label: "Major hemorrhage controlled?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "minorInjuriesOnly",
+      label: "Minor injuries only?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "likelyToSurviveGivenResources",
+      label: "Likely to survive with current resources?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "finalTriage",
+      label: "Final triage",
+      options: FINAL_TRIAGE_COLOR_OPTIONS,
+    },
+  ],
+};
 
 const TRIAGE_STAGE_OPTIONS = [
   "On-site",
@@ -236,6 +474,7 @@ type FormState = {
   triageTime: string;
   triageLocation: string;
   triageNotes: string;
+  triageAssessmentAnswers: Record<string, string>;
 
   transportRequired: string;
   transportMode: string;
@@ -303,6 +542,7 @@ const initialForm: FormState = {
   triageTime: "",
   triageLocation: "",
   triageNotes: "",
+  triageAssessmentAnswers: {},
 
   transportRequired: "",
   transportMode: "",
@@ -436,6 +676,10 @@ function normalizeTriageSystem(value: string): TriageSystem {
       return "urgent_non_urgent";
     case "nato":
       return "nato";
+    case "sieve":
+      return "sieve";
+    case "sort":
+      return "sort";
     case "sieve/sort":
     case "sieve / sort":
       return "sieve_sort";
@@ -492,6 +736,10 @@ function formatTriageSystem(value: string | null | undefined): string {
       return "NATO";
     case "start":
       return "START";
+    case "sieve":
+      return "SIEVE";
+    case "sort":
+      return "SORT";
     case "sieve_sort":
       return "SIEVE/SORT";
     case "smart":
@@ -739,7 +987,73 @@ function getTriageFormSignature(form: FormState): string {
     time: parseDateTimeInput(form.triageTime) ?? "",
     location: form.triageLocation.trim(),
     notes: form.triageNotes.trim(),
+    assessmentAnswers: buildTriageAssessmentAnswers(form) ?? {},
   });
+}
+
+function getAppendixQuestionsForSystem(
+  system: string,
+): AppendixQuestion[] {
+  const normalizedSystem = normalizeTriageSystem(system);
+  const appendixKey =
+    normalizedSystem === "sieve_sort" ? "sieve" : normalizedSystem;
+
+  return APPENDIX_TRIAGE_FIELDS[appendixKey] ?? [];
+}
+
+function coerceAppendixAnswer(
+  key: string,
+  value: string,
+): string | boolean {
+  if (key === "finalTriage") {
+    return value;
+  }
+
+  if (value === "yes") {
+    return true;
+  }
+
+  if (value === "no") {
+    return false;
+  }
+
+  if (key === "palpableRadialPulse") {
+    return value;
+  }
+
+  if (key === "breathingWithOpenAirway") {
+    return value === "present";
+  }
+
+  return value;
+}
+
+function buildTriageAssessmentAnswers(
+  form: FormState,
+): Record<string, unknown> | undefined {
+  const questions = getAppendixQuestionsForSystem(form.triageSystem);
+
+  if (questions.length === 0) {
+    return undefined;
+  }
+
+  const answers = questions.reduce<Record<string, unknown>>(
+    (currentAnswers, question) => {
+      const answer = form.triageAssessmentAnswers[question.key];
+
+      if (answer) {
+        currentAnswers[question.key] = coerceAppendixAnswer(
+          question.key,
+          answer,
+        );
+      }
+
+      return currentAnswers;
+    },
+    {},
+  );
+
+  return Object.keys(answers).length > 0 ? answers : undefined;
 }
 
 function getTransportFormSignature(form: FormState): string {
@@ -868,6 +1182,18 @@ function mapRecordToForm(
       : "",
     triageLocation: valueOrEmpty(latestTriage?.location),
     triageNotes: valueOrEmpty(latestTriage?.notes),
+    triageAssessmentAnswers: Object.fromEntries(
+      Object.entries(latestTriage?.assessment_answers ?? {}).map(
+        ([key, value]) => [
+          key,
+          typeof value === "boolean"
+            ? value
+              ? "yes"
+              : "no"
+            : String(value),
+        ],
+      ),
+    ),
 
     transportRequired: formatTransportRequired(
       latestTransport?.transport_required,
@@ -1153,10 +1479,24 @@ function DatePickerSheet({
   const [visibleMonth, setVisibleMonth] = useState(() =>
     parseDateInput(value),
   );
+  const [pickerMode, setPickerMode] = useState<"calendar" | "year">(
+    "calendar",
+  );
+  const [yearPageStart, setYearPageStart] = useState(() => {
+    const selectedYear = parseDateInput(value).getFullYear();
+
+    return selectedYear - (selectedYear % 12);
+  });
 
   useEffect(() => {
     if (visible) {
-      setVisibleMonth(parseDateInput(value));
+      const selectedDate = parseDateInput(value);
+
+      setVisibleMonth(selectedDate);
+      setPickerMode("calendar");
+      setYearPageStart(
+        selectedDate.getFullYear() - (selectedDate.getFullYear() % 12),
+      );
     }
   }, [value, visible]);
 
@@ -1165,6 +1505,10 @@ function DatePickerSheet({
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDay = new Date(year, month, 1).getDay();
   const selectedDate = parseDateInput(value);
+  const yearOptions = Array.from(
+    { length: 12 },
+    (_, index) => yearPageStart + index,
+  );
 
   const dayCells = [
     ...Array.from({ length: firstDay }, (_, index) => ({
@@ -1198,7 +1542,14 @@ function DatePickerSheet({
 
           <View style={styles.dateHeader}>
             <Pressable
-              onPress={() => moveMonth(-1)}
+              onPress={() => {
+                if (pickerMode === "year") {
+                  setYearPageStart((current) => current - 12);
+                  return;
+                }
+
+                moveMonth(-1);
+              }}
               style={styles.dateArrowButton}
             >
               <Ionicons
@@ -1208,12 +1559,38 @@ function DatePickerSheet({
               />
             </Pressable>
 
-            <Text style={styles.dateTitle}>
-              {MONTH_NAMES[month]} {year}
-            </Text>
+            <Pressable
+              onPress={() =>
+                setPickerMode((current) =>
+                  current === "year" ? "calendar" : "year",
+                )
+              }
+              style={({ pressed }) => [
+                styles.dateTitleButton,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={styles.dateTitle}>
+                {pickerMode === "year"
+                  ? `${yearPageStart} - ${yearPageStart + 11}`
+                  : `${MONTH_NAMES[month]} ${year}`}
+              </Text>
+              <Text style={styles.dateTitleHint}>
+                {pickerMode === "year"
+                  ? "Select birth year"
+                  : "Tap to change year"}
+              </Text>
+            </Pressable>
 
             <Pressable
-              onPress={() => moveMonth(1)}
+              onPress={() => {
+                if (pickerMode === "year") {
+                  setYearPageStart((current) => current + 12);
+                  return;
+                }
+
+                moveMonth(1);
+              }}
               style={styles.dateArrowButton}
             >
               <Ionicons
@@ -1224,60 +1601,96 @@ function DatePickerSheet({
             </Pressable>
           </View>
 
-          <View style={styles.weekRow}>
-            {["S", "M", "T", "W", "T", "F", "S"].map(
-              (day, index) => (
-                <Text
-                  key={`${day}-${index}`}
-                  style={styles.weekLabel}
-                >
-                  {day}
-                </Text>
-              ),
-            )}
-          </View>
+          {pickerMode === "year" ? (
+            <View style={styles.yearGrid}>
+              {yearOptions.map((yearOption) => {
+                const selected = yearOption === year;
 
-          <View style={styles.dayGrid}>
-            {dayCells.map((cell) => {
-              const isSelected =
-                cell.day !== null &&
-                selectedDate.getFullYear() === year &&
-                selectedDate.getMonth() === month &&
-                selectedDate.getDate() === cell.day;
-
-              return (
-                <Pressable
-                  key={cell.key}
-                  disabled={cell.day === null}
-                  onPress={() => {
-                    if (cell.day === null) {
-                      return;
-                    }
-
-                    onSelect(
-                      formatDateForInput(
-                        new Date(year, month, cell.day),
-                      ),
-                    );
-                    onClose();
-                  }}
-                  style={[
-                    styles.dayCell,
-                    isSelected && styles.dayCellSelected,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.dayText,
-                      isSelected && styles.dayTextSelected,
+                return (
+                  <Pressable
+                    key={yearOption}
+                    onPress={() => {
+                      setVisibleMonth(
+                        new Date(yearOption, month, 1),
+                      );
+                      setPickerMode("calendar");
+                    }}
+                    style={({ pressed }) => [
+                      styles.yearCell,
+                      selected && styles.yearCellSelected,
+                      pressed && styles.pressed,
                     ]}
                   >
-                    {cell.day ?? ""}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+                    <Text
+                      style={[
+                        styles.yearText,
+                        selected && styles.yearTextSelected,
+                      ]}
+                    >
+                      {yearOption}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : (
+            <>
+              <View style={styles.weekRow}>
+                {["S", "M", "T", "W", "T", "F", "S"].map(
+                  (day, index) => (
+                    <Text
+                      key={`${day}-${index}`}
+                      style={styles.weekLabel}
+                    >
+                      {day}
+                    </Text>
+                  ),
+                )}
+              </View>
+
+              <View style={styles.dayGrid}>
+                {dayCells.map((cell) => {
+                  const isSelected =
+                    cell.day !== null &&
+                    selectedDate.getFullYear() === year &&
+                    selectedDate.getMonth() === month &&
+                    selectedDate.getDate() === cell.day;
+
+                  return (
+                    <Pressable
+                      key={cell.key}
+                      disabled={cell.day === null}
+                      onPress={() => {
+                        if (cell.day === null) {
+                          return;
+                        }
+
+                        onSelect(
+                          formatDateForInput(
+                            new Date(year, month, cell.day),
+                          ),
+                        );
+                        onClose();
+                      }}
+                      style={[
+                        styles.dayCell,
+                        isSelected && styles.dayCellSelected,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.dayText,
+                          isSelected && styles.dayTextSelected,
+                        ]}
+                      >
+                        {cell.day ?? ""}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </>
+          )}
 
           <Pressable
             onPress={() => {
@@ -1464,6 +1877,7 @@ export default function AddCasualtyScreen() {
       triagedAt: parseDateTimeInput(form.triageTime),
       location: form.triageLocation || form.currentLocation,
       notes: form.triageNotes,
+      assessmentAnswers: buildTriageAssessmentAnswers(form),
     };
   }, [form, initialTriageSignature, isEditing]);
 
@@ -1733,9 +2147,32 @@ export default function AddCasualtyScreen() {
     key: K,
     value: FormState[K],
   ) {
+    setForm((current) => {
+      if (key === "triageSystem") {
+        return {
+          ...current,
+          [key]: value,
+          triageAssessmentAnswers: {},
+        };
+      }
+
+      return {
+        ...current,
+        [key]: value,
+      };
+    });
+  }
+
+  function updateTriageAssessmentAnswer(
+    key: string,
+    value: string,
+  ) {
     setForm((current) => ({
       ...current,
-      [key]: value,
+      triageAssessmentAnswers: {
+        ...current.triageAssessmentAnswers,
+        [key]: value,
+      },
     }));
   }
 
@@ -1876,6 +2313,17 @@ export default function AddCasualtyScreen() {
           Alert.alert(
             "Invalid triage time",
             "Enter triage time using mm/dd/yyyy hh:mm.",
+          );
+          return false;
+        }
+
+        if (
+          getAppendixQuestionsForSystem(form.triageSystem).length > 0 &&
+          !form.triageAssessmentAnswers.finalTriage
+        ) {
+          Alert.alert(
+            "Final triage required",
+            "Select the Appendix A final triage color for this triage system.",
           );
           return false;
         }
@@ -3204,6 +3652,76 @@ export default function AddCasualtyScreen() {
     );
   }
 
+  function renderAppendixQuestion(question: AppendixQuestion) {
+    const selectedValue =
+      form.triageAssessmentAnswers[question.key] ?? "";
+
+    return (
+      <View key={question.key} style={styles.appendixQuestion}>
+        <Text style={styles.appendixQuestionLabel}>
+          {question.label}
+        </Text>
+        <View style={styles.appendixOptionGrid}>
+          {question.options.map((option) => {
+            const selected = selectedValue === option.value;
+
+            return (
+              <Pressable
+                key={option.value}
+                onPress={() =>
+                  updateTriageAssessmentAnswer(
+                    question.key,
+                    option.value,
+                  )
+                }
+                style={({ pressed }) => [
+                  styles.appendixOption,
+                  selected && styles.appendixOptionSelected,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text
+                  numberOfLines={2}
+                  style={[
+                    styles.appendixOptionText,
+                    selected && styles.appendixOptionTextSelected,
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+    );
+  }
+
+  function renderAppendixAssessmentFields() {
+    const questions = getAppendixQuestionsForSystem(form.triageSystem);
+
+    if (questions.length === 0) {
+      return null;
+    }
+
+    return (
+      <View style={styles.appendixBlock}>
+        <View style={styles.appendixHeader}>
+          <Ionicons
+            name="clipboard-outline"
+            size={18}
+            color={COLORS.maroon}
+          />
+          <Text style={styles.appendixTitle}>
+            Appendix A Assessment
+          </Text>
+        </View>
+
+        {questions.map(renderAppendixQuestion)}
+      </View>
+    );
+  }
+
   function renderTriageStep() {
     return (
       <>
@@ -3227,6 +3745,8 @@ export default function AddCasualtyScreen() {
           placeholder="Select triage stage"
           onPress={() => openChoiceSheet("triageStage")}
         />
+
+        {renderAppendixAssessmentFields()}
 
         <FormField
           label="TRIAGE TIME"
@@ -4015,6 +4535,21 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontSize: 16,
     fontWeight: "900",
+    textAlign: "center",
+  },
+  dateTitleButton: {
+    flex: 1,
+    minHeight: 42,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+    paddingHorizontal: 8,
+  },
+  dateTitleHint: {
+    color: COLORS.secondaryText,
+    fontSize: 10,
+    fontWeight: "700",
+    marginTop: 2,
   },
   weekRow: {
     flexDirection: "row",
@@ -4049,6 +4584,34 @@ const styles = StyleSheet.create({
   },
   dayTextSelected: {
     color: COLORS.white,
+  },
+  yearGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 8,
+  },
+  yearCell: {
+    width: "31.5%",
+    minHeight: 46,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.fieldBorder,
+    backgroundColor: COLORS.fieldBackground,
+  },
+  yearCellSelected: {
+    borderColor: COLORS.maroon,
+    backgroundColor: "#FFF4F4",
+  },
+  yearText: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  yearTextSelected: {
+    color: COLORS.maroon,
   },
   todayButton: {
     minHeight: 45,
@@ -4201,6 +4764,69 @@ const styles = StyleSheet.create({
     color: COLORS.maroon,
     fontSize: 13,
     fontWeight: "700",
+  },
+
+  appendixBlock: {
+    borderWidth: 1,
+    borderColor: COLORS.fieldBorder,
+    borderRadius: 13,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 4,
+    marginBottom: 17,
+    backgroundColor: COLORS.white,
+  },
+  appendixHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+    gap: 7,
+  },
+  appendixTitle: {
+    color: COLORS.maroon,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  appendixQuestion: {
+    marginBottom: 12,
+  },
+  appendixQuestionLabel: {
+    color: COLORS.text,
+    fontSize: 11,
+    fontWeight: "800",
+    marginBottom: 7,
+  },
+  appendixOptionGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 7,
+  },
+  appendixOption: {
+    minHeight: 38,
+    minWidth: "30%",
+    flexGrow: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: COLORS.fieldBorder,
+    backgroundColor: COLORS.fieldBackground,
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+  },
+  appendixOptionSelected: {
+    borderColor: COLORS.maroon,
+    backgroundColor: "#FFF4F4",
+  },
+  appendixOptionText: {
+    color: COLORS.secondaryText,
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  appendixOptionTextSelected: {
+    color: COLORS.maroon,
   },
 
   inlineWarning: {

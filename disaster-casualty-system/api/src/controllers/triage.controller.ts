@@ -21,9 +21,15 @@ const supportedTriageSystems: TriageSystem[] = [
   "start",
   "nato",
   "sieve",
+  "sieve_sort",
   "sort",
+  "smart",
   "care_flight",
+  "mass",
   "salt",
+  "urgent_non_urgent",
+  "ed_triage",
+  "other",
 ];
 
 const triageCategories: TriageCategory[] = [

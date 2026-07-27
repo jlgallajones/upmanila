@@ -2,9 +2,15 @@ export type TriageSystem =
   | "start"
   | "nato"
   | "sieve"
+  | "sieve_sort"
   | "sort"
+  | "smart"
   | "care_flight"
-  | "salt";
+  | "mass"
+  | "salt"
+  | "urgent_non_urgent"
+  | "ed_triage"
+  | "other";
 
 export type TriageCategory =
   | "immediate"
@@ -32,6 +38,17 @@ export interface StartAssessmentAnswers {
   respirations: StartRespirationStatus;
   capillaryRefill?: StartCapillaryRefill;
   followsSimpleCommands?: boolean;
+}
+
+export type FinalTriageColor =
+  | "green"
+  | "black"
+  | "red"
+  | "yellow";
+
+export interface AppendixAssessmentAnswers
+  extends Record<string, unknown> {
+  finalTriage?: FinalTriageColor;
 }
 
 export interface CreateTriageAssessmentRequest {

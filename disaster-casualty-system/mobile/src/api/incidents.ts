@@ -87,6 +87,47 @@ export type MedicalCoordinationAssessment = {
   assessed_at: string;
 };
 
+export type OnsiteTriageIntervalMetric = {
+  minutes: number;
+  cutoffAt: string | null;
+  count: number;
+  totalSurvivors: number;
+  percentage: number;
+};
+
+export type OnsiteTriageAccuracyMetric = {
+  label: string;
+  numerator: number;
+  denominator: number;
+  percentage: number;
+};
+
+export type OnsiteTriageSummary = {
+  incidentId: string;
+  totalSurvivors: number;
+  onSiteTriagedTotal: number;
+  triageSystemUsed: string | null;
+  firstTriageSystemCounts: Record<string, number>;
+  responseInitiatedAt: string | null;
+  responseInitiationSource: string;
+  triageOrderedAt: string | null;
+  firstSiteTriageAt: string | null;
+  lastSiteTriageAt: string | null;
+  intervalMinutes: number[];
+  categories: {
+    immediate: OnsiteTriageIntervalMetric[];
+    delayed: OnsiteTriageIntervalMetric[];
+  };
+  accuracy: {
+    undertriagedT1: OnsiteTriageAccuracyMetric;
+    undertriagedT2: OnsiteTriageAccuracyMetric;
+    overtriagedT2: OnsiteTriageAccuracyMetric;
+    overtriagedT3: OnsiteTriageAccuracyMetric;
+  };
+  formula: string;
+  accuracyFormula: string;
+};
+
 export type CoordinationAssessmentPayload = {
   initialActionsRating?: CoordinationRating | null;
   sceneCoordinationRating?: CoordinationRating | null;
@@ -190,6 +231,11 @@ type CoordinationAssessmentResponse = {
   success: boolean;
   message?: string;
   data: MedicalCoordinationAssessment | null;
+};
+
+type OnsiteTriageSummaryResponse = {
+  success: boolean;
+  data: OnsiteTriageSummary;
 };
 
 type IncidentSitrepResponse = {
@@ -344,6 +390,16 @@ export async function saveCoordinationAssessment(
   if (!response.data.data) {
     throw new Error("Coordination assessment was not returned.");
   }
+
+  return response.data.data;
+}
+
+export async function getOnsiteTriageSummary(
+  id: string,
+): Promise<OnsiteTriageSummary> {
+  const response = await api.get<OnsiteTriageSummaryResponse>(
+    `/incidents/${encodeURIComponent(id)}/onsite-triage-summary`,
+  );
 
   return response.data.data;
 }

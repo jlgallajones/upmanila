@@ -105,6 +105,12 @@ export type CasualtyTriageHistoryItem = {
   casualty_incident_id: string;
   triage_system: string;
   triage_category: string;
+  responder_category: string | null;
+  calculated_category: string | null;
+  assessment_answers: Record<string, unknown> | null;
+  algorithm_version: string | null;
+  is_over_triage: boolean | null;
+  is_under_triage: boolean | null;
   triage_stage: string;
   triaged_at: string;
   triaged_by: string | null;
@@ -204,7 +210,9 @@ export type CasualtyTriageAssessmentPayload = {
     | "urgent_non_urgent"
     | "nato"
     | "start"
+    | "sieve"
     | "sieve_sort"
+    | "sort"
     | "smart"
     | "care_flight"
     | "mass"
@@ -224,6 +232,7 @@ export type CasualtyTriageAssessmentPayload = {
   triagedAt?: string;
   location?: string;
   notes?: string;
+  assessmentAnswers?: Record<string, unknown>;
 };
 
 export type CasualtyTransportRecordPayload = {
