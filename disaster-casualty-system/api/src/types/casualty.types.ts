@@ -96,6 +96,13 @@ export interface CasualtyTreatmentRecordRequest {
   notes?: string;
 }
 
+export interface FacilityEncounterRequest {
+  facilityId?: string;
+  arrivedAt?: string;
+  referredOrTransferred?: boolean | null;
+  disposition?: string;
+}
+
 export interface CreateCasualtyRequest {
   clientRecordId: string;
   incidentId: string;
@@ -148,6 +155,7 @@ export interface CreateCasualtyRequest {
   triageAssessment?: CasualtyTriageAssessmentRequest;
   transportRecord?: CasualtyTransportRecordRequest;
   treatmentRecord?: CasualtyTreatmentRecordRequest;
+  facilityEncounter?: FacilityEncounterRequest;
 }
 
 export interface UpdateCasualtyRequest {
@@ -162,4 +170,5 @@ export interface UpdateCasualtyRequest {
   triageAssessment?: CasualtyTriageAssessmentRequest;
   transportRecord?: CasualtyTransportRecordRequest;
   treatmentRecord?: CasualtyTreatmentRecordRequest;
+  facilityEncounter?: FacilityEncounterRequest;
 }

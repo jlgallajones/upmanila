@@ -1995,6 +1995,27 @@ export default function IncidentsPage() {
     );
   }
 
+  function renderDistributionRatioRow(
+    title: string,
+    description: string,
+    metric: { numerator: number; denominator: number; percentage: number },
+  ) {
+    return (
+      <View style={styles.triageAccuracyRow}>
+        <View style={styles.triageAccuracyTextGroup}>
+          <Text style={styles.triageAccuracyTitle}>{title}</Text>
+          <Text style={styles.triageAccuracyDescription}>
+            {description}
+          </Text>
+        </View>
+        <Text style={styles.triageAccuracyValue}>
+          {metric.numerator}/{metric.denominator} -{" "}
+          {metric.percentage}%
+        </Text>
+      </View>
+    );
+  }
+
   if (isLoading) {
     return (
       <View style={styles.centerState}>
@@ -3535,6 +3556,17 @@ export default function IncidentsPage() {
                     }),
                   ),
                 )}
+
+                <Text style={styles.fieldLabel}>
+                  INTERHOSPITAL TRANSFER
+                </Text>
+                <View style={styles.triageAccuracyList}>
+                  {renderDistributionRatioRow(
+                    "Transferred out of hospital",
+                    "Survivors transferred out / survivors initially arrived at a recorded hospital",
+                    distributionSummary.interhospitalTransfer,
+                  )}
+                </View>
 
                 <Pressable
                   onPress={handleCloseDistributionModal}

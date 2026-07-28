@@ -267,6 +267,20 @@ export type CasualtyTreatmentRecordPayload = {
   notes?: string;
 };
 
+export type FacilityEncounterPayload = {
+  facilityId?: string;
+  arrivedAt?: string;
+  referredOrTransferred?: boolean | null;
+  disposition?:
+    | "active_care"
+    | "hospital_admission"
+    | "discharged_home"
+    | "transferred"
+    | "deceased"
+    | "left_without_treatment"
+    | "unknown";
+};
+
 export async function getCasualties(): Promise<CasualtyRecord[]> {
   const response =
     await api.get<CasualtyListResponse>("/casualties");
@@ -406,6 +420,7 @@ export type CreateCasualtyPayload = {
   triageAssessment?: CasualtyTriageAssessmentPayload;
   transportRecord?: CasualtyTransportRecordPayload;
   treatmentRecord?: CasualtyTreatmentRecordPayload;
+  facilityEncounter?: FacilityEncounterPayload;
 };
 
 type CreateCasualtyResponse = {
@@ -442,6 +457,7 @@ export type UpdateCasualtyPayload = {
   triageAssessment?: CasualtyTriageAssessmentPayload;
   transportRecord?: CasualtyTransportRecordPayload;
   treatmentRecord?: CasualtyTreatmentRecordPayload;
+  facilityEncounter?: FacilityEncounterPayload;
 };
 
 export async function updateCasualty(

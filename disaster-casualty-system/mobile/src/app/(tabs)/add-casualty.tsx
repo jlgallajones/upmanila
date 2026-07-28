@@ -406,6 +406,8 @@ const TREATMENT_STRATEGY_OPTIONS = [
   "Unknown",
 ] as const;
 
+const TRANSFERRED_OUT_OPTIONS = ["Yes", "No", "Unknown"] as const;
+
 const FACILITY_LEVEL_OPTIONS = [
   "Primary",
   "Secondary",
@@ -436,6 +438,7 @@ type ChoiceSheetName =
   | "transportMode"
   | "emsUnitType"
   | "treatmentStrategy"
+  | "transferredOutOfHospital"
   | "casualtyStatus"
   | "severity";
 
@@ -498,6 +501,7 @@ type FormState = {
   stabilizationStartedTime: string;
   stabilizedTime: string;
   treatmentNotes: string;
+  transferredOutOfHospital: string;
 
   casualtyStatus: string;
   severity: string;
@@ -573,6 +577,7 @@ const initialForm: FormState = {
   stabilizationStartedTime: "",
   stabilizedTime: "",
   treatmentNotes: "",
+  transferredOutOfHospital: "",
 
   casualtyStatus: "",
   severity: "",
@@ -859,6 +864,20 @@ function normalizeTreatmentStrategy(
     case "unknown":
     default:
       return "unknown";
+  }
+}
+
+function normalizeTransferredOut(
+  value: string,
+): boolean | null {
+  switch (value.trim().toLowerCase()) {
+    case "yes":
+      return true;
+    case "no":
+      return false;
+    case "unknown":
+    default:
+      return null;
   }
 }
 
@@ -1152,6 +1171,8 @@ function getTreatmentFormSignature(form: FormState): string {
       parseDateTimeInput(form.stabilizationStartedTime) ?? "",
     stabilized: parseDateTimeInput(form.stabilizedTime) ?? "",
     notes: form.treatmentNotes.trim(),
+    transferredOut:
+      normalizeTransferredOut(form.transferredOutOfHospital),
   });
 }
 
@@ -1303,6 +1324,7 @@ function mapRecordToForm(
     stabilizationStartedTime: "",
     stabilizedTime: "",
     treatmentNotes: "",
+    transferredOutOfHospital: "",
 
     casualtyStatus: titleCase(record.current_status),
     severity: titleCase(record.severity),
@@ -1817,6 +1839,7 @@ export default function AddCasualtyScreen() {
     transportMode: isEditing ? "" : "Unknown",
     emsUnitType: isEditing ? "" : "Unknown",
     treatmentStrategy: isEditing ? "" : "Unknown",
+    transferredOutOfHospital: isEditing ? "" : "Unknown",
   }));
   const [isLoadingRecord, setIsLoadingRecord] =
     useState(isEditing);
@@ -2031,6 +2054,33 @@ export default function AddCasualtyScreen() {
     };
   }, [form, initialTreatmentSignature, isEditing]);
 
+  const facilityEncounterPayload = useMemo<
+    CreateCasualtyPayload["facilityEncounter"]
+  >(() => {
+    if (!form.healthcareFacilityId) {
+      return undefined;
+    }
+
+    if (
+      isEditing &&
+      getTreatmentFormSignature(form) === initialTreatmentSignature
+    ) {
+      return undefined;
+    }
+
+    const referredOrTransferred = normalizeTransferredOut(
+      form.transferredOutOfHospital,
+    );
+
+    return {
+      facilityId: form.healthcareFacilityId,
+      arrivedAt: parseDateTimeInput(form.arrivedFacilityTime),
+      referredOrTransferred,
+      disposition:
+        referredOrTransferred === true ? "transferred" : "unknown",
+    };
+  }, [form, initialTreatmentSignature, isEditing]);
+
   const updatePayload = useMemo<UpdateCasualtyPayload>(
     () => ({
       incidentId: form.incidentId || undefined,
@@ -2039,8 +2089,10 @@ export default function AddCasualtyScreen() {
       triageAssessment: triageAssessmentPayload,
       transportRecord: transportRecordPayload,
       treatmentRecord: treatmentRecordPayload,
+      facilityEncounter: facilityEncounterPayload,
     }),
     [
+      facilityEncounterPayload,
       form.incidentId,
       incidentDetailsPayload,
       personPayload,
@@ -2594,6 +2646,17 @@ export default function AddCasualtyScreen() {
           return false;
         }
 
+        if (
+          form.healthcareFacilityId &&
+          !form.transferredOutOfHospital.trim()
+        ) {
+          Alert.alert(
+            "Transfer status required",
+            "Select whether this casualty was transferred out of the hospital, or choose Unknown.",
+          );
+          return false;
+        }
+
         const treatmentStrategy = normalizeTreatmentStrategy(
           form.treatmentStrategy,
         );
@@ -3085,6 +3148,8 @@ export default function AddCasualtyScreen() {
         return "Select EMS Unit Type";
       case "treatmentStrategy":
         return "Select On-site Care";
+      case "transferredOutOfHospital":
+        return "Transferred Out of Hospital";
       case "casualtyStatus":
         return "Select Casualty Status";
       case "severity":
@@ -3297,6 +3362,16 @@ export default function AddCasualtyScreen() {
           onSelect: () => updateField("treatmentStrategy", option),
         }));
 
+      case "transferredOutOfHospital":
+        return TRANSFERRED_OUT_OPTIONS.map((option) => ({
+          label: option,
+          selected:
+            form.transferredOutOfHospital.toLowerCase() ===
+            option.toLowerCase(),
+          onSelect: () =>
+            updateField("transferredOutOfHospital", option),
+        }));
+
       case "casualtyStatus":
         return STATUS_OPTIONS.map((option) => ({
           label: option,
@@ -3331,6 +3406,7 @@ export default function AddCasualtyScreen() {
         triageAssessment: triageAssessmentPayload,
         transportRecord: transportRecordPayload,
         treatmentRecord: treatmentRecordPayload,
+        facilityEncounter: facilityEncounterPayload,
       };
 
       if (!currentUserId) {
@@ -3383,6 +3459,7 @@ export default function AddCasualtyScreen() {
           triageAssessment: triageAssessmentPayload,
           transportRecord: transportRecordPayload,
           treatmentRecord: treatmentRecordPayload,
+          facilityEncounter: facilityEncounterPayload,
         };
 
         const response = await createCasualty(payload);
@@ -4374,6 +4451,15 @@ export default function AddCasualtyScreen() {
           placeholder="Hospital or medical facility"
           onChangeText={(value) =>
             updateField("hospitalName", value)
+          }
+        />
+
+        <SelectField
+          label="TRANSFERRED OUT OF HOSPITAL"
+          value={form.transferredOutOfHospital}
+          placeholder="Select transfer status"
+          onPress={() =>
+            openChoiceSheet("transferredOutOfHospital")
           }
         />
 

@@ -9,6 +9,7 @@ import type {
   CasualtyTransportRecordRequest,
   CasualtyTriageAssessmentRequest,
   CreateCasualtyRequest,
+  FacilityEncounterRequest,
   UpdateCasualtyRequest,
 } from "../types/casualty.types.js";
 import type {
@@ -89,6 +90,16 @@ const treatmentStrategies = [
   "scooter",
   "stay_and_play",
   "play_and_run",
+  "unknown",
+];
+
+const facilityDispositions = [
+  "active_care",
+  "hospital_admission",
+  "discharged_home",
+  "transferred",
+  "deceased",
+  "left_without_treatment",
   "unknown",
 ];
 
@@ -506,6 +517,40 @@ function validateTreatmentRecord(
   return true;
 }
 
+function validateFacilityEncounter(
+  facilityEncounter: FacilityEncounterRequest | undefined,
+  response: Response,
+): boolean {
+  if (!facilityEncounter) {
+    return true;
+  }
+
+  if (
+    facilityEncounter.disposition !== undefined &&
+    !facilityDispositions.includes(facilityEncounter.disposition)
+  ) {
+    response.status(400).json({
+      success: false,
+      message: "Invalid facility disposition.",
+    });
+    return false;
+  }
+
+  if (facilityEncounter.arrivedAt) {
+    const arrivedAt = new Date(facilityEncounter.arrivedAt);
+
+    if (Number.isNaN(arrivedAt.getTime())) {
+      response.status(400).json({
+        success: false,
+        message: "Invalid facility arrival time.",
+      });
+      return false;
+    }
+  }
+
+  return true;
+}
+
 async function ensureActiveHealthcareFacility(
   facilityId: string | undefined,
   response: Response,
@@ -653,6 +698,34 @@ async function insertTreatmentRecord(
   }
 }
 
+async function insertFacilityEncounter(
+  casualtyIncidentId: string,
+  userId: string,
+  facilityEncounter: FacilityEncounterRequest,
+): Promise<void> {
+  if (!facilityEncounter.facilityId) {
+    return;
+  }
+
+  const { error } = await supabase
+    .from("facility_encounters")
+    .insert({
+      casualty_incident_id: casualtyIncidentId,
+      facility_id: facilityEncounter.facilityId,
+      arrived_at: facilityEncounter.arrivedAt ?? null,
+      referred_or_transferred:
+        facilityEncounter.referredOrTransferred ?? null,
+      disposition: facilityEncounter.disposition ?? "unknown",
+      recorded_by: userId,
+    });
+
+  if (error) {
+    throw new Error(
+      `Unable to record facility encounter: ${error.message}`,
+    );
+  }
+}
+
 export async function createCasualty(
   request: Request<
     Record<string, never>,
@@ -671,6 +744,7 @@ export async function createCasualty(
       triageAssessment,
       transportRecord,
       treatmentRecord,
+      facilityEncounter,
     } = request.body;
     const user = getAuthenticatedUser(request);
 
@@ -818,6 +892,10 @@ export async function createCasualty(
       return;
     }
 
+    if (!validateFacilityEncounter(facilityEncounter, response)) {
+      return;
+    }
+
     const existingIdNumber = await ensureUniqueIdNumber(
       person.idNumber,
     );
@@ -870,6 +948,15 @@ export async function createCasualty(
     if (
       !(await ensureActiveHealthcareFacility(
         transportRecord?.receivingFacilityId,
+        response,
+      ))
+    ) {
+      return;
+    }
+
+    if (
+      !(await ensureActiveHealthcareFacility(
+        facilityEncounter?.facilityId,
         response,
       ))
     ) {
@@ -934,6 +1021,23 @@ export async function createCasualty(
         transactionResult.casualtyIncident.id,
         user.id,
         treatmentRecord,
+      );
+    }
+
+    const encounterPayload = facilityEncounter ?? {
+      facilityId:
+        transportRecord?.receivingFacilityId ??
+        incidentDetails.healthcareFacilityId,
+      arrivedAt: transportRecord?.arrivedFacilityAt,
+      referredOrTransferred: null,
+      disposition: "unknown",
+    };
+
+    if (encounterPayload.facilityId) {
+      await insertFacilityEncounter(
+        transactionResult.casualtyIncident.id,
+        user.id,
+        encounterPayload,
       );
     }
 
@@ -1726,6 +1830,7 @@ export async function updateCasualty(
       triageAssessment,
       transportRecord,
       treatmentRecord,
+      facilityEncounter,
     } = request.body;
     const user = getAuthenticatedUser(request);
 
@@ -1735,7 +1840,8 @@ export async function updateCasualty(
       !incidentId &&
       !triageAssessment &&
       !transportRecord &&
-      !treatmentRecord
+      !treatmentRecord &&
+      !facilityEncounter
     ) {
       response.status(400).json({
         success: false,
@@ -1753,6 +1859,10 @@ export async function updateCasualty(
     }
 
     if (!validateTreatmentRecord(treatmentRecord, response)) {
+      return;
+    }
+
+    if (!validateFacilityEncounter(facilityEncounter, response)) {
       return;
     }
 
@@ -1902,6 +2012,15 @@ export async function updateCasualty(
       return;
     }
 
+    if (
+      !(await ensureActiveHealthcareFacility(
+        facilityEncounter?.facilityId,
+        response,
+      ))
+    ) {
+      return;
+    }
+
     if (person) {
       const existingIdNumber = await ensureUniqueIdNumber(
         person.idNumber,
@@ -2040,6 +2159,23 @@ export async function updateCasualty(
 
     if (treatmentRecord) {
       await insertTreatmentRecord(id, user.id, treatmentRecord);
+    }
+
+    const encounterPayload = facilityEncounter ?? (
+      transportRecord?.receivingFacilityId || incidentDetails?.healthcareFacilityId
+        ? {
+            facilityId:
+              transportRecord?.receivingFacilityId ??
+              incidentDetails?.healthcareFacilityId,
+            arrivedAt: transportRecord?.arrivedFacilityAt,
+            referredOrTransferred: null,
+            disposition: "unknown",
+          }
+        : undefined
+    );
+
+    if (encounterPayload?.facilityId) {
+      await insertFacilityEncounter(id, user.id, encounterPayload);
     }
 
     const { data: updatedRecord, error: updatedError } =

@@ -202,6 +202,12 @@ export type SurvivorDistributionIntervalMetric = {
   percentage: number;
 };
 
+export type SurvivorDistributionRatioMetric = {
+  numerator: number;
+  denominator: number;
+  percentage: number;
+};
+
 export type SurvivorDistributionSummary = {
   incidentId: string;
   totalSurvivors: number;
@@ -216,6 +222,7 @@ export type SurvivorDistributionSummary = {
     }
   >;
   edArrivalsByInterval: SurvivorDistributionIntervalMetric[];
+  interhospitalTransfer: SurvivorDistributionRatioMetric;
 };
 
 export type CoordinationAssessmentPayload = {

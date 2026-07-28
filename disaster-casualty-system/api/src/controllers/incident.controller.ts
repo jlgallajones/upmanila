@@ -161,6 +161,13 @@ type FacilityRow = {
   province: string | null;
 };
 
+type FacilityEncounterRow = {
+  casualty_incident_id: string;
+  facility_id: string | null;
+  arrived_at: string | null;
+  referred_or_transferred: boolean | null;
+};
+
 type ExportCasualtyRow = {
   id: string;
   current_status: string | null;
@@ -1892,18 +1899,39 @@ export async function getIncidentSurvivorDistributionSummary(
             .order("arrived_facility_at", { ascending: true })
         : { data: [], error: null };
 
+    const encounterResult =
+      casualtyIncidentIds.length > 0
+        ? await supabase
+            .from("facility_encounters")
+            .select(
+              "casualty_incident_id, facility_id, arrived_at, referred_or_transferred",
+            )
+            .in("casualty_incident_id", casualtyIncidentIds)
+            .order("arrived_at", { ascending: true })
+        : { data: [], error: null };
+
     if (transportResult.error) {
       throw new Error(
         `Unable to retrieve survivor distribution data: ${transportResult.error.message}`,
       );
     }
 
+    if (encounterResult.error) {
+      throw new Error(
+        `Unable to retrieve facility encounter data: ${encounterResult.error.message}`,
+      );
+    }
+
     const transportRows = (transportResult.data ??
       []) as TransportRecordRow[];
+    const encounterRows = (encounterResult.data ??
+      []) as FacilityEncounterRow[];
     const facilityIds = Array.from(
       new Set(
-        transportRows
-          .map((row) => row.receiving_facility_id)
+        [
+          ...transportRows.map((row) => row.receiving_facility_id),
+          ...encounterRows.map((row) => row.facility_id),
+        ]
           .filter((value): value is string => Boolean(value)),
       ),
     );
@@ -1987,6 +2015,12 @@ export async function getIncidentSurvivorDistributionSummary(
       : null;
     const intervalMinutes = [1, 5, 10, 15, 30, 60];
     const totalEdArrivals = arrivedRows.length;
+    const transferDenominator = encounterRows.filter((row) =>
+      Boolean(row.facility_id),
+    ).length;
+    const transferNumerator = encounterRows.filter(
+      (row) => row.referred_or_transferred === true,
+    ).length;
 
     const edArrivalsByInterval = intervalMinutes.map((minutes) => {
       const cutoff =
@@ -2052,6 +2086,19 @@ export async function getIncidentSurvivorDistributionSummary(
           },
         },
         edArrivalsByInterval,
+        interhospitalTransfer: {
+          numerator: transferNumerator,
+          denominator: transferDenominator,
+          percentage:
+            transferDenominator > 0
+              ? Number(
+                  (
+                    (transferNumerator / transferDenominator) *
+                    100
+                  ).toFixed(2),
+                )
+              : 0,
+        },
       },
     });
   } catch (error) {
