@@ -6,8 +6,10 @@ import {
   getCoordinationAssessment,
   getDmmpStaff,
   getDmmpStaffSummary,
+  getResponderSafetyReport,
   getUtsteinOperations,
   saveCoordinationAssessment,
+  saveResponderSafetyReport,
   saveUtsteinOperations,
   updateDmmpStaff,
 } from "../controllers/incident-operations.controller.js";
@@ -99,4 +101,18 @@ incidentOperationsRouter.put(
   requireAuth,
   requireRole(writableRoles),
   saveCoordinationAssessment,
+);
+
+incidentOperationsRouter.get(
+  "/incidents/:id/responder-safety-report",
+  requireAuth,
+  requireRole(readableRoles),
+  getResponderSafetyReport,
+);
+
+incidentOperationsRouter.put(
+  "/incidents/:id/responder-safety-report",
+  requireAuth,
+  requireRole(writableRoles),
+  saveResponderSafetyReport,
 );

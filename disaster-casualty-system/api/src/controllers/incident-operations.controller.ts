@@ -89,6 +89,56 @@ function parseNullableBoolean(
   return value;
 }
 
+function parseNullableNonNegativeInteger(
+  value: unknown,
+  fieldName: string,
+): number | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null || value === "") {
+    return null;
+  }
+
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value < 0
+  ) {
+    throw new Error(
+      `${fieldName} must be a non-negative whole number, or null.`,
+    );
+  }
+
+  return value;
+}
+
+function parseSafetyActionStatus(
+  value: unknown,
+  fieldName: string,
+): string | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null || value === "") {
+    return null;
+  }
+
+  if (
+    value !== "yes" &&
+    value !== "no" &&
+    value !== "unknown"
+  ) {
+    throw new Error(
+      `${fieldName} must be yes, no, unknown, or null.`,
+    );
+  }
+
+  return value;
+}
+
 function parseCoordinationRating(
   value: unknown,
   fieldName: string,
@@ -997,6 +1047,300 @@ export async function getDmmpStaffSummary(
         formula:
           "(staff who arrived within standard / staff contacted) × 100",
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+function buildResponderSafetySummary(
+  report: Record<string, unknown> | null,
+  timeline: Record<string, unknown> | null,
+  incident: Record<string, unknown> | null,
+) {
+  const deployedResponders =
+    typeof report?.deployed_responders === "number"
+      ? report.deployed_responders
+      : 0;
+  const injuredResponders =
+    typeof report?.injured_responders === "number"
+      ? report.injured_responders
+      : 0;
+  const illResponders =
+    typeof report?.ill_responders === "number"
+      ? report.ill_responders
+      : 0;
+  const deceasedResponders =
+    typeof report?.deceased_responders === "number"
+      ? report.deceased_responders
+      : 0;
+  const illOrInjuredResponders =
+    illResponders + injuredResponders;
+  const killedPercentage =
+    deployedResponders > 0
+      ? Number(
+          (
+            (deceasedResponders / deployedResponders) *
+            100
+          ).toFixed(2),
+        )
+      : 0;
+  const illOrInjuredPercentage =
+    deployedResponders > 0
+      ? Number(
+          (
+            (illOrInjuredResponders / deployedResponders) *
+            100
+          ).toFixed(2),
+        )
+      : 0;
+  const responseDeactivatedAt =
+    (report?.response_deactivated_at as string | null | undefined) ??
+    (timeline?.scene_demobilized_at as string | null | undefined) ??
+    (incident?.ended_at as string | null | undefined) ??
+    null;
+
+  return {
+    safetyActionsEstablished:
+      report?.safety_actions_established ?? null,
+    ppeDecisionAt: report?.ppe_decision_at ?? null,
+    dmmpActivatedAt: timeline?.dmmp_activated_at ?? null,
+    responseDeactivatedAt,
+    deployedResponders,
+    injuredResponders,
+    illResponders,
+    deceasedResponders,
+    illOrInjuredResponders,
+    killedPercentage,
+    illOrInjuredPercentage,
+    killedFormula:
+      "(killed responders during acute response phase / deployed responders during acute response phase) x 100",
+    illOrInjuredFormula:
+      "(ill or injured responders during acute response phase / deployed responders during acute response phase) x 100",
+  };
+}
+
+/**
+ * GET /api/incidents/:id/responder-safety-report
+ */
+export async function getResponderSafetyReport(
+  request: Request<{ id: string }>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const incidentId = request.params.id;
+
+    if (!isValidUuid(incidentId)) {
+      response.status(400).json({
+        success: false,
+        message: "A valid incident UUID is required.",
+      });
+      return;
+    }
+
+    const { data: incident, error: incidentError } = await supabase
+      .from("incidents")
+      .select("id, ended_at")
+      .eq("id", incidentId)
+      .maybeSingle();
+
+    if (incidentError) {
+      throw new Error(
+        `Unable to retrieve incident: ${incidentError.message}`,
+      );
+    }
+
+    if (!incident) {
+      response.status(404).json({
+        success: false,
+        message: "Incident not found.",
+      });
+      return;
+    }
+
+    const [reportResult, timelineResult] = await Promise.all([
+      supabase
+        .from("responder_safety_reports")
+        .select("*")
+        .eq("incident_id", incidentId)
+        .maybeSingle(),
+      supabase
+        .from("incident_response_timelines")
+        .select("dmmp_activated_at, scene_demobilized_at")
+        .eq("incident_id", incidentId)
+        .maybeSingle(),
+    ]);
+
+    if (reportResult.error) {
+      throw new Error(
+        `Unable to retrieve responder safety report: ${reportResult.error.message}`,
+      );
+    }
+
+    if (timelineResult.error) {
+      throw new Error(
+        `Unable to retrieve incident timeline: ${timelineResult.error.message}`,
+      );
+    }
+
+    response.status(200).json({
+      success: true,
+      data: reportResult.data ?? null,
+      summary: buildResponderSafetySummary(
+        reportResult.data ?? null,
+        timelineResult.data ?? null,
+        incident,
+      ),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * PUT /api/incidents/:id/responder-safety-report
+ */
+export async function saveResponderSafetyReport(
+  request: Request<{ id: string }>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const incidentId = request.params.id;
+
+    if (!isValidUuid(incidentId)) {
+      response.status(400).json({
+        success: false,
+        message: "A valid incident UUID is required.",
+      });
+      return;
+    }
+
+    if (!isPlainObject(request.body)) {
+      response.status(400).json({
+        success: false,
+        message: "A JSON request body is required.",
+      });
+      return;
+    }
+
+    const { data: incident, error: incidentError } = await supabase
+      .from("incidents")
+      .select("id, ended_at")
+      .eq("id", incidentId)
+      .maybeSingle();
+
+    if (incidentError) {
+      throw new Error(
+        `Unable to retrieve incident: ${incidentError.message}`,
+      );
+    }
+
+    if (!incident) {
+      response.status(404).json({
+        success: false,
+        message: "Incident not found.",
+      });
+      return;
+    }
+
+    let safetyActionsEstablished: string | null | undefined;
+    let ppeDecisionAt: string | null | undefined;
+    let responseDeactivatedAt: string | null | undefined;
+    let deployedResponders: number | null | undefined;
+    let injuredResponders: number | null | undefined;
+    let illResponders: number | null | undefined;
+    let deceasedResponders: number | null | undefined;
+
+    try {
+      safetyActionsEstablished = parseSafetyActionStatus(
+        request.body.safetyActionsEstablished,
+        "safetyActionsEstablished",
+      );
+      ppeDecisionAt = parseNullableDate(
+        request.body.ppeDecisionAt,
+        "ppeDecisionAt",
+      );
+      responseDeactivatedAt = parseNullableDate(
+        request.body.responseDeactivatedAt,
+        "responseDeactivatedAt",
+      );
+      deployedResponders = parseNullableNonNegativeInteger(
+        request.body.deployedResponders,
+        "deployedResponders",
+      );
+      injuredResponders = parseNullableNonNegativeInteger(
+        request.body.injuredResponders,
+        "injuredResponders",
+      );
+      illResponders = parseNullableNonNegativeInteger(
+        request.body.illResponders,
+        "illResponders",
+      );
+      deceasedResponders = parseNullableNonNegativeInteger(
+        request.body.deceasedResponders,
+        "deceasedResponders",
+      );
+    } catch (validationError) {
+      response.status(400).json({
+        success: false,
+        message:
+          validationError instanceof Error
+            ? validationError.message
+            : "Invalid responder safety report.",
+      });
+      return;
+    }
+
+    const authenticatedUser = getAuthenticatedUser(request);
+    const values = {
+      incident_id: incidentId,
+      safety_actions_established:
+        safetyActionsEstablished ?? null,
+      ppe_decision_at: ppeDecisionAt ?? null,
+      response_deactivated_at: responseDeactivatedAt ?? null,
+      deployed_responders: deployedResponders ?? 0,
+      injured_responders: injuredResponders ?? 0,
+      ill_responders: illResponders ?? 0,
+      deceased_responders: deceasedResponders ?? 0,
+      reported_by: authenticatedUser.id,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase
+      .from("responder_safety_reports")
+      .upsert(values, {
+        onConflict: "incident_id",
+      })
+      .select("*")
+      .single();
+
+    if (error || !data) {
+      throw new Error(
+        `Unable to save responder safety report: ${
+          error?.message ?? "Unknown database error"
+        }`,
+      );
+    }
+
+    const { data: timeline, error: timelineError } = await supabase
+      .from("incident_response_timelines")
+      .select("dmmp_activated_at, scene_demobilized_at")
+      .eq("incident_id", incidentId)
+      .maybeSingle();
+
+    if (timelineError) {
+      throw new Error(
+        `Unable to retrieve incident timeline: ${timelineError.message}`,
+      );
+    }
+
+    response.status(200).json({
+      success: true,
+      message: "Responder safety report saved successfully.",
+      data,
+      summary: buildResponderSafetySummary(data, timeline, incident),
     });
   } catch (error) {
     next(error);

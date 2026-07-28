@@ -87,6 +87,54 @@ export type MedicalCoordinationAssessment = {
   assessed_at: string;
 };
 
+export type ResponderSafetyStatus = "yes" | "no" | "unknown";
+
+export type ResponderSafetyReport = {
+  id: string;
+  incident_id: string;
+  safety_actions_established: ResponderSafetyStatus | null;
+  ppe_decision_at: string | null;
+  response_deactivated_at: string | null;
+  deployed_responders: number;
+  injured_responders: number;
+  ill_responders: number;
+  deceased_responders: number;
+  reported_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ResponderSafetySummary = {
+  safetyActionsEstablished: ResponderSafetyStatus | null;
+  ppeDecisionAt: string | null;
+  dmmpActivatedAt: string | null;
+  responseDeactivatedAt: string | null;
+  deployedResponders: number;
+  injuredResponders: number;
+  illResponders: number;
+  deceasedResponders: number;
+  illOrInjuredResponders: number;
+  killedPercentage: number;
+  illOrInjuredPercentage: number;
+  killedFormula: string;
+  illOrInjuredFormula: string;
+};
+
+export type ResponderSafetyPayload = {
+  safetyActionsEstablished?: ResponderSafetyStatus | null;
+  ppeDecisionAt?: string | null;
+  responseDeactivatedAt?: string | null;
+  deployedResponders?: number | null;
+  injuredResponders?: number | null;
+  illResponders?: number | null;
+  deceasedResponders?: number | null;
+};
+
+export type ResponderSafetyResult = {
+  report: ResponderSafetyReport | null;
+  summary: ResponderSafetySummary;
+};
+
 export type OnsiteTriageIntervalMetric = {
   minutes: number;
   cutoffAt: string | null;
@@ -347,6 +395,13 @@ type CoordinationAssessmentResponse = {
   data: MedicalCoordinationAssessment | null;
 };
 
+type ResponderSafetyResponse = {
+  success: boolean;
+  message?: string;
+  data: ResponderSafetyReport | null;
+  summary: ResponderSafetySummary;
+};
+
 type OnsiteTriageSummaryResponse = {
   success: boolean;
   data: OnsiteTriageSummary;
@@ -526,6 +581,34 @@ export async function saveCoordinationAssessment(
   }
 
   return response.data.data;
+}
+
+export async function getResponderSafetyReport(
+  id: string,
+): Promise<ResponderSafetyResult> {
+  const response = await api.get<ResponderSafetyResponse>(
+    `/incidents/${encodeURIComponent(id)}/responder-safety-report`,
+  );
+
+  return {
+    report: response.data.data,
+    summary: response.data.summary,
+  };
+}
+
+export async function saveResponderSafetyReport(
+  id: string,
+  payload: ResponderSafetyPayload,
+): Promise<ResponderSafetyResult> {
+  const response = await api.put<ResponderSafetyResponse>(
+    `/incidents/${encodeURIComponent(id)}/responder-safety-report`,
+    payload,
+  );
+
+  return {
+    report: response.data.data,
+    summary: response.data.summary,
+  };
 }
 
 export async function getOnsiteTriageSummary(

@@ -32,9 +32,11 @@ import {
   getIncidentTimeline,
   getOnsiteCareSummary,
   getOnsiteTriageSummary,
+  getResponderSafetyReport,
   getSceneClearanceSummary,
   getSurvivorDistributionSummary,
   saveCoordinationAssessment,
+  saveResponderSafetyReport,
   type Incident,
   type CoordinationRating,
   type DmmpStaffRecord,
@@ -43,6 +45,8 @@ import {
   type MedicalCoordinationAssessment,
   type OnsiteCareSummary,
   type OnsiteTriageSummary,
+  type ResponderSafetyResult,
+  type ResponderSafetyStatus,
   type SceneClearanceSummary,
   type SurvivorDistributionFacilityMetric,
   type SurvivorDistributionSummary,
@@ -226,6 +230,18 @@ function getValidDateTimeInput(value: string): Date | null {
 
 function valueOrEmpty(value: string | null | undefined): string {
   return value ?? "";
+}
+
+function parseOptionalWholeNumber(value: string): number | null {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  const parsed = Number(trimmed);
+
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
 }
 
 function formatCountLabel(value: string): string {
@@ -494,6 +510,26 @@ const initialCoordinationForm: CoordinationFormState = {
   assessedAt: "",
 };
 
+type ResponderSafetyFormState = {
+  safetyActionsEstablished: ResponderSafetyStatus;
+  ppeDecisionAt: string;
+  responseDeactivatedAt: string;
+  deployedResponders: string;
+  injuredResponders: string;
+  illResponders: string;
+  deceasedResponders: string;
+};
+
+const initialResponderSafetyForm: ResponderSafetyFormState = {
+  safetyActionsEstablished: "unknown",
+  ppeDecisionAt: "",
+  responseDeactivatedAt: "",
+  deployedResponders: "",
+  injuredResponders: "",
+  illResponders: "",
+  deceasedResponders: "",
+};
+
 function mapStaffToForm(record: DmmpStaffRecord): StaffFormState {
   return {
     staffName: valueOrEmpty(record.staff_name),
@@ -523,6 +559,53 @@ function mapCoordinationToForm(
     resourceManagementRating: assessment.resource_management_rating,
     notes: valueOrEmpty(assessment.notes),
     assessedAt: formatTimelineInput(assessment.assessed_at),
+  };
+}
+
+function formatSafetyStatus(
+  value: ResponderSafetyStatus | null | undefined,
+): string {
+  switch (value) {
+    case "yes":
+      return "Yes";
+    case "no":
+      return "No";
+    case "unknown":
+      return "Unknown";
+    default:
+      return "Not recorded";
+  }
+}
+
+function mapResponderSafetyToForm(
+  result: ResponderSafetyResult | null,
+): ResponderSafetyFormState {
+  const report = result?.report;
+
+  return {
+    safetyActionsEstablished:
+      report?.safety_actions_established ?? "unknown",
+    ppeDecisionAt: formatTimelineInput(report?.ppe_decision_at),
+    responseDeactivatedAt: formatTimelineInput(
+      report?.response_deactivated_at ??
+        result?.summary.responseDeactivatedAt,
+    ),
+    deployedResponders:
+      report?.deployed_responders !== undefined
+        ? String(report.deployed_responders)
+        : "",
+    injuredResponders:
+      report?.injured_responders !== undefined
+        ? String(report.injured_responders)
+        : "",
+    illResponders:
+      report?.ill_responders !== undefined
+        ? String(report.ill_responders)
+        : "",
+    deceasedResponders:
+      report?.deceased_responders !== undefined
+        ? String(report.deceased_responders)
+        : "",
   };
 }
 
@@ -645,6 +728,7 @@ function IncidentCard({
   onEditTimeline,
   onManageStaff,
   onEditCoordination,
+  onEditResponderSafety,
   onViewOnsiteTriage,
   onViewFacilityTriage,
   onViewOnsiteCare,
@@ -659,6 +743,7 @@ function IncidentCard({
   onEditTimeline: () => void;
   onManageStaff: () => void;
   onEditCoordination: () => void;
+  onEditResponderSafety: () => void;
   onViewOnsiteTriage: () => void;
   onViewFacilityTriage: () => void;
   onViewOnsiteCare: () => void;
@@ -769,6 +854,23 @@ function IncidentCard({
           </Text>
         </Pressable>
       </View>
+
+      <Pressable
+        onPress={onEditResponderSafety}
+        style={({ pressed }) => [
+          styles.triageButton,
+          pressed && styles.pressed,
+        ]}
+      >
+        <Ionicons
+          name="shield-checkmark-outline"
+          size={17}
+          color={COLORS.maroon}
+        />
+        <Text style={styles.timelineButtonText}>
+          Responder Safety
+        </Text>
+      </Pressable>
 
       <Pressable
         onPress={onViewOnsiteTriage}
@@ -959,6 +1061,22 @@ export default function IncidentsPage() {
   const [isLoadingCoordination, setIsLoadingCoordination] =
     useState(false);
   const [isSavingCoordination, setIsSavingCoordination] =
+    useState(false);
+  const [
+    isResponderSafetyModalVisible,
+    setIsResponderSafetyModalVisible,
+  ] = useState(false);
+  const [
+    selectedResponderSafetyIncident,
+    setSelectedResponderSafetyIncident,
+  ] = useState<Incident | null>(null);
+  const [responderSafetyForm, setResponderSafetyForm] =
+    useState<ResponderSafetyFormState>(initialResponderSafetyForm);
+  const [responderSafetySummary, setResponderSafetySummary] =
+    useState<ResponderSafetyResult["summary"] | null>(null);
+  const [isLoadingResponderSafety, setIsLoadingResponderSafety] =
+    useState(false);
+  const [isSavingResponderSafety, setIsSavingResponderSafety] =
     useState(false);
   const [isOnsiteTriageModalVisible, setIsOnsiteTriageModalVisible] =
     useState(false);
@@ -1666,6 +1784,192 @@ export default function IncidentsPage() {
     }
   }
 
+  async function handleOpenResponderSafety(incident: Incident) {
+    setSelectedResponderSafetyIncident(incident);
+    setResponderSafetyForm(initialResponderSafetyForm);
+    setResponderSafetySummary(null);
+    setIsResponderSafetyModalVisible(true);
+    setIsLoadingResponderSafety(true);
+
+    try {
+      const result = await getResponderSafetyReport(incident.id);
+
+      setResponderSafetyForm(mapResponderSafetyToForm(result));
+      setResponderSafetySummary(result.summary);
+    } catch (error) {
+      console.error("Unable to load responder safety:", error);
+
+      Alert.alert(
+        "Unable to load responder safety",
+        error instanceof Error
+          ? error.message
+          : "Please try again.",
+      );
+    } finally {
+      setIsLoadingResponderSafety(false);
+    }
+  }
+
+  function handleCloseResponderSafetyModal() {
+    if (isSavingResponderSafety) {
+      return;
+    }
+
+    setIsResponderSafetyModalVisible(false);
+    setSelectedResponderSafetyIncident(null);
+    setResponderSafetyForm(initialResponderSafetyForm);
+    setResponderSafetySummary(null);
+  }
+
+  function updateResponderSafetyField<
+    K extends keyof ResponderSafetyFormState,
+  >(key: K, value: ResponderSafetyFormState[K]) {
+    setResponderSafetyForm((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  }
+
+  function setResponderSafetyFieldToNow(
+    key: keyof Pick<
+      ResponderSafetyFormState,
+      "ppeDecisionAt" | "responseDeactivatedAt"
+    >,
+  ) {
+    updateResponderSafetyField(
+      key,
+      formatDateTimeForInput(new Date()),
+    );
+  }
+
+  function validateResponderSafetyForm(
+    form: ResponderSafetyFormState,
+  ): string | null {
+    const dateFields: Array<
+      [keyof ResponderSafetyFormState, string]
+    > = [
+      ["ppeDecisionAt", "PPE decision time"],
+      ["responseDeactivatedAt", "Response deactivation time"],
+    ];
+
+    for (const [key, label] of dateFields) {
+      const value = String(form[key]).trim();
+
+      if (value && !getValidDateTimeInput(value)) {
+        return `${label} must use mm/dd/yyyy hh:mm.`;
+      }
+    }
+
+    const countFields: Array<
+      [keyof ResponderSafetyFormState, string]
+    > = [
+      ["deployedResponders", "Deployed responders"],
+      ["injuredResponders", "Injured responders"],
+      ["illResponders", "Ill responders"],
+      ["deceasedResponders", "Deceased responders"],
+    ];
+
+    for (const [key, label] of countFields) {
+      const value = String(form[key]).trim();
+
+      if (value && parseOptionalWholeNumber(value) === null) {
+        return `${label} must be a non-negative whole number.`;
+      }
+    }
+
+    const deployedResponders =
+      parseOptionalWholeNumber(form.deployedResponders) ?? 0;
+    const affectedResponders =
+      (parseOptionalWholeNumber(form.injuredResponders) ?? 0) +
+      (parseOptionalWholeNumber(form.illResponders) ?? 0) +
+      (parseOptionalWholeNumber(form.deceasedResponders) ?? 0);
+
+    if (
+      deployedResponders > 0 &&
+      affectedResponders > deployedResponders
+    ) {
+      return "Injured, ill, and deceased responders cannot exceed deployed responders.";
+    }
+
+    return null;
+  }
+
+  async function handleSaveResponderSafety() {
+    if (!selectedResponderSafetyIncident) {
+      return;
+    }
+
+    if (!canUpdateOperations) {
+      Alert.alert(
+        "Permission required",
+        "Your account is not allowed to update responder safety records.",
+      );
+      return;
+    }
+
+    const validationError = validateResponderSafetyForm(
+      responderSafetyForm,
+    );
+
+    if (validationError) {
+      Alert.alert("Check responder safety", validationError);
+      return;
+    }
+
+    try {
+      setIsSavingResponderSafety(true);
+
+      const result = await saveResponderSafetyReport(
+        selectedResponderSafetyIncident.id,
+        {
+          safetyActionsEstablished:
+            responderSafetyForm.safetyActionsEstablished,
+          ppeDecisionAt: parseDateTimeInput(
+            responderSafetyForm.ppeDecisionAt,
+          ),
+          responseDeactivatedAt: parseDateTimeInput(
+            responderSafetyForm.responseDeactivatedAt,
+          ),
+          deployedResponders:
+            parseOptionalWholeNumber(
+              responderSafetyForm.deployedResponders,
+            ) ?? 0,
+          injuredResponders:
+            parseOptionalWholeNumber(
+              responderSafetyForm.injuredResponders,
+            ) ?? 0,
+          illResponders:
+            parseOptionalWholeNumber(
+              responderSafetyForm.illResponders,
+            ) ?? 0,
+          deceasedResponders:
+            parseOptionalWholeNumber(
+              responderSafetyForm.deceasedResponders,
+            ) ?? 0,
+        },
+      );
+
+      setResponderSafetyForm(mapResponderSafetyToForm(result));
+      setResponderSafetySummary(result.summary);
+
+      Alert.alert(
+        "Responder safety saved",
+        "Responder safety and health metrics have been updated.",
+      );
+    } catch (error) {
+      console.error("Unable to save responder safety:", error);
+
+      Alert.alert(
+        "Unable to save responder safety",
+        error instanceof Error
+          ? error.message
+          : "Please review the responder safety report and try again.",
+      );
+    } finally {
+      setIsSavingResponderSafety(false);
+    }
+  }
+
   async function handleOpenOnsiteTriage(incident: Incident) {
     setSelectedOnsiteTriageIncident(incident);
     setOnsiteTriageSummary(null);
@@ -1951,6 +2255,97 @@ export default function IncidentsPage() {
     );
   }
 
+  function renderResponderSafetyDateField(
+    label: string,
+    key: keyof Pick<
+      ResponderSafetyFormState,
+      "ppeDecisionAt" | "responseDeactivatedAt"
+    >,
+  ) {
+    return (
+      <View style={styles.timelineFieldGroup}>
+        <View style={styles.timelineLabelRow}>
+          <Text style={styles.fieldLabel}>{label}</Text>
+          {canUpdateOperations ? (
+            <Pressable
+              onPress={() => setResponderSafetyFieldToNow(key)}
+              style={({ pressed }) => [
+                styles.nowButton,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Ionicons
+                name="time-outline"
+                size={14}
+                color={COLORS.maroon}
+              />
+              <Text style={styles.nowButtonText}>Now</Text>
+            </Pressable>
+          ) : null}
+        </View>
+        <TextInput
+          value={responderSafetyForm[key]}
+          onChangeText={(value) =>
+            updateResponderSafetyField(key, value)
+          }
+          style={styles.input}
+          placeholder="mm/dd/yyyy hh:mm"
+          placeholderTextColor={COLORS.mutedText}
+          editable={canUpdateOperations}
+        />
+      </View>
+    );
+  }
+
+  function renderResponderSafetyStatusField() {
+    const options: ResponderSafetyStatus[] = [
+      "yes",
+      "no",
+      "unknown",
+    ];
+
+    return (
+      <View style={styles.timelineFieldGroup}>
+        <Text style={styles.fieldLabel}>
+          RESPONDER SAFETY ACTIONS ESTABLISHED
+        </Text>
+        <View style={styles.timelineOptionRow}>
+          {options.map((option) => {
+            const selected =
+              responderSafetyForm.safetyActionsEstablished === option;
+
+            return (
+              <Pressable
+                key={option}
+                disabled={!canUpdateOperations}
+                onPress={() =>
+                  updateResponderSafetyField(
+                    "safetyActionsEstablished",
+                    option,
+                  )
+                }
+                style={({ pressed }) => [
+                  styles.timelineOptionChip,
+                  selected && styles.timelineOptionChipActive,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.timelineOptionText,
+                    selected && styles.timelineOptionTextActive,
+                  ]}
+                >
+                  {formatSafetyStatus(option)}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+    );
+  }
+
   function renderTriageIntervalSection(
     title: string,
     rows: Array<{
@@ -2192,6 +2587,9 @@ export default function IncidentsPage() {
             }}
             onEditCoordination={() => {
               void handleOpenCoordination(item);
+            }}
+            onEditResponderSafety={() => {
+              void handleOpenResponderSafety(item);
             }}
             onViewOnsiteTriage={() => {
               void handleOpenOnsiteTriage(item);
@@ -3053,6 +3451,246 @@ export default function IncidentsPage() {
                           : "Save Ratings"}
                       </Text>
                       {isSavingCoordination ? (
+                        <ActivityIndicator
+                          size="small"
+                          color={COLORS.white}
+                        />
+                      ) : (
+                        <Ionicons
+                          name="checkmark-circle-outline"
+                          size={19}
+                          color={COLORS.white}
+                        />
+                      )}
+                    </Pressable>
+                  ) : null}
+                </View>
+              </ScrollView>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={isResponderSafetyModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCloseResponderSafetyModal}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={handleCloseResponderSafetyModal}
+        >
+          <Pressable style={styles.timelineSheet}>
+            <View style={styles.sheetHandle} />
+
+            <View style={styles.sheetHeader}>
+              <View style={styles.sheetTitleGroup}>
+                <Text style={styles.sheetTitle}>Responder Safety</Text>
+                <Text
+                  style={styles.sheetSubtitle}
+                  numberOfLines={1}
+                >
+                  {selectedResponderSafetyIncident?.incident_name ??
+                    "Incident"}
+                </Text>
+              </View>
+              <Pressable
+                onPress={handleCloseResponderSafetyModal}
+                style={styles.sheetCloseButton}
+              >
+                <Ionicons
+                  name="close"
+                  size={20}
+                  color={COLORS.secondaryText}
+                />
+              </Pressable>
+            </View>
+
+            {isLoadingResponderSafety ? (
+              <View style={styles.timelineLoading}>
+                <ActivityIndicator
+                  size="small"
+                  color={COLORS.maroon}
+                />
+                <Text style={styles.timelineLoadingText}>
+                  Loading responder safety...
+                </Text>
+              </View>
+            ) : (
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.timelineScrollContent}
+              >
+                <View style={styles.sitrepMetricGrid}>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {responderSafetySummary?.killedPercentage ?? 0}%
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      Killed
+                    </Text>
+                  </View>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {responderSafetySummary
+                        ?.illOrInjuredPercentage ?? 0}
+                      %
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      Ill/Injured
+                    </Text>
+                  </View>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {responderSafetySummary?.deployedResponders ??
+                        0}
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      Deployed
+                    </Text>
+                  </View>
+                </View>
+
+                {renderResponderSafetyStatusField()}
+
+                {renderResponderSafetyDateField(
+                  "PPE DECISION TIME",
+                  "ppeDecisionAt",
+                )}
+
+                {renderResponderSafetyDateField(
+                  "LAST HEALTHCARE FACILITY RESPONSE DEACTIVATION",
+                  "responseDeactivatedAt",
+                )}
+
+                <Text style={styles.fieldLabel}>
+                  ACUTE RESPONSE PHASE
+                </Text>
+                <Text style={styles.sitrepSectionText}>
+                  DMMP activation:{" "}
+                  {formatDateTime(
+                    responderSafetySummary?.dmmpActivatedAt,
+                  )}
+                  {"\n"}Response deactivation:{" "}
+                  {formatDateTime(
+                    responderSafetySummary?.responseDeactivatedAt,
+                  )}
+                </Text>
+
+                <Text style={styles.fieldLabel}>
+                  DEPLOYED RESPONDERS
+                </Text>
+                <TextInput
+                  value={responderSafetyForm.deployedResponders}
+                  onChangeText={(value) =>
+                    updateResponderSafetyField(
+                      "deployedResponders",
+                      value,
+                    )
+                  }
+                  style={styles.input}
+                  placeholder="0"
+                  placeholderTextColor={COLORS.mutedText}
+                  keyboardType="number-pad"
+                  editable={canUpdateOperations}
+                />
+
+                <Text style={styles.fieldLabel}>
+                  INJURED RESPONDERS
+                </Text>
+                <TextInput
+                  value={responderSafetyForm.injuredResponders}
+                  onChangeText={(value) =>
+                    updateResponderSafetyField(
+                      "injuredResponders",
+                      value,
+                    )
+                  }
+                  style={styles.input}
+                  placeholder="0"
+                  placeholderTextColor={COLORS.mutedText}
+                  keyboardType="number-pad"
+                  editable={canUpdateOperations}
+                />
+
+                <Text style={styles.fieldLabel}>ILL RESPONDERS</Text>
+                <TextInput
+                  value={responderSafetyForm.illResponders}
+                  onChangeText={(value) =>
+                    updateResponderSafetyField(
+                      "illResponders",
+                      value,
+                    )
+                  }
+                  style={styles.input}
+                  placeholder="0"
+                  placeholderTextColor={COLORS.mutedText}
+                  keyboardType="number-pad"
+                  editable={canUpdateOperations}
+                />
+
+                <Text style={styles.fieldLabel}>
+                  DECEASED RESPONDERS
+                </Text>
+                <TextInput
+                  value={responderSafetyForm.deceasedResponders}
+                  onChangeText={(value) =>
+                    updateResponderSafetyField(
+                      "deceasedResponders",
+                      value,
+                    )
+                  }
+                  style={styles.input}
+                  placeholder="0"
+                  placeholderTextColor={COLORS.mutedText}
+                  keyboardType="number-pad"
+                  editable={canUpdateOperations}
+                />
+
+                <Text style={styles.staffFormulaText}>
+                  Killed:{" "}
+                  {responderSafetySummary?.deceasedResponders ?? 0} /{" "}
+                  {responderSafetySummary?.deployedResponders ?? 0}
+                  {"\n"}Ill/Injured:{" "}
+                  {responderSafetySummary?.illOrInjuredResponders ??
+                    0}{" "}
+                  / {responderSafetySummary?.deployedResponders ?? 0}
+                </Text>
+
+                <View style={styles.timelineActions}>
+                  <Pressable
+                    onPress={handleCloseResponderSafetyModal}
+                    style={({ pressed }) => [
+                      styles.secondaryButton,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Text style={styles.secondaryButtonText}>
+                      Cancel
+                    </Text>
+                  </Pressable>
+
+                  {canUpdateOperations ? (
+                    <Pressable
+                      disabled={isSavingResponderSafety}
+                      onPress={() => {
+                        void handleSaveResponderSafety();
+                      }}
+                      style={({ pressed }) => [
+                        styles.createButton,
+                        styles.timelineSaveButton,
+                        isSavingResponderSafety &&
+                          styles.disabledButton,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <Text style={styles.createButtonText}>
+                        {isSavingResponderSafety
+                          ? "Saving..."
+                          : "Save Safety"}
+                      </Text>
+                      {isSavingResponderSafety ? (
                         <ActivityIndicator
                           size="small"
                           color={COLORS.white}
