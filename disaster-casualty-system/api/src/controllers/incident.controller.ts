@@ -165,7 +165,14 @@ type FacilityEncounterRow = {
   casualty_incident_id: string;
   facility_id: string | null;
   arrived_at: string | null;
+  ed_admitted_at?: string | null;
+  ed_departed_at?: string | null;
   referred_or_transferred: boolean | null;
+  sought_ed_care?: boolean | null;
+  admitted_to_hospital?: boolean | null;
+  discharged_home?: boolean | null;
+  ed_resuscitation_started_at?: string | null;
+  created_at?: string | null;
 };
 
 type ExportCasualtyRow = {
@@ -317,6 +324,51 @@ function countBy<T>(
   }
 
   return counts;
+}
+
+function calculatePercentage(numerator: number, denominator: number): number {
+  return denominator > 0
+    ? Number(((numerator / denominator) * 100).toFixed(2))
+    : 0;
+}
+
+function minutesBetween(start: string, end: string): number | null {
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+
+  if (
+    Number.isNaN(startDate.getTime()) ||
+    Number.isNaN(endDate.getTime())
+  ) {
+    return null;
+  }
+
+  return Math.max(
+    0,
+    Math.round((endDate.getTime() - startDate.getTime()) / 60000),
+  );
+}
+
+function median(values: number[]): number | null {
+  if (values.length === 0) {
+    return null;
+  }
+
+  const sorted = [...values].sort((first, second) => first - second);
+  const midpoint = Math.floor(sorted.length / 2);
+
+  if (sorted.length % 2 === 1) {
+    return sorted[midpoint] ?? null;
+  }
+
+  const lower = sorted[midpoint - 1];
+  const upper = sorted[midpoint];
+
+  if (lower === undefined || upper === undefined) {
+    return null;
+  }
+
+  return Number(((lower + upper) / 2).toFixed(2));
 }
 
 function formatFacilityLabel(
@@ -2267,6 +2319,264 @@ export async function getIncidentSurvivorDistributionSummary(
                 )
               : 0,
         },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getIncidentEdResourceSummary(
+  request: Request<{ id: string }>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { id } = request.params;
+
+    const { data: incident, error: incidentError } = await supabase
+      .from("incidents")
+      .select("id, started_at")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (incidentError) {
+      throw new Error(
+        `Unable to retrieve incident: ${incidentError.message}`,
+      );
+    }
+
+    if (!incident) {
+      response.status(404).json({
+        success: false,
+        message: "Incident not found.",
+      });
+      return;
+    }
+
+    const { data: timeline, error: timelineError } = await supabase
+      .from("incident_response_timelines")
+      .select("dmmp_activated_at")
+      .eq("incident_id", id)
+      .maybeSingle();
+
+    if (timelineError) {
+      throw new Error(
+        `Unable to retrieve incident timeline: ${timelineError.message}`,
+      );
+    }
+
+    const { data: casualties, error: casualtiesError } =
+      await supabase
+        .from("casualty_incidents")
+        .select("id")
+        .eq("incident_id", id)
+        .is("deleted_at", null);
+
+    if (casualtiesError) {
+      throw new Error(
+        `Unable to retrieve incident casualties: ${casualtiesError.message}`,
+      );
+    }
+
+    const casualtyIncidentIds = (casualties ?? []).map(
+      (item) => item.id,
+    );
+
+    const triageResult =
+      casualtyIncidentIds.length > 0
+        ? await supabase
+            .from("casualty_triage_assessments")
+            .select(
+              "casualty_incident_id, triage_category, triage_stage, triaged_at",
+            )
+            .in("casualty_incident_id", casualtyIncidentIds)
+            .order("triaged_at", { ascending: false })
+        : { data: [], error: null };
+
+    const encounterResult =
+      casualtyIncidentIds.length > 0
+        ? await supabase
+            .from("facility_encounters")
+            .select(
+              "casualty_incident_id, facility_id, arrived_at, ed_admitted_at, ed_departed_at, referred_or_transferred, sought_ed_care, admitted_to_hospital, discharged_home, ed_resuscitation_started_at, created_at",
+            )
+            .in("casualty_incident_id", casualtyIncidentIds)
+            .order("arrived_at", { ascending: true })
+            .order("created_at", { ascending: true })
+        : { data: [], error: null };
+
+    if (triageResult.error) {
+      throw new Error(
+        `Unable to retrieve ED triage data: ${triageResult.error.message}`,
+      );
+    }
+
+    if (encounterResult.error) {
+      throw new Error(
+        `Unable to retrieve ED resource data: ${encounterResult.error.message}`,
+      );
+    }
+
+    const latestTriageByCasualty = new Map<
+      string,
+      TriageAssessmentRow
+    >();
+
+    for (const row of (triageResult.data ?? []) as TriageAssessmentRow[]) {
+      if (!latestTriageByCasualty.has(row.casualty_incident_id)) {
+        latestTriageByCasualty.set(row.casualty_incident_id, row);
+      }
+    }
+
+    const firstEncounterByCasualty = new Map<
+      string,
+      FacilityEncounterRow
+    >();
+
+    for (const row of (encounterResult.data ?? []) as FacilityEncounterRow[]) {
+      if (!firstEncounterByCasualty.has(row.casualty_incident_id)) {
+        firstEncounterByCasualty.set(row.casualty_incident_id, row);
+      }
+    }
+
+    const categories = [
+      "immediate",
+      "delayed",
+      "minimal",
+      "expectant",
+    ] as const;
+
+    const encounterRows = Array.from(firstEncounterByCasualty.values());
+    const soughtEdRows = encounterRows.filter(
+      (row) =>
+        row.sought_ed_care === true ||
+        (
+          row.sought_ed_care !== false &&
+          (Boolean(row.facility_id) || Boolean(row.arrived_at))
+        ),
+    );
+    const totalEdCareSeekers = soughtEdRows.length;
+    const disasterOnsetAt = incident.started_at ?? null;
+    const responseInitiatedAt =
+      timeline?.dmmp_activated_at ?? incident.started_at ?? null;
+    const responseInitiatedDate = responseInitiatedAt
+      ? new Date(responseInitiatedAt)
+      : null;
+    const intervalMinutes = [0, 15, 30, 45, 60];
+
+    const getCategoryForCasualty = (casualtyIncidentId: string) =>
+      latestTriageByCasualty.get(casualtyIncidentId)?.triage_category ??
+      "unknown";
+
+    const buildRatioMetric = (
+      label: string,
+      numerator: number,
+      denominator: number,
+    ) => ({
+      label,
+      numerator,
+      denominator,
+      percentage: calculatePercentage(numerator, denominator),
+    });
+
+    const buildCategorySummary = (
+      category: (typeof categories)[number],
+    ) => {
+      const categoryRows = soughtEdRows.filter(
+        (row) => getCategoryForCasualty(row.casualty_incident_id) === category,
+      );
+      const arrivalIntervals = categoryRows
+        .map((row) =>
+          disasterOnsetAt && row.arrived_at
+            ? minutesBetween(disasterOnsetAt, row.arrived_at)
+            : null,
+        )
+        .filter((value): value is number => value !== null);
+
+      return {
+        soughtCare: buildRatioMetric(
+          "Sought ED/similar facility care",
+          categoryRows.length,
+          totalEdCareSeekers,
+        ),
+        admitted: buildRatioMetric(
+          "Admitted after ED/similar facility care",
+          categoryRows.filter(
+            (row) =>
+              row.admitted_to_hospital === true ||
+              Boolean(row.ed_admitted_at),
+          ).length,
+          categoryRows.length,
+        ),
+        discharged: buildRatioMetric(
+          "Discharged after ED/similar facility care",
+          categoryRows.filter(
+            (row) =>
+              row.discharged_home === true ||
+              Boolean(row.ed_departed_at),
+          ).length,
+          categoryRows.length,
+        ),
+        medianArrivalMinutes: median(arrivalIntervals),
+        arrivalIntervalCount: arrivalIntervals.length,
+      };
+    };
+
+    const t1Rows = soughtEdRows.filter(
+      (row) => getCategoryForCasualty(row.casualty_incident_id) === "immediate",
+    );
+    const resuscitationIntervals = intervalMinutes.map((minutes) => {
+      const cutoff =
+        responseInitiatedDate && !Number.isNaN(responseInitiatedDate.getTime())
+          ? new Date(
+              responseInitiatedDate.getTime() + minutes * 60 * 1000,
+            )
+          : null;
+      const count =
+        cutoff === null
+          ? 0
+          : t1Rows.filter((row) => {
+              if (!row.ed_resuscitation_started_at) {
+                return false;
+              }
+
+              const resuscitationStartedAt = new Date(
+                row.ed_resuscitation_started_at,
+              );
+
+              return (
+                !Number.isNaN(resuscitationStartedAt.getTime()) &&
+                resuscitationStartedAt <= cutoff
+              );
+            }).length;
+
+      return {
+        minutes,
+        cutoffAt: cutoff?.toISOString() ?? null,
+        count,
+        totalT1EdCareSeekers: t1Rows.length,
+      };
+    });
+
+    response.status(200).json({
+      success: true,
+      data: {
+        incidentId: id,
+        totalSurvivors: casualtyIncidentIds.length,
+        totalEdCareSeekers,
+        disasterOnsetAt,
+        responseInitiatedAt,
+        responseInitiationSource: timeline?.dmmp_activated_at
+          ? "dmmp_activated_at"
+          : "incident_started_at",
+        categories: {
+          immediate: buildCategorySummary("immediate"),
+          delayed: buildCategorySummary("delayed"),
+          minimal: buildCategorySummary("minimal"),
+          expectant: buildCategorySummary("expectant"),
+        },
+        resuscitationIntervals,
       },
     });
   } catch (error) {

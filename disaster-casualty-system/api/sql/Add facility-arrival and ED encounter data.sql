@@ -14,8 +14,10 @@ CREATE TABLE IF NOT EXISTS public.facility_encounters (
 
   disposition varchar(30),
   referred_or_transferred boolean,
+  sought_ed_care boolean,
   admitted_to_hospital boolean,
   discharged_home boolean,
+  ed_resuscitation_started_at timestamptz,
 
   recorded_by uuid
     REFERENCES public.users(id) ON DELETE SET NULL,
@@ -43,8 +45,10 @@ ALTER TABLE public.facility_encounters
   ADD COLUMN IF NOT EXISTS ed_departed_at timestamptz,
   ADD COLUMN IF NOT EXISTS disposition varchar(30),
   ADD COLUMN IF NOT EXISTS referred_or_transferred boolean,
+  ADD COLUMN IF NOT EXISTS sought_ed_care boolean,
   ADD COLUMN IF NOT EXISTS admitted_to_hospital boolean,
   ADD COLUMN IF NOT EXISTS discharged_home boolean,
+  ADD COLUMN IF NOT EXISTS ed_resuscitation_started_at timestamptz,
   ADD COLUMN IF NOT EXISTS recorded_by uuid,
   ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
 
@@ -72,6 +76,12 @@ CREATE INDEX IF NOT EXISTS facility_encounters_facility_idx
 
 CREATE INDEX IF NOT EXISTS facility_encounters_transfer_idx
   ON public.facility_encounters(referred_or_transferred);
+
+CREATE INDEX IF NOT EXISTS facility_encounters_ed_care_idx
+  ON public.facility_encounters(sought_ed_care, arrived_at);
+
+CREATE INDEX IF NOT EXISTS facility_encounters_ed_resuscitation_idx
+  ON public.facility_encounters(ed_resuscitation_started_at);
 
 ALTER TABLE public.facility_encounters ENABLE ROW LEVEL SECURITY;
 

@@ -537,16 +537,77 @@ function validateFacilityEncounter(
     return false;
   }
 
-  if (facilityEncounter.arrivedAt) {
-    const arrivedAt = new Date(facilityEncounter.arrivedAt);
+  const arrivedAt = facilityEncounter.arrivedAt
+    ? new Date(facilityEncounter.arrivedAt)
+    : null;
+  const edAdmittedAt = facilityEncounter.edAdmittedAt
+    ? new Date(facilityEncounter.edAdmittedAt)
+    : null;
+  const edDepartedAt = facilityEncounter.edDepartedAt
+    ? new Date(facilityEncounter.edDepartedAt)
+    : null;
+  const edResuscitationStartedAt =
+    facilityEncounter.edResuscitationStartedAt
+      ? new Date(facilityEncounter.edResuscitationStartedAt)
+      : null;
 
-    if (Number.isNaN(arrivedAt.getTime())) {
-      response.status(400).json({
-        success: false,
-        message: "Invalid facility arrival time.",
-      });
-      return false;
-    }
+  if (arrivedAt && Number.isNaN(arrivedAt.getTime())) {
+    response.status(400).json({
+      success: false,
+      message: "Invalid facility arrival time.",
+    });
+    return false;
+  }
+
+  if (edAdmittedAt && Number.isNaN(edAdmittedAt.getTime())) {
+    response.status(400).json({
+      success: false,
+      message: "Invalid ED admission time.",
+    });
+    return false;
+  }
+
+  if (edDepartedAt && Number.isNaN(edDepartedAt.getTime())) {
+    response.status(400).json({
+      success: false,
+      message: "Invalid ED discharge time.",
+    });
+    return false;
+  }
+
+  if (
+    edResuscitationStartedAt &&
+    Number.isNaN(edResuscitationStartedAt.getTime())
+  ) {
+    response.status(400).json({
+      success: false,
+      message: "Invalid ED resuscitation room time.",
+    });
+    return false;
+  }
+
+  if (arrivedAt && edAdmittedAt && edAdmittedAt < arrivedAt) {
+    response.status(400).json({
+      success: false,
+      message: "ED admission time cannot be before facility arrival time.",
+    });
+    return false;
+  }
+
+  if (arrivedAt && edDepartedAt && edDepartedAt < arrivedAt) {
+    response.status(400).json({
+      success: false,
+      message: "ED discharge time cannot be before facility arrival time.",
+    });
+    return false;
+  }
+
+  if (edAdmittedAt && edDepartedAt && edDepartedAt < edAdmittedAt) {
+    response.status(400).json({
+      success: false,
+      message: "ED discharge time cannot be before ED admission time.",
+    });
+    return false;
   }
 
   return true;
@@ -714,8 +775,16 @@ async function insertFacilityEncounter(
       casualty_incident_id: casualtyIncidentId,
       facility_id: facilityEncounter.facilityId,
       arrived_at: facilityEncounter.arrivedAt ?? null,
+      ed_admitted_at: facilityEncounter.edAdmittedAt ?? null,
+      ed_departed_at: facilityEncounter.edDepartedAt ?? null,
       referred_or_transferred:
         facilityEncounter.referredOrTransferred ?? null,
+      sought_ed_care: facilityEncounter.soughtEdCare ?? null,
+      admitted_to_hospital:
+        facilityEncounter.admittedToHospital ?? null,
+      discharged_home: facilityEncounter.dischargedHome ?? null,
+      ed_resuscitation_started_at:
+        facilityEncounter.edResuscitationStartedAt ?? null,
       disposition: facilityEncounter.disposition ?? "unknown",
       recorded_by: userId,
     });
@@ -1031,6 +1100,11 @@ export async function createCasualty(
         incidentDetails.healthcareFacilityId,
       arrivedAt: transportRecord?.arrivedFacilityAt,
       referredOrTransferred: null,
+      soughtEdCare:
+        Boolean(
+          transportRecord?.receivingFacilityId ??
+            incidentDetails.healthcareFacilityId,
+        ) || null,
       disposition: "unknown",
     };
 
@@ -2170,6 +2244,7 @@ export async function updateCasualty(
               incidentDetails?.healthcareFacilityId,
             arrivedAt: transportRecord?.arrivedFacilityAt,
             referredOrTransferred: null,
+            soughtEdCare: true,
             disposition: "unknown",
           }
         : undefined

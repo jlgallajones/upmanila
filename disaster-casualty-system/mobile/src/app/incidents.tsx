@@ -28,6 +28,7 @@ import {
   getCoordinationAssessment,
   getDmmpStaff,
   getDmmpStaffSummary,
+  getEdResourceSummary,
   getFacilityTriageSummary,
   getIncidents,
   getIncidentTimeline,
@@ -45,6 +46,7 @@ import {
   type DisruptionLevel,
   type DmmpStaffRecord,
   type DmmpStaffSummary,
+  type EdResourceSummary,
   type FacilityTriageSummary,
   type MedicalCoordinationAssessment,
   type OnsiteCareSummary,
@@ -782,6 +784,29 @@ function formatFacilityLevelLabel(value: string): string {
   }
 }
 
+function formatTriageCategoryLabel(value: string): string {
+  switch (value) {
+    case "immediate":
+      return "T1 Immediate";
+    case "delayed":
+      return "T2 Delayed";
+    case "minimal":
+      return "T3 Minor";
+    case "expectant":
+      return "T4 Expectant";
+    default:
+      return value;
+  }
+}
+
+function formatMinuteLabel(value: number): string {
+  if (value === 0) {
+    return "0 min";
+  }
+
+  return value === 60 ? "1 hour" : `${value} min`;
+}
+
 function IncidentCard({
   incident,
   canClose,
@@ -796,6 +821,7 @@ function IncidentCard({
   onViewOnsiteCare,
   onViewSceneClearance,
   onViewDistribution,
+  onViewEdResources,
   onGenerateSitrep,
   isGeneratingSitrep,
 }: {
@@ -812,6 +838,7 @@ function IncidentCard({
   onViewOnsiteCare: () => void;
   onViewSceneClearance: () => void;
   onViewDistribution: () => void;
+  onViewEdResources: () => void;
   onGenerateSitrep: () => void;
   isGeneratingSitrep: boolean;
 }) {
@@ -1032,6 +1059,23 @@ function IncidentCard({
       </Pressable>
 
       <Pressable
+        onPress={onViewEdResources}
+        style={({ pressed }) => [
+          styles.triageButton,
+          pressed && styles.pressed,
+        ]}
+      >
+        <Ionicons
+          name="bed-outline"
+          size={17}
+          color={COLORS.maroon}
+        />
+        <Text style={styles.timelineButtonText}>
+          ED Resources
+        </Text>
+      </Pressable>
+
+      <Pressable
         disabled={isGeneratingSitrep}
         onPress={onGenerateSitrep}
         style={({ pressed }) => [
@@ -1235,6 +1279,14 @@ export default function IncidentsPage() {
   const [distributionSummary, setDistributionSummary] =
     useState<SurvivorDistributionSummary | null>(null);
   const [isLoadingDistribution, setIsLoadingDistribution] =
+    useState(false);
+  const [isEdResourceModalVisible, setIsEdResourceModalVisible] =
+    useState(false);
+  const [selectedEdResourceIncident, setSelectedEdResourceIncident] =
+    useState<Incident | null>(null);
+  const [edResourceSummary, setEdResourceSummary] =
+    useState<EdResourceSummary | null>(null);
+  const [isLoadingEdResource, setIsLoadingEdResource] =
     useState(false);
   const [sitrep, setSitrep] = useState<IncidentSitrep | null>(null);
   const [isSitrepModalVisible, setIsSitrepModalVisible] =
@@ -2407,6 +2459,36 @@ export default function IncidentsPage() {
     setDistributionSummary(null);
   }
 
+  async function handleOpenEdResources(incident: Incident) {
+    setSelectedEdResourceIncident(incident);
+    setEdResourceSummary(null);
+    setIsEdResourceModalVisible(true);
+    setIsLoadingEdResource(true);
+
+    try {
+      const summary = await getEdResourceSummary(incident.id);
+
+      setEdResourceSummary(summary);
+    } catch (error) {
+      console.error("Unable to load ED resources:", error);
+
+      Alert.alert(
+        "Unable to load ED resources",
+        error instanceof Error
+          ? error.message
+          : "Please try again.",
+      );
+    } finally {
+      setIsLoadingEdResource(false);
+    }
+  }
+
+  function handleCloseEdResourceModal() {
+    setIsEdResourceModalVisible(false);
+    setSelectedEdResourceIncident(null);
+    setEdResourceSummary(null);
+  }
+
   function renderTimelineDateField(
     label: string,
     key: keyof TimelineFormState,
@@ -2857,6 +2939,65 @@ export default function IncidentsPage() {
     );
   }
 
+  function renderEdCategoryRow(
+    category: keyof EdResourceSummary["categories"],
+    summary: EdResourceSummary,
+  ) {
+    const categorySummary = summary.categories[category];
+    const medianText =
+      categorySummary.medianArrivalMinutes === null
+        ? "No arrival time"
+        : `${categorySummary.medianArrivalMinutes} min`;
+
+    return (
+      <View key={category} style={styles.triageAccuracyRow}>
+        <View style={styles.triageAccuracyTextGroup}>
+          <Text style={styles.triageAccuracyTitle}>
+            {formatTriageCategoryLabel(category)}
+          </Text>
+          <Text style={styles.triageAccuracyDescription}>
+            Care {categorySummary.soughtCare.numerator}/
+            {categorySummary.soughtCare.denominator} -{" "}
+            {categorySummary.soughtCare.percentage}%
+            {"\n"}Admitted {categorySummary.admitted.numerator}/
+            {categorySummary.admitted.denominator} -{" "}
+            {categorySummary.admitted.percentage}%
+            {"\n"}Discharged {categorySummary.discharged.numerator}/
+            {categorySummary.discharged.denominator} -{" "}
+            {categorySummary.discharged.percentage}%
+          </Text>
+        </View>
+        <Text style={styles.triageAccuracyValue}>
+          {medianText}
+        </Text>
+      </View>
+    );
+  }
+
+  function renderEdResuscitationIntervals(summary: EdResourceSummary) {
+    return (
+      <View style={styles.triageIntervalSection}>
+        <Text style={styles.triageIntervalTitle}>
+          T1 RESUSCITATION ROOM BY INTERVAL
+        </Text>
+        <View style={styles.triageIntervalHeader}>
+          <Text style={styles.triageIntervalHeaderText}>Interval</Text>
+          <Text style={styles.triageIntervalHeaderText}>Count</Text>
+        </View>
+        {summary.resuscitationIntervals.map((row) => (
+          <View key={row.minutes} style={styles.triageIntervalRow}>
+            <Text style={styles.triageIntervalText}>
+              {formatMinuteLabel(row.minutes)}
+            </Text>
+            <Text style={styles.triageIntervalValue}>
+              {row.count}/{row.totalT1EdCareSeekers}
+            </Text>
+          </View>
+        ))}
+      </View>
+    );
+  }
+
   if (isLoading) {
     return (
       <View style={styles.centerState}>
@@ -2989,6 +3130,9 @@ export default function IncidentsPage() {
             }}
             onViewDistribution={() => {
               void handleOpenDistribution(item);
+            }}
+            onViewEdResources={() => {
+              void handleOpenEdResources(item);
             }}
             onGenerateSitrep={() => {
               void handleGenerateSitrep(item);
@@ -5005,6 +5149,134 @@ export default function IncidentsPage() {
       </Modal>
 
       <Modal
+        visible={isEdResourceModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCloseEdResourceModal}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={handleCloseEdResourceModal}
+        >
+          <Pressable style={styles.timelineSheet}>
+            <View style={styles.sheetHandle} />
+
+            <View style={styles.sheetHeader}>
+              <View style={styles.sheetTitleGroup}>
+                <Text style={styles.sheetTitle}>ED Resources</Text>
+                <Text
+                  style={styles.sheetSubtitle}
+                  numberOfLines={1}
+                >
+                  {selectedEdResourceIncident?.incident_name ??
+                    "Incident"}
+                </Text>
+              </View>
+              <Pressable
+                onPress={handleCloseEdResourceModal}
+                style={styles.sheetCloseButton}
+              >
+                <Ionicons
+                  name="close"
+                  size={20}
+                  color={COLORS.secondaryText}
+                />
+              </Pressable>
+            </View>
+
+            {isLoadingEdResource ? (
+              <View style={styles.timelineLoading}>
+                <ActivityIndicator
+                  size="small"
+                  color={COLORS.maroon}
+                />
+                <Text style={styles.timelineLoadingText}>
+                  Loading ED resources...
+                </Text>
+              </View>
+            ) : edResourceSummary ? (
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.timelineScrollContent}
+              >
+                <View style={styles.sitrepMetricGrid}>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {edResourceSummary.totalSurvivors}
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      Survivors
+                    </Text>
+                  </View>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {edResourceSummary.totalEdCareSeekers}
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      ED Care
+                    </Text>
+                  </View>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {
+                        edResourceSummary.categories.immediate
+                          .soughtCare.numerator
+                      }
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      T1 ED Care
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={styles.fieldLabel}>
+                  ED / SIMILAR FACILITY CARE BY TRIAGE
+                </Text>
+                <Text style={styles.sitrepSectionText}>
+                  Disaster onset:{" "}
+                  {formatDateTime(edResourceSummary.disasterOnsetAt)}
+                  {"\n"}Response initiation:{" "}
+                  {formatDateTime(
+                    edResourceSummary.responseInitiatedAt,
+                  )}
+                </Text>
+
+                <View style={styles.triageAccuracyList}>
+                  {(
+                    [
+                      "immediate",
+                      "delayed",
+                      "minimal",
+                      "expectant",
+                    ] as const
+                  ).map((category) =>
+                    renderEdCategoryRow(category, edResourceSummary),
+                  )}
+                </View>
+
+                {renderEdResuscitationIntervals(edResourceSummary)}
+
+                <Pressable
+                  onPress={handleCloseEdResourceModal}
+                  style={({ pressed }) => [
+                    styles.createButton,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={styles.createButtonText}>Done</Text>
+                  <Ionicons
+                    name="checkmark-circle-outline"
+                    size={19}
+                    color={COLORS.white}
+                  />
+                </Pressable>
+              </ScrollView>
+            ) : null}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
         visible={isSitrepModalVisible}
         transparent
         animationType="fade"
@@ -5818,6 +6090,12 @@ const styles = StyleSheet.create({
   },
   triageIntervalSection: {
     marginTop: 4,
+  },
+  triageIntervalTitle: {
+    color: COLORS.text,
+    fontSize: 11,
+    fontWeight: "900",
+    marginBottom: 8,
   },
   triageIntervalHeader: {
     minHeight: 34,

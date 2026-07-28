@@ -272,6 +272,12 @@ export type FacilityEncounterPayload = {
   facilityId?: string;
   arrivedAt?: string;
   referredOrTransferred?: boolean | null;
+  soughtEdCare?: boolean | null;
+  admittedToHospital?: boolean | null;
+  dischargedHome?: boolean | null;
+  edAdmittedAt?: string;
+  edDepartedAt?: string;
+  edResuscitationStartedAt?: string;
   disposition?:
     | "active_care"
     | "hospital_admission"

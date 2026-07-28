@@ -448,6 +448,7 @@ const TREATMENT_STRATEGY_OPTIONS = [
 ] as const;
 
 const TRANSFERRED_OUT_OPTIONS = ["Yes", "No", "Unknown"] as const;
+const ED_CARE_OPTIONS = ["Yes", "No", "Unknown"] as const;
 
 const FACILITY_LEVEL_OPTIONS = [
   "Primary",
@@ -480,6 +481,9 @@ type ChoiceSheetName =
   | "emsUnitType"
   | "treatmentStrategy"
   | "transferredOutOfHospital"
+  | "soughtEdCare"
+  | "admittedAfterEd"
+  | "dischargedAfterEd"
   | "casualtyStatus"
   | "severity";
 
@@ -543,6 +547,10 @@ type FormState = {
   stabilizedTime: string;
   treatmentNotes: string;
   transferredOutOfHospital: string;
+  soughtEdCare: string;
+  admittedAfterEd: string;
+  dischargedAfterEd: string;
+  edResuscitationTime: string;
 
   casualtyStatus: string;
   severity: string;
@@ -619,6 +627,10 @@ const initialForm: FormState = {
   stabilizedTime: "",
   treatmentNotes: "",
   transferredOutOfHospital: "",
+  soughtEdCare: "",
+  admittedAfterEd: "",
+  dischargedAfterEd: "",
+  edResuscitationTime: "",
 
   casualtyStatus: "",
   severity: "",
@@ -926,6 +938,10 @@ function normalizeTransferredOut(
   }
 }
 
+function normalizeYesNoUnknown(value: string): boolean | null {
+  return normalizeTransferredOut(value);
+}
+
 function formatTransportRequired(
   value: string | null | undefined,
 ): string {
@@ -1218,6 +1234,11 @@ function getTreatmentFormSignature(form: FormState): string {
     notes: form.treatmentNotes.trim(),
     transferredOut:
       normalizeTransferredOut(form.transferredOutOfHospital),
+    soughtEdCare: normalizeYesNoUnknown(form.soughtEdCare),
+    admittedAfterEd: normalizeYesNoUnknown(form.admittedAfterEd),
+    dischargedAfterEd: normalizeYesNoUnknown(form.dischargedAfterEd),
+    edResuscitationTime:
+      parseDateTimeInput(form.edResuscitationTime) ?? "",
   });
 }
 
@@ -1370,6 +1391,10 @@ function mapRecordToForm(
     stabilizedTime: "",
     treatmentNotes: "",
     transferredOutOfHospital: "",
+    soughtEdCare: "",
+    admittedAfterEd: "",
+    dischargedAfterEd: "",
+    edResuscitationTime: "",
 
     casualtyStatus: titleCase(record.current_status),
     severity: titleCase(record.severity),
@@ -1885,6 +1910,9 @@ export default function AddCasualtyScreen() {
     emsUnitType: isEditing ? "" : "Unknown",
     treatmentStrategy: isEditing ? "" : "Unknown",
     transferredOutOfHospital: isEditing ? "" : "Unknown",
+    soughtEdCare: isEditing ? "" : "Unknown",
+    admittedAfterEd: isEditing ? "" : "Unknown",
+    dischargedAfterEd: isEditing ? "" : "Unknown",
   }));
   const [isLoadingRecord, setIsLoadingRecord] =
     useState(isEditing);
@@ -2116,13 +2144,35 @@ export default function AddCasualtyScreen() {
     const referredOrTransferred = normalizeTransferredOut(
       form.transferredOutOfHospital,
     );
+    const soughtEdCare = normalizeYesNoUnknown(form.soughtEdCare);
+    const admittedToHospital = normalizeYesNoUnknown(
+      form.admittedAfterEd,
+    );
+    const dischargedHome = normalizeYesNoUnknown(
+      form.dischargedAfterEd,
+    );
+    const hasFacilityCare =
+      Boolean(form.healthcareFacilityId) ||
+      Boolean(form.arrivedFacilityTime.trim());
 
     return {
       facilityId: form.healthcareFacilityId,
       arrivedAt: parseDateTimeInput(form.arrivedFacilityTime),
       referredOrTransferred,
+      soughtEdCare: soughtEdCare ?? (hasFacilityCare ? true : null),
+      admittedToHospital,
+      dischargedHome,
+      edResuscitationStartedAt: parseDateTimeInput(
+        form.edResuscitationTime,
+      ),
       disposition:
-        referredOrTransferred === true ? "transferred" : "unknown",
+        referredOrTransferred === true
+          ? "transferred"
+          : admittedToHospital === true
+            ? "hospital_admission"
+            : dischargedHome === true
+              ? "discharged_home"
+              : "unknown",
     };
   }, [form, initialTreatmentSignature, isEditing]);
 
@@ -2702,6 +2752,20 @@ export default function AddCasualtyScreen() {
           return false;
         }
 
+        const hasEdDetails =
+          normalizeYesNoUnknown(form.soughtEdCare) === true ||
+          normalizeYesNoUnknown(form.admittedAfterEd) === true ||
+          normalizeYesNoUnknown(form.dischargedAfterEd) === true ||
+          form.edResuscitationTime.trim();
+
+        if (hasEdDetails && !form.healthcareFacilityId) {
+          Alert.alert(
+            "Healthcare facility required",
+            "Select the receiving healthcare facility before recording ED resource use.",
+          );
+          return false;
+        }
+
         const treatmentStrategy = normalizeTreatmentStrategy(
           form.treatmentStrategy,
         );
@@ -2711,6 +2775,12 @@ export default function AddCasualtyScreen() {
             : null;
         const stabilizedAt = form.stabilizedTime.trim()
           ? getValidDateTimeInput(form.stabilizedTime)
+          : null;
+        const arrivedFacilityAt = form.arrivedFacilityTime.trim()
+          ? getValidDateTimeInput(form.arrivedFacilityTime)
+          : null;
+        const edResuscitationAt = form.edResuscitationTime.trim()
+          ? getValidDateTimeInput(form.edResuscitationTime)
           : null;
 
         if (
@@ -2728,6 +2798,17 @@ export default function AddCasualtyScreen() {
           Alert.alert(
             "Invalid stabilized time",
             "Enter stabilized time using mm/dd/yyyy hh:mm.",
+          );
+          return false;
+        }
+
+        if (
+          form.edResuscitationTime.trim() &&
+          !edResuscitationAt
+        ) {
+          Alert.alert(
+            "Invalid resuscitation time",
+            "Enter ED resuscitation room time using mm/dd/yyyy hh:mm.",
           );
           return false;
         }
@@ -2753,6 +2834,18 @@ export default function AddCasualtyScreen() {
           Alert.alert(
             "Invalid care times",
             "Stabilized time cannot be before the stabilization start time.",
+          );
+          return false;
+        }
+
+        if (
+          arrivedFacilityAt &&
+          edResuscitationAt &&
+          edResuscitationAt < arrivedFacilityAt
+        ) {
+          Alert.alert(
+            "Invalid ED time",
+            "ED resuscitation room time cannot be before facility arrival time.",
           );
           return false;
         }
@@ -3195,6 +3288,12 @@ export default function AddCasualtyScreen() {
         return "Select On-site Care";
       case "transferredOutOfHospital":
         return "Transferred Out of Hospital";
+      case "soughtEdCare":
+        return "ED / Similar Facility Care";
+      case "admittedAfterEd":
+        return "ED Admission";
+      case "dischargedAfterEd":
+        return "ED Discharge";
       case "casualtyStatus":
         return "Select Casualty Status";
       case "severity":
@@ -3415,6 +3514,32 @@ export default function AddCasualtyScreen() {
             option.toLowerCase(),
           onSelect: () =>
             updateField("transferredOutOfHospital", option),
+        }));
+
+      case "soughtEdCare":
+        return ED_CARE_OPTIONS.map((option) => ({
+          label: option,
+          selected:
+            form.soughtEdCare.toLowerCase() === option.toLowerCase(),
+          onSelect: () => updateField("soughtEdCare", option),
+        }));
+
+      case "admittedAfterEd":
+        return ED_CARE_OPTIONS.map((option) => ({
+          label: option,
+          selected:
+            form.admittedAfterEd.toLowerCase() ===
+            option.toLowerCase(),
+          onSelect: () => updateField("admittedAfterEd", option),
+        }));
+
+      case "dischargedAfterEd":
+        return ED_CARE_OPTIONS.map((option) => ({
+          label: option,
+          selected:
+            form.dischargedAfterEd.toLowerCase() ===
+            option.toLowerCase(),
+          onSelect: () => updateField("dischargedAfterEd", option),
         }));
 
       case "casualtyStatus":
@@ -4507,6 +4632,58 @@ export default function AddCasualtyScreen() {
             openChoiceSheet("transferredOutOfHospital")
           }
         />
+
+        <SelectField
+          label="ED / SIMILAR FACILITY CARE"
+          value={form.soughtEdCare}
+          placeholder="Select ED care use"
+          onPress={() => openChoiceSheet("soughtEdCare")}
+        />
+
+        <SelectField
+          label="ADMITTED AFTER ED / SIMILAR CARE"
+          value={form.admittedAfterEd}
+          placeholder="Select admission status"
+          onPress={() => openChoiceSheet("admittedAfterEd")}
+        />
+
+        <SelectField
+          label="DISCHARGED HOME AFTER ED / SIMILAR CARE"
+          value={form.dischargedAfterEd}
+          placeholder="Select discharge status"
+          onPress={() => openChoiceSheet("dischargedAfterEd")}
+        />
+
+        <FormField
+          label="ED RESUSCITATION ROOM TIME"
+          value={form.edResuscitationTime}
+          placeholder="mm/dd/yyyy hh:mm"
+          onChangeText={(value) =>
+            updateField("edResuscitationTime", value)
+          }
+        />
+
+        <Pressable
+          onPress={() =>
+            updateField(
+              "edResuscitationTime",
+              formatDateTimeForInput(new Date()),
+            )
+          }
+          style={({ pressed }) => [
+            styles.locationButton,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Ionicons
+            name="medical-outline"
+            size={19}
+            color={COLORS.maroon}
+          />
+          <Text style={styles.locationButtonText}>
+            Use current ED resuscitation time
+          </Text>
+        </Pressable>
 
         <FormField
           label="VISIBLE INJURY"

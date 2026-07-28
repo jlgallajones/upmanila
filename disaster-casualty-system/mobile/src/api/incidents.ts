@@ -335,6 +335,42 @@ export type SurvivorDistributionSummary = {
   interhospitalTransfer: SurvivorDistributionRatioMetric;
 };
 
+export type EdResourceRatioMetric = {
+  label: string;
+  numerator: number;
+  denominator: number;
+  percentage: number;
+};
+
+export type EdResourceCategorySummary = {
+  soughtCare: EdResourceRatioMetric;
+  admitted: EdResourceRatioMetric;
+  discharged: EdResourceRatioMetric;
+  medianArrivalMinutes: number | null;
+  arrivalIntervalCount: number;
+};
+
+export type EdResuscitationIntervalMetric = {
+  minutes: number;
+  cutoffAt: string | null;
+  count: number;
+  totalT1EdCareSeekers: number;
+};
+
+export type EdResourceSummary = {
+  incidentId: string;
+  totalSurvivors: number;
+  totalEdCareSeekers: number;
+  disasterOnsetAt: string | null;
+  responseInitiatedAt: string | null;
+  responseInitiationSource: string;
+  categories: Record<
+    "immediate" | "delayed" | "minimal" | "expectant",
+    EdResourceCategorySummary
+  >;
+  resuscitationIntervals: EdResuscitationIntervalMetric[];
+};
+
 export type CoordinationAssessmentPayload = {
   initialActionsRating?: CoordinationRating | null;
   sceneCoordinationRating?: CoordinationRating | null;
@@ -483,6 +519,11 @@ type SceneClearanceSummaryResponse = {
 type SurvivorDistributionSummaryResponse = {
   success: boolean;
   data: SurvivorDistributionSummary;
+};
+
+type EdResourceSummaryResponse = {
+  success: boolean;
+  data: EdResourceSummary;
 };
 
 type IncidentSitrepResponse = {
@@ -744,6 +785,16 @@ export async function getSurvivorDistributionSummary(
 ): Promise<SurvivorDistributionSummary> {
   const response = await api.get<SurvivorDistributionSummaryResponse>(
     `/incidents/${encodeURIComponent(id)}/survivor-distribution-summary`,
+  );
+
+  return response.data.data;
+}
+
+export async function getEdResourceSummary(
+  id: string,
+): Promise<EdResourceSummary> {
+  const response = await api.get<EdResourceSummaryResponse>(
+    `/incidents/${encodeURIComponent(id)}/ed-resource-summary`,
   );
 
   return response.data.data;
