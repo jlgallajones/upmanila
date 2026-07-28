@@ -5,6 +5,7 @@ import {
   Animated,
   Easing,
   Pressable,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -102,110 +103,117 @@ export default function LandingScreen() {
       <View style={styles.centerGlow} />
 
       <SafeAreaView style={styles.safeArea}>
-        <Animated.View
-          style={[
-            styles.content,
-            {
-              opacity: entrance,
-              transform: [{ translateY: contentTranslateY }],
-            },
-          ]}
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          bounces={false}
         >
-          <View style={styles.brandSection}>
-            <Image
-              source={require("../assets/UP-Logo.svg")}
-              style={styles.logo}
-              contentFit="contain"
-              accessibilityLabel="University of the Philippines logo"
-            />
+          <Animated.View
+            style={[
+              styles.content,
+              {
+                opacity: entrance,
+                transform: [{ translateY: contentTranslateY }],
+              },
+            ]}
+          >
+            <View style={styles.brandSection}>
+              <Image
+                source={require("../assets/UP-Logo.svg")}
+                style={styles.logo}
+                contentFit="contain"
+                accessibilityLabel="University of the Philippines logo"
+              />
 
-            <View style={styles.institutionRow}>
-              <View style={styles.verticalLine} />
+              <View style={styles.institutionRow}>
+                <View style={styles.verticalLine} />
 
-              <View style={styles.institutionTextWrapper}>
-                <Text style={styles.republicText}>
-                  REPUBLIC OF THE PHILIPPINES
-                </Text>
+                <View style={styles.institutionTextWrapper}>
+                  <Text style={styles.republicText}>
+                    REPUBLIC OF THE PHILIPPINES
+                  </Text>
 
-                <Text style={styles.institutionText}>
-                  UNIVERSITY OF THE PHILIPPINES
-                </Text>
+                  <Text style={styles.institutionText}>
+                    UNIVERSITY OF THE PHILIPPINES
+                  </Text>
+                </View>
+
+                <View style={styles.verticalLine} />
               </View>
-
-              <View style={styles.verticalLine} />
             </View>
-          </View>
 
-          <View style={styles.emblemSection}>
-            <View style={styles.pulseContainer}>
-              <Animated.View
-                style={[
-                  styles.outerPulse,
-                  {
-                    opacity: ringOpacity,
-                    transform: [{ scale: outerRingScale }],
-                  },
-                ]}
-              />
+            <View style={styles.emblemSection}>
+              <View style={styles.pulseContainer}>
+                <Animated.View
+                  style={[
+                    styles.outerPulse,
+                    {
+                      opacity: ringOpacity,
+                      transform: [{ scale: outerRingScale }],
+                    },
+                  ]}
+                />
 
-              <Animated.View
-                style={[
-                  styles.middlePulse,
-                  {
-                    opacity: ringOpacity,
-                    transform: [{ scale: middleRingScale }],
-                  },
-                ]}
-              />
+                <Animated.View
+                  style={[
+                    styles.middlePulse,
+                    {
+                      opacity: ringOpacity,
+                      transform: [{ scale: middleRingScale }],
+                    },
+                  ]}
+                />
 
-              <View style={styles.innerRing}>
-                <View style={styles.shieldContainer}>
-                  <EmergencyShield size={102} />
+                <View style={styles.innerRing}>
+                  <View style={styles.shieldContainer}>
+                    <EmergencyShield size={102} />
+                  </View>
                 </View>
               </View>
+
+              <View style={styles.acronymBadge}>
+                <Text style={styles.acronym}>DCMS</Text>
+              </View>
             </View>
 
-            <View style={styles.acronymBadge}>
-              <Text style={styles.acronym}>DCMS</Text>
-            </View>
-          </View>
+            <View style={styles.titleSection}>
+              <Text style={styles.title}>
+                Disaster Casualty{"\n"}Management System
+              </Text>
 
-          <View style={styles.titleSection}>
-            <Text style={styles.title}>
-              Disaster Casualty{"\n"}Management System
-            </Text>
-
-            <Text style={styles.subtitle}>
-              Emergency Response Information Platform
-            </Text>
-          </View>
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.continueButton,
-              pressed && styles.continueButtonPressed,
-            ]}
-            onPress={continueToApp}
-            accessibilityRole="button"
-            accessibilityLabel="Continue to app"
-          >
-            <Text style={styles.continueButtonText}>Continue</Text>
-          </Pressable>
-
-          <View style={styles.footer}>
-            <View style={styles.footerLine} />
-
-            <View style={styles.upBadge}>
-              <Text style={styles.upBadgeText}>UP</Text>
+              <Text style={styles.subtitle}>
+                Emergency Response Information Platform
+              </Text>
             </View>
 
-            <Text style={styles.footerText}>
-              University of the Philippines
-            </Text>
+            <Pressable
+              style={({ pressed }) => [
+                styles.continueButton,
+                pressed && styles.continueButtonPressed,
+              ]}
+              onPress={continueToApp}
+              accessibilityRole="button"
+              accessibilityLabel="Continue to app"
+            >
+              <Text style={styles.continueButtonText}>Continue</Text>
+            </Pressable>
 
-            <View style={styles.footerLine} />
-          </View>
-        </Animated.View>
+            <View style={styles.footer}>
+              <View style={styles.footerLine} />
+
+              <View style={styles.upBadge}>
+                <Text style={styles.upBadgeText}>UP</Text>
+              </View>
+
+              <Text style={styles.footerText}>
+                University of the Philippines
+              </Text>
+
+              <View style={styles.footerLine} />
+            </View>
+          </Animated.View>
+        </ScrollView>
       </SafeAreaView>
     </View>
   );
@@ -214,15 +222,21 @@ export default function LandingScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    overflow: "hidden",
     backgroundColor: COLORS.upMaroon,
   },
   safeArea: {
     flex: 1,
   },
-  content: {
+  scrollView: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
+  content: {
+    flexGrow: 1,
     alignItems: "center",
+    width: "100%",
     paddingHorizontal: 24,
     paddingTop: 18,
     paddingBottom: 22,

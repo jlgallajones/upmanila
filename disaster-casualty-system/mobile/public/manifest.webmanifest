@@ -1,0 +1,25 @@
+{
+  "name": "Disaster Casualty Management System",
+  "short_name": "DCMS",
+  "description": "Emergency response casualty records and incident management.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#7B1113",
+  "theme_color": "#7B1113",
+  "icons": [
+    {
+      "src": "/icons/dcms-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/dcms-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
