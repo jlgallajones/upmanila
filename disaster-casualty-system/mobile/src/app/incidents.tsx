@@ -5812,11 +5812,13 @@ export default function IncidentsPage() {
                 </Text>
               </View>
             ) : hospitalResourceSummary ? (
-              <ScrollView
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.timelineScrollContent}
-              >
-                <View style={styles.sitrepMetricGrid}>
+              <>
+                <ScrollView
+                  style={styles.timelineScroll}
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={styles.timelineScrollContent}
+                >
+                  <View style={styles.sitrepMetricGrid}>
                   <View style={styles.sitrepMetric}>
                     <Text style={styles.sitrepMetricValue}>
                       {hospitalResourceSummary.surgery.meanDurationMinutes ??
@@ -6015,52 +6017,8 @@ export default function IncidentsPage() {
                   hospitalResourceSummary.icu.admittedByInterval,
                 )}
 
-                <View style={styles.timelineActions}>
-                  <Pressable
-                    onPress={handleCloseHospitalResourceModal}
-                    style={({ pressed }) => [
-                      styles.secondaryButton,
-                      pressed && styles.pressed,
-                    ]}
-                  >
-                    <Text style={styles.secondaryButtonText}>Close</Text>
-                  </Pressable>
-
-                  <Pressable
-                    disabled={
-                      !canUpdateOperations || isSavingHospitalResource
-                    }
-                    onPress={() => {
-                      void handleSaveHospitalResources();
-                    }}
-                    style={({ pressed }) => [
-                      styles.createButton,
-                      (!canUpdateOperations ||
-                        isSavingHospitalResource) &&
-                        styles.disabledButton,
-                      pressed && styles.pressed,
-                    ]}
-                  >
-                    <Text style={styles.createButtonText}>
-                      {isSavingHospitalResource
-                        ? "Saving..."
-                        : "Save"}
-                    </Text>
-                    {isSavingHospitalResource ? (
-                      <ActivityIndicator
-                        size="small"
-                        color={COLORS.white}
-                      />
-                    ) : (
-                      <Ionicons
-                        name="save-outline"
-                        size={19}
-                        color={COLORS.white}
-                      />
-                    )}
-                  </Pressable>
-                </View>
-              </ScrollView>
+                </ScrollView>
+              </>
             ) : null}
           </Pressable>
         </Pressable>
@@ -6777,13 +6735,14 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
   },
   timelineSheet: {
-    maxHeight: "88%",
+    height: "86%",
     paddingHorizontal: SCREEN_PADDING,
     paddingTop: 10,
-    paddingBottom: 18,
+    paddingBottom: 0,
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
     backgroundColor: COLORS.white,
+    overflow: "hidden",
   },
   sheetHandle: {
     width: 42,
@@ -6852,8 +6811,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
   },
+  timelineScroll: {
+    flex: 1,
+  },
   timelineScrollContent: {
-    paddingBottom: 6,
+    paddingBottom: 30,
   },
   timelineFieldGroup: {
     marginTop: 2,
