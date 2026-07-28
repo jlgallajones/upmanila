@@ -27,6 +27,7 @@ import {
   getCoordinationAssessment,
   getDmmpStaff,
   getDmmpStaffSummary,
+  getFacilityTriageSummary,
   getIncidents,
   getIncidentTimeline,
   getOnsiteCareSummary,
@@ -38,6 +39,7 @@ import {
   type CoordinationRating,
   type DmmpStaffRecord,
   type DmmpStaffSummary,
+  type FacilityTriageSummary,
   type MedicalCoordinationAssessment,
   type OnsiteCareSummary,
   type OnsiteTriageSummary,
@@ -551,12 +553,16 @@ function formatTriageSystemLabel(value: string | null | undefined): string {
       return "SORT";
     case "smart":
       return "SMART";
+    case "rts":
+      return "RTS";
     case "care_flight":
       return "Care Flight";
     case "mass":
       return "MASS";
     case "salt":
       return "SALT";
+    case "ed_triage":
+      return "ED Triage";
     case "other":
       return "Other";
     case "unknown":
@@ -570,7 +576,7 @@ function formatTriageSystemCounts(counts: Record<string, number>): string {
   const entries = Object.entries(counts).filter(([, count]) => count > 0);
 
   if (entries.length === 0) {
-    return "No on-site triage system recorded.";
+    return "No triage system recorded.";
   }
 
   return entries
@@ -640,6 +646,7 @@ function IncidentCard({
   onManageStaff,
   onEditCoordination,
   onViewOnsiteTriage,
+  onViewFacilityTriage,
   onViewOnsiteCare,
   onViewSceneClearance,
   onViewDistribution,
@@ -653,6 +660,7 @@ function IncidentCard({
   onManageStaff: () => void;
   onEditCoordination: () => void;
   onViewOnsiteTriage: () => void;
+  onViewFacilityTriage: () => void;
   onViewOnsiteCare: () => void;
   onViewSceneClearance: () => void;
   onViewDistribution: () => void;
@@ -775,6 +783,21 @@ function IncidentCard({
           color={COLORS.maroon}
         />
         <Text style={styles.timelineButtonText}>On-site Triage</Text>
+      </Pressable>
+
+      <Pressable
+        onPress={onViewFacilityTriage}
+        style={({ pressed }) => [
+          styles.triageButton,
+          pressed && styles.pressed,
+        ]}
+      >
+        <Ionicons
+          name="pulse-outline"
+          size={17}
+          color={COLORS.maroon}
+        />
+        <Text style={styles.timelineButtonText}>Facility Triage</Text>
       </Pressable>
 
       <Pressable
@@ -944,6 +967,18 @@ export default function IncidentsPage() {
   const [onsiteTriageSummary, setOnsiteTriageSummary] =
     useState<OnsiteTriageSummary | null>(null);
   const [isLoadingOnsiteTriage, setIsLoadingOnsiteTriage] =
+    useState(false);
+  const [
+    isFacilityTriageModalVisible,
+    setIsFacilityTriageModalVisible,
+  ] = useState(false);
+  const [
+    selectedFacilityTriageIncident,
+    setSelectedFacilityTriageIncident,
+  ] = useState<Incident | null>(null);
+  const [facilityTriageSummary, setFacilityTriageSummary] =
+    useState<FacilityTriageSummary | null>(null);
+  const [isLoadingFacilityTriage, setIsLoadingFacilityTriage] =
     useState(false);
   const [isOnsiteCareModalVisible, setIsOnsiteCareModalVisible] =
     useState(false);
@@ -1661,6 +1696,36 @@ export default function IncidentsPage() {
     setOnsiteTriageSummary(null);
   }
 
+  async function handleOpenFacilityTriage(incident: Incident) {
+    setSelectedFacilityTriageIncident(incident);
+    setFacilityTriageSummary(null);
+    setIsFacilityTriageModalVisible(true);
+    setIsLoadingFacilityTriage(true);
+
+    try {
+      const summary = await getFacilityTriageSummary(incident.id);
+
+      setFacilityTriageSummary(summary);
+    } catch (error) {
+      console.error("Unable to load facility triage summary:", error);
+
+      Alert.alert(
+        "Unable to load facility triage",
+        error instanceof Error
+          ? error.message
+          : "Please try again.",
+      );
+    } finally {
+      setIsLoadingFacilityTriage(false);
+    }
+  }
+
+  function handleCloseFacilityTriageModal() {
+    setIsFacilityTriageModalVisible(false);
+    setSelectedFacilityTriageIncident(null);
+    setFacilityTriageSummary(null);
+  }
+
   async function handleOpenOnsiteCare(incident: Incident) {
     setSelectedOnsiteCareIncident(incident);
     setOnsiteCareSummary(null);
@@ -2130,6 +2195,9 @@ export default function IncidentsPage() {
             }}
             onViewOnsiteTriage={() => {
               void handleOpenOnsiteTriage(item);
+            }}
+            onViewFacilityTriage={() => {
+              void handleOpenFacilityTriage(item);
             }}
             onViewOnsiteCare={() => {
               void handleOpenOnsiteCare(item);
@@ -3149,6 +3217,149 @@ export default function IncidentsPage() {
 
                 <Pressable
                   onPress={handleCloseOnsiteTriageModal}
+                  style={({ pressed }) => [
+                    styles.createButton,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={styles.createButtonText}>Done</Text>
+                  <Ionicons
+                    name="checkmark-circle-outline"
+                    size={19}
+                    color={COLORS.white}
+                  />
+                </Pressable>
+              </ScrollView>
+            ) : null}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={isFacilityTriageModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCloseFacilityTriageModal}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={handleCloseFacilityTriageModal}
+        >
+          <Pressable style={styles.timelineSheet}>
+            <View style={styles.sheetHandle} />
+
+            <View style={styles.sheetHeader}>
+              <View style={styles.sheetTitleGroup}>
+                <Text style={styles.sheetTitle}>Facility Triage</Text>
+                <Text
+                  style={styles.sheetSubtitle}
+                  numberOfLines={1}
+                >
+                  {selectedFacilityTriageIncident?.incident_name ??
+                    "Incident"}
+                </Text>
+              </View>
+              <Pressable
+                onPress={handleCloseFacilityTriageModal}
+                style={styles.sheetCloseButton}
+              >
+                <Ionicons
+                  name="close"
+                  size={20}
+                  color={COLORS.secondaryText}
+                />
+              </Pressable>
+            </View>
+
+            {isLoadingFacilityTriage ? (
+              <View style={styles.timelineLoading}>
+                <ActivityIndicator
+                  size="small"
+                  color={COLORS.maroon}
+                />
+                <Text style={styles.timelineLoadingText}>
+                  Loading facility triage...
+                </Text>
+              </View>
+            ) : facilityTriageSummary ? (
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.timelineScrollContent}
+              >
+                <View style={styles.sitrepMetricGrid}>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {facilityTriageSummary.totalSurvivors}
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      Survivors
+                    </Text>
+                  </View>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {facilityTriageSummary.facilityTriagedTotal}
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      Facility Triaged
+                    </Text>
+                  </View>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {formatTriageSystemLabel(
+                        facilityTriageSummary.triageSystemUsed,
+                      )}
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      Primary System
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={styles.fieldLabel}>
+                  TRIAGE SYSTEM USED AT HEALTHCARE FACILITY
+                </Text>
+                <Text style={styles.sitrepSectionText}>
+                  {formatTriageSystemCounts(
+                    facilityTriageSummary.firstTriageSystemCounts,
+                  )}
+                </Text>
+
+                <Text style={styles.fieldLabel}>FACILITY TRIAGE TIMES</Text>
+                <Text style={styles.sitrepSectionText}>
+                  First facility triage:{" "}
+                  {formatDateTime(
+                    facilityTriageSummary.firstFacilityTriageAt,
+                  )}
+                  {"\n"}Last facility triage:{" "}
+                  {formatDateTime(
+                    facilityTriageSummary.lastFacilityTriageAt,
+                  )}
+                </Text>
+
+                <Text style={styles.fieldLabel}>
+                  FACILITY TRIAGE ACCURACY
+                </Text>
+                <View style={styles.triageAccuracyList}>
+                  {renderTriageAccuracyRow(
+                    "UNDERTRIAGED T1",
+                    facilityTriageSummary.accuracy.undertriagedT1,
+                  )}
+                  {renderTriageAccuracyRow(
+                    "UNDERTRIAGED T2",
+                    facilityTriageSummary.accuracy.undertriagedT2,
+                  )}
+                  {renderTriageAccuracyRow(
+                    "OVERTRIAGED T2",
+                    facilityTriageSummary.accuracy.overtriagedT2,
+                  )}
+                  {renderTriageAccuracyRow(
+                    "OVERTRIAGED T3",
+                    facilityTriageSummary.accuracy.overtriagedT3,
+                  )}
+                </View>
+
+                <Pressable
+                  onPress={handleCloseFacilityTriageModal}
                   style={({ pressed }) => [
                     styles.createButton,
                     pressed && styles.pressed,

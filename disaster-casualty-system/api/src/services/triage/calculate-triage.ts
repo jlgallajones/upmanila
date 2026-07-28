@@ -187,6 +187,7 @@ export function calculateTriageCategory(
 
     case "sort":
     case "smart":
+    case "rts":
     case "mass":
     case "urgent_non_urgent":
     case "ed_triage":

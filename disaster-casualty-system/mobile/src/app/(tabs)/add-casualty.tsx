@@ -118,6 +118,7 @@ const TRIAGE_SYSTEM_OPTIONS = [
   "SORT",
   "SIEVE/SORT",
   "SMART",
+  "RTS",
   "Care Flight",
   "MASS",
   "SALT",
@@ -296,6 +297,46 @@ const APPENDIX_TRIAGE_FIELDS: Record<string, AppendixQuestion[]> = {
       options: [
         { label: ">80", value: "more_than_80" },
         { label: "76-80", value: "76_to_80" },
+        { label: "50-75", value: "50_to_75" },
+        { label: "1-49", value: "1_to_49" },
+        { label: "0", value: "0" },
+      ],
+    },
+    {
+      key: "finalTriage",
+      label: "Final triage",
+      options: FINAL_TRIAGE_COLOR_OPTIONS,
+    },
+  ],
+  rts: [
+    {
+      key: "gcs",
+      label: "Glasgow Coma Scale",
+      options: [
+        { label: "13-15", value: "13_to_15" },
+        { label: "9-12", value: "9_to_12" },
+        { label: "6-8", value: "6_to_8" },
+        { label: "4-5", value: "4_to_5" },
+        { label: "3", value: "3" },
+      ],
+    },
+    {
+      key: "respiratoryRate",
+      label: "Respiratory rate",
+      options: [
+        { label: "10-29", value: "10_to_29" },
+        { label: ">29", value: "more_than_29" },
+        { label: "6-9", value: "6_to_9" },
+        { label: "1-5", value: "1_to_5" },
+        { label: "0", value: "0" },
+      ],
+    },
+    {
+      key: "systolicBp",
+      label: "Systolic BP",
+      options: [
+        { label: ">89", value: "more_than_89" },
+        { label: "76-89", value: "76_to_89" },
         { label: "50-75", value: "50_to_75" },
         { label: "1-49", value: "1_to_49" },
         { label: "0", value: "0" },
@@ -716,6 +757,8 @@ function normalizeTriageSystem(value: string): TriageSystem {
       return "sieve_sort";
     case "smart":
       return "smart";
+    case "rts":
+      return "rts";
     case "care flight":
       return "care_flight";
     case "mass":
@@ -775,6 +818,8 @@ function formatTriageSystem(value: string | null | undefined): string {
       return "SIEVE/SORT";
     case "smart":
       return "SMART";
+    case "rts":
+      return "RTS";
     case "care_flight":
       return "Care Flight";
     case "mass":

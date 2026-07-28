@@ -29,6 +29,7 @@ export type TriageSystem =
   | "sieve_sort"
   | "sort"
   | "smart"
+  | "rts"
   | "care_flight"
   | "mass"
   | "salt"

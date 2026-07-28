@@ -49,6 +49,7 @@ ALTER TABLE public.casualty_triage_assessments
       'sort',
       'sieve_sort',
       'smart',
+      'rts',
       'care_flight',
       'mass',
       'salt',

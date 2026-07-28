@@ -8,6 +8,7 @@ import {
   exportLatestSitrepPdf,
   generateIncidentSitrep,
   getIncidents,
+  getIncidentFacilityTriageSummary,
   getIncidentOnsiteCareSummary,
   getIncidentTimeline,
   getIncidentOnsiteTriageSummary,
@@ -44,6 +45,11 @@ incidentRouter.get(
   "/:id/onsite-triage-summary",
   requireAuth,
   getIncidentOnsiteTriageSummary,
+);
+incidentRouter.get(
+  "/:id/facility-triage-summary",
+  requireAuth,
+  getIncidentFacilityTriageSummary,
 );
 incidentRouter.get(
   "/:id/onsite-care-summary",

@@ -128,6 +128,23 @@ export type OnsiteTriageSummary = {
   accuracyFormula: string;
 };
 
+export type FacilityTriageSummary = {
+  incidentId: string;
+  totalSurvivors: number;
+  facilityTriagedTotal: number;
+  triageSystemUsed: string | null;
+  firstTriageSystemCounts: Record<string, number>;
+  firstFacilityTriageAt: string | null;
+  lastFacilityTriageAt: string | null;
+  accuracy: {
+    undertriagedT1: OnsiteTriageAccuracyMetric;
+    undertriagedT2: OnsiteTriageAccuracyMetric;
+    overtriagedT2: OnsiteTriageAccuracyMetric;
+    overtriagedT3: OnsiteTriageAccuracyMetric;
+  };
+  accuracyFormula: string;
+};
+
 export type OnsiteCareIntervalMetric = {
   minutes: number;
   cutoffAt: string | null;
@@ -335,6 +352,11 @@ type OnsiteTriageSummaryResponse = {
   data: OnsiteTriageSummary;
 };
 
+type FacilityTriageSummaryResponse = {
+  success: boolean;
+  data: FacilityTriageSummary;
+};
+
 type OnsiteCareSummaryResponse = {
   success: boolean;
   data: OnsiteCareSummary;
@@ -511,6 +533,16 @@ export async function getOnsiteTriageSummary(
 ): Promise<OnsiteTriageSummary> {
   const response = await api.get<OnsiteTriageSummaryResponse>(
     `/incidents/${encodeURIComponent(id)}/onsite-triage-summary`,
+  );
+
+  return response.data.data;
+}
+
+export async function getFacilityTriageSummary(
+  id: string,
+): Promise<FacilityTriageSummary> {
+  const response = await api.get<FacilityTriageSummaryResponse>(
+    `/incidents/${encodeURIComponent(id)}/facility-triage-summary`,
   );
 
   return response.data.data;

@@ -268,6 +268,8 @@ function formatTriageSystem(value: string | null | undefined): string {
       return "SIEVE/SORT";
     case "smart":
       return "SMART";
+    case "rts":
+      return "RTS";
     case "care_flight":
       return "Care Flight";
     case "mass":

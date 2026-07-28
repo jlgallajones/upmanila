@@ -1361,6 +1361,174 @@ export async function getIncidentOnsiteTriageSummary(
   }
 }
 
+export async function getIncidentFacilityTriageSummary(
+  request: Request<{ id: string }>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { id } = request.params;
+
+    const { data: incident, error: incidentError } = await supabase
+      .from("incidents")
+      .select("id")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (incidentError) {
+      throw new Error(
+        `Unable to retrieve incident: ${incidentError.message}`,
+      );
+    }
+
+    if (!incident) {
+      response.status(404).json({
+        success: false,
+        message: "Incident not found.",
+      });
+      return;
+    }
+
+    const { data: casualties, error: casualtiesError } =
+      await supabase
+        .from("casualty_incidents")
+        .select("id")
+        .eq("incident_id", id)
+        .is("deleted_at", null);
+
+    if (casualtiesError) {
+      throw new Error(
+        `Unable to retrieve incident casualties: ${casualtiesError.message}`,
+      );
+    }
+
+    const casualtyIncidentIds = (casualties ?? []).map(
+      (item) => item.id,
+    );
+
+    const triageResult =
+      casualtyIncidentIds.length > 0
+        ? await supabase
+            .from("casualty_triage_assessments")
+            .select(
+              "casualty_incident_id, triage_system, triage_category, responder_category, calculated_category, triage_stage, triaged_at",
+            )
+            .in("casualty_incident_id", casualtyIncidentIds)
+            .eq("triage_stage", "facility_arrival")
+            .order("triaged_at", { ascending: true })
+        : { data: [], error: null };
+
+    if (triageResult.error) {
+      throw new Error(
+        `Unable to retrieve healthcare facility triage data: ${triageResult.error.message}`,
+      );
+    }
+
+    const firstFacilityTriageByCasualty = new Map<
+      string,
+      TriageAssessmentRow
+    >();
+
+    for (const row of (triageResult.data ?? []) as TriageAssessmentRow[]) {
+      if (
+        !firstFacilityTriageByCasualty.has(row.casualty_incident_id)
+      ) {
+        firstFacilityTriageByCasualty.set(
+          row.casualty_incident_id,
+          row,
+        );
+      }
+    }
+
+    const facilityRows = Array.from(
+      firstFacilityTriageByCasualty.values(),
+    );
+    const triagedAtValues = facilityRows
+      .map((row) => (row.triaged_at ? new Date(row.triaged_at) : null))
+      .filter((value): value is Date => Boolean(value));
+
+    const buildAccuracyMetric = (
+      label: string,
+      trueCategory: string,
+      assignedCategories: string[],
+    ) => {
+      const denominator = facilityRows.filter(
+        (row) => row.calculated_category === trueCategory,
+      ).length;
+      const numerator = facilityRows.filter((row) => {
+        const assignedCategory =
+          row.responder_category ?? row.triage_category;
+
+        return (
+          row.calculated_category === trueCategory &&
+          assignedCategory !== null &&
+          assignedCategories.includes(assignedCategory)
+        );
+      }).length;
+
+      return {
+        label,
+        numerator,
+        denominator,
+        percentage:
+          denominator > 0
+            ? Number(((numerator / denominator) * 100).toFixed(2))
+            : 0,
+      };
+    };
+
+    const firstTriageSystemCounts = countBy(
+      facilityRows,
+      (row) => row.triage_system,
+    );
+    const dominantSystemEntry = Object.entries(
+      firstTriageSystemCounts,
+    ).sort(([, firstCount], [, secondCount]) => secondCount - firstCount)[0];
+
+    response.status(200).json({
+      success: true,
+      data: {
+        incidentId: id,
+        totalSurvivors: casualtyIncidentIds.length,
+        facilityTriagedTotal: facilityRows.length,
+        triageSystemUsed: dominantSystemEntry?.[0] ?? null,
+        firstTriageSystemCounts,
+        firstFacilityTriageAt:
+          triagedAtValues[0]?.toISOString() ?? null,
+        lastFacilityTriageAt:
+          triagedAtValues[triagedAtValues.length - 1]?.toISOString() ??
+          null,
+        accuracy: {
+          undertriagedT1: buildAccuracyMetric(
+            "T1 survivors assigned T2, T3, or T4",
+            "immediate",
+            ["delayed", "minimal", "expectant"],
+          ),
+          undertriagedT2: buildAccuracyMetric(
+            "T2 survivors assigned T3 or T4",
+            "delayed",
+            ["minimal", "expectant"],
+          ),
+          overtriagedT2: buildAccuracyMetric(
+            "T2 survivors assigned T1",
+            "delayed",
+            ["immediate"],
+          ),
+          overtriagedT3: buildAccuracyMetric(
+            "T3 survivors assigned T1 or T2",
+            "minimal",
+            ["immediate", "delayed"],
+          ),
+        },
+        accuracyFormula:
+          "(number of true category survivors assigned to listed categories / number of true category survivors) x 100",
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function getIncidentOnsiteCareSummary(
   request: Request<{ id: string }>,
   response: Response,
