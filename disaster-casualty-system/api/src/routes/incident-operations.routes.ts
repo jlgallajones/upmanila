@@ -7,10 +7,12 @@ import {
   getDeactivationContinuity,
   getDmmpStaff,
   getDmmpStaffSummary,
+  getHospitalResources,
   getResponderSafetyReport,
   getUtsteinOperations,
   saveCoordinationAssessment,
   saveDeactivationContinuity,
+  saveHospitalResources,
   saveResponderSafetyReport,
   saveUtsteinOperations,
   updateDmmpStaff,
@@ -131,4 +133,18 @@ incidentOperationsRouter.put(
   requireAuth,
   requireRole(writableRoles),
   saveDeactivationContinuity,
+);
+
+incidentOperationsRouter.get(
+  "/incidents/:id/hospital-resources",
+  requireAuth,
+  requireRole(readableRoles),
+  getHospitalResources,
+);
+
+incidentOperationsRouter.put(
+  "/incidents/:id/hospital-resources",
+  requireAuth,
+  requireRole(writableRoles),
+  saveHospitalResources,
 );

@@ -166,6 +166,13 @@ function parseDisruptionLevel(
   return value;
 }
 
+function parseAlternativeIcuUse(
+  value: unknown,
+  fieldName: string,
+): boolean | null | undefined {
+  return parseNullableBoolean(value, fieldName);
+}
+
 function parseCoordinationRating(
   value: unknown,
   fieldName: string,
@@ -1462,6 +1469,176 @@ export async function saveDeactivationContinuity(
         timeline,
         assessment,
       ),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * GET /api/incidents/:id/hospital-resources
+ */
+export async function getHospitalResources(
+  request: Request<{ id: string }>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const incidentId = request.params.id;
+
+    if (!isValidUuid(incidentId)) {
+      response.status(400).json({
+        success: false,
+        message: "A valid incident UUID is required.",
+      });
+      return;
+    }
+
+    const incidentExists = await verifyIncidentExists(incidentId);
+
+    if (!incidentExists) {
+      response.status(404).json({
+        success: false,
+        message: "Incident not found.",
+      });
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("facility_resource_snapshots")
+      .select("*")
+      .eq("incident_id", incidentId)
+      .order("recorded_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(
+        `Unable to retrieve hospital resources: ${error.message}`,
+      );
+    }
+
+    response.status(200).json({
+      success: true,
+      data: data ?? null,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * PUT /api/incidents/:id/hospital-resources
+ */
+export async function saveHospitalResources(
+  request: Request<{ id: string }>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const incidentId = request.params.id;
+
+    if (!isValidUuid(incidentId)) {
+      response.status(400).json({
+        success: false,
+        message: "A valid incident UUID is required.",
+      });
+      return;
+    }
+
+    if (!isPlainObject(request.body)) {
+      response.status(400).json({
+        success: false,
+        message: "A JSON request body is required.",
+      });
+      return;
+    }
+
+    const incidentExists = await verifyIncidentExists(incidentId);
+
+    if (!incidentExists) {
+      response.status(404).json({
+        success: false,
+        message: "Incident not found.",
+      });
+      return;
+    }
+
+    let facilityId: string | null | undefined;
+    let recordedAt: string | null | undefined;
+    let totalOperatingRooms: number | null | undefined;
+    let totalResuscitationRooms: number | null | undefined;
+    let alternativeIcuInUse: boolean | null | undefined;
+    let notes: string | null | undefined;
+
+    try {
+      facilityId = parseNullableText(request.body.facilityId, "facilityId");
+
+      if (facilityId && !isValidUuid(facilityId)) {
+        throw new Error("facilityId must be a valid UUID or null.");
+      }
+
+      recordedAt = parseNullableDate(
+        request.body.recordedAt,
+        "recordedAt",
+      );
+      totalOperatingRooms = parseNullableNonNegativeInteger(
+        request.body.totalOperatingRooms,
+        "totalOperatingRooms",
+      );
+      totalResuscitationRooms = parseNullableNonNegativeInteger(
+        request.body.totalResuscitationRooms,
+        "totalResuscitationRooms",
+      );
+      alternativeIcuInUse = parseAlternativeIcuUse(
+        request.body.alternativeIcuInUse,
+        "alternativeIcuInUse",
+      );
+      notes = parseNullableText(request.body.notes, "notes");
+    } catch (validationError) {
+      response.status(400).json({
+        success: false,
+        message:
+          validationError instanceof Error
+            ? validationError.message
+            : "Invalid hospital resources.",
+      });
+      return;
+    }
+
+    const authenticatedUser = getAuthenticatedUser(request);
+    const values = {
+      incident_id: incidentId,
+      facility_id: facilityId ?? null,
+      recorded_at: recordedAt ?? new Date().toISOString(),
+      total_operating_rooms: totalOperatingRooms ?? null,
+      total_resuscitation_rooms: totalResuscitationRooms ?? null,
+      alternative_icu_in_use: alternativeIcuInUse ?? null,
+      notes: notes ?? null,
+      recorded_by: authenticatedUser.id,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase
+      .from("facility_resource_snapshots")
+      .upsert(values, {
+        onConflict: "incident_id",
+      })
+      .select("*")
+      .single();
+
+    if (error || !data) {
+      throw new Error(
+        `Unable to save hospital resources: ${
+          error?.message ?? "Unknown database error"
+        }`,
+      );
+    }
+
+    response.status(200).json({
+      success: true,
+      message: "Hospital resources saved successfully.",
+      data,
     });
   } catch (error) {
     next(error);

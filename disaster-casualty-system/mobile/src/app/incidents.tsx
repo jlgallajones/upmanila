@@ -29,9 +29,12 @@ import {
   getDmmpStaff,
   getDmmpStaffSummary,
   getEdResourceSummary,
+  getHospitalResources,
+  getHospitalResourceSummary,
   getFacilityTriageSummary,
   getIncidents,
   getIncidentTimeline,
+  getMorbidityMortalitySummary,
   getOnsiteCareSummary,
   getOnsiteTriageSummary,
   getResponderSafetyReport,
@@ -39,6 +42,7 @@ import {
   getSurvivorDistributionSummary,
   saveCoordinationAssessment,
   saveDeactivationContinuity,
+  saveHospitalResources,
   saveResponderSafetyReport,
   type Incident,
   type CoordinationRating,
@@ -48,7 +52,10 @@ import {
   type DmmpStaffSummary,
   type EdResourceSummary,
   type FacilityTriageSummary,
+  type HospitalResourcesResult,
+  type HospitalResourceSummary,
   type MedicalCoordinationAssessment,
+  type MorbidityMortalitySummary,
   type OnsiteCareSummary,
   type OnsiteTriageSummary,
   type ResponderSafetyResult,
@@ -536,6 +543,22 @@ const initialResponderSafetyForm: ResponderSafetyFormState = {
   deceasedResponders: "",
 };
 
+type HospitalResourcesFormState = {
+  totalOperatingRooms: string;
+  totalResuscitationRooms: string;
+  alternativeIcuInUse: ResponderSafetyStatus;
+  recordedAt: string;
+  notes: string;
+};
+
+const initialHospitalResourcesForm: HospitalResourcesFormState = {
+  totalOperatingRooms: "",
+  totalResuscitationRooms: "",
+  alternativeIcuInUse: "unknown",
+  recordedAt: "",
+  notes: "",
+};
+
 type DeactivationContinuityFormState = {
   sceneDemobilizedAt: string;
   lastFacilityDeactivatedAt: string;
@@ -631,6 +654,33 @@ function mapResponderSafetyToForm(
       report?.deceased_responders !== undefined
         ? String(report.deceased_responders)
         : "",
+  };
+}
+
+function mapHospitalResourcesToForm(
+  result: HospitalResourcesResult | null,
+): HospitalResourcesFormState {
+  const resources = result?.resources;
+
+  return {
+    totalOperatingRooms:
+      resources?.total_operating_rooms !== undefined &&
+      resources?.total_operating_rooms !== null
+        ? String(resources.total_operating_rooms)
+        : "",
+    totalResuscitationRooms:
+      resources?.total_resuscitation_rooms !== undefined &&
+      resources?.total_resuscitation_rooms !== null
+        ? String(resources.total_resuscitation_rooms)
+        : "",
+    alternativeIcuInUse:
+      resources?.alternative_icu_in_use === true
+        ? "yes"
+        : resources?.alternative_icu_in_use === false
+          ? "no"
+          : "unknown",
+    recordedAt: formatTimelineInput(resources?.recorded_at),
+    notes: valueOrEmpty(resources?.notes),
   };
 }
 
@@ -822,6 +872,8 @@ function IncidentCard({
   onViewSceneClearance,
   onViewDistribution,
   onViewEdResources,
+  onViewHospitalResources,
+  onViewMorbidityMortality,
   onGenerateSitrep,
   isGeneratingSitrep,
 }: {
@@ -839,6 +891,8 @@ function IncidentCard({
   onViewSceneClearance: () => void;
   onViewDistribution: () => void;
   onViewEdResources: () => void;
+  onViewHospitalResources: () => void;
+  onViewMorbidityMortality: () => void;
   onGenerateSitrep: () => void;
   isGeneratingSitrep: boolean;
 }) {
@@ -1076,6 +1130,40 @@ function IncidentCard({
       </Pressable>
 
       <Pressable
+        onPress={onViewHospitalResources}
+        style={({ pressed }) => [
+          styles.triageButton,
+          pressed && styles.pressed,
+        ]}
+      >
+        <Ionicons
+          name="storefront-outline"
+          size={17}
+          color={COLORS.maroon}
+        />
+        <Text style={styles.timelineButtonText}>
+          Hospital Resources
+        </Text>
+      </Pressable>
+
+      <Pressable
+        onPress={onViewMorbidityMortality}
+        style={({ pressed }) => [
+          styles.triageButton,
+          pressed && styles.pressed,
+        ]}
+      >
+        <Ionicons
+          name="heart-outline"
+          size={17}
+          color={COLORS.maroon}
+        />
+        <Text style={styles.timelineButtonText}>
+          Morbidity & Mortality
+        </Text>
+      </Pressable>
+
+      <Pressable
         disabled={isGeneratingSitrep}
         onPress={onGenerateSitrep}
         style={({ pressed }) => [
@@ -1288,6 +1376,40 @@ export default function IncidentsPage() {
     useState<EdResourceSummary | null>(null);
   const [isLoadingEdResource, setIsLoadingEdResource] =
     useState(false);
+  const [
+    isHospitalResourceModalVisible,
+    setIsHospitalResourceModalVisible,
+  ] = useState(false);
+  const [
+    selectedHospitalResourceIncident,
+    setSelectedHospitalResourceIncident,
+  ] = useState<Incident | null>(null);
+  const [
+    hospitalResourcesForm,
+    setHospitalResourcesForm,
+  ] = useState<HospitalResourcesFormState>(
+    initialHospitalResourcesForm,
+  );
+  const [hospitalResourceSummary, setHospitalResourceSummary] =
+    useState<HospitalResourceSummary | null>(null);
+  const [isLoadingHospitalResource, setIsLoadingHospitalResource] =
+    useState(false);
+  const [isSavingHospitalResource, setIsSavingHospitalResource] =
+    useState(false);
+  const [
+    isMorbidityMortalityModalVisible,
+    setIsMorbidityMortalityModalVisible,
+  ] = useState(false);
+  const [
+    selectedMorbidityMortalityIncident,
+    setSelectedMorbidityMortalityIncident,
+  ] = useState<Incident | null>(null);
+  const [morbidityMortalitySummary, setMorbidityMortalitySummary] =
+    useState<MorbidityMortalitySummary | null>(null);
+  const [
+    isLoadingMorbidityMortality,
+    setIsLoadingMorbidityMortality,
+  ] = useState(false);
   const [sitrep, setSitrep] = useState<IncidentSitrep | null>(null);
   const [isSitrepModalVisible, setIsSitrepModalVisible] =
     useState(false);
@@ -2489,6 +2611,182 @@ export default function IncidentsPage() {
     setEdResourceSummary(null);
   }
 
+  async function handleOpenHospitalResources(incident: Incident) {
+    setSelectedHospitalResourceIncident(incident);
+    setHospitalResourcesForm(initialHospitalResourcesForm);
+    setHospitalResourceSummary(null);
+    setIsHospitalResourceModalVisible(true);
+    setIsLoadingHospitalResource(true);
+
+    try {
+      const [resources, summary] = await Promise.all([
+        getHospitalResources(incident.id),
+        getHospitalResourceSummary(incident.id),
+      ]);
+
+      setHospitalResourcesForm(mapHospitalResourcesToForm(resources));
+      setHospitalResourceSummary(summary);
+    } catch (error) {
+      console.error("Unable to load hospital resources:", error);
+
+      Alert.alert(
+        "Unable to load hospital resources",
+        error instanceof Error
+          ? error.message
+          : "Please try again.",
+      );
+    } finally {
+      setIsLoadingHospitalResource(false);
+    }
+  }
+
+  function handleCloseHospitalResourceModal() {
+    if (isSavingHospitalResource) {
+      return;
+    }
+
+    setIsHospitalResourceModalVisible(false);
+    setSelectedHospitalResourceIncident(null);
+    setHospitalResourcesForm(initialHospitalResourcesForm);
+    setHospitalResourceSummary(null);
+  }
+
+  async function handleOpenMorbidityMortality(incident: Incident) {
+    setSelectedMorbidityMortalityIncident(incident);
+    setMorbidityMortalitySummary(null);
+    setIsMorbidityMortalityModalVisible(true);
+    setIsLoadingMorbidityMortality(true);
+
+    try {
+      const summary = await getMorbidityMortalitySummary(incident.id);
+
+      setMorbidityMortalitySummary(summary);
+    } catch (error) {
+      console.error("Unable to load morbidity and mortality:", error);
+
+      Alert.alert(
+        "Unable to load morbidity and mortality",
+        error instanceof Error
+          ? error.message
+          : "Please try again.",
+      );
+    } finally {
+      setIsLoadingMorbidityMortality(false);
+    }
+  }
+
+  function handleCloseMorbidityMortalityModal() {
+    setIsMorbidityMortalityModalVisible(false);
+    setSelectedMorbidityMortalityIncident(null);
+    setMorbidityMortalitySummary(null);
+  }
+
+  function updateHospitalResourcesField<
+    K extends keyof HospitalResourcesFormState,
+  >(key: K, value: HospitalResourcesFormState[K]) {
+    setHospitalResourcesForm((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  }
+
+  function setHospitalResourcesFieldToNow() {
+    updateHospitalResourcesField(
+      "recordedAt",
+      formatDateTimeForInput(new Date()),
+    );
+  }
+
+  function validateHospitalResourcesForm(
+    form: HospitalResourcesFormState,
+  ): string | null {
+    if (
+      form.totalOperatingRooms.trim() &&
+      parseOptionalWholeNumber(form.totalOperatingRooms) === null
+    ) {
+      return "Total operating rooms must be a non-negative whole number.";
+    }
+
+    if (
+      form.totalResuscitationRooms.trim() &&
+      parseOptionalWholeNumber(form.totalResuscitationRooms) === null
+    ) {
+      return "Total ED resuscitation rooms must be a non-negative whole number.";
+    }
+
+    if (form.recordedAt.trim() && !getValidDateTimeInput(form.recordedAt)) {
+      return "Recorded time must use mm/dd/yyyy hh:mm.";
+    }
+
+    return null;
+  }
+
+  async function handleSaveHospitalResources() {
+    if (!selectedHospitalResourceIncident) {
+      return;
+    }
+
+    if (!canUpdateOperations) {
+      Alert.alert(
+        "Permission required",
+        "Your account is not allowed to update hospital resources.",
+      );
+      return;
+    }
+
+    const validationError = validateHospitalResourcesForm(
+      hospitalResourcesForm,
+    );
+
+    if (validationError) {
+      Alert.alert("Check hospital resources", validationError);
+      return;
+    }
+
+    try {
+      setIsSavingHospitalResource(true);
+
+      await saveHospitalResources(selectedHospitalResourceIncident.id, {
+        totalOperatingRooms: parseOptionalWholeNumber(
+          hospitalResourcesForm.totalOperatingRooms,
+        ),
+        totalResuscitationRooms: parseOptionalWholeNumber(
+          hospitalResourcesForm.totalResuscitationRooms,
+        ),
+        alternativeIcuInUse:
+          hospitalResourcesForm.alternativeIcuInUse === "unknown"
+            ? null
+            : hospitalResourcesForm.alternativeIcuInUse === "yes",
+        recordedAt: parseDateTimeInput(hospitalResourcesForm.recordedAt),
+        notes: hospitalResourcesForm.notes.trim() || null,
+      });
+
+      const [resources, summary] = await Promise.all([
+        getHospitalResources(selectedHospitalResourceIncident.id),
+        getHospitalResourceSummary(selectedHospitalResourceIncident.id),
+      ]);
+
+      setHospitalResourcesForm(mapHospitalResourcesToForm(resources));
+      setHospitalResourceSummary(summary);
+
+      Alert.alert(
+        "Hospital resources updated",
+        "Hospital resources utilization records have been updated.",
+      );
+    } catch (error) {
+      console.error("Unable to save hospital resources:", error);
+
+      Alert.alert(
+        "Unable to save hospital resources",
+        error instanceof Error
+          ? error.message
+          : "Please review the hospital resources and try again.",
+      );
+    } finally {
+      setIsSavingHospitalResource(false);
+    }
+  }
+
   function renderTimelineDateField(
     label: string,
     key: keyof TimelineFormState,
@@ -2939,6 +3237,46 @@ export default function IncidentsPage() {
     );
   }
 
+  function renderMorbidityMinuteRow(
+    title: string,
+    metric: { meanMinutes: number | null; medianMinutes: number | null; count: number },
+  ) {
+    return (
+      <View style={styles.triageAccuracyRow}>
+        <View style={styles.triageAccuracyTextGroup}>
+          <Text style={styles.triageAccuracyTitle}>{title}</Text>
+          <Text style={styles.triageAccuracyDescription}>
+            Mean {metric.meanMinutes ?? "Not available"} min
+            {"\n"}Median {metric.medianMinutes ?? "Not available"} min
+          </Text>
+        </View>
+        <Text style={styles.triageAccuracyValue}>
+          {metric.count}
+        </Text>
+      </View>
+    );
+  }
+
+  function renderMorbidityDayRow(
+    title: string,
+    metric: { meanDays: number | null; medianDays: number | null; count: number },
+  ) {
+    return (
+      <View style={styles.triageAccuracyRow}>
+        <View style={styles.triageAccuracyTextGroup}>
+          <Text style={styles.triageAccuracyTitle}>{title}</Text>
+          <Text style={styles.triageAccuracyDescription}>
+            Mean {metric.meanDays ?? "Not available"} days
+            {"\n"}Median {metric.medianDays ?? "Not available"} days
+          </Text>
+        </View>
+        <Text style={styles.triageAccuracyValue}>
+          {metric.count}
+        </Text>
+      </View>
+    );
+  }
+
   function renderEdCategoryRow(
     category: keyof EdResourceSummary["categories"],
     summary: EdResourceSummary,
@@ -2994,6 +3332,150 @@ export default function IncidentsPage() {
             </Text>
           </View>
         ))}
+      </View>
+    );
+  }
+
+  function renderEdResuscitationRoomUse(summary: EdResourceSummary) {
+    return (
+      <View style={styles.triageIntervalSection}>
+        <Text style={styles.triageIntervalTitle}>
+          ED RESUSCITATION ROOMS USED FOR T1
+        </Text>
+        <View style={styles.triageIntervalHeader}>
+          <Text style={styles.triageIntervalHeaderText}>Interval</Text>
+          <Text style={styles.triageIntervalHeaderText}>Rooms</Text>
+          <Text style={styles.triageIntervalHeaderText}>%</Text>
+        </View>
+        {summary.resuscitationRoomUseByInterval.map((row) => (
+          <View key={row.minutes} style={styles.triageIntervalRow}>
+            <Text style={styles.triageIntervalText}>
+              {formatMinuteLabel(row.minutes)}
+            </Text>
+            <Text style={styles.triageIntervalValue}>
+              {row.count}/{row.totalResuscitationRooms}
+            </Text>
+            <Text style={styles.triageIntervalValue}>
+              {row.percentage}%
+            </Text>
+          </View>
+        ))}
+      </View>
+    );
+  }
+
+  function renderHospitalIntervalSection(
+    title: string,
+    rows: HospitalResourceSummary["operatingRooms"]["t1ByInterval"],
+    showPercentage = false,
+  ) {
+    return (
+      <View style={styles.triageIntervalSection}>
+        <Text style={styles.triageIntervalTitle}>{title}</Text>
+        <View style={styles.triageIntervalHeader}>
+          <Text style={styles.triageIntervalHeaderText}>Interval</Text>
+          <Text style={styles.triageIntervalHeaderText}>Count</Text>
+          {showPercentage ? (
+            <Text style={styles.triageIntervalHeaderText}>%</Text>
+          ) : null}
+        </View>
+        {rows.map((row) => (
+          <View key={row.minutes} style={styles.triageIntervalRow}>
+            <Text style={styles.triageIntervalText}>
+              {formatMinuteLabel(row.minutes)}
+            </Text>
+            <Text style={styles.triageIntervalValue}>
+              {row.count}
+            </Text>
+            {showPercentage ? (
+              <Text style={styles.triageIntervalValue}>
+                {row.percentage ?? 0}%
+              </Text>
+            ) : null}
+          </View>
+        ))}
+      </View>
+    );
+  }
+
+  function renderHospitalYesNoField(
+    label: string,
+    key: keyof Pick<HospitalResourcesFormState, "alternativeIcuInUse">,
+  ) {
+    const options: ResponderSafetyStatus[] = [
+      "yes",
+      "no",
+      "unknown",
+    ];
+
+    return (
+      <View style={styles.timelineFieldGroup}>
+        <Text style={styles.fieldLabel}>{label}</Text>
+        <View style={styles.timelineOptionRow}>
+          {options.map((option) => {
+            const selected = hospitalResourcesForm[key] === option;
+
+            return (
+              <Pressable
+                key={option}
+                disabled={!canUpdateOperations}
+                onPress={() =>
+                  updateHospitalResourcesField(key, option)
+                }
+                style={({ pressed }) => [
+                  styles.timelineOptionChip,
+                  selected && styles.timelineOptionChipActive,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.timelineOptionText,
+                    selected && styles.timelineOptionTextActive,
+                  ]}
+                >
+                  {formatSafetyStatus(option)}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+    );
+  }
+
+  function renderHospitalRecordedAtField() {
+    return (
+      <View style={styles.timelineFieldGroup}>
+        <View style={styles.timelineLabelRow}>
+          <Text style={styles.fieldLabel}>RECORDED AT</Text>
+          {canUpdateOperations ? (
+            <Pressable
+              onPress={setHospitalResourcesFieldToNow}
+              style={({ pressed }) => [
+                styles.nowButton,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Ionicons
+                name="time-outline"
+                size={14}
+                color={COLORS.maroon}
+              />
+              <Text style={styles.nowButtonText}>Now</Text>
+            </Pressable>
+          ) : null}
+        </View>
+        <TextInput
+          value={hospitalResourcesForm.recordedAt}
+          onChangeText={(value) =>
+            updateHospitalResourcesField("recordedAt", value)
+          }
+          style={styles.input}
+          placeholder="mm/dd/yyyy hh:mm"
+          placeholderTextColor={COLORS.mutedText}
+          editable={canUpdateOperations}
+        />
       </View>
     );
   }
@@ -3133,6 +3615,12 @@ export default function IncidentsPage() {
             }}
             onViewEdResources={() => {
               void handleOpenEdResources(item);
+            }}
+            onViewHospitalResources={() => {
+              void handleOpenHospitalResources(item);
+            }}
+            onViewMorbidityMortality={() => {
+              void handleOpenMorbidityMortality(item);
             }}
             onGenerateSitrep={() => {
               void handleGenerateSitrep(item);
@@ -5255,6 +5743,7 @@ export default function IncidentsPage() {
                 </View>
 
                 {renderEdResuscitationIntervals(edResourceSummary)}
+                {renderEdResuscitationRoomUse(edResourceSummary)}
 
                 <Pressable
                   onPress={handleCloseEdResourceModal}
@@ -5270,6 +5759,459 @@ export default function IncidentsPage() {
                     color={COLORS.white}
                   />
                 </Pressable>
+              </ScrollView>
+            ) : null}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={isHospitalResourceModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCloseHospitalResourceModal}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={handleCloseHospitalResourceModal}
+        >
+          <Pressable style={styles.timelineSheet}>
+            <View style={styles.sheetHandle} />
+
+            <View style={styles.sheetHeader}>
+              <View style={styles.sheetTitleGroup}>
+                <Text style={styles.sheetTitle}>Hospital Resources</Text>
+                <Text
+                  style={styles.sheetSubtitle}
+                  numberOfLines={1}
+                >
+                  {selectedHospitalResourceIncident?.incident_name ??
+                    "Incident"}
+                </Text>
+              </View>
+              <Pressable
+                onPress={handleCloseHospitalResourceModal}
+                style={styles.sheetCloseButton}
+              >
+                <Ionicons
+                  name="close"
+                  size={20}
+                  color={COLORS.secondaryText}
+                />
+              </Pressable>
+            </View>
+
+            {isLoadingHospitalResource ? (
+              <View style={styles.timelineLoading}>
+                <ActivityIndicator
+                  size="small"
+                  color={COLORS.maroon}
+                />
+                <Text style={styles.timelineLoadingText}>
+                  Loading hospital resources...
+                </Text>
+              </View>
+            ) : hospitalResourceSummary ? (
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.timelineScrollContent}
+              >
+                <View style={styles.sitrepMetricGrid}>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {hospitalResourceSummary.surgery.meanDurationMinutes ??
+                        0}
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      Mean Surgery Min
+                    </Text>
+                  </View>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {hospitalResourceSummary.icu.admittedTotal}
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      ICU Admissions
+                    </Text>
+                  </View>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {hospitalResourceSummary.icu.ventilatedPercentage}%
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      ICU Vent
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={styles.fieldLabel}>
+                  RESOURCE SETTINGS
+                </Text>
+                <View style={styles.timelineFieldGroup}>
+                  <Text style={styles.fieldLabel}>
+                    TOTAL OPERATING ROOMS
+                  </Text>
+                  <TextInput
+                    value={hospitalResourcesForm.totalOperatingRooms}
+                    onChangeText={(value) =>
+                      updateHospitalResourcesField(
+                        "totalOperatingRooms",
+                        value,
+                      )
+                    }
+                    style={styles.input}
+                    placeholder="Number of operating rooms"
+                    placeholderTextColor={COLORS.mutedText}
+                    keyboardType="number-pad"
+                    editable={canUpdateOperations}
+                  />
+                </View>
+
+                <View style={styles.timelineFieldGroup}>
+                  <Text style={styles.fieldLabel}>
+                    TOTAL ED RESUSCITATION ROOMS
+                  </Text>
+                  <TextInput
+                    value={hospitalResourcesForm.totalResuscitationRooms}
+                    onChangeText={(value) =>
+                      updateHospitalResourcesField(
+                        "totalResuscitationRooms",
+                        value,
+                      )
+                    }
+                    style={styles.input}
+                    placeholder="Number of ED resuscitation rooms"
+                    placeholderTextColor={COLORS.mutedText}
+                    keyboardType="number-pad"
+                    editable={canUpdateOperations}
+                  />
+                </View>
+
+                {renderHospitalYesNoField(
+                  "ALTERNATIVE ICU USE",
+                  "alternativeIcuInUse",
+                )}
+                {renderHospitalRecordedAtField()}
+
+                <TextInput
+                  value={hospitalResourcesForm.notes}
+                  onChangeText={(value) =>
+                    updateHospitalResourcesField("notes", value)
+                  }
+                  style={[styles.input, styles.notesInput]}
+                  placeholder="Optional hospital resource notes"
+                  placeholderTextColor={COLORS.mutedText}
+                  multiline
+                  editable={canUpdateOperations}
+                />
+
+                <Text style={styles.fieldLabel}>SURGERY</Text>
+                <Text style={styles.sitrepSectionText}>
+                  First surgical intervention:{" "}
+                  {formatDateTime(
+                    hospitalResourceSummary.surgery
+                      .firstSurgicalInterventionAt,
+                  )}
+                  {"\n"}Last surgical intervention:{" "}
+                  {formatDateTime(
+                    hospitalResourceSummary.surgery
+                      .lastSurgicalInterventionAt,
+                  )}
+                  {"\n"}Mean duration:{" "}
+                  {hospitalResourceSummary.surgery.meanDurationMinutes ??
+                    "Not available"}{" "}
+                  minutes
+                </Text>
+
+                {renderHospitalIntervalSection(
+                  "T1 SURVIVORS SENT TO OPERATING ROOM",
+                  hospitalResourceSummary.operatingRooms.t1ByInterval,
+                )}
+                {renderHospitalIntervalSection(
+                  "OPERATING ROOMS USED FOR T1",
+                  hospitalResourceSummary.operatingRooms
+                    .percentUsedByInterval,
+                  true,
+                )}
+
+                <Text style={styles.fieldLabel}>IMAGING</Text>
+                <Text style={styles.sitrepSectionText}>
+                  X-ray required T1/T2:{" "}
+                  {
+                    hospitalResourceSummary.imaging.xray.requiredT1Total
+                  }
+                  /
+                  {
+                    hospitalResourceSummary.imaging.xray.requiredT2Total
+                  }
+                  {"\n"}Ultrasound required T1/T2:{" "}
+                  {
+                    hospitalResourceSummary.imaging.ultrasound
+                      .requiredT1Total
+                  }
+                  /
+                  {
+                    hospitalResourceSummary.imaging.ultrasound
+                      .requiredT2Total
+                  }
+                  {"\n"}CT required T1/T2:{" "}
+                  {hospitalResourceSummary.imaging.ct.requiredT1Total}/
+                  {hospitalResourceSummary.imaging.ct.requiredT2Total}
+                </Text>
+
+                {renderHospitalIntervalSection(
+                  "T1 X-RAY USE BY INTERVAL",
+                  hospitalResourceSummary.imaging.xray
+                    .performedT1ByInterval,
+                )}
+                {renderHospitalIntervalSection(
+                  "T2 X-RAY USE BY INTERVAL",
+                  hospitalResourceSummary.imaging.xray
+                    .performedT2ByInterval,
+                )}
+                {renderHospitalIntervalSection(
+                  "T1 ULTRASOUND USE BY INTERVAL",
+                  hospitalResourceSummary.imaging.ultrasound
+                    .performedT1ByInterval,
+                )}
+                {renderHospitalIntervalSection(
+                  "T2 ULTRASOUND USE BY INTERVAL",
+                  hospitalResourceSummary.imaging.ultrasound
+                    .performedT2ByInterval,
+                )}
+                {renderHospitalIntervalSection(
+                  "T1 CT SCAN USE BY INTERVAL",
+                  hospitalResourceSummary.imaging.ct.performedT1ByInterval,
+                )}
+                {renderHospitalIntervalSection(
+                  "T2 CT SCAN USE BY INTERVAL",
+                  hospitalResourceSummary.imaging.ct.performedT2ByInterval,
+                )}
+
+                <Text style={styles.fieldLabel}>ICU</Text>
+                <Text style={styles.sitrepSectionText}>
+                  Response initiation:{" "}
+                  {formatDateTime(
+                    hospitalResourceSummary.responseInitiatedAt,
+                  )}
+                  {"\n"}Mean disaster onset to ICU:{" "}
+                  {hospitalResourceSummary.icu.meanDisasterToIcuMinutes ??
+                    "Not available"}{" "}
+                  minutes
+                  {"\n"}Mean ED to ICU:{" "}
+                  {hospitalResourceSummary.icu.meanEdToIcuMinutes ??
+                    "Not available"}{" "}
+                  minutes
+                  {"\n"}Alternative ICU use:{" "}
+                  {hospitalResourceSummary.icu.alternativeIcuUse === true
+                    ? "Yes"
+                    : hospitalResourceSummary.icu.alternativeIcuUse ===
+                        false
+                      ? "No"
+                      : "Unknown"}
+                </Text>
+                {renderHospitalIntervalSection(
+                  "CRITICAL SURVIVORS ADMITTED TO ICU",
+                  hospitalResourceSummary.icu.admittedByInterval,
+                )}
+
+                <View style={styles.timelineActions}>
+                  <Pressable
+                    onPress={handleCloseHospitalResourceModal}
+                    style={({ pressed }) => [
+                      styles.secondaryButton,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Text style={styles.secondaryButtonText}>Close</Text>
+                  </Pressable>
+
+                  <Pressable
+                    disabled={
+                      !canUpdateOperations || isSavingHospitalResource
+                    }
+                    onPress={() => {
+                      void handleSaveHospitalResources();
+                    }}
+                    style={({ pressed }) => [
+                      styles.createButton,
+                      (!canUpdateOperations ||
+                        isSavingHospitalResource) &&
+                        styles.disabledButton,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Text style={styles.createButtonText}>
+                      {isSavingHospitalResource
+                        ? "Saving..."
+                        : "Save"}
+                    </Text>
+                    {isSavingHospitalResource ? (
+                      <ActivityIndicator
+                        size="small"
+                        color={COLORS.white}
+                      />
+                    ) : (
+                      <Ionicons
+                        name="save-outline"
+                        size={19}
+                        color={COLORS.white}
+                      />
+                    )}
+                  </Pressable>
+                </View>
+              </ScrollView>
+            ) : null}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={isMorbidityMortalityModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCloseMorbidityMortalityModal}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={handleCloseMorbidityMortalityModal}
+        >
+          <Pressable style={styles.timelineSheet}>
+            <View style={styles.sheetHandle} />
+
+            <View style={styles.sheetHeader}>
+              <View style={styles.sheetTitleGroup}>
+                <Text style={styles.sheetTitle}>
+                  Morbidity & Mortality
+                </Text>
+                <Text
+                  style={styles.sheetSubtitle}
+                  numberOfLines={1}
+                >
+                  {selectedMorbidityMortalityIncident?.incident_name ??
+                    "Incident"}
+                </Text>
+              </View>
+              <Pressable
+                onPress={handleCloseMorbidityMortalityModal}
+                style={styles.sheetCloseButton}
+              >
+                <Ionicons
+                  name="close"
+                  size={20}
+                  color={COLORS.secondaryText}
+                />
+              </Pressable>
+            </View>
+
+            {isLoadingMorbidityMortality ? (
+              <View style={styles.timelineLoading}>
+                <ActivityIndicator
+                  size="small"
+                  color={COLORS.maroon}
+                />
+                <Text style={styles.timelineLoadingText}>
+                  Loading morbidity and mortality...
+                </Text>
+              </View>
+            ) : morbidityMortalitySummary ? (
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.timelineScrollContent}
+              >
+                <View style={styles.sitrepMetricGrid}>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {morbidityMortalitySummary.totalVictims}
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      Victims
+                    </Text>
+                  </View>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {
+                        morbidityMortalitySummary.mortality
+                          .inHospitalDeaths.percentage
+                      }
+                      %
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      In-hospital Deaths
+                    </Text>
+                  </View>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {
+                        morbidityMortalitySummary.morbidity.hospital
+                          .count
+                      }
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      Hospital LOS
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={styles.fieldLabel}>ED LENGTH OF STAY</Text>
+                {renderMorbidityMinuteRow(
+                  "T1 Immediate ED LOS",
+                  morbidityMortalitySummary.morbidity.ed.immediate,
+                )}
+                {renderMorbidityMinuteRow(
+                  "T2 Delayed ED LOS",
+                  morbidityMortalitySummary.morbidity.ed.delayed,
+                )}
+
+                <Text style={styles.fieldLabel}>ICU AND VENTILATOR</Text>
+                {renderMorbidityDayRow(
+                  "T1 Immediate ICU LOS",
+                  morbidityMortalitySummary.morbidity.icu.immediate,
+                )}
+                {renderMorbidityDayRow(
+                  "Mechanical Ventilator Days",
+                  morbidityMortalitySummary.morbidity.ventilator,
+                )}
+
+                <Text style={styles.fieldLabel}>HOSPITAL STAY</Text>
+                {renderMorbidityDayRow(
+                  "All Survivors Hospital LOS",
+                  morbidityMortalitySummary.morbidity.hospital,
+                )}
+
+                <Text style={styles.fieldLabel}>MORTALITY</Text>
+                {renderDistributionRatioRow(
+                  "Impact Deaths",
+                  "Deaths before any medical contact / total victims",
+                  morbidityMortalitySummary.mortality.impactDeaths,
+                )}
+                {renderDistributionRatioRow(
+                  "Pre-hospital Deaths",
+                  "Deaths after medical contact before hospital arrival / total victims",
+                  morbidityMortalitySummary.mortality.prehospitalDeaths,
+                )}
+                {renderDistributionRatioRow(
+                  "In-hospital Deaths",
+                  "Deaths inside hospital premises / total victims",
+                  morbidityMortalitySummary.mortality.inHospitalDeaths,
+                )}
+                {renderDistributionRatioRow(
+                  "T1 Immediate Deaths",
+                  "Dead T1 victims / total T1 victims",
+                  morbidityMortalitySummary.mortality.immediateDeaths,
+                )}
+
+                <View style={styles.timelineActions}>
+                  <Pressable
+                    onPress={handleCloseMorbidityMortalityModal}
+                    style={({ pressed }) => [
+                      styles.secondaryButton,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Text style={styles.secondaryButtonText}>Close</Text>
+                  </Pressable>
+                </View>
               </ScrollView>
             ) : null}
           </Pressable>

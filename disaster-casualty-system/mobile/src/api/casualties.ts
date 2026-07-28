@@ -278,6 +278,23 @@ export type FacilityEncounterPayload = {
   edAdmittedAt?: string;
   edDepartedAt?: string;
   edResuscitationStartedAt?: string;
+  hospitalAdmittedAt?: string;
+  hospitalDischargedAt?: string;
+  surgicalInterventionStartedAt?: string;
+  surgicalInterventionEndedAt?: string;
+  operatingRoomStartedAt?: string;
+  xrayRequired?: boolean | null;
+  xrayPerformedAt?: string;
+  ultrasoundRequired?: boolean | null;
+  ultrasoundPerformedAt?: string;
+  ctRequired?: boolean | null;
+  ctPerformedAt?: string;
+  icuAdmittedAt?: string;
+  icuDischargedAt?: string;
+  mechanicalVentilationRequired?: boolean | null;
+  ventilationStartedAt?: string;
+  ventilationEndedAt?: string;
+  alternativeIcuUsed?: boolean | null;
   disposition?:
     | "active_care"
     | "hospital_admission"
@@ -286,6 +303,21 @@ export type FacilityEncounterPayload = {
     | "deceased"
     | "left_without_treatment"
     | "unknown";
+};
+
+export type CasualtyOutcomePayload = {
+  died?: boolean | null;
+  deathStage?: "impact" | "prehospital" | "in_hospital" | null;
+  deathAt?: string;
+  reachedHospital?: boolean | null;
+  medicalContactBeforeDeath?: boolean | null;
+  finalDisposition?:
+    | "alive"
+    | "deceased"
+    | "transferred"
+    | "discharged"
+    | "unknown"
+    | null;
 };
 
 export async function getCasualties(): Promise<CasualtyRecord[]> {
@@ -428,6 +460,7 @@ export type CreateCasualtyPayload = {
   transportRecord?: CasualtyTransportRecordPayload;
   treatmentRecord?: CasualtyTreatmentRecordPayload;
   facilityEncounter?: FacilityEncounterPayload;
+  casualtyOutcome?: CasualtyOutcomePayload;
 };
 
 type CreateCasualtyResponse = {
@@ -465,6 +498,7 @@ export type UpdateCasualtyPayload = {
   transportRecord?: CasualtyTransportRecordPayload;
   treatmentRecord?: CasualtyTreatmentRecordPayload;
   facilityEncounter?: FacilityEncounterPayload;
+  casualtyOutcome?: CasualtyOutcomePayload;
 };
 
 export async function updateCasualty(

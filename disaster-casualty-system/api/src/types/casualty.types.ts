@@ -107,7 +107,41 @@ export interface FacilityEncounterRequest {
   edAdmittedAt?: string;
   edDepartedAt?: string;
   edResuscitationStartedAt?: string;
+  hospitalAdmittedAt?: string;
+  hospitalDischargedAt?: string;
+  surgicalInterventionStartedAt?: string;
+  surgicalInterventionEndedAt?: string;
+  operatingRoomStartedAt?: string;
+  xrayRequired?: boolean | null;
+  xrayPerformedAt?: string;
+  ultrasoundRequired?: boolean | null;
+  ultrasoundPerformedAt?: string;
+  ctRequired?: boolean | null;
+  ctPerformedAt?: string;
+  icuAdmittedAt?: string;
+  icuDischargedAt?: string;
+  mechanicalVentilationRequired?: boolean | null;
+  ventilationStartedAt?: string;
+  ventilationEndedAt?: string;
+  alternativeIcuUsed?: boolean | null;
   disposition?: string;
+}
+
+export type DeathStage = "impact" | "prehospital" | "in_hospital";
+
+export interface CasualtyOutcomeRequest {
+  died?: boolean | null;
+  deathStage?: DeathStage | null;
+  deathAt?: string;
+  reachedHospital?: boolean | null;
+  medicalContactBeforeDeath?: boolean | null;
+  finalDisposition?:
+    | "alive"
+    | "deceased"
+    | "transferred"
+    | "discharged"
+    | "unknown"
+    | null;
 }
 
 export interface CreateCasualtyRequest {
@@ -163,6 +197,7 @@ export interface CreateCasualtyRequest {
   transportRecord?: CasualtyTransportRecordRequest;
   treatmentRecord?: CasualtyTreatmentRecordRequest;
   facilityEncounter?: FacilityEncounterRequest;
+  casualtyOutcome?: CasualtyOutcomeRequest;
 }
 
 export interface UpdateCasualtyRequest {
@@ -178,4 +213,5 @@ export interface UpdateCasualtyRequest {
   transportRecord?: CasualtyTransportRecordRequest;
   treatmentRecord?: CasualtyTreatmentRecordRequest;
   facilityEncounter?: FacilityEncounterRequest;
+  casualtyOutcome?: CasualtyOutcomeRequest;
 }

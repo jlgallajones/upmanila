@@ -33,6 +33,7 @@ import {
   type UpdateCasualtyPayload,
 } from "../../api/casualties";
 import { uploadAttachment } from "../../api/attachments";
+import { isAuthenticationTokenError } from "../../api/client";
 import {
   createIncident,
   getIncidents,
@@ -449,6 +450,18 @@ const TREATMENT_STRATEGY_OPTIONS = [
 
 const TRANSFERRED_OUT_OPTIONS = ["Yes", "No", "Unknown"] as const;
 const ED_CARE_OPTIONS = ["Yes", "No", "Unknown"] as const;
+const DEATH_STAGE_OPTIONS = [
+  "Impact",
+  "Pre-hospital",
+  "In-hospital",
+] as const;
+const FINAL_DISPOSITION_OPTIONS = [
+  "Alive",
+  "Deceased",
+  "Transferred",
+  "Discharged",
+  "Unknown",
+] as const;
 
 const FACILITY_LEVEL_OPTIONS = [
   "Primary",
@@ -484,6 +497,16 @@ type ChoiceSheetName =
   | "soughtEdCare"
   | "admittedAfterEd"
   | "dischargedAfterEd"
+  | "xrayRequired"
+  | "ultrasoundRequired"
+  | "ctRequired"
+  | "mechanicalVentilationRequired"
+  | "alternativeIcuUsed"
+  | "died"
+  | "deathStage"
+  | "reachedHospital"
+  | "medicalContactBeforeDeath"
+  | "finalDisposition"
   | "casualtyStatus"
   | "severity";
 
@@ -550,7 +573,32 @@ type FormState = {
   soughtEdCare: string;
   admittedAfterEd: string;
   dischargedAfterEd: string;
+  edAdmissionTime: string;
+  edTransferOutTime: string;
   edResuscitationTime: string;
+  hospitalAdmissionTime: string;
+  hospitalDischargeTime: string;
+  surgicalInterventionStartTime: string;
+  surgicalInterventionEndTime: string;
+  operatingRoomTime: string;
+  xrayRequired: string;
+  xrayTime: string;
+  ultrasoundRequired: string;
+  ultrasoundTime: string;
+  ctRequired: string;
+  ctTime: string;
+  icuAdmissionTime: string;
+  icuTransferOutTime: string;
+  mechanicalVentilationRequired: string;
+  ventilationStartTime: string;
+  ventilationEndTime: string;
+  alternativeIcuUsed: string;
+  died: string;
+  deathStage: string;
+  deathTime: string;
+  reachedHospital: string;
+  medicalContactBeforeDeath: string;
+  finalDisposition: string;
 
   casualtyStatus: string;
   severity: string;
@@ -630,7 +678,32 @@ const initialForm: FormState = {
   soughtEdCare: "",
   admittedAfterEd: "",
   dischargedAfterEd: "",
+  edAdmissionTime: "",
+  edTransferOutTime: "",
   edResuscitationTime: "",
+  hospitalAdmissionTime: "",
+  hospitalDischargeTime: "",
+  surgicalInterventionStartTime: "",
+  surgicalInterventionEndTime: "",
+  operatingRoomTime: "",
+  xrayRequired: "",
+  xrayTime: "",
+  ultrasoundRequired: "",
+  ultrasoundTime: "",
+  ctRequired: "",
+  ctTime: "",
+  icuAdmissionTime: "",
+  icuTransferOutTime: "",
+  mechanicalVentilationRequired: "",
+  ventilationStartTime: "",
+  ventilationEndTime: "",
+  alternativeIcuUsed: "",
+  died: "",
+  deathStage: "",
+  deathTime: "",
+  reachedHospital: "",
+  medicalContactBeforeDeath: "",
+  finalDisposition: "",
 
   casualtyStatus: "",
   severity: "",
@@ -665,6 +738,11 @@ type EmsUnitType = NonNullable<TransportRecord["emsUnitType"]>;
 type TreatmentRecord =
   NonNullable<CreateCasualtyPayload["treatmentRecord"]>;
 type TreatmentStrategy = TreatmentRecord["treatmentStrategy"];
+type CasualtyOutcome =
+  NonNullable<CreateCasualtyPayload["casualtyOutcome"]>;
+type DeathStage = NonNullable<CasualtyOutcome["deathStage"]>;
+type FinalDisposition =
+  NonNullable<CasualtyOutcome["finalDisposition"]>;
 
 function valueOrEmpty(value: string | number | null | undefined): string {
   if (value === null || value === undefined) {
@@ -940,6 +1018,38 @@ function normalizeTransferredOut(
 
 function normalizeYesNoUnknown(value: string): boolean | null {
   return normalizeTransferredOut(value);
+}
+
+function normalizeDeathStage(value: string): DeathStage | null {
+  switch (value.trim().toLowerCase()) {
+    case "impact":
+      return "impact";
+    case "pre-hospital":
+    case "prehospital":
+      return "prehospital";
+    case "in-hospital":
+    case "in hospital":
+      return "in_hospital";
+    default:
+      return null;
+  }
+}
+
+function normalizeFinalDisposition(
+  value: string,
+): FinalDisposition | null {
+  const normalized = normalizeEnumValue(value);
+  const allowed: FinalDisposition[] = [
+    "alive",
+    "deceased",
+    "transferred",
+    "discharged",
+    "unknown",
+  ];
+
+  return allowed.includes(normalized as FinalDisposition)
+    ? (normalized as FinalDisposition)
+    : null;
 }
 
 function formatTransportRequired(
@@ -1237,8 +1347,44 @@ function getTreatmentFormSignature(form: FormState): string {
     soughtEdCare: normalizeYesNoUnknown(form.soughtEdCare),
     admittedAfterEd: normalizeYesNoUnknown(form.admittedAfterEd),
     dischargedAfterEd: normalizeYesNoUnknown(form.dischargedAfterEd),
+    edAdmissionTime: parseDateTimeInput(form.edAdmissionTime) ?? "",
+    edTransferOutTime:
+      parseDateTimeInput(form.edTransferOutTime) ?? "",
     edResuscitationTime:
       parseDateTimeInput(form.edResuscitationTime) ?? "",
+    hospitalAdmissionTime:
+      parseDateTimeInput(form.hospitalAdmissionTime) ?? "",
+    hospitalDischargeTime:
+      parseDateTimeInput(form.hospitalDischargeTime) ?? "",
+    surgicalInterventionStart:
+      parseDateTimeInput(form.surgicalInterventionStartTime) ?? "",
+    surgicalInterventionEnd:
+      parseDateTimeInput(form.surgicalInterventionEndTime) ?? "",
+    operatingRoomTime: parseDateTimeInput(form.operatingRoomTime) ?? "",
+    xrayRequired: normalizeYesNoUnknown(form.xrayRequired),
+    xrayTime: parseDateTimeInput(form.xrayTime) ?? "",
+    ultrasoundRequired: normalizeYesNoUnknown(form.ultrasoundRequired),
+    ultrasoundTime: parseDateTimeInput(form.ultrasoundTime) ?? "",
+    ctRequired: normalizeYesNoUnknown(form.ctRequired),
+    ctTime: parseDateTimeInput(form.ctTime) ?? "",
+    icuAdmissionTime: parseDateTimeInput(form.icuAdmissionTime) ?? "",
+    icuTransferOutTime:
+      parseDateTimeInput(form.icuTransferOutTime) ?? "",
+    mechanicalVentilationRequired: normalizeYesNoUnknown(
+      form.mechanicalVentilationRequired,
+    ),
+    ventilationStartTime:
+      parseDateTimeInput(form.ventilationStartTime) ?? "",
+    ventilationEndTime: parseDateTimeInput(form.ventilationEndTime) ?? "",
+    alternativeIcuUsed: normalizeYesNoUnknown(form.alternativeIcuUsed),
+    died: normalizeYesNoUnknown(form.died),
+    deathStage: normalizeDeathStage(form.deathStage),
+    deathTime: parseDateTimeInput(form.deathTime) ?? "",
+    reachedHospital: normalizeYesNoUnknown(form.reachedHospital),
+    medicalContactBeforeDeath: normalizeYesNoUnknown(
+      form.medicalContactBeforeDeath,
+    ),
+    finalDisposition: normalizeFinalDisposition(form.finalDisposition),
   });
 }
 
@@ -1394,7 +1540,33 @@ function mapRecordToForm(
     soughtEdCare: "",
     admittedAfterEd: "",
     dischargedAfterEd: "",
+    edAdmissionTime: "",
+    edTransferOutTime: "",
     edResuscitationTime: "",
+    hospitalAdmissionTime: "",
+    hospitalDischargeTime: "",
+    surgicalInterventionStartTime: "",
+    surgicalInterventionEndTime: "",
+    operatingRoomTime: "",
+    xrayRequired: "",
+    xrayTime: "",
+    ultrasoundRequired: "",
+    ultrasoundTime: "",
+    ctRequired: "",
+    ctTime: "",
+    icuAdmissionTime: "",
+    icuTransferOutTime: "",
+    mechanicalVentilationRequired: "",
+    ventilationStartTime: "",
+    ventilationEndTime: "",
+    alternativeIcuUsed: "",
+    died: record.current_status === "deceased" ? "Yes" : "Unknown",
+    deathStage: "",
+    deathTime: "",
+    reachedHospital: "Unknown",
+    medicalContactBeforeDeath: "Unknown",
+    finalDisposition:
+      record.current_status === "deceased" ? "Deceased" : "Unknown",
 
     casualtyStatus: titleCase(record.current_status),
     severity: titleCase(record.severity),
@@ -1504,6 +1676,16 @@ function SelectField({
           color={COLORS.secondaryText}
         />
       </Pressable>
+    </View>
+  );
+}
+
+function SectionLabel({ title }: { title: string }) {
+  return (
+    <View style={styles.sectionLabelRow}>
+      <View style={styles.sectionLabelRule} />
+      <Text style={styles.sectionLabelText}>{title}</Text>
+      <View style={styles.sectionLabelRule} />
     </View>
   );
 }
@@ -1913,6 +2095,15 @@ export default function AddCasualtyScreen() {
     soughtEdCare: isEditing ? "" : "Unknown",
     admittedAfterEd: isEditing ? "" : "Unknown",
     dischargedAfterEd: isEditing ? "" : "Unknown",
+    xrayRequired: isEditing ? "" : "Unknown",
+    ultrasoundRequired: isEditing ? "" : "Unknown",
+    ctRequired: isEditing ? "" : "Unknown",
+    mechanicalVentilationRequired: isEditing ? "" : "Unknown",
+    alternativeIcuUsed: isEditing ? "" : "Unknown",
+    died: isEditing ? "" : "Unknown",
+    reachedHospital: isEditing ? "" : "Unknown",
+    medicalContactBeforeDeath: isEditing ? "" : "Unknown",
+    finalDisposition: isEditing ? "" : "Unknown",
   }));
   const [isLoadingRecord, setIsLoadingRecord] =
     useState(isEditing);
@@ -2162,19 +2353,103 @@ export default function AddCasualtyScreen() {
       soughtEdCare: soughtEdCare ?? (hasFacilityCare ? true : null),
       admittedToHospital,
       dischargedHome,
+      edAdmittedAt: parseDateTimeInput(form.edAdmissionTime),
+      edDepartedAt: parseDateTimeInput(form.edTransferOutTime),
       edResuscitationStartedAt: parseDateTimeInput(
         form.edResuscitationTime,
       ),
+      hospitalAdmittedAt: parseDateTimeInput(
+        form.hospitalAdmissionTime,
+      ),
+      hospitalDischargedAt: parseDateTimeInput(
+        form.hospitalDischargeTime,
+      ),
+      surgicalInterventionStartedAt: parseDateTimeInput(
+        form.surgicalInterventionStartTime,
+      ),
+      surgicalInterventionEndedAt: parseDateTimeInput(
+        form.surgicalInterventionEndTime,
+      ),
+      operatingRoomStartedAt: parseDateTimeInput(
+        form.operatingRoomTime,
+      ),
+      xrayRequired: normalizeYesNoUnknown(form.xrayRequired),
+      xrayPerformedAt: parseDateTimeInput(form.xrayTime),
+      ultrasoundRequired: normalizeYesNoUnknown(
+        form.ultrasoundRequired,
+      ),
+      ultrasoundPerformedAt: parseDateTimeInput(form.ultrasoundTime),
+      ctRequired: normalizeYesNoUnknown(form.ctRequired),
+      ctPerformedAt: parseDateTimeInput(form.ctTime),
+      icuAdmittedAt: parseDateTimeInput(form.icuAdmissionTime),
+      icuDischargedAt: parseDateTimeInput(form.icuTransferOutTime),
+      mechanicalVentilationRequired: normalizeYesNoUnknown(
+        form.mechanicalVentilationRequired,
+      ),
+      ventilationStartedAt: parseDateTimeInput(
+        form.ventilationStartTime,
+      ),
+      ventilationEndedAt: parseDateTimeInput(form.ventilationEndTime),
+      alternativeIcuUsed: normalizeYesNoUnknown(
+        form.alternativeIcuUsed,
+      ),
       disposition:
         referredOrTransferred === true
-          ? "transferred"
-          : admittedToHospital === true
-            ? "hospital_admission"
-            : dischargedHome === true
+      ? "transferred"
+      : admittedToHospital === true
+        ? "hospital_admission"
+        : dischargedHome === true
               ? "discharged_home"
-              : "unknown",
+            : "unknown",
     };
   }, [form, initialTreatmentSignature, isEditing]);
+
+  const casualtyOutcomePayload = useMemo<
+    CreateCasualtyPayload["casualtyOutcome"]
+  >(() => {
+    const died = normalizeYesNoUnknown(form.died);
+
+    if (died !== true) {
+      return died === null ? undefined : { died };
+    }
+
+    const deathStage = normalizeDeathStage(form.deathStage);
+    const selectedFinalDisposition = normalizeFinalDisposition(
+      form.finalDisposition,
+    );
+    const finalDisposition =
+      selectedFinalDisposition &&
+      selectedFinalDisposition !== "unknown"
+        ? selectedFinalDisposition
+        : "deceased";
+    const reachedHospital = normalizeYesNoUnknown(
+      form.reachedHospital,
+    );
+    const medicalContactBeforeDeath = normalizeYesNoUnknown(
+      form.medicalContactBeforeDeath,
+    );
+    const deathAt = parseDateTimeInput(form.deathTime);
+    const hasOutcome =
+      died === true ||
+      deathStage !== null ||
+      finalDisposition !== null ||
+      reachedHospital !== null ||
+      medicalContactBeforeDeath !== null ||
+      Boolean(deathAt);
+
+    if (!hasOutcome) {
+      return undefined;
+    }
+
+    return {
+      died,
+      deathStage,
+      deathAt,
+      reachedHospital,
+      medicalContactBeforeDeath,
+      finalDisposition,
+    };
+  }, [form]);
 
   const updatePayload = useMemo<UpdateCasualtyPayload>(
     () => ({
@@ -2185,8 +2460,10 @@ export default function AddCasualtyScreen() {
       transportRecord: transportRecordPayload,
       treatmentRecord: treatmentRecordPayload,
       facilityEncounter: facilityEncounterPayload,
+      casualtyOutcome: casualtyOutcomePayload,
     }),
     [
+      casualtyOutcomePayload,
       facilityEncounterPayload,
       form.incidentId,
       incidentDetailsPayload,
@@ -2756,12 +3033,36 @@ export default function AddCasualtyScreen() {
           normalizeYesNoUnknown(form.soughtEdCare) === true ||
           normalizeYesNoUnknown(form.admittedAfterEd) === true ||
           normalizeYesNoUnknown(form.dischargedAfterEd) === true ||
+          form.edAdmissionTime.trim() ||
+          form.edTransferOutTime.trim() ||
           form.edResuscitationTime.trim();
+        const hasHospitalResourceDetails =
+          form.hospitalAdmissionTime.trim() ||
+          form.hospitalDischargeTime.trim() ||
+          form.surgicalInterventionStartTime.trim() ||
+          form.surgicalInterventionEndTime.trim() ||
+          form.operatingRoomTime.trim() ||
+          normalizeYesNoUnknown(form.xrayRequired) === true ||
+          form.xrayTime.trim() ||
+          normalizeYesNoUnknown(form.ultrasoundRequired) === true ||
+          form.ultrasoundTime.trim() ||
+          normalizeYesNoUnknown(form.ctRequired) === true ||
+          form.ctTime.trim() ||
+          form.icuAdmissionTime.trim() ||
+          form.icuTransferOutTime.trim() ||
+          normalizeYesNoUnknown(form.mechanicalVentilationRequired) ===
+            true ||
+          form.ventilationStartTime.trim() ||
+          form.ventilationEndTime.trim() ||
+          normalizeYesNoUnknown(form.alternativeIcuUsed) === true;
 
-        if (hasEdDetails && !form.healthcareFacilityId) {
+        if (
+          (hasEdDetails || hasHospitalResourceDetails) &&
+          !form.healthcareFacilityId
+        ) {
           Alert.alert(
             "Healthcare facility required",
-            "Select the receiving healthcare facility before recording ED resource use.",
+            "Select the receiving healthcare facility before recording ED or hospital resource use.",
           );
           return false;
         }
@@ -2782,6 +3083,66 @@ export default function AddCasualtyScreen() {
         const edResuscitationAt = form.edResuscitationTime.trim()
           ? getValidDateTimeInput(form.edResuscitationTime)
           : null;
+        const edAdmissionAt = form.edAdmissionTime.trim()
+          ? getValidDateTimeInput(form.edAdmissionTime)
+          : null;
+        const edTransferOutAt = form.edTransferOutTime.trim()
+          ? getValidDateTimeInput(form.edTransferOutTime)
+          : null;
+        const hospitalAdmissionAt = form.hospitalAdmissionTime.trim()
+          ? getValidDateTimeInput(form.hospitalAdmissionTime)
+          : null;
+        const hospitalDischargeAt = form.hospitalDischargeTime.trim()
+          ? getValidDateTimeInput(form.hospitalDischargeTime)
+          : null;
+        const surgicalStartAt =
+          form.surgicalInterventionStartTime.trim()
+            ? getValidDateTimeInput(
+                form.surgicalInterventionStartTime,
+              )
+            : null;
+        const surgicalEndAt = form.surgicalInterventionEndTime.trim()
+          ? getValidDateTimeInput(form.surgicalInterventionEndTime)
+          : null;
+        const operatingRoomAt = form.operatingRoomTime.trim()
+          ? getValidDateTimeInput(form.operatingRoomTime)
+          : null;
+        const xrayAt = form.xrayTime.trim()
+          ? getValidDateTimeInput(form.xrayTime)
+          : null;
+        const ultrasoundAt = form.ultrasoundTime.trim()
+          ? getValidDateTimeInput(form.ultrasoundTime)
+          : null;
+        const ctAt = form.ctTime.trim()
+          ? getValidDateTimeInput(form.ctTime)
+          : null;
+        const icuAdmissionAt = form.icuAdmissionTime.trim()
+          ? getValidDateTimeInput(form.icuAdmissionTime)
+          : null;
+        const icuTransferOutAt = form.icuTransferOutTime.trim()
+          ? getValidDateTimeInput(form.icuTransferOutTime)
+          : null;
+        const ventilationStartAt = form.ventilationStartTime.trim()
+          ? getValidDateTimeInput(form.ventilationStartTime)
+          : null;
+        const ventilationEndAt = form.ventilationEndTime.trim()
+          ? getValidDateTimeInput(form.ventilationEndTime)
+          : null;
+        const isDiedYes = normalizeYesNoUnknown(form.died) === true;
+        const deathAt = form.deathTime.trim()
+          ? getValidDateTimeInput(form.deathTime)
+          : null;
+
+        if (
+          normalizeStatus(form.casualtyStatus) === "deceased" &&
+          !isDiedYes
+        ) {
+          Alert.alert(
+            "Death status required",
+            "Set Died to Yes when the casualty status is Deceased.",
+          );
+          return false;
+        }
 
         if (
           form.stabilizationStartedTime.trim() &&
@@ -2813,6 +3174,77 @@ export default function AddCasualtyScreen() {
           return false;
         }
 
+        const hospitalDateChecks: Array<[string, Date | null, string]> = [
+          [
+            form.edAdmissionTime,
+            edAdmissionAt,
+            "Invalid ED admission time",
+          ],
+          [
+            form.edTransferOutTime,
+            edTransferOutAt,
+            "Invalid ED transfer out time",
+          ],
+          [
+            form.hospitalAdmissionTime,
+            hospitalAdmissionAt,
+            "Invalid hospital admission time",
+          ],
+          [
+            form.hospitalDischargeTime,
+            hospitalDischargeAt,
+            "Invalid hospital discharge time",
+          ],
+          [
+            form.surgicalInterventionStartTime,
+            surgicalStartAt,
+            "Invalid surgery start time",
+          ],
+          [
+            form.surgicalInterventionEndTime,
+            surgicalEndAt,
+            "Invalid surgery end time",
+          ],
+          [
+            form.operatingRoomTime,
+            operatingRoomAt,
+            "Invalid operating room time",
+          ],
+          [form.xrayTime, xrayAt, "Invalid X-ray time"],
+          [form.ultrasoundTime, ultrasoundAt, "Invalid ultrasound time"],
+          [form.ctTime, ctAt, "Invalid CT scan time"],
+          [
+            form.icuAdmissionTime,
+            icuAdmissionAt,
+            "Invalid ICU admission time",
+          ],
+          [
+            form.icuTransferOutTime,
+            icuTransferOutAt,
+            "Invalid ICU transfer out time",
+          ],
+          [
+            form.ventilationStartTime,
+            ventilationStartAt,
+            "Invalid ventilation start time",
+          ],
+          [
+            form.ventilationEndTime,
+            ventilationEndAt,
+            "Invalid ventilation end time",
+          ],
+        ];
+
+        for (const [rawValue, parsedValue, title] of hospitalDateChecks) {
+          if (rawValue.trim() && !parsedValue) {
+            Alert.alert(
+              title,
+              "Enter the time using mm/dd/yyyy hh:mm.",
+            );
+            return false;
+          }
+        }
+
         if (
           ["stay_and_play", "play_and_run"].includes(
             treatmentStrategy,
@@ -2840,6 +3272,42 @@ export default function AddCasualtyScreen() {
 
         if (
           arrivedFacilityAt &&
+          edAdmissionAt &&
+          edAdmissionAt < arrivedFacilityAt
+        ) {
+          Alert.alert(
+            "Invalid ED time",
+            "ED admission time cannot be before facility arrival time.",
+          );
+          return false;
+        }
+
+        if (
+          arrivedFacilityAt &&
+          edTransferOutAt &&
+          edTransferOutAt < arrivedFacilityAt
+        ) {
+          Alert.alert(
+            "Invalid ED time",
+            "ED transfer out time cannot be before facility arrival time.",
+          );
+          return false;
+        }
+
+        if (
+          edAdmissionAt &&
+          edTransferOutAt &&
+          edTransferOutAt < edAdmissionAt
+        ) {
+          Alert.alert(
+            "Invalid ED stay",
+            "ED transfer out time cannot be before ED admission time.",
+          );
+          return false;
+        }
+
+        if (
+          arrivedFacilityAt &&
           edResuscitationAt &&
           edResuscitationAt < arrivedFacilityAt
         ) {
@@ -2848,6 +3316,101 @@ export default function AddCasualtyScreen() {
             "ED resuscitation room time cannot be before facility arrival time.",
           );
           return false;
+        }
+
+        if (surgicalStartAt && surgicalEndAt && surgicalEndAt < surgicalStartAt) {
+          Alert.alert(
+            "Invalid surgery times",
+            "Surgery end time cannot be before surgery start time.",
+          );
+          return false;
+        }
+
+        if (
+          hospitalAdmissionAt &&
+          hospitalDischargeAt &&
+          hospitalDischargeAt < hospitalAdmissionAt
+        ) {
+          Alert.alert(
+            "Invalid hospital stay",
+            "Hospital discharge time cannot be before hospital admission time.",
+          );
+          return false;
+        }
+
+        if (
+          icuAdmissionAt &&
+          icuTransferOutAt &&
+          icuTransferOutAt < icuAdmissionAt
+        ) {
+          Alert.alert(
+            "Invalid ICU stay",
+            "ICU transfer out time cannot be before ICU admission time.",
+          );
+          return false;
+        }
+
+        if (
+          ventilationStartAt &&
+          ventilationEndAt &&
+          ventilationEndAt < ventilationStartAt
+        ) {
+          Alert.alert(
+            "Invalid ventilation days",
+            "Ventilation end time cannot be before ventilation start time.",
+          );
+          return false;
+        }
+
+        if (
+          isDiedYes &&
+          !normalizeDeathStage(form.deathStage)
+        ) {
+          Alert.alert(
+            "Death stage required",
+            "Select Impact, Pre-hospital, or In-hospital for deceased casualties.",
+          );
+          return false;
+        }
+
+        if (isDiedYes && form.deathTime.trim() && !deathAt) {
+          Alert.alert(
+            "Invalid death time",
+            "Enter death time using mm/dd/yyyy hh:mm.",
+          );
+          return false;
+        }
+
+        const facilityTimeChecks: Array<[Date | null, string]> = [
+          [
+            hospitalAdmissionAt,
+            "Hospital admission time cannot be before facility arrival time.",
+          ],
+          [
+            surgicalStartAt,
+            "Surgery start time cannot be before facility arrival time.",
+          ],
+          [
+            operatingRoomAt,
+            "Operating room time cannot be before facility arrival time.",
+          ],
+          [xrayAt, "X-ray time cannot be before facility arrival time."],
+          [
+            ultrasoundAt,
+            "Ultrasound time cannot be before facility arrival time.",
+          ],
+          [ctAt, "CT scan time cannot be before facility arrival time."],
+          [
+            icuAdmissionAt,
+            "ICU admission time cannot be before facility arrival time.",
+          ],
+        ];
+
+        for (const [eventTime, message] of facilityTimeChecks) {
+          if (arrivedFacilityAt && eventTime && eventTime < arrivedFacilityAt) {
+            Alert.alert("Invalid hospital time", message);
+            return false;
+          }
         }
 
         return true;
@@ -3294,6 +3857,26 @@ export default function AddCasualtyScreen() {
         return "ED Admission";
       case "dischargedAfterEd":
         return "ED Discharge";
+      case "xrayRequired":
+        return "Plain X-ray Required";
+      case "ultrasoundRequired":
+        return "Ultrasound Required";
+      case "ctRequired":
+        return "CT Scan Required";
+      case "mechanicalVentilationRequired":
+        return "Mechanical Ventilation";
+      case "alternativeIcuUsed":
+        return "Alternative ICU Use";
+      case "died":
+        return "Death Status";
+      case "deathStage":
+        return "Death Stage";
+      case "reachedHospital":
+        return "Reached Hospital";
+      case "medicalContactBeforeDeath":
+        return "Medical Contact Before Death";
+      case "finalDisposition":
+        return "Final Disposition";
       case "casualtyStatus":
         return "Select Casualty Status";
       case "severity":
@@ -3542,6 +4125,93 @@ export default function AddCasualtyScreen() {
           onSelect: () => updateField("dischargedAfterEd", option),
         }));
 
+      case "xrayRequired":
+        return ED_CARE_OPTIONS.map((option) => ({
+          label: option,
+          selected:
+            form.xrayRequired.toLowerCase() === option.toLowerCase(),
+          onSelect: () => updateField("xrayRequired", option),
+        }));
+
+      case "ultrasoundRequired":
+        return ED_CARE_OPTIONS.map((option) => ({
+          label: option,
+          selected:
+            form.ultrasoundRequired.toLowerCase() ===
+            option.toLowerCase(),
+          onSelect: () => updateField("ultrasoundRequired", option),
+        }));
+
+      case "ctRequired":
+        return ED_CARE_OPTIONS.map((option) => ({
+          label: option,
+          selected:
+            form.ctRequired.toLowerCase() === option.toLowerCase(),
+          onSelect: () => updateField("ctRequired", option),
+        }));
+
+      case "mechanicalVentilationRequired":
+        return ED_CARE_OPTIONS.map((option) => ({
+          label: option,
+          selected:
+            form.mechanicalVentilationRequired.toLowerCase() ===
+            option.toLowerCase(),
+          onSelect: () =>
+            updateField("mechanicalVentilationRequired", option),
+        }));
+
+      case "alternativeIcuUsed":
+        return ED_CARE_OPTIONS.map((option) => ({
+          label: option,
+          selected:
+            form.alternativeIcuUsed.toLowerCase() ===
+            option.toLowerCase(),
+          onSelect: () => updateField("alternativeIcuUsed", option),
+        }));
+
+      case "died":
+        return ED_CARE_OPTIONS.map((option) => ({
+          label: option,
+          selected: form.died.toLowerCase() === option.toLowerCase(),
+          onSelect: () => updateField("died", option),
+        }));
+
+      case "deathStage":
+        return DEATH_STAGE_OPTIONS.map((option) => ({
+          label: option,
+          selected:
+            form.deathStage.toLowerCase() === option.toLowerCase(),
+          onSelect: () => updateField("deathStage", option),
+        }));
+
+      case "reachedHospital":
+        return ED_CARE_OPTIONS.map((option) => ({
+          label: option,
+          selected:
+            form.reachedHospital.toLowerCase() ===
+            option.toLowerCase(),
+          onSelect: () => updateField("reachedHospital", option),
+        }));
+
+      case "medicalContactBeforeDeath":
+        return ED_CARE_OPTIONS.map((option) => ({
+          label: option,
+          selected:
+            form.medicalContactBeforeDeath.toLowerCase() ===
+            option.toLowerCase(),
+          onSelect: () =>
+            updateField("medicalContactBeforeDeath", option),
+        }));
+
+      case "finalDisposition":
+        return FINAL_DISPOSITION_OPTIONS.map((option) => ({
+          label: option,
+          selected:
+            form.finalDisposition.toLowerCase() ===
+            option.toLowerCase(),
+          onSelect: () => updateField("finalDisposition", option),
+        }));
+
       case "casualtyStatus":
         return STATUS_OPTIONS.map((option) => ({
           label: option,
@@ -3577,6 +4247,7 @@ export default function AddCasualtyScreen() {
         transportRecord: transportRecordPayload,
         treatmentRecord: treatmentRecordPayload,
         facilityEncounter: facilityEncounterPayload,
+        casualtyOutcome: casualtyOutcomePayload,
       };
 
       if (!currentUserId) {
@@ -3630,6 +4301,7 @@ export default function AddCasualtyScreen() {
           transportRecord: transportRecordPayload,
           treatmentRecord: treatmentRecordPayload,
           facilityEncounter: facilityEncounterPayload,
+          casualtyOutcome: casualtyOutcomePayload,
         };
 
         const response = await createCasualty(payload);
@@ -3664,6 +4336,22 @@ export default function AddCasualtyScreen() {
           Alert.alert(
             "Saved offline",
             "The casualty record was saved on this device and will sync when the connection is available.",
+          );
+          return;
+        }
+
+        if (isAuthenticationTokenError(error)) {
+          await queueCasualtySubmission(queuedPayload);
+
+          Alert.alert(
+            "Session expired",
+            "The casualty record was saved on this device. Please log in again from Profile, then sync queued records.",
+            [
+              {
+                text: "OK",
+                onPress: () => router.replace("/profile"),
+              },
+            ],
           );
           return;
         }
@@ -3704,6 +4392,20 @@ export default function AddCasualtyScreen() {
       );
     } catch (error) {
       console.error("Failed to update casualty:", error);
+
+      if (isAuthenticationTokenError(error)) {
+        Alert.alert(
+          "Session expired",
+          "Please log in again from Profile, then try saving the casualty update again.",
+          [
+            {
+              text: "OK",
+              onPress: () => router.replace("/profile"),
+            },
+          ],
+        );
+        return;
+      }
 
       Alert.alert(
         "Unable to save changes",
@@ -4509,8 +5211,12 @@ export default function AddCasualtyScreen() {
   }
 
   function renderStatusStep() {
+    const showDeathDetails = normalizeYesNoUnknown(form.died) === true;
+
     return (
       <>
+        <SectionLabel title="Clinical status" />
+
         <SelectField
           label="CASUALTY STATUS"
           value={form.casualtyStatus}
@@ -4533,6 +5239,8 @@ export default function AddCasualtyScreen() {
           placeholder="Select treatment type"
           onPress={() => openChoiceSheet("treatmentStrategy")}
         />
+
+        <SectionLabel title="On-site care" />
 
         <FormField
           label="TREATMENT AREA"
@@ -4624,6 +5332,8 @@ export default function AddCasualtyScreen() {
           }
         />
 
+        <SectionLabel title="ED and hospital care" />
+
         <SelectField
           label="TRANSFERRED OUT OF HOSPITAL"
           value={form.transferredOutOfHospital}
@@ -4652,6 +5362,24 @@ export default function AddCasualtyScreen() {
           value={form.dischargedAfterEd}
           placeholder="Select discharge status"
           onPress={() => openChoiceSheet("dischargedAfterEd")}
+        />
+
+        <FormField
+          label="ED ADMISSION TIME"
+          value={form.edAdmissionTime}
+          placeholder="mm/dd/yyyy hh:mm"
+          onChangeText={(value) =>
+            updateField("edAdmissionTime", value)
+          }
+        />
+
+        <FormField
+          label="ED TRANSFER OUT TIME"
+          value={form.edTransferOutTime}
+          placeholder="mm/dd/yyyy hh:mm"
+          onChangeText={(value) =>
+            updateField("edTransferOutTime", value)
+          }
         />
 
         <FormField
@@ -4684,6 +5412,203 @@ export default function AddCasualtyScreen() {
             Use current ED resuscitation time
           </Text>
         </Pressable>
+
+        <FormField
+          label="HOSPITAL ADMISSION TIME"
+          value={form.hospitalAdmissionTime}
+          placeholder="mm/dd/yyyy hh:mm"
+          onChangeText={(value) =>
+            updateField("hospitalAdmissionTime", value)
+          }
+        />
+
+        <FormField
+          label="HOSPITAL DISCHARGE TIME"
+          value={form.hospitalDischargeTime}
+          placeholder="mm/dd/yyyy hh:mm"
+          onChangeText={(value) =>
+            updateField("hospitalDischargeTime", value)
+          }
+        />
+
+        <SectionLabel title="Surgery and imaging" />
+
+        <FormField
+          label="SURGICAL INTERVENTION START TIME"
+          value={form.surgicalInterventionStartTime}
+          placeholder="mm/dd/yyyy hh:mm"
+          onChangeText={(value) =>
+            updateField("surgicalInterventionStartTime", value)
+          }
+        />
+
+        <FormField
+          label="SURGICAL INTERVENTION END TIME"
+          value={form.surgicalInterventionEndTime}
+          placeholder="mm/dd/yyyy hh:mm"
+          onChangeText={(value) =>
+            updateField("surgicalInterventionEndTime", value)
+          }
+        />
+
+        <FormField
+          label="OPERATING ROOM USE TIME"
+          value={form.operatingRoomTime}
+          placeholder="mm/dd/yyyy hh:mm"
+          onChangeText={(value) =>
+            updateField("operatingRoomTime", value)
+          }
+        />
+
+        <SelectField
+          label="PLAIN X-RAY REQUIRED"
+          value={form.xrayRequired}
+          placeholder="Select X-ray status"
+          onPress={() => openChoiceSheet("xrayRequired")}
+        />
+
+        <FormField
+          label="PLAIN X-RAY TIME"
+          value={form.xrayTime}
+          placeholder="mm/dd/yyyy hh:mm"
+          onChangeText={(value) => updateField("xrayTime", value)}
+        />
+
+        <SelectField
+          label="ULTRASOUND REQUIRED"
+          value={form.ultrasoundRequired}
+          placeholder="Select ultrasound status"
+          onPress={() => openChoiceSheet("ultrasoundRequired")}
+        />
+
+        <FormField
+          label="ULTRASOUND TIME"
+          value={form.ultrasoundTime}
+          placeholder="mm/dd/yyyy hh:mm"
+          onChangeText={(value) =>
+            updateField("ultrasoundTime", value)
+          }
+        />
+
+        <SelectField
+          label="CT SCAN REQUIRED"
+          value={form.ctRequired}
+          placeholder="Select CT scan status"
+          onPress={() => openChoiceSheet("ctRequired")}
+        />
+
+        <FormField
+          label="CT SCAN TIME"
+          value={form.ctTime}
+          placeholder="mm/dd/yyyy hh:mm"
+          onChangeText={(value) => updateField("ctTime", value)}
+        />
+
+        <SectionLabel title="ICU and ventilation" />
+
+        <FormField
+          label="ICU ADMISSION TIME"
+          value={form.icuAdmissionTime}
+          placeholder="mm/dd/yyyy hh:mm"
+          onChangeText={(value) =>
+            updateField("icuAdmissionTime", value)
+          }
+        />
+
+        <FormField
+          label="ICU TRANSFER OUT TIME"
+          value={form.icuTransferOutTime}
+          placeholder="mm/dd/yyyy hh:mm"
+          onChangeText={(value) =>
+            updateField("icuTransferOutTime", value)
+          }
+        />
+
+        <SelectField
+          label="MECHANICAL VENTILATION REQUIRED"
+          value={form.mechanicalVentilationRequired}
+          placeholder="Select ventilation status"
+          onPress={() =>
+            openChoiceSheet("mechanicalVentilationRequired")
+          }
+        />
+
+        <FormField
+          label="VENTILATION START TIME"
+          value={form.ventilationStartTime}
+          placeholder="mm/dd/yyyy hh:mm"
+          onChangeText={(value) =>
+            updateField("ventilationStartTime", value)
+          }
+        />
+
+        <FormField
+          label="VENTILATION END TIME"
+          value={form.ventilationEndTime}
+          placeholder="mm/dd/yyyy hh:mm"
+          onChangeText={(value) =>
+            updateField("ventilationEndTime", value)
+          }
+        />
+
+        <SelectField
+          label="ALTERNATIVE ICU USE"
+          value={form.alternativeIcuUsed}
+          placeholder="Select alternative ICU use"
+          onPress={() => openChoiceSheet("alternativeIcuUsed")}
+        />
+
+        <SectionLabel title="Outcome" />
+
+        <SelectField
+          label="DIED"
+          value={form.died}
+          placeholder="Select death status"
+          onPress={() => openChoiceSheet("died")}
+        />
+
+        {showDeathDetails ? (
+          <>
+            <SelectField
+              label="DEATH STAGE"
+              value={form.deathStage}
+              placeholder="Select death stage"
+              onPress={() => openChoiceSheet("deathStage")}
+            />
+
+            <FormField
+              label="DEATH TIME"
+              value={form.deathTime}
+              placeholder="mm/dd/yyyy hh:mm"
+              onChangeText={(value) => updateField("deathTime", value)}
+            />
+
+            <SelectField
+              label="REACHED HOSPITAL"
+              value={form.reachedHospital}
+              placeholder="Select reached hospital status"
+              onPress={() => openChoiceSheet("reachedHospital")}
+            />
+
+            <SelectField
+              label="MEDICAL CONTACT BEFORE DEATH"
+              value={form.medicalContactBeforeDeath}
+              placeholder="Select medical contact status"
+              onPress={() =>
+                openChoiceSheet("medicalContactBeforeDeath")
+              }
+            />
+
+            <SelectField
+              label="FINAL DISPOSITION"
+              value={form.finalDisposition}
+              placeholder="Select final disposition"
+              onPress={() => openChoiceSheet("finalDisposition")}
+            />
+          </>
+        ) : null}
+
+        <SectionLabel title="Clinical notes" />
 
         <FormField
           label="VISIBLE INJURY"
@@ -5361,6 +6286,25 @@ const styles = StyleSheet.create({
   },
   fieldGroup: {
     marginBottom: 17,
+  },
+  sectionLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 7,
+    marginBottom: 15,
+  },
+  sectionLabelRule: {
+    flex: 1,
+    height: 1,
+    backgroundColor: COLORS.fieldBorder,
+  },
+  sectionLabelText: {
+    color: COLORS.maroon,
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
   },
   label: {
     color: COLORS.text,

@@ -8,8 +8,10 @@ import {
   exportLatestSitrepPdf,
   generateIncidentSitrep,
   getIncidentEdResourceSummary,
+  getIncidentHospitalResourceSummary,
   getIncidents,
   getIncidentFacilityTriageSummary,
+  getIncidentMorbidityMortalitySummary,
   getIncidentOnsiteCareSummary,
   getIncidentTimeline,
   getIncidentOnsiteTriageSummary,
@@ -71,6 +73,16 @@ incidentRouter.get(
   "/:id/ed-resource-summary",
   requireAuth,
   getIncidentEdResourceSummary,
+);
+incidentRouter.get(
+  "/:id/hospital-resource-summary",
+  requireAuth,
+  getIncidentHospitalResourceSummary,
+);
+incidentRouter.get(
+  "/:id/morbidity-mortality-summary",
+  requireAuth,
+  getIncidentMorbidityMortalitySummary,
 );
 incidentRouter.put(
   "/:id/timeline",

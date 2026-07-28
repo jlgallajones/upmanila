@@ -8,6 +8,7 @@ import type {
   CasualtyTreatmentRecordRequest,
   CasualtyTransportRecordRequest,
   CasualtyTriageAssessmentRequest,
+  CasualtyOutcomeRequest,
   CreateCasualtyRequest,
   FacilityEncounterRequest,
   UpdateCasualtyRequest,
@@ -101,6 +102,16 @@ const facilityDispositions = [
   "transferred",
   "deceased",
   "left_without_treatment",
+  "unknown",
+];
+
+const deathStages = ["impact", "prehospital", "in_hospital"];
+
+const finalDispositions = [
+  "alive",
+  "deceased",
+  "transferred",
+  "discharged",
   "unknown",
 ];
 
@@ -518,6 +529,53 @@ function validateTreatmentRecord(
   return true;
 }
 
+function validateCasualtyOutcome(
+  casualtyOutcome: CasualtyOutcomeRequest | undefined,
+  response: Response,
+): boolean {
+  if (!casualtyOutcome) {
+    return true;
+  }
+
+  if (
+    casualtyOutcome.deathStage !== undefined &&
+    casualtyOutcome.deathStage !== null &&
+    !deathStages.includes(casualtyOutcome.deathStage)
+  ) {
+    response.status(400).json({
+      success: false,
+      message: "Invalid death stage.",
+    });
+    return false;
+  }
+
+  if (
+    casualtyOutcome.finalDisposition !== undefined &&
+    casualtyOutcome.finalDisposition !== null &&
+    !finalDispositions.includes(casualtyOutcome.finalDisposition)
+  ) {
+    response.status(400).json({
+      success: false,
+      message: "Invalid final disposition.",
+    });
+    return false;
+  }
+
+  if (casualtyOutcome.deathAt) {
+    const deathAt = new Date(casualtyOutcome.deathAt);
+
+    if (Number.isNaN(deathAt.getTime())) {
+      response.status(400).json({
+        success: false,
+        message: "Invalid death time.",
+      });
+      return false;
+    }
+  }
+
+  return true;
+}
+
 function validateFacilityEncounter(
   facilityEncounter: FacilityEncounterRequest | undefined,
   response: Response,
@@ -546,10 +604,48 @@ function validateFacilityEncounter(
   const edDepartedAt = facilityEncounter.edDepartedAt
     ? new Date(facilityEncounter.edDepartedAt)
     : null;
+  const hospitalAdmittedAt = facilityEncounter.hospitalAdmittedAt
+    ? new Date(facilityEncounter.hospitalAdmittedAt)
+    : null;
+  const hospitalDischargedAt = facilityEncounter.hospitalDischargedAt
+    ? new Date(facilityEncounter.hospitalDischargedAt)
+    : null;
   const edResuscitationStartedAt =
     facilityEncounter.edResuscitationStartedAt
       ? new Date(facilityEncounter.edResuscitationStartedAt)
       : null;
+  const surgicalInterventionStartedAt =
+    facilityEncounter.surgicalInterventionStartedAt
+      ? new Date(facilityEncounter.surgicalInterventionStartedAt)
+      : null;
+  const surgicalInterventionEndedAt =
+    facilityEncounter.surgicalInterventionEndedAt
+      ? new Date(facilityEncounter.surgicalInterventionEndedAt)
+      : null;
+  const operatingRoomStartedAt = facilityEncounter.operatingRoomStartedAt
+    ? new Date(facilityEncounter.operatingRoomStartedAt)
+    : null;
+  const xrayPerformedAt = facilityEncounter.xrayPerformedAt
+    ? new Date(facilityEncounter.xrayPerformedAt)
+    : null;
+  const ultrasoundPerformedAt = facilityEncounter.ultrasoundPerformedAt
+    ? new Date(facilityEncounter.ultrasoundPerformedAt)
+    : null;
+  const ctPerformedAt = facilityEncounter.ctPerformedAt
+    ? new Date(facilityEncounter.ctPerformedAt)
+    : null;
+  const icuAdmittedAt = facilityEncounter.icuAdmittedAt
+    ? new Date(facilityEncounter.icuAdmittedAt)
+    : null;
+  const icuDischargedAt = facilityEncounter.icuDischargedAt
+    ? new Date(facilityEncounter.icuDischargedAt)
+    : null;
+  const ventilationStartedAt = facilityEncounter.ventilationStartedAt
+    ? new Date(facilityEncounter.ventilationStartedAt)
+    : null;
+  const ventilationEndedAt = facilityEncounter.ventilationEndedAt
+    ? new Date(facilityEncounter.ventilationEndedAt)
+    : null;
 
   if (arrivedAt && Number.isNaN(arrivedAt.getTime())) {
     response.status(400).json({
@@ -586,6 +682,31 @@ function validateFacilityEncounter(
     return false;
   }
 
+  const hospitalTimes: Array<[Date | null, string]> = [
+    [hospitalAdmittedAt, "Invalid hospital admission time."],
+    [hospitalDischargedAt, "Invalid hospital discharge time."],
+    [surgicalInterventionStartedAt, "Invalid surgery start time."],
+    [surgicalInterventionEndedAt, "Invalid surgery end time."],
+    [operatingRoomStartedAt, "Invalid operating room time."],
+    [xrayPerformedAt, "Invalid X-ray time."],
+    [ultrasoundPerformedAt, "Invalid ultrasound time."],
+    [ctPerformedAt, "Invalid CT scan time."],
+    [icuAdmittedAt, "Invalid ICU admission time."],
+    [icuDischargedAt, "Invalid ICU transfer out time."],
+    [ventilationStartedAt, "Invalid ventilation start time."],
+    [ventilationEndedAt, "Invalid ventilation end time."],
+  ];
+
+  for (const [dateValue, message] of hospitalTimes) {
+    if (dateValue && Number.isNaN(dateValue.getTime())) {
+      response.status(400).json({
+        success: false,
+        message,
+      });
+      return false;
+    }
+  }
+
   if (arrivedAt && edAdmittedAt && edAdmittedAt < arrivedAt) {
     response.status(400).json({
       success: false,
@@ -608,6 +729,91 @@ function validateFacilityEncounter(
       message: "ED discharge time cannot be before ED admission time.",
     });
     return false;
+  }
+
+  if (
+    hospitalAdmittedAt &&
+    hospitalDischargedAt &&
+    hospitalDischargedAt < hospitalAdmittedAt
+  ) {
+    response.status(400).json({
+      success: false,
+      message:
+        "Hospital discharge time cannot be before hospital admission time.",
+    });
+    return false;
+  }
+
+  if (
+    icuAdmittedAt &&
+    icuDischargedAt &&
+    icuDischargedAt < icuAdmittedAt
+  ) {
+    response.status(400).json({
+      success: false,
+      message: "ICU transfer out time cannot be before ICU admission time.",
+    });
+    return false;
+  }
+
+  if (
+    ventilationStartedAt &&
+    ventilationEndedAt &&
+    ventilationEndedAt < ventilationStartedAt
+  ) {
+    response.status(400).json({
+      success: false,
+      message:
+        "Ventilation end time cannot be before ventilation start time.",
+    });
+    return false;
+  }
+
+  if (
+    surgicalInterventionStartedAt &&
+    surgicalInterventionEndedAt &&
+    surgicalInterventionEndedAt < surgicalInterventionStartedAt
+  ) {
+    response.status(400).json({
+      success: false,
+      message: "Surgery end time cannot be before surgery start time.",
+    });
+    return false;
+  }
+
+  const facilityBasedTimes: Array<[Date | null, string]> = [
+    [
+      surgicalInterventionStartedAt,
+      "Surgery start time cannot be before facility arrival time.",
+    ],
+    [
+      hospitalAdmittedAt,
+      "Hospital admission time cannot be before facility arrival time.",
+    ],
+    [
+      operatingRoomStartedAt,
+      "Operating room time cannot be before facility arrival time.",
+    ],
+    [xrayPerformedAt, "X-ray time cannot be before facility arrival time."],
+    [
+      ultrasoundPerformedAt,
+      "Ultrasound time cannot be before facility arrival time.",
+    ],
+    [ctPerformedAt, "CT scan time cannot be before facility arrival time."],
+    [
+      icuAdmittedAt,
+      "ICU admission time cannot be before facility arrival time.",
+    ],
+  ];
+
+  for (const [dateValue, message] of facilityBasedTimes) {
+    if (arrivedAt && dateValue && dateValue < arrivedAt) {
+      response.status(400).json({
+        success: false,
+        message,
+      });
+      return false;
+    }
   }
 
   return true;
@@ -785,6 +991,31 @@ async function insertFacilityEncounter(
       discharged_home: facilityEncounter.dischargedHome ?? null,
       ed_resuscitation_started_at:
         facilityEncounter.edResuscitationStartedAt ?? null,
+      surgical_intervention_started_at:
+        facilityEncounter.surgicalInterventionStartedAt ?? null,
+      surgical_intervention_ended_at:
+        facilityEncounter.surgicalInterventionEndedAt ?? null,
+      operating_room_started_at:
+        facilityEncounter.operatingRoomStartedAt ?? null,
+      xray_required: facilityEncounter.xrayRequired ?? null,
+      xray_performed_at: facilityEncounter.xrayPerformedAt ?? null,
+      ultrasound_required: facilityEncounter.ultrasoundRequired ?? null,
+      ultrasound_performed_at:
+        facilityEncounter.ultrasoundPerformedAt ?? null,
+      ct_required: facilityEncounter.ctRequired ?? null,
+      ct_performed_at: facilityEncounter.ctPerformedAt ?? null,
+      icu_admitted_at: facilityEncounter.icuAdmittedAt ?? null,
+      hospital_admitted_at: facilityEncounter.hospitalAdmittedAt ?? null,
+      hospital_discharged_at:
+        facilityEncounter.hospitalDischargedAt ?? null,
+      icu_discharged_at: facilityEncounter.icuDischargedAt ?? null,
+      mechanical_ventilation_required:
+        facilityEncounter.mechanicalVentilationRequired ?? null,
+      ventilation_started_at:
+        facilityEncounter.ventilationStartedAt ?? null,
+      ventilation_ended_at: facilityEncounter.ventilationEndedAt ?? null,
+      alternative_icu_used:
+        facilityEncounter.alternativeIcuUsed ?? null,
       disposition: facilityEncounter.disposition ?? "unknown",
       recorded_by: userId,
     });
@@ -792,6 +1023,44 @@ async function insertFacilityEncounter(
   if (error) {
     throw new Error(
       `Unable to record facility encounter: ${error.message}`,
+    );
+  }
+}
+
+async function upsertCasualtyOutcome(
+  casualtyIncidentId: string,
+  userId: string,
+  casualtyOutcome: CasualtyOutcomeRequest,
+  currentStatus?: string | null,
+): Promise<void> {
+  const died =
+    casualtyOutcome.died ??
+    (currentStatus === "deceased" ? true : null);
+  const finalDisposition =
+    casualtyOutcome.finalDisposition ??
+    (died === true ? "deceased" : null);
+
+  const { error } = await supabase
+    .from("casualty_outcomes")
+    .upsert(
+      {
+        casualty_incident_id: casualtyIncidentId,
+        reached_hospital: casualtyOutcome.reachedHospital ?? null,
+        medical_contact_before_death:
+          casualtyOutcome.medicalContactBeforeDeath ?? null,
+        died: died ?? false,
+        death_stage: casualtyOutcome.deathStage ?? null,
+        death_at: casualtyOutcome.deathAt ?? null,
+        final_disposition: finalDisposition,
+        recorded_by: userId,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "casualty_incident_id" },
+    );
+
+  if (error) {
+    throw new Error(
+      `Unable to record casualty outcome: ${error.message}`,
     );
   }
 }
@@ -815,6 +1084,7 @@ export async function createCasualty(
       transportRecord,
       treatmentRecord,
       facilityEncounter,
+      casualtyOutcome,
     } = request.body;
     const user = getAuthenticatedUser(request);
 
@@ -966,6 +1236,10 @@ export async function createCasualty(
       return;
     }
 
+    if (!validateCasualtyOutcome(casualtyOutcome, response)) {
+      return;
+    }
+
     const existingIdNumber = await ensureUniqueIdNumber(
       person.idNumber,
     );
@@ -1113,6 +1387,15 @@ export async function createCasualty(
         transactionResult.casualtyIncident.id,
         user.id,
         encounterPayload,
+      );
+    }
+
+    if (casualtyOutcome) {
+      await upsertCasualtyOutcome(
+        transactionResult.casualtyIncident.id,
+        user.id,
+        casualtyOutcome,
+        incidentDetails.currentStatus,
       );
     }
 
@@ -1906,6 +2189,7 @@ export async function updateCasualty(
       transportRecord,
       treatmentRecord,
       facilityEncounter,
+      casualtyOutcome,
     } = request.body;
     const user = getAuthenticatedUser(request);
 
@@ -1916,7 +2200,8 @@ export async function updateCasualty(
       !triageAssessment &&
       !transportRecord &&
       !treatmentRecord &&
-      !facilityEncounter
+      !facilityEncounter &&
+      !casualtyOutcome
     ) {
       response.status(400).json({
         success: false,
@@ -1938,6 +2223,10 @@ export async function updateCasualty(
     }
 
     if (!validateFacilityEncounter(facilityEncounter, response)) {
+      return;
+    }
+
+    if (!validateCasualtyOutcome(casualtyOutcome, response)) {
       return;
     }
 
@@ -2252,6 +2541,15 @@ export async function updateCasualty(
 
     if (encounterPayload?.facilityId) {
       await insertFacilityEncounter(id, user.id, encounterPayload);
+    }
+
+    if (casualtyOutcome) {
+      await upsertCasualtyOutcome(
+        id,
+        user.id,
+        casualtyOutcome,
+        incidentDetails?.currentStatus ?? existingRecord.current_status,
+      );
     }
 
     const { data: updatedRecord, error: updatedError } =

@@ -357,10 +357,19 @@ export type EdResuscitationIntervalMetric = {
   totalT1EdCareSeekers: number;
 };
 
+export type EdResuscitationRoomUseMetric = {
+  minutes: number;
+  cutoffAt: string | null;
+  count: number;
+  totalResuscitationRooms: number;
+  percentage: number;
+};
+
 export type EdResourceSummary = {
   incidentId: string;
   totalSurvivors: number;
   totalEdCareSeekers: number;
+  resourceSnapshot: HospitalResourceSnapshot | null;
   disasterOnsetAt: string | null;
   responseInitiatedAt: string | null;
   responseInitiationSource: string;
@@ -369,6 +378,120 @@ export type EdResourceSummary = {
     EdResourceCategorySummary
   >;
   resuscitationIntervals: EdResuscitationIntervalMetric[];
+  resuscitationRoomUseByInterval: EdResuscitationRoomUseMetric[];
+};
+
+export type HospitalResourceSnapshot = {
+  id: string;
+  incident_id: string;
+  facility_id: string | null;
+  recorded_at: string | null;
+  total_operating_rooms: number | null;
+  used_operating_rooms: number | null;
+  total_resuscitation_rooms: number | null;
+  used_resuscitation_rooms: number | null;
+  alternative_icu_in_use: boolean | null;
+  notes: string | null;
+};
+
+export type HospitalResourceIntervalMetric = {
+  minutes: number;
+  cutoffAt: string | null;
+  count: number;
+  percentage?: number;
+  totalOperatingRooms?: number;
+};
+
+export type HospitalResourceSummary = {
+  incidentId: string;
+  totalSurvivors: number;
+  responseInitiatedAt: string | null;
+  responseInitiationSource: string;
+  intervalMinutes: number[];
+  resourceSnapshot: HospitalResourceSnapshot | null;
+  surgery: {
+    firstSurgicalInterventionAt: string | null;
+    lastSurgicalInterventionAt: string | null;
+    criticallyInjuredSurgeryTotal: number;
+    meanDurationMinutes: number | null;
+    durationCount: number;
+  };
+  operatingRooms: {
+    t1ByInterval: HospitalResourceIntervalMetric[];
+    percentUsedByInterval: HospitalResourceIntervalMetric[];
+  };
+  imaging: Record<
+    "xray" | "ultrasound" | "ct",
+    {
+      requiredT1Total: number;
+      requiredT2Total: number;
+      performedT1ByInterval: HospitalResourceIntervalMetric[];
+      performedT2ByInterval: HospitalResourceIntervalMetric[];
+      performedByInterval: HospitalResourceIntervalMetric[];
+    }
+  >;
+  icu: {
+    admittedByInterval: HospitalResourceIntervalMetric[];
+    admittedTotal: number;
+    ventilatedTotal: number;
+    ventilatedPercentage: number;
+    meanDisasterToIcuMinutes: number | null;
+    meanEdToIcuMinutes: number | null;
+    alternativeIcuUse: boolean | null;
+  };
+};
+
+export type MorbidityMinuteMetric = {
+  meanMinutes: number | null;
+  medianMinutes: number | null;
+  count: number;
+};
+
+export type MorbidityDayMetric = {
+  meanDays: number | null;
+  medianDays: number | null;
+  count: number;
+};
+
+export type MortalityRatioMetric = {
+  numerator: number;
+  denominator: number;
+  percentage: number;
+};
+
+export type MorbidityMortalitySummary = {
+  incidentId: string;
+  totalVictims: number;
+  morbidity: {
+    ed: {
+      immediate: MorbidityMinuteMetric;
+      delayed: MorbidityMinuteMetric;
+    };
+    icu: {
+      immediate: MorbidityDayMetric;
+    };
+    ventilator: MorbidityDayMetric;
+    hospital: MorbidityDayMetric;
+  };
+  mortality: {
+    impactDeaths: MortalityRatioMetric;
+    prehospitalDeaths: MortalityRatioMetric;
+    inHospitalDeaths: MortalityRatioMetric;
+    immediateDeaths: MortalityRatioMetric;
+  };
+};
+
+export type HospitalResourcesPayload = {
+  facilityId?: string | null;
+  recordedAt?: string | null;
+  totalOperatingRooms?: number | null;
+  totalResuscitationRooms?: number | null;
+  alternativeIcuInUse?: boolean | null;
+  notes?: string | null;
+};
+
+export type HospitalResourcesResult = {
+  resources: HospitalResourceSnapshot | null;
 };
 
 export type CoordinationAssessmentPayload = {
@@ -524,6 +647,22 @@ type SurvivorDistributionSummaryResponse = {
 type EdResourceSummaryResponse = {
   success: boolean;
   data: EdResourceSummary;
+};
+
+type HospitalResourceSummaryResponse = {
+  success: boolean;
+  data: HospitalResourceSummary;
+};
+
+type MorbidityMortalitySummaryResponse = {
+  success: boolean;
+  data: MorbidityMortalitySummary;
+};
+
+type HospitalResourcesResponse = {
+  success: boolean;
+  message?: string;
+  data: HospitalResourceSnapshot | null;
 };
 
 type IncidentSitrepResponse = {
@@ -798,6 +937,53 @@ export async function getEdResourceSummary(
   );
 
   return response.data.data;
+}
+
+export async function getHospitalResourceSummary(
+  id: string,
+): Promise<HospitalResourceSummary> {
+  const response = await api.get<HospitalResourceSummaryResponse>(
+    `/incidents/${encodeURIComponent(id)}/hospital-resource-summary`,
+  );
+
+  return response.data.data;
+}
+
+export async function getMorbidityMortalitySummary(
+  id: string,
+): Promise<MorbidityMortalitySummary> {
+  const response =
+    await api.get<MorbidityMortalitySummaryResponse>(
+      `/incidents/${encodeURIComponent(id)}/morbidity-mortality-summary`,
+    );
+
+  return response.data.data;
+}
+
+export async function getHospitalResources(
+  id: string,
+): Promise<HospitalResourcesResult> {
+  const response = await api.get<HospitalResourcesResponse>(
+    `/incidents/${encodeURIComponent(id)}/hospital-resources`,
+  );
+
+  return {
+    resources: response.data.data,
+  };
+}
+
+export async function saveHospitalResources(
+  id: string,
+  payload: HospitalResourcesPayload,
+): Promise<HospitalResourcesResult> {
+  const response = await api.put<HospitalResourcesResponse>(
+    `/incidents/${encodeURIComponent(id)}/hospital-resources`,
+    payload,
+  );
+
+  return {
+    resources: response.data.data,
+  };
 }
 
 export async function generateIncidentSitrep(
