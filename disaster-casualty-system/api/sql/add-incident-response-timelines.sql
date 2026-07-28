@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS public.incident_response_timelines (
   dmmp_activation_trigger text,
   dmmp_activated_at timestamptz,
   medical_coordinator_notified_at timestamptz,
+  last_dmmp_staff_arrived_at timestamptz,
   first_ems_on_scene_at timestamptz,
   triage_ordered_at timestamptz,
   first_site_triage_at timestamptz,
@@ -17,6 +18,9 @@ CREATE TABLE IF NOT EXISTS public.incident_response_timelines (
   first_transport_from_scene_at timestamptz,
   last_transport_from_scene_at timestamptz,
   scene_demobilized_at timestamptz,
+  last_facility_deactivated_at timestamptz,
+  acute_response_started_at timestamptz,
+  acute_response_ended_at timestamptz,
   updated_by uuid
     REFERENCES public.users(id)
     ON DELETE SET NULL,
@@ -42,6 +46,7 @@ ALTER TABLE public.incident_response_timelines
   ADD COLUMN IF NOT EXISTS dmmp_activation_trigger text,
   ADD COLUMN IF NOT EXISTS dmmp_activated_at timestamptz,
   ADD COLUMN IF NOT EXISTS medical_coordinator_notified_at timestamptz,
+  ADD COLUMN IF NOT EXISTS last_dmmp_staff_arrived_at timestamptz,
   ADD COLUMN IF NOT EXISTS first_ems_on_scene_at timestamptz,
   ADD COLUMN IF NOT EXISTS triage_ordered_at timestamptz,
   ADD COLUMN IF NOT EXISTS first_site_triage_at timestamptz,
@@ -49,6 +54,9 @@ ALTER TABLE public.incident_response_timelines
   ADD COLUMN IF NOT EXISTS first_transport_from_scene_at timestamptz,
   ADD COLUMN IF NOT EXISTS last_transport_from_scene_at timestamptz,
   ADD COLUMN IF NOT EXISTS scene_demobilized_at timestamptz,
+  ADD COLUMN IF NOT EXISTS last_facility_deactivated_at timestamptz,
+  ADD COLUMN IF NOT EXISTS acute_response_started_at timestamptz,
+  ADD COLUMN IF NOT EXISTS acute_response_ended_at timestamptz,
   ADD COLUMN IF NOT EXISTS updated_by uuid,
   ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now(),
   ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();

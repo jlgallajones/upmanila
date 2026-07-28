@@ -24,6 +24,7 @@ import {
   deleteDmmpStaff,
   downloadIncidentExport,
   generateIncidentSitrep,
+  getDeactivationContinuity,
   getCoordinationAssessment,
   getDmmpStaff,
   getDmmpStaffSummary,
@@ -36,9 +37,12 @@ import {
   getSceneClearanceSummary,
   getSurvivorDistributionSummary,
   saveCoordinationAssessment,
+  saveDeactivationContinuity,
   saveResponderSafetyReport,
   type Incident,
   type CoordinationRating,
+  type DeactivationContinuityResult,
+  type DisruptionLevel,
   type DmmpStaffRecord,
   type DmmpStaffSummary,
   type FacilityTriageSummary,
@@ -530,6 +534,25 @@ const initialResponderSafetyForm: ResponderSafetyFormState = {
   deceasedResponders: "",
 };
 
+type DeactivationContinuityFormState = {
+  sceneDemobilizedAt: string;
+  lastFacilityDeactivatedAt: string;
+  emsCoverageDisruption: DisruptionLevel;
+  facilityCareDisruption: DisruptionLevel;
+  notes: string;
+  assessedAt: string;
+};
+
+const initialDeactivationContinuityForm: DeactivationContinuityFormState =
+  {
+    sceneDemobilizedAt: "",
+    lastFacilityDeactivatedAt: "",
+    emsCoverageDisruption: "unknown",
+    facilityCareDisruption: "unknown",
+    notes: "",
+    assessedAt: "",
+  };
+
 function mapStaffToForm(record: DmmpStaffRecord): StaffFormState {
   return {
     staffName: valueOrEmpty(record.staff_name),
@@ -606,6 +629,44 @@ function mapResponderSafetyToForm(
       report?.deceased_responders !== undefined
         ? String(report.deceased_responders)
         : "",
+  };
+}
+
+function formatDisruptionLevel(
+  value: DisruptionLevel | null | undefined,
+): string {
+  switch (value) {
+    case "none":
+      return "No";
+    case "minimal":
+      return "Minimal";
+    case "moderate":
+      return "Moderate";
+    case "total":
+      return "Total";
+    case "unknown":
+      return "Unknown";
+    default:
+      return "Not recorded";
+  }
+}
+
+function mapDeactivationContinuityToForm(
+  result: DeactivationContinuityResult | null,
+): DeactivationContinuityFormState {
+  return {
+    sceneDemobilizedAt: formatTimelineInput(
+      result?.summary.sceneDemobilizedAt,
+    ),
+    lastFacilityDeactivatedAt: formatTimelineInput(
+      result?.summary.lastFacilityDeactivatedAt,
+    ),
+    emsCoverageDisruption:
+      result?.summary.emsCoverageDisruption ?? "unknown",
+    facilityCareDisruption:
+      result?.summary.facilityCareDisruption ?? "unknown",
+    notes: valueOrEmpty(result?.summary.notes),
+    assessedAt: formatTimelineInput(result?.summary.assessedAt),
   };
 }
 
@@ -729,6 +790,7 @@ function IncidentCard({
   onManageStaff,
   onEditCoordination,
   onEditResponderSafety,
+  onEditDeactivationContinuity,
   onViewOnsiteTriage,
   onViewFacilityTriage,
   onViewOnsiteCare,
@@ -744,6 +806,7 @@ function IncidentCard({
   onManageStaff: () => void;
   onEditCoordination: () => void;
   onEditResponderSafety: () => void;
+  onEditDeactivationContinuity: () => void;
   onViewOnsiteTriage: () => void;
   onViewFacilityTriage: () => void;
   onViewOnsiteCare: () => void;
@@ -869,6 +932,23 @@ function IncidentCard({
         />
         <Text style={styles.timelineButtonText}>
           Responder Safety
+        </Text>
+      </Pressable>
+
+      <Pressable
+        onPress={onEditDeactivationContinuity}
+        style={({ pressed }) => [
+          styles.triageButton,
+          pressed && styles.pressed,
+        ]}
+      >
+        <Ionicons
+          name="power-outline"
+          size={17}
+          color={COLORS.maroon}
+        />
+        <Text style={styles.timelineButtonText}>
+          Deactivation & Continuity
         </Text>
       </Pressable>
 
@@ -1078,6 +1158,32 @@ export default function IncidentsPage() {
     useState(false);
   const [isSavingResponderSafety, setIsSavingResponderSafety] =
     useState(false);
+  const [
+    isDeactivationContinuityModalVisible,
+    setIsDeactivationContinuityModalVisible,
+  ] = useState(false);
+  const [
+    selectedDeactivationContinuityIncident,
+    setSelectedDeactivationContinuityIncident,
+  ] = useState<Incident | null>(null);
+  const [
+    deactivationContinuityForm,
+    setDeactivationContinuityForm,
+  ] = useState<DeactivationContinuityFormState>(
+    initialDeactivationContinuityForm,
+  );
+  const [
+    deactivationContinuitySummary,
+    setDeactivationContinuitySummary,
+  ] = useState<DeactivationContinuityResult["summary"] | null>(null);
+  const [
+    isLoadingDeactivationContinuity,
+    setIsLoadingDeactivationContinuity,
+  ] = useState(false);
+  const [
+    isSavingDeactivationContinuity,
+    setIsSavingDeactivationContinuity,
+  ] = useState(false);
   const [isOnsiteTriageModalVisible, setIsOnsiteTriageModalVisible] =
     useState(false);
   const [selectedOnsiteTriageIncident, setSelectedOnsiteTriageIncident] =
@@ -1970,6 +2076,187 @@ export default function IncidentsPage() {
     }
   }
 
+  async function handleOpenDeactivationContinuity(
+    incident: Incident,
+  ) {
+    setSelectedDeactivationContinuityIncident(incident);
+    setDeactivationContinuityForm(
+      initialDeactivationContinuityForm,
+    );
+    setDeactivationContinuitySummary(null);
+    setIsDeactivationContinuityModalVisible(true);
+    setIsLoadingDeactivationContinuity(true);
+
+    try {
+      const result = await getDeactivationContinuity(incident.id);
+
+      setDeactivationContinuityForm(
+        mapDeactivationContinuityToForm(result),
+      );
+      setDeactivationContinuitySummary(result.summary);
+    } catch (error) {
+      console.error(
+        "Unable to load deactivation and continuity:",
+        error,
+      );
+
+      Alert.alert(
+        "Unable to load deactivation",
+        error instanceof Error
+          ? error.message
+          : "Please try again.",
+      );
+    } finally {
+      setIsLoadingDeactivationContinuity(false);
+    }
+  }
+
+  function handleCloseDeactivationContinuityModal() {
+    if (isSavingDeactivationContinuity) {
+      return;
+    }
+
+    setIsDeactivationContinuityModalVisible(false);
+    setSelectedDeactivationContinuityIncident(null);
+    setDeactivationContinuityForm(
+      initialDeactivationContinuityForm,
+    );
+    setDeactivationContinuitySummary(null);
+  }
+
+  function updateDeactivationContinuityField<
+    K extends keyof DeactivationContinuityFormState,
+  >(key: K, value: DeactivationContinuityFormState[K]) {
+    setDeactivationContinuityForm((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  }
+
+  function setDeactivationContinuityFieldToNow(
+    key: keyof Pick<
+      DeactivationContinuityFormState,
+      "sceneDemobilizedAt" | "lastFacilityDeactivatedAt" | "assessedAt"
+    >,
+  ) {
+    updateDeactivationContinuityField(
+      key,
+      formatDateTimeForInput(new Date()),
+    );
+  }
+
+  function validateDeactivationContinuityForm(
+    form: DeactivationContinuityFormState,
+  ): string | null {
+    const dateFields: Array<
+      [keyof DeactivationContinuityFormState, string]
+    > = [
+      ["sceneDemobilizedAt", "Scene demobilized time"],
+      [
+        "lastFacilityDeactivatedAt",
+        "Last healthcare facility deactivation time",
+      ],
+      ["assessedAt", "Assessment time"],
+    ];
+
+    for (const [key, label] of dateFields) {
+      const value = String(form[key]).trim();
+
+      if (value && !getValidDateTimeInput(value)) {
+        return `${label} must use mm/dd/yyyy hh:mm.`;
+      }
+    }
+
+    const sceneDemobilizedAt = form.sceneDemobilizedAt.trim()
+      ? getValidDateTimeInput(form.sceneDemobilizedAt)
+      : null;
+    const lastFacilityDeactivatedAt =
+      form.lastFacilityDeactivatedAt.trim()
+        ? getValidDateTimeInput(form.lastFacilityDeactivatedAt)
+        : null;
+
+    if (
+      sceneDemobilizedAt &&
+      lastFacilityDeactivatedAt &&
+      lastFacilityDeactivatedAt < sceneDemobilizedAt
+    ) {
+      return "Last healthcare facility deactivation cannot be before scene demobilization.";
+    }
+
+    return null;
+  }
+
+  async function handleSaveDeactivationContinuity() {
+    if (!selectedDeactivationContinuityIncident) {
+      return;
+    }
+
+    if (!canUpdateOperations) {
+      Alert.alert(
+        "Permission required",
+        "Your account is not allowed to update deactivation and continuity records.",
+      );
+      return;
+    }
+
+    const validationError = validateDeactivationContinuityForm(
+      deactivationContinuityForm,
+    );
+
+    if (validationError) {
+      Alert.alert("Check deactivation", validationError);
+      return;
+    }
+
+    try {
+      setIsSavingDeactivationContinuity(true);
+
+      const result = await saveDeactivationContinuity(
+        selectedDeactivationContinuityIncident.id,
+        {
+          sceneDemobilizedAt: parseDateTimeInput(
+            deactivationContinuityForm.sceneDemobilizedAt,
+          ),
+          lastFacilityDeactivatedAt: parseDateTimeInput(
+            deactivationContinuityForm.lastFacilityDeactivatedAt,
+          ),
+          emsCoverageDisruption:
+            deactivationContinuityForm.emsCoverageDisruption,
+          facilityCareDisruption:
+            deactivationContinuityForm.facilityCareDisruption,
+          notes: deactivationContinuityForm.notes.trim() || null,
+          assessedAt: parseDateTimeInput(
+            deactivationContinuityForm.assessedAt,
+          ),
+        },
+      );
+
+      setDeactivationContinuityForm(
+        mapDeactivationContinuityToForm(result),
+      );
+      setDeactivationContinuitySummary(result.summary);
+
+      Alert.alert(
+        "Deactivation saved",
+        "DMMP deactivation and continuity of care records have been updated.",
+      );
+    } catch (error) {
+      console.error(
+        "Unable to save deactivation and continuity:",
+        error,
+      );
+
+      Alert.alert(
+        "Unable to save deactivation",
+        error instanceof Error
+          ? error.message
+          : "Please review the deactivation and continuity record and try again.",
+      );
+    } finally {
+      setIsSavingDeactivationContinuity(false);
+    }
+  }
+
   async function handleOpenOnsiteTriage(incident: Incident) {
     setSelectedOnsiteTriageIncident(incident);
     setOnsiteTriageSummary(null);
@@ -2346,6 +2633,100 @@ export default function IncidentsPage() {
     );
   }
 
+  function renderDeactivationContinuityDateField(
+    label: string,
+    key: keyof Pick<
+      DeactivationContinuityFormState,
+      "sceneDemobilizedAt" | "lastFacilityDeactivatedAt" | "assessedAt"
+    >,
+  ) {
+    return (
+      <View style={styles.timelineFieldGroup}>
+        <View style={styles.timelineLabelRow}>
+          <Text style={styles.fieldLabel}>{label}</Text>
+          {canUpdateOperations ? (
+            <Pressable
+              onPress={() => setDeactivationContinuityFieldToNow(key)}
+              style={({ pressed }) => [
+                styles.nowButton,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Ionicons
+                name="time-outline"
+                size={14}
+                color={COLORS.maroon}
+              />
+              <Text style={styles.nowButtonText}>Now</Text>
+            </Pressable>
+          ) : null}
+        </View>
+        <TextInput
+          value={deactivationContinuityForm[key]}
+          onChangeText={(value) =>
+            updateDeactivationContinuityField(key, value)
+          }
+          style={styles.input}
+          placeholder="mm/dd/yyyy hh:mm"
+          placeholderTextColor={COLORS.mutedText}
+          editable={canUpdateOperations}
+        />
+      </View>
+    );
+  }
+
+  function renderDisruptionField(
+    label: string,
+    key: keyof Pick<
+      DeactivationContinuityFormState,
+      "emsCoverageDisruption" | "facilityCareDisruption"
+    >,
+  ) {
+    const options: DisruptionLevel[] = [
+      "none",
+      "minimal",
+      "moderate",
+      "total",
+      "unknown",
+    ];
+
+    return (
+      <View style={styles.coordinationFieldGroup}>
+        <Text style={styles.fieldLabel}>{label}</Text>
+        <View style={styles.ratingGrid}>
+          {options.map((option) => {
+            const selected =
+              deactivationContinuityForm[key] === option;
+
+            return (
+              <Pressable
+                key={option}
+                disabled={!canUpdateOperations}
+                onPress={() =>
+                  updateDeactivationContinuityField(key, option)
+                }
+                style={({ pressed }) => [
+                  styles.ratingChip,
+                  selected && styles.ratingChipActive,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.ratingChipText,
+                    selected && styles.ratingChipTextActive,
+                  ]}
+                >
+                  {formatDisruptionLevel(option)}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+    );
+  }
+
   function renderTriageIntervalSection(
     title: string,
     rows: Array<{
@@ -2590,6 +2971,9 @@ export default function IncidentsPage() {
             }}
             onEditResponderSafety={() => {
               void handleOpenResponderSafety(item);
+            }}
+            onEditDeactivationContinuity={() => {
+              void handleOpenDeactivationContinuity(item);
             }}
             onViewOnsiteTriage={() => {
               void handleOpenOnsiteTriage(item);
@@ -3691,6 +4075,189 @@ export default function IncidentsPage() {
                           : "Save Safety"}
                       </Text>
                       {isSavingResponderSafety ? (
+                        <ActivityIndicator
+                          size="small"
+                          color={COLORS.white}
+                        />
+                      ) : (
+                        <Ionicons
+                          name="checkmark-circle-outline"
+                          size={19}
+                          color={COLORS.white}
+                        />
+                      )}
+                    </Pressable>
+                  ) : null}
+                </View>
+              </ScrollView>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={isDeactivationContinuityModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCloseDeactivationContinuityModal}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={handleCloseDeactivationContinuityModal}
+        >
+          <Pressable style={styles.timelineSheet}>
+            <View style={styles.sheetHandle} />
+
+            <View style={styles.sheetHeader}>
+              <View style={styles.sheetTitleGroup}>
+                <Text style={styles.sheetTitle}>
+                  Deactivation & Continuity
+                </Text>
+                <Text
+                  style={styles.sheetSubtitle}
+                  numberOfLines={1}
+                >
+                  {selectedDeactivationContinuityIncident
+                    ?.incident_name ?? "Incident"}
+                </Text>
+              </View>
+              <Pressable
+                onPress={handleCloseDeactivationContinuityModal}
+                style={styles.sheetCloseButton}
+              >
+                <Ionicons
+                  name="close"
+                  size={20}
+                  color={COLORS.secondaryText}
+                />
+              </Pressable>
+            </View>
+
+            {isLoadingDeactivationContinuity ? (
+              <View style={styles.timelineLoading}>
+                <ActivityIndicator
+                  size="small"
+                  color={COLORS.maroon}
+                />
+                <Text style={styles.timelineLoadingText}>
+                  Loading deactivation...
+                </Text>
+              </View>
+            ) : (
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.timelineScrollContent}
+              >
+                <View style={styles.sitrepMetricGrid}>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {deactivationContinuitySummary?.sceneDemobilizedAt
+                        ? "Set"
+                        : "Not set"}
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      Scene Demobilized
+                    </Text>
+                  </View>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {formatDisruptionLevel(
+                        deactivationContinuitySummary
+                          ?.emsCoverageDisruption,
+                      )}
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      EMS Coverage
+                    </Text>
+                  </View>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {formatDisruptionLevel(
+                        deactivationContinuitySummary
+                          ?.facilityCareDisruption,
+                      )}
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      Facility Care
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={styles.fieldLabel}>
+                  DEACTIVATION OF DMMP
+                </Text>
+                {renderDeactivationContinuityDateField(
+                  "SCENE MEDICAL RESPONDERS DEMOBILIZED",
+                  "sceneDemobilizedAt",
+                )}
+                {renderDeactivationContinuityDateField(
+                  "LAST HEALTHCARE FACILITY DEACTIVATED RESPONSE PLAN",
+                  "lastFacilityDeactivatedAt",
+                )}
+
+                <Text style={styles.fieldLabel}>
+                  CONTINUITY OF CARE
+                </Text>
+                {renderDisruptionField(
+                  "NORMAL EMS CALL COVERAGE DISRUPTION",
+                  "emsCoverageDisruption",
+                )}
+                {renderDisruptionField(
+                  "HEALTHCARE FACILITY ROUTINE CARE DISRUPTION",
+                  "facilityCareDisruption",
+                )}
+
+                {renderDeactivationContinuityDateField(
+                  "ASSESSED AT",
+                  "assessedAt",
+                )}
+
+                <Text style={styles.fieldLabel}>NOTES</Text>
+                <TextInput
+                  value={deactivationContinuityForm.notes}
+                  onChangeText={(value) =>
+                    updateDeactivationContinuityField("notes", value)
+                  }
+                  style={[styles.input, styles.notesInput]}
+                  placeholder="Optional continuity notes"
+                  placeholderTextColor={COLORS.mutedText}
+                  editable={canUpdateOperations}
+                  multiline
+                />
+
+                <View style={styles.timelineActions}>
+                  <Pressable
+                    onPress={handleCloseDeactivationContinuityModal}
+                    style={({ pressed }) => [
+                      styles.secondaryButton,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Text style={styles.secondaryButtonText}>
+                      Cancel
+                    </Text>
+                  </Pressable>
+
+                  {canUpdateOperations ? (
+                    <Pressable
+                      disabled={isSavingDeactivationContinuity}
+                      onPress={() => {
+                        void handleSaveDeactivationContinuity();
+                      }}
+                      style={({ pressed }) => [
+                        styles.createButton,
+                        styles.timelineSaveButton,
+                        isSavingDeactivationContinuity &&
+                          styles.disabledButton,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <Text style={styles.createButtonText}>
+                        {isSavingDeactivationContinuity
+                          ? "Saving..."
+                          : "Save"}
+                      </Text>
+                      {isSavingDeactivationContinuity ? (
                         <ActivityIndicator
                           size="small"
                           color={COLORS.white}

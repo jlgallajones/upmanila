@@ -135,6 +135,51 @@ export type ResponderSafetyResult = {
   summary: ResponderSafetySummary;
 };
 
+export type DisruptionLevel =
+  | "none"
+  | "minimal"
+  | "moderate"
+  | "total"
+  | "unknown";
+
+export type ContinuityOfCareAssessment = {
+  id: string;
+  incident_id: string;
+  ems_coverage_disruption: DisruptionLevel | null;
+  facility_care_disruption: DisruptionLevel | null;
+  notes: string | null;
+  assessed_by: string | null;
+  assessed_at: string;
+  updated_at: string;
+};
+
+export type DeactivationContinuitySummary = {
+  sceneDemobilizedAt: string | null;
+  lastFacilityDeactivatedAt: string | null;
+  emsCoverageDisruption: DisruptionLevel | null;
+  facilityCareDisruption: DisruptionLevel | null;
+  notes: string | null;
+  assessedAt: string | null;
+};
+
+export type DeactivationContinuityPayload = {
+  sceneDemobilizedAt?: string | null;
+  lastFacilityDeactivatedAt?: string | null;
+  emsCoverageDisruption?: DisruptionLevel | null;
+  facilityCareDisruption?: DisruptionLevel | null;
+  notes?: string | null;
+  assessedAt?: string | null;
+};
+
+export type DeactivationContinuityResult = {
+  timeline: {
+    scene_demobilized_at: string | null;
+    last_facility_deactivated_at: string | null;
+  } | null;
+  assessment: ContinuityOfCareAssessment | null;
+  summary: DeactivationContinuitySummary;
+};
+
 export type OnsiteTriageIntervalMetric = {
   minutes: number;
   cutoffAt: string | null;
@@ -402,6 +447,19 @@ type ResponderSafetyResponse = {
   summary: ResponderSafetySummary;
 };
 
+type DeactivationContinuityResponse = {
+  success: boolean;
+  message?: string;
+  data: {
+    timeline: {
+      scene_demobilized_at: string | null;
+      last_facility_deactivated_at: string | null;
+    } | null;
+    assessment: ContinuityOfCareAssessment | null;
+  };
+  summary: DeactivationContinuitySummary;
+};
+
 type OnsiteTriageSummaryResponse = {
   success: boolean;
   data: OnsiteTriageSummary;
@@ -607,6 +665,36 @@ export async function saveResponderSafetyReport(
 
   return {
     report: response.data.data,
+    summary: response.data.summary,
+  };
+}
+
+export async function getDeactivationContinuity(
+  id: string,
+): Promise<DeactivationContinuityResult> {
+  const response = await api.get<DeactivationContinuityResponse>(
+    `/incidents/${encodeURIComponent(id)}/deactivation-continuity`,
+  );
+
+  return {
+    timeline: response.data.data.timeline,
+    assessment: response.data.data.assessment,
+    summary: response.data.summary,
+  };
+}
+
+export async function saveDeactivationContinuity(
+  id: string,
+  payload: DeactivationContinuityPayload,
+): Promise<DeactivationContinuityResult> {
+  const response = await api.put<DeactivationContinuityResponse>(
+    `/incidents/${encodeURIComponent(id)}/deactivation-continuity`,
+    payload,
+  );
+
+  return {
+    timeline: response.data.data.timeline,
+    assessment: response.data.data.assessment,
     summary: response.data.summary,
   };
 }

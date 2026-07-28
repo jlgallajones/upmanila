@@ -139,6 +139,33 @@ function parseSafetyActionStatus(
   return value;
 }
 
+function parseDisruptionLevel(
+  value: unknown,
+  fieldName: string,
+): string | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null || value === "") {
+    return null;
+  }
+
+  if (
+    value !== "none" &&
+    value !== "minimal" &&
+    value !== "moderate" &&
+    value !== "total" &&
+    value !== "unknown"
+  ) {
+    throw new Error(
+      `${fieldName} must be none, minimal, moderate, total, unknown, or null.`,
+    );
+  }
+
+  return value;
+}
+
 function parseCoordinationRating(
   value: unknown,
   fieldName: string,
@@ -1096,6 +1123,10 @@ function buildResponderSafetySummary(
       : 0;
   const responseDeactivatedAt =
     (report?.response_deactivated_at as string | null | undefined) ??
+    (timeline?.last_facility_deactivated_at as
+      | string
+      | null
+      | undefined) ??
     (timeline?.scene_demobilized_at as string | null | undefined) ??
     (incident?.ended_at as string | null | undefined) ??
     null;
@@ -1167,7 +1198,9 @@ export async function getResponderSafetyReport(
         .maybeSingle(),
       supabase
         .from("incident_response_timelines")
-        .select("dmmp_activated_at, scene_demobilized_at")
+        .select(
+          "dmmp_activated_at, scene_demobilized_at, last_facility_deactivated_at",
+        )
         .eq("incident_id", incidentId)
         .maybeSingle(),
     ]);
@@ -1191,6 +1224,243 @@ export async function getResponderSafetyReport(
         reportResult.data ?? null,
         timelineResult.data ?? null,
         incident,
+      ),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+function buildDeactivationContinuitySummary(
+  timeline: Record<string, unknown> | null,
+  assessment: Record<string, unknown> | null,
+) {
+  return {
+    sceneDemobilizedAt: timeline?.scene_demobilized_at ?? null,
+    lastFacilityDeactivatedAt:
+      timeline?.last_facility_deactivated_at ?? null,
+    emsCoverageDisruption:
+      assessment?.ems_coverage_disruption ?? null,
+    facilityCareDisruption:
+      assessment?.facility_care_disruption ?? null,
+    notes: assessment?.notes ?? null,
+    assessedAt: assessment?.assessed_at ?? null,
+  };
+}
+
+/**
+ * GET /api/incidents/:id/deactivation-continuity
+ */
+export async function getDeactivationContinuity(
+  request: Request<{ id: string }>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const incidentId = request.params.id;
+
+    if (!isValidUuid(incidentId)) {
+      response.status(400).json({
+        success: false,
+        message: "A valid incident UUID is required.",
+      });
+      return;
+    }
+
+    const incidentExists = await verifyIncidentExists(incidentId);
+
+    if (!incidentExists) {
+      response.status(404).json({
+        success: false,
+        message: "Incident not found.",
+      });
+      return;
+    }
+
+    const [timelineResult, assessmentResult] = await Promise.all([
+      supabase
+        .from("incident_response_timelines")
+        .select("scene_demobilized_at, last_facility_deactivated_at")
+        .eq("incident_id", incidentId)
+        .maybeSingle(),
+      supabase
+        .from("continuity_of_care_assessments")
+        .select("*")
+        .eq("incident_id", incidentId)
+        .maybeSingle(),
+    ]);
+
+    if (timelineResult.error) {
+      throw new Error(
+        `Unable to retrieve incident timeline: ${timelineResult.error.message}`,
+      );
+    }
+
+    if (assessmentResult.error) {
+      throw new Error(
+        `Unable to retrieve continuity assessment: ${assessmentResult.error.message}`,
+      );
+    }
+
+    response.status(200).json({
+      success: true,
+      data: {
+        timeline: timelineResult.data ?? null,
+        assessment: assessmentResult.data ?? null,
+      },
+      summary: buildDeactivationContinuitySummary(
+        timelineResult.data ?? null,
+        assessmentResult.data ?? null,
+      ),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * PUT /api/incidents/:id/deactivation-continuity
+ */
+export async function saveDeactivationContinuity(
+  request: Request<{ id: string }>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const incidentId = request.params.id;
+
+    if (!isValidUuid(incidentId)) {
+      response.status(400).json({
+        success: false,
+        message: "A valid incident UUID is required.",
+      });
+      return;
+    }
+
+    if (!isPlainObject(request.body)) {
+      response.status(400).json({
+        success: false,
+        message: "A JSON request body is required.",
+      });
+      return;
+    }
+
+    const incidentExists = await verifyIncidentExists(incidentId);
+
+    if (!incidentExists) {
+      response.status(404).json({
+        success: false,
+        message: "Incident not found.",
+      });
+      return;
+    }
+
+    let sceneDemobilizedAt: string | null | undefined;
+    let lastFacilityDeactivatedAt: string | null | undefined;
+    let emsCoverageDisruption: string | null | undefined;
+    let facilityCareDisruption: string | null | undefined;
+    let notes: string | null | undefined;
+    let assessedAt: string | null | undefined;
+
+    try {
+      sceneDemobilizedAt = parseNullableDate(
+        request.body.sceneDemobilizedAt,
+        "sceneDemobilizedAt",
+      );
+      lastFacilityDeactivatedAt = parseNullableDate(
+        request.body.lastFacilityDeactivatedAt,
+        "lastFacilityDeactivatedAt",
+      );
+      emsCoverageDisruption = parseDisruptionLevel(
+        request.body.emsCoverageDisruption,
+        "emsCoverageDisruption",
+      );
+      facilityCareDisruption = parseDisruptionLevel(
+        request.body.facilityCareDisruption,
+        "facilityCareDisruption",
+      );
+      notes = parseNullableText(request.body.notes, "notes");
+      assessedAt = parseNullableDate(
+        request.body.assessedAt,
+        "assessedAt",
+      );
+    } catch (validationError) {
+      response.status(400).json({
+        success: false,
+        message:
+          validationError instanceof Error
+            ? validationError.message
+            : "Invalid deactivation and continuity assessment.",
+      });
+      return;
+    }
+
+    if (
+      sceneDemobilizedAt &&
+      lastFacilityDeactivatedAt &&
+      new Date(lastFacilityDeactivatedAt) < new Date(sceneDemobilizedAt)
+    ) {
+      response.status(400).json({
+        success: false,
+        message:
+          "Last facility deactivation cannot be before scene demobilization.",
+      });
+      return;
+    }
+
+    const authenticatedUser = getAuthenticatedUser(request);
+    const timelineValues: Record<string, unknown> = {
+      updated_by: authenticatedUser.id,
+    };
+
+    if (sceneDemobilizedAt !== undefined) {
+      timelineValues.scene_demobilized_at = sceneDemobilizedAt;
+    }
+
+    if (lastFacilityDeactivatedAt !== undefined) {
+      timelineValues.last_facility_deactivated_at =
+        lastFacilityDeactivatedAt;
+    }
+
+    const timeline = await saveTimeline(incidentId, timelineValues);
+
+    const assessmentValues = {
+      incident_id: incidentId,
+      ems_coverage_disruption: emsCoverageDisruption ?? null,
+      facility_care_disruption: facilityCareDisruption ?? null,
+      notes: notes ?? null,
+      assessed_by: authenticatedUser.id,
+      assessed_at: assessedAt ?? new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data: assessment, error: assessmentError } = await supabase
+      .from("continuity_of_care_assessments")
+      .upsert(assessmentValues, {
+        onConflict: "incident_id",
+      })
+      .select("*")
+      .single();
+
+    if (assessmentError || !assessment) {
+      throw new Error(
+        `Unable to save continuity assessment: ${
+          assessmentError?.message ?? "Unknown database error"
+        }`,
+      );
+    }
+
+    response.status(200).json({
+      success: true,
+      message:
+        "Deactivation and continuity assessment saved successfully.",
+      data: {
+        timeline,
+        assessment,
+      },
+      summary: buildDeactivationContinuitySummary(
+        timeline,
+        assessment,
       ),
     });
   } catch (error) {
@@ -1326,7 +1596,9 @@ export async function saveResponderSafetyReport(
 
     const { data: timeline, error: timelineError } = await supabase
       .from("incident_response_timelines")
-      .select("dmmp_activated_at, scene_demobilized_at")
+        .select(
+          "dmmp_activated_at, scene_demobilized_at, last_facility_deactivated_at",
+        )
       .eq("incident_id", incidentId)
       .maybeSingle();
 

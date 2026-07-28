@@ -4,11 +4,13 @@ import {
   createDmmpStaff,
   deleteDmmpStaff,
   getCoordinationAssessment,
+  getDeactivationContinuity,
   getDmmpStaff,
   getDmmpStaffSummary,
   getResponderSafetyReport,
   getUtsteinOperations,
   saveCoordinationAssessment,
+  saveDeactivationContinuity,
   saveResponderSafetyReport,
   saveUtsteinOperations,
   updateDmmpStaff,
@@ -115,4 +117,18 @@ incidentOperationsRouter.put(
   requireAuth,
   requireRole(writableRoles),
   saveResponderSafetyReport,
+);
+
+incidentOperationsRouter.get(
+  "/incidents/:id/deactivation-continuity",
+  requireAuth,
+  requireRole(readableRoles),
+  getDeactivationContinuity,
+);
+
+incidentOperationsRouter.put(
+  "/incidents/:id/deactivation-continuity",
+  requireAuth,
+  requireRole(writableRoles),
+  saveDeactivationContinuity,
 );
