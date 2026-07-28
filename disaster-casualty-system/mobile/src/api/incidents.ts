@@ -152,6 +152,72 @@ export type OnsiteCareSummary = {
   };
 };
 
+export type SceneClearanceTransportMetric = {
+  minutes: number;
+  cutoffAt: string | null;
+  count: number;
+  totalSurvivors: number;
+  percentage: number;
+};
+
+export type SceneClearanceAmbulanceMetric = {
+  minutes: number;
+  cutoffAt: string | null;
+  count: number;
+};
+
+export type SceneClearanceSummary = {
+  incidentId: string;
+  totalSurvivors: number;
+  emsTransportedTotal: number;
+  firstEmsVehicleOnSceneAt: string | null;
+  firstTransportFromSceneAt: string | null;
+  lastTransportFromSceneAt: string | null;
+  responseInitiatedAt: string | null;
+  responseInitiationSource: string;
+  intervalMinutes: number[];
+  transported: {
+    immediate: SceneClearanceTransportMetric[];
+    delayed: SceneClearanceTransportMetric[];
+  };
+  ambulances: {
+    bls: SceneClearanceAmbulanceMetric[];
+    als: SceneClearanceAmbulanceMetric[];
+  };
+};
+
+export type SurvivorDistributionFacilityMetric = {
+  level: "primary" | "secondary" | "tertiary" | "specialized";
+  transportUse: "ems" | "non_ems";
+  numerator: number;
+  denominator: number;
+  percentage: number;
+};
+
+export type SurvivorDistributionIntervalMetric = {
+  minutes: number;
+  cutoffAt: string | null;
+  count: number;
+  totalArrivals: number;
+  percentage: number;
+};
+
+export type SurvivorDistributionSummary = {
+  incidentId: string;
+  totalSurvivors: number;
+  totalFacilityArrivals: number;
+  responseInitiatedAt: string | null;
+  responseInitiationSource: string;
+  facilityLevels: Record<
+    "primary" | "secondary" | "tertiary" | "specialized",
+    {
+      nonEms: SurvivorDistributionFacilityMetric;
+      ems: SurvivorDistributionFacilityMetric;
+    }
+  >;
+  edArrivalsByInterval: SurvivorDistributionIntervalMetric[];
+};
+
 export type CoordinationAssessmentPayload = {
   initialActionsRating?: CoordinationRating | null;
   sceneCoordinationRating?: CoordinationRating | null;
@@ -265,6 +331,16 @@ type OnsiteTriageSummaryResponse = {
 type OnsiteCareSummaryResponse = {
   success: boolean;
   data: OnsiteCareSummary;
+};
+
+type SceneClearanceSummaryResponse = {
+  success: boolean;
+  data: SceneClearanceSummary;
+};
+
+type SurvivorDistributionSummaryResponse = {
+  success: boolean;
+  data: SurvivorDistributionSummary;
 };
 
 type IncidentSitrepResponse = {
@@ -438,6 +514,26 @@ export async function getOnsiteCareSummary(
 ): Promise<OnsiteCareSummary> {
   const response = await api.get<OnsiteCareSummaryResponse>(
     `/incidents/${encodeURIComponent(id)}/onsite-care-summary`,
+  );
+
+  return response.data.data;
+}
+
+export async function getSceneClearanceSummary(
+  id: string,
+): Promise<SceneClearanceSummary> {
+  const response = await api.get<SceneClearanceSummaryResponse>(
+    `/incidents/${encodeURIComponent(id)}/scene-clearance-summary`,
+  );
+
+  return response.data.data;
+}
+
+export async function getSurvivorDistributionSummary(
+  id: string,
+): Promise<SurvivorDistributionSummary> {
+  const response = await api.get<SurvivorDistributionSummaryResponse>(
+    `/incidents/${encodeURIComponent(id)}/survivor-distribution-summary`,
   );
 
   return response.data.data;

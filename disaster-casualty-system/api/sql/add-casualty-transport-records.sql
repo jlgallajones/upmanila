@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS public.casualty_transport_records (
   transport_required varchar(20) NOT NULL DEFAULT 'unknown',
   transport_mode varchar(50) NOT NULL DEFAULT 'unknown',
   ems_unit_type varchar(50) NOT NULL DEFAULT 'unknown',
+  arrived_scene_at timestamptz,
   departed_scene_at timestamptz,
   arrived_facility_at timestamptz,
   receiving_facility_id uuid
@@ -35,9 +36,16 @@ CREATE TABLE IF NOT EXISTS public.casualty_transport_records (
     CHECK (ems_unit_type IN ('bls', 'als', 'other', 'unknown')),
   CONSTRAINT casualty_transport_records_valid_times_check
     CHECK (
-      arrived_facility_at IS NULL
-      OR departed_scene_at IS NULL
-      OR arrived_facility_at >= departed_scene_at
+      (
+        departed_scene_at IS NULL
+        OR arrived_scene_at IS NULL
+        OR departed_scene_at >= arrived_scene_at
+      )
+      AND (
+        arrived_facility_at IS NULL
+        OR departed_scene_at IS NULL
+        OR arrived_facility_at >= departed_scene_at
+      )
     )
 );
 
@@ -57,12 +65,31 @@ ALTER TABLE public.casualty_transport_records
   ADD COLUMN IF NOT EXISTS transport_required varchar(20) DEFAULT 'unknown',
   ADD COLUMN IF NOT EXISTS transport_mode varchar(50) DEFAULT 'unknown',
   ADD COLUMN IF NOT EXISTS ems_unit_type varchar(50) DEFAULT 'unknown',
+  ADD COLUMN IF NOT EXISTS arrived_scene_at timestamptz,
   ADD COLUMN IF NOT EXISTS departed_scene_at timestamptz,
   ADD COLUMN IF NOT EXISTS arrived_facility_at timestamptz,
   ADD COLUMN IF NOT EXISTS receiving_facility_id uuid,
   ADD COLUMN IF NOT EXISTS recorded_by uuid,
   ADD COLUMN IF NOT EXISTS notes text,
   ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
+
+ALTER TABLE public.casualty_transport_records
+  DROP CONSTRAINT IF EXISTS casualty_transport_records_valid_times_check;
+
+ALTER TABLE public.casualty_transport_records
+  ADD CONSTRAINT casualty_transport_records_valid_times_check
+  CHECK (
+    (
+      departed_scene_at IS NULL
+      OR arrived_scene_at IS NULL
+      OR departed_scene_at >= arrived_scene_at
+    )
+    AND (
+      arrived_facility_at IS NULL
+      OR departed_scene_at IS NULL
+      OR arrived_facility_at >= departed_scene_at
+    )
+  );
 
 ALTER TABLE public.casualty_transport_records ENABLE ROW LEVEL SECURITY;
 
@@ -115,4 +142,3 @@ BEGIN
   END IF;
 END;
 $$;
-

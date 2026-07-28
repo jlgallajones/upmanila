@@ -224,6 +224,7 @@ BEGIN
       transport_required,
       transport_mode,
       ems_unit_type,
+      arrived_scene_at,
       departed_scene_at,
       arrived_facility_at,
       receiving_facility_id,
@@ -244,6 +245,7 @@ BEGIN
         NULLIF(p_transport_record ->> 'emsUnitType', ''),
         'unknown'
       ),
+      NULLIF(p_transport_record ->> 'arrivedSceneAt', '')::timestamptz,
       NULLIF(p_transport_record ->> 'departedSceneAt', '')::timestamptz,
       NULLIF(p_transport_record ->> 'arrivedFacilityAt', '')::timestamptz,
       v_receiving_facility_id,

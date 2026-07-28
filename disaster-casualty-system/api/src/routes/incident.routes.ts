@@ -11,6 +11,8 @@ import {
   getIncidentOnsiteCareSummary,
   getIncidentTimeline,
   getIncidentOnsiteTriageSummary,
+  getIncidentSceneClearanceSummary,
+  getIncidentSurvivorDistributionSummary,
   updateIncidentTimeline,
 } from "../controllers/incident.controller.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
@@ -47,6 +49,16 @@ incidentRouter.get(
   "/:id/onsite-care-summary",
   requireAuth,
   getIncidentOnsiteCareSummary,
+);
+incidentRouter.get(
+  "/:id/scene-clearance-summary",
+  requireAuth,
+  getIncidentSceneClearanceSummary,
+);
+incidentRouter.get(
+  "/:id/survivor-distribution-summary",
+  requireAuth,
+  getIncidentSurvivorDistributionSummary,
 );
 incidentRouter.put(
   "/:id/timeline",

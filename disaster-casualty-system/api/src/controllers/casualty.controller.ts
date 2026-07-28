@@ -362,12 +362,26 @@ function validateTransportRecord(
     return false;
   }
 
+  const arrivedSceneAt = transportRecord.arrivedSceneAt
+    ? new Date(transportRecord.arrivedSceneAt)
+    : null;
   const departedSceneAt = transportRecord.departedSceneAt
     ? new Date(transportRecord.departedSceneAt)
     : null;
   const arrivedFacilityAt = transportRecord.arrivedFacilityAt
     ? new Date(transportRecord.arrivedFacilityAt)
     : null;
+
+  if (
+    arrivedSceneAt &&
+    Number.isNaN(arrivedSceneAt.getTime())
+  ) {
+    response.status(400).json({
+      success: false,
+      message: "Invalid EMS scene arrival time.",
+    });
+    return false;
+  }
 
   if (
     departedSceneAt &&
@@ -387,6 +401,19 @@ function validateTransportRecord(
     response.status(400).json({
       success: false,
       message: "Invalid arrived facility time.",
+    });
+    return false;
+  }
+
+  if (
+    arrivedSceneAt &&
+    departedSceneAt &&
+    departedSceneAt < arrivedSceneAt
+  ) {
+    response.status(400).json({
+      success: false,
+      message:
+        "Departed scene time cannot be before EMS scene arrival time.",
     });
     return false;
   }
@@ -583,6 +610,7 @@ async function insertTransportRecord(
       transport_required: transportRecord.transportRequired,
       transport_mode: transportRecord.transportMode ?? "unknown",
       ems_unit_type: transportRecord.emsUnitType ?? "unknown",
+      arrived_scene_at: transportRecord.arrivedSceneAt ?? null,
       departed_scene_at: transportRecord.departedSceneAt ?? null,
       arrived_facility_at: transportRecord.arrivedFacilityAt ?? null,
       receiving_facility_id:
@@ -1504,7 +1532,7 @@ export async function getCasualtyTransportHistory(
     const { data, error } = await supabase
       .from("casualty_transport_records")
       .select(
-        "id, casualty_incident_id, transport_required, transport_mode, ems_unit_type, departed_scene_at, arrived_facility_at, receiving_facility_id, recorded_by, notes, created_at",
+        "id, casualty_incident_id, transport_required, transport_mode, ems_unit_type, arrived_scene_at, departed_scene_at, arrived_facility_at, receiving_facility_id, recorded_by, notes, created_at",
       )
       .eq("casualty_incident_id", id)
       .order("created_at", { ascending: false });

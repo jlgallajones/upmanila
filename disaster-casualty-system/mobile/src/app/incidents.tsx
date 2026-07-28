@@ -31,6 +31,8 @@ import {
   getIncidentTimeline,
   getOnsiteCareSummary,
   getOnsiteTriageSummary,
+  getSceneClearanceSummary,
+  getSurvivorDistributionSummary,
   saveCoordinationAssessment,
   type Incident,
   type CoordinationRating,
@@ -39,6 +41,9 @@ import {
   type MedicalCoordinationAssessment,
   type OnsiteCareSummary,
   type OnsiteTriageSummary,
+  type SceneClearanceSummary,
+  type SurvivorDistributionFacilityMetric,
+  type SurvivorDistributionSummary,
   type OnsiteTriageAccuracyMetric,
   type IncidentResponseTimeline,
   type IncidentSitrep,
@@ -612,6 +617,21 @@ function formatTreatmentStrategyCounts(
     .join("\n");
 }
 
+function formatFacilityLevelLabel(value: string): string {
+  switch (value) {
+    case "primary":
+      return "Primary";
+    case "secondary":
+      return "Secondary";
+    case "tertiary":
+      return "Tertiary";
+    case "specialized":
+      return "Specialized";
+    default:
+      return value;
+  }
+}
+
 function IncidentCard({
   incident,
   canClose,
@@ -621,6 +641,8 @@ function IncidentCard({
   onEditCoordination,
   onViewOnsiteTriage,
   onViewOnsiteCare,
+  onViewSceneClearance,
+  onViewDistribution,
   onGenerateSitrep,
   isGeneratingSitrep,
 }: {
@@ -632,6 +654,8 @@ function IncidentCard({
   onEditCoordination: () => void;
   onViewOnsiteTriage: () => void;
   onViewOnsiteCare: () => void;
+  onViewSceneClearance: () => void;
+  onViewDistribution: () => void;
   onGenerateSitrep: () => void;
   isGeneratingSitrep: boolean;
 }) {
@@ -769,6 +793,40 @@ function IncidentCard({
       </Pressable>
 
       <Pressable
+        onPress={onViewSceneClearance}
+        style={({ pressed }) => [
+          styles.triageButton,
+          pressed && styles.pressed,
+        ]}
+      >
+        <Ionicons
+          name="car-outline"
+          size={17}
+          color={COLORS.maroon}
+        />
+        <Text style={styles.timelineButtonText}>
+          Scene Clearance
+        </Text>
+      </Pressable>
+
+      <Pressable
+        onPress={onViewDistribution}
+        style={({ pressed }) => [
+          styles.triageButton,
+          pressed && styles.pressed,
+        ]}
+      >
+        <Ionicons
+          name="business-outline"
+          size={17}
+          color={COLORS.maroon}
+        />
+        <Text style={styles.timelineButtonText}>
+          Distribution
+        </Text>
+      </Pressable>
+
+      <Pressable
         disabled={isGeneratingSitrep}
         onPress={onGenerateSitrep}
         style={({ pressed }) => [
@@ -894,6 +952,30 @@ export default function IncidentsPage() {
   const [onsiteCareSummary, setOnsiteCareSummary] =
     useState<OnsiteCareSummary | null>(null);
   const [isLoadingOnsiteCare, setIsLoadingOnsiteCare] =
+    useState(false);
+  const [
+    isSceneClearanceModalVisible,
+    setIsSceneClearanceModalVisible,
+  ] = useState(false);
+  const [
+    selectedSceneClearanceIncident,
+    setSelectedSceneClearanceIncident,
+  ] = useState<Incident | null>(null);
+  const [sceneClearanceSummary, setSceneClearanceSummary] =
+    useState<SceneClearanceSummary | null>(null);
+  const [isLoadingSceneClearance, setIsLoadingSceneClearance] =
+    useState(false);
+  const [
+    isDistributionModalVisible,
+    setIsDistributionModalVisible,
+  ] = useState(false);
+  const [
+    selectedDistributionIncident,
+    setSelectedDistributionIncident,
+  ] = useState<Incident | null>(null);
+  const [distributionSummary, setDistributionSummary] =
+    useState<SurvivorDistributionSummary | null>(null);
+  const [isLoadingDistribution, setIsLoadingDistribution] =
     useState(false);
   const [sitrep, setSitrep] = useState<IncidentSitrep | null>(null);
   const [isSitrepModalVisible, setIsSitrepModalVisible] =
@@ -1609,6 +1691,66 @@ export default function IncidentsPage() {
     setOnsiteCareSummary(null);
   }
 
+  async function handleOpenSceneClearance(incident: Incident) {
+    setSelectedSceneClearanceIncident(incident);
+    setSceneClearanceSummary(null);
+    setIsSceneClearanceModalVisible(true);
+    setIsLoadingSceneClearance(true);
+
+    try {
+      const summary = await getSceneClearanceSummary(incident.id);
+
+      setSceneClearanceSummary(summary);
+    } catch (error) {
+      console.error("Unable to load scene clearance summary:", error);
+
+      Alert.alert(
+        "Unable to load scene clearance",
+        error instanceof Error
+          ? error.message
+          : "Please try again.",
+      );
+    } finally {
+      setIsLoadingSceneClearance(false);
+    }
+  }
+
+  function handleCloseSceneClearanceModal() {
+    setIsSceneClearanceModalVisible(false);
+    setSelectedSceneClearanceIncident(null);
+    setSceneClearanceSummary(null);
+  }
+
+  async function handleOpenDistribution(incident: Incident) {
+    setSelectedDistributionIncident(incident);
+    setDistributionSummary(null);
+    setIsDistributionModalVisible(true);
+    setIsLoadingDistribution(true);
+
+    try {
+      const summary = await getSurvivorDistributionSummary(incident.id);
+
+      setDistributionSummary(summary);
+    } catch (error) {
+      console.error("Unable to load survivor distribution:", error);
+
+      Alert.alert(
+        "Unable to load distribution",
+        error instanceof Error
+          ? error.message
+          : "Please try again.",
+      );
+    } finally {
+      setIsLoadingDistribution(false);
+    }
+  }
+
+  function handleCloseDistributionModal() {
+    setIsDistributionModalVisible(false);
+    setSelectedDistributionIncident(null);
+    setDistributionSummary(null);
+  }
+
   function renderTimelineDateField(
     label: string,
     key: keyof TimelineFormState,
@@ -1799,6 +1941,60 @@ export default function IncidentsPage() {
     );
   }
 
+  function renderAmbulanceIntervalSection(
+    title: string,
+    rows: Array<{
+      minutes: number;
+      count: number;
+    }>,
+  ) {
+    return (
+      <View style={styles.triageIntervalSection}>
+        <Text style={styles.fieldLabel}>{title}</Text>
+        <View style={styles.triageIntervalHeader}>
+          <Text style={styles.triageIntervalHeaderText}>Interval</Text>
+          <Text style={styles.triageIntervalHeaderText}>Count</Text>
+        </View>
+
+        {rows.map((row) => (
+          <View key={row.minutes} style={styles.triageIntervalRow}>
+            <Text style={styles.triageIntervalText}>
+              {row.minutes === 60 ? "1 hour" : `${row.minutes} min`}
+            </Text>
+            <Text style={styles.triageIntervalValue}>
+              {row.count}
+            </Text>
+          </View>
+        ))}
+      </View>
+    );
+  }
+
+  function renderDistributionMetricRow(
+    metric: SurvivorDistributionFacilityMetric,
+  ) {
+    return (
+      <View
+        key={`${metric.level}-${metric.transportUse}`}
+        style={styles.triageAccuracyRow}
+      >
+        <View style={styles.triageAccuracyTextGroup}>
+          <Text style={styles.triageAccuracyTitle}>
+            {formatFacilityLevelLabel(metric.level)} -{" "}
+            {metric.transportUse === "ems" ? "EMS" : "No EMS"}
+          </Text>
+          <Text style={styles.triageAccuracyDescription}>
+            Facility arrivals by transport use
+          </Text>
+        </View>
+        <Text style={styles.triageAccuracyValue}>
+          {metric.numerator}/{metric.denominator} -{" "}
+          {metric.percentage}%
+        </Text>
+      </View>
+    );
+  }
+
   if (isLoading) {
     return (
       <View style={styles.centerState}>
@@ -1916,6 +2112,12 @@ export default function IncidentsPage() {
             }}
             onViewOnsiteCare={() => {
               void handleOpenOnsiteCare(item);
+            }}
+            onViewSceneClearance={() => {
+              void handleOpenSceneClearance(item);
+            }}
+            onViewDistribution={() => {
+              void handleOpenDistribution(item);
             }}
             onGenerateSitrep={() => {
               void handleGenerateSitrep(item);
@@ -3048,6 +3250,294 @@ export default function IncidentsPage() {
 
                 <Pressable
                   onPress={handleCloseOnsiteCareModal}
+                  style={({ pressed }) => [
+                    styles.createButton,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={styles.createButtonText}>Done</Text>
+                  <Ionicons
+                    name="checkmark-circle-outline"
+                    size={19}
+                    color={COLORS.white}
+                  />
+                </Pressable>
+              </ScrollView>
+            ) : null}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={isSceneClearanceModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCloseSceneClearanceModal}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={handleCloseSceneClearanceModal}
+        >
+          <Pressable style={styles.timelineSheet}>
+            <View style={styles.sheetHandle} />
+
+            <View style={styles.sheetHeader}>
+              <View style={styles.sheetTitleGroup}>
+                <Text style={styles.sheetTitle}>
+                  Scene Clearance
+                </Text>
+                <Text
+                  style={styles.sheetSubtitle}
+                  numberOfLines={1}
+                >
+                  {selectedSceneClearanceIncident?.incident_name ??
+                    "Incident"}
+                </Text>
+              </View>
+              <Pressable
+                onPress={handleCloseSceneClearanceModal}
+                style={styles.sheetCloseButton}
+              >
+                <Ionicons
+                  name="close"
+                  size={20}
+                  color={COLORS.secondaryText}
+                />
+              </Pressable>
+            </View>
+
+            {isLoadingSceneClearance ? (
+              <View style={styles.timelineLoading}>
+                <ActivityIndicator
+                  size="small"
+                  color={COLORS.maroon}
+                />
+                <Text style={styles.timelineLoadingText}>
+                  Loading scene clearance...
+                </Text>
+              </View>
+            ) : sceneClearanceSummary ? (
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.timelineScrollContent}
+              >
+                <View style={styles.sitrepMetricGrid}>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {sceneClearanceSummary.totalSurvivors}
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      Survivors
+                    </Text>
+                  </View>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {sceneClearanceSummary.emsTransportedTotal}
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      EMS Transported
+                    </Text>
+                  </View>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {
+                        sceneClearanceSummary.transported.immediate[
+                          sceneClearanceSummary.transported.immediate.length - 1
+                        ]?.percentage ?? 0
+                      }
+                      %
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      T1 by 1 hour
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={styles.fieldLabel}>
+                  CLEARANCE TIMES
+                </Text>
+                <Text style={styles.sitrepSectionText}>
+                  First EMS vehicle on scene:{" "}
+                  {formatDateTime(
+                    sceneClearanceSummary.firstEmsVehicleOnSceneAt,
+                  )}
+                  {"\n"}First EMS transport from scene:{" "}
+                  {formatDateTime(
+                    sceneClearanceSummary.firstTransportFromSceneAt,
+                  )}
+                  {"\n"}Last EMS transport from scene:{" "}
+                  {formatDateTime(
+                    sceneClearanceSummary.lastTransportFromSceneAt,
+                  )}
+                  {"\n"}Response initiation:{" "}
+                  {formatDateTime(
+                    sceneClearanceSummary.responseInitiatedAt,
+                  )}
+                </Text>
+
+                {renderTriageIntervalSection(
+                  "T1 IMMEDIATE TRANSPORTED BY INTERVAL",
+                  sceneClearanceSummary.transported.immediate,
+                )}
+                {renderTriageIntervalSection(
+                  "T2 DELAYED TRANSPORTED BY INTERVAL",
+                  sceneClearanceSummary.transported.delayed,
+                )}
+                {renderAmbulanceIntervalSection(
+                  "BLS AMBULANCES ARRIVED BY INTERVAL",
+                  sceneClearanceSummary.ambulances.bls,
+                )}
+                {renderAmbulanceIntervalSection(
+                  "ALS AMBULANCES ARRIVED BY INTERVAL",
+                  sceneClearanceSummary.ambulances.als,
+                )}
+
+                <Pressable
+                  onPress={handleCloseSceneClearanceModal}
+                  style={({ pressed }) => [
+                    styles.createButton,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={styles.createButtonText}>Done</Text>
+                  <Ionicons
+                    name="checkmark-circle-outline"
+                    size={19}
+                    color={COLORS.white}
+                  />
+                </Pressable>
+              </ScrollView>
+            ) : null}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={isDistributionModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCloseDistributionModal}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={handleCloseDistributionModal}
+        >
+          <Pressable style={styles.timelineSheet}>
+            <View style={styles.sheetHandle} />
+
+            <View style={styles.sheetHeader}>
+              <View style={styles.sheetTitleGroup}>
+                <Text style={styles.sheetTitle}>Distribution</Text>
+                <Text
+                  style={styles.sheetSubtitle}
+                  numberOfLines={1}
+                >
+                  {selectedDistributionIncident?.incident_name ??
+                    "Incident"}
+                </Text>
+              </View>
+              <Pressable
+                onPress={handleCloseDistributionModal}
+                style={styles.sheetCloseButton}
+              >
+                <Ionicons
+                  name="close"
+                  size={20}
+                  color={COLORS.secondaryText}
+                />
+              </Pressable>
+            </View>
+
+            {isLoadingDistribution ? (
+              <View style={styles.timelineLoading}>
+                <ActivityIndicator
+                  size="small"
+                  color={COLORS.maroon}
+                />
+                <Text style={styles.timelineLoadingText}>
+                  Loading distribution...
+                </Text>
+              </View>
+            ) : distributionSummary ? (
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.timelineScrollContent}
+              >
+                <View style={styles.sitrepMetricGrid}>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {distributionSummary.totalSurvivors}
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      Survivors
+                    </Text>
+                  </View>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {distributionSummary.totalFacilityArrivals}
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      Facility Arrivals
+                    </Text>
+                  </View>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {
+                        distributionSummary.edArrivalsByInterval[
+                          distributionSummary.edArrivalsByInterval.length - 1
+                        ]?.percentage ?? 0
+                      }
+                      %
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      Arrivals by 1 hr
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={styles.fieldLabel}>
+                  FACILITY ARRIVALS BY LEVEL
+                </Text>
+                <View style={styles.triageAccuracyList}>
+                  {(
+                    [
+                      "primary",
+                      "secondary",
+                      "tertiary",
+                      "specialized",
+                    ] as const
+                  ).flatMap((level) => [
+                    renderDistributionMetricRow(
+                      distributionSummary.facilityLevels[level].nonEms,
+                    ),
+                    renderDistributionMetricRow(
+                      distributionSummary.facilityLevels[level].ems,
+                    ),
+                  ])}
+                </View>
+
+                <Text style={styles.fieldLabel}>ED ARRIVALS</Text>
+                <Text style={styles.sitrepSectionText}>
+                  Response initiation:{" "}
+                  {formatDateTime(
+                    distributionSummary.responseInitiatedAt,
+                  )}
+                </Text>
+
+                {renderTriageIntervalSection(
+                  "ED ARRIVALS BY INTERVAL",
+                  distributionSummary.edArrivalsByInterval.map(
+                    (row) => ({
+                      minutes: row.minutes,
+                      count: row.count,
+                      totalSurvivors: row.totalArrivals,
+                      percentage: row.percentage,
+                    }),
+                  ),
+                )}
+
+                <Pressable
+                  onPress={handleCloseDistributionModal}
                   style={({ pressed }) => [
                     styles.createButton,
                     pressed && styles.pressed,

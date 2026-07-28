@@ -488,6 +488,7 @@ type FormState = {
   transportRequired: string;
   transportMode: string;
   emsUnitType: string;
+  arrivedSceneTime: string;
   departedSceneTime: string;
   arrivedFacilityTime: string;
   transportNotes: string;
@@ -562,6 +563,7 @@ const initialForm: FormState = {
   transportRequired: "",
   transportMode: "",
   emsUnitType: "",
+  arrivedSceneTime: "",
   departedSceneTime: "",
   arrivedFacilityTime: "",
   transportNotes: "",
@@ -1130,6 +1132,7 @@ function getTransportFormSignature(form: FormState): string {
     required: normalizeTransportRequired(form.transportRequired),
     mode: normalizeTransportMode(form.transportMode),
     emsUnitType: normalizeEmsUnitType(form.emsUnitType),
+    arrivedScene: parseDateTimeInput(form.arrivedSceneTime) ?? "",
     departed: parseDateTimeInput(form.departedSceneTime) ?? "",
     arrived: parseDateTimeInput(form.arrivedFacilityTime) ?? "",
     receivingFacilityId: form.healthcareFacilityId.trim(),
@@ -1280,6 +1283,9 @@ function mapRecordToForm(
     ),
     transportMode: formatTransportMode(latestTransport?.transport_mode),
     emsUnitType: formatEmsUnitType(latestTransport?.ems_unit_type),
+    arrivedSceneTime: latestTransport?.arrived_scene_at
+      ? formatDateTimeForInput(new Date(latestTransport.arrived_scene_at))
+      : "",
     departedSceneTime: latestTransport?.departed_scene_at
       ? formatDateTimeForInput(
           new Date(latestTransport.departed_scene_at),
@@ -1990,6 +1996,7 @@ export default function AddCasualtyScreen() {
       ),
       transportMode: normalizeTransportMode(form.transportMode),
       emsUnitType: normalizeEmsUnitType(form.emsUnitType),
+      arrivedSceneAt: parseDateTimeInput(form.arrivedSceneTime),
       departedSceneAt: parseDateTimeInput(form.departedSceneTime),
       arrivedFacilityAt: parseDateTimeInput(form.arrivedFacilityTime),
       receivingFacilityId: form.healthcareFacilityId || undefined,
@@ -2498,12 +2505,34 @@ export default function AddCasualtyScreen() {
           return false;
         }
 
+        if (
+          transportMode === "ems" &&
+          !form.arrivedSceneTime.trim()
+        ) {
+          Alert.alert(
+            "EMS scene arrival required",
+            "Enter the time the EMS vehicle arrived on scene.",
+          );
+          return false;
+        }
+
+        const arrivedSceneAt = form.arrivedSceneTime.trim()
+          ? getValidDateTimeInput(form.arrivedSceneTime)
+          : null;
         const departedSceneAt = form.departedSceneTime.trim()
           ? getValidDateTimeInput(form.departedSceneTime)
           : null;
         const arrivedFacilityAt = form.arrivedFacilityTime.trim()
           ? getValidDateTimeInput(form.arrivedFacilityTime)
           : null;
+
+        if (form.arrivedSceneTime.trim() && !arrivedSceneAt) {
+          Alert.alert(
+            "Invalid EMS scene arrival time",
+            "Enter EMS scene arrival time using mm/dd/yyyy hh:mm.",
+          );
+          return false;
+        }
 
         if (form.departedSceneTime.trim() && !departedSceneAt) {
           Alert.alert(
@@ -2517,6 +2546,18 @@ export default function AddCasualtyScreen() {
           Alert.alert(
             "Invalid arrival time",
             "Enter arrived facility time using mm/dd/yyyy hh:mm.",
+          );
+          return false;
+        }
+
+        if (
+          arrivedSceneAt &&
+          departedSceneAt &&
+          departedSceneAt < arrivedSceneAt
+        ) {
+          Alert.alert(
+            "Invalid transport times",
+            "Departed scene time cannot be before EMS scene arrival time.",
           );
           return false;
         }
@@ -4021,6 +4062,37 @@ export default function AddCasualtyScreen() {
           placeholder="BLS, ALS, other, or unknown"
           onPress={() => openChoiceSheet("emsUnitType")}
         />
+
+        <FormField
+          label="EMS SCENE ARRIVAL TIME"
+          value={form.arrivedSceneTime}
+          placeholder="mm/dd/yyyy hh:mm"
+          onChangeText={(value) =>
+            updateField("arrivedSceneTime", value)
+          }
+        />
+
+        <Pressable
+          onPress={() =>
+            updateField(
+              "arrivedSceneTime",
+              formatDateTimeForInput(new Date()),
+            )
+          }
+          style={({ pressed }) => [
+            styles.locationButton,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Ionicons
+            name="car-outline"
+            size={19}
+            color={COLORS.maroon}
+          />
+          <Text style={styles.locationButtonText}>
+            Use current EMS arrival time
+          </Text>
+        </Pressable>
 
         <FormField
           label="DEPARTED SCENE TIME"

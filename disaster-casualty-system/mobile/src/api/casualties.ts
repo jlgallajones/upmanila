@@ -131,6 +131,7 @@ export type CasualtyTransportHistoryItem = {
   transport_required: string;
   transport_mode: string;
   ems_unit_type: string;
+  arrived_scene_at: string | null;
   departed_scene_at: string | null;
   arrived_facility_at: string | null;
   receiving_facility_id: string | null;
@@ -245,6 +246,7 @@ export type CasualtyTransportRecordPayload = {
     | "other"
     | "unknown";
   emsUnitType?: "bls" | "als" | "other" | "unknown";
+  arrivedSceneAt?: string;
   departedSceneAt?: string;
   arrivedFacilityAt?: string;
   receivingFacilityId?: string;

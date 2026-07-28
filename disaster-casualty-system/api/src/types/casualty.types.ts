@@ -73,6 +73,7 @@ export interface CasualtyTransportRecordRequest {
   transportRequired: TransportRequired;
   transportMode?: TransportMode;
   emsUnitType?: EmsUnitType;
+  arrivedSceneAt?: string;
   departedSceneAt?: string;
   arrivedFacilityAt?: string;
   receivingFacilityId?: string;

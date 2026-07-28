@@ -138,6 +138,7 @@ type TransportRecordRow = {
   transport_required: string | null;
   transport_mode: string | null;
   ems_unit_type: string | null;
+  arrived_scene_at: string | null;
   departed_scene_at: string | null;
   arrived_facility_at: string | null;
   receiving_facility_id: string | null;
@@ -155,6 +156,7 @@ type TreatmentRecordRow = {
 type FacilityRow = {
   id: string;
   facility_name: string | null;
+  facility_level: string | null;
   municipality: string | null;
   province: string | null;
 };
@@ -1560,6 +1562,496 @@ export async function getIncidentOnsiteCareSummary(
           immediate: buildIntervalRows("immediate"),
           delayed: buildIntervalRows("delayed"),
         },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getIncidentSceneClearanceSummary(
+  request: Request<{ id: string }>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { id } = request.params;
+
+    const { data: incident, error: incidentError } = await supabase
+      .from("incidents")
+      .select("id, started_at")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (incidentError) {
+      throw new Error(
+        `Unable to retrieve incident: ${incidentError.message}`,
+      );
+    }
+
+    if (!incident) {
+      response.status(404).json({
+        success: false,
+        message: "Incident not found.",
+      });
+      return;
+    }
+
+    const { data: timeline, error: timelineError } = await supabase
+      .from("incident_response_timelines")
+      .select(
+        "dmmp_activated_at, first_ems_on_scene_at, first_transport_from_scene_at, last_transport_from_scene_at",
+      )
+      .eq("incident_id", id)
+      .maybeSingle();
+
+    if (timelineError) {
+      throw new Error(
+        `Unable to retrieve incident timeline: ${timelineError.message}`,
+      );
+    }
+
+    const { data: casualties, error: casualtiesError } =
+      await supabase
+        .from("casualty_incidents")
+        .select("id")
+        .eq("incident_id", id)
+        .is("deleted_at", null);
+
+    if (casualtiesError) {
+      throw new Error(
+        `Unable to retrieve incident casualties: ${casualtiesError.message}`,
+      );
+    }
+
+    const casualtyIncidentIds = (casualties ?? []).map(
+      (item) => item.id,
+    );
+
+    const triageResult =
+      casualtyIncidentIds.length > 0
+        ? await supabase
+            .from("casualty_triage_assessments")
+            .select(
+              "casualty_incident_id, triage_category, triage_stage, triaged_at",
+            )
+            .in("casualty_incident_id", casualtyIncidentIds)
+            .eq("triage_stage", "on_site")
+            .order("triaged_at", { ascending: true })
+        : { data: [], error: null };
+
+    if (triageResult.error) {
+      throw new Error(
+        `Unable to retrieve on-site triage data: ${triageResult.error.message}`,
+      );
+    }
+
+    const transportResult =
+      casualtyIncidentIds.length > 0
+        ? await supabase
+            .from("casualty_transport_records")
+            .select(
+              "casualty_incident_id, transport_required, transport_mode, ems_unit_type, arrived_scene_at, departed_scene_at, arrived_facility_at, receiving_facility_id",
+            )
+            .in("casualty_incident_id", casualtyIncidentIds)
+            .order("departed_scene_at", { ascending: true })
+        : { data: [], error: null };
+
+    if (transportResult.error) {
+      throw new Error(
+        `Unable to retrieve scene clearance data: ${transportResult.error.message}`,
+      );
+    }
+
+    const firstTriageByCasualty = new Map<
+      string,
+      TriageAssessmentRow
+    >();
+
+    for (const row of (triageResult.data ?? []) as TriageAssessmentRow[]) {
+      if (!firstTriageByCasualty.has(row.casualty_incident_id)) {
+        firstTriageByCasualty.set(row.casualty_incident_id, row);
+      }
+    }
+
+    const transportRows = (transportResult.data ??
+      []) as TransportRecordRow[];
+    const emsTransportRows = transportRows.filter(
+      (row) => row.transport_mode === "ems",
+    );
+    const departedAtValues = emsTransportRows
+      .map((row) =>
+        row.departed_scene_at ? new Date(row.departed_scene_at) : null,
+      )
+      .filter((value): value is Date => Boolean(value));
+    const arrivedSceneAtValues = emsTransportRows
+      .map((row) =>
+        row.arrived_scene_at ? new Date(row.arrived_scene_at) : null,
+      )
+      .filter((value): value is Date => Boolean(value));
+
+    const firstEmsVehicleOnSceneAt =
+      timeline?.first_ems_on_scene_at ??
+      arrivedSceneAtValues[0]?.toISOString() ??
+      null;
+    const firstTransportFromSceneAt =
+      timeline?.first_transport_from_scene_at ??
+      departedAtValues[0]?.toISOString() ??
+      null;
+    const lastTransportFromSceneAt =
+      timeline?.last_transport_from_scene_at ??
+      departedAtValues[departedAtValues.length - 1]?.toISOString() ??
+      null;
+
+    const responseInitiatedAt =
+      timeline?.dmmp_activated_at ?? incident.started_at ?? null;
+    const responseInitiatedDate = responseInitiatedAt
+      ? new Date(responseInitiatedAt)
+      : null;
+    const intervalMinutes = [1, 5, 10, 15, 30, 60];
+    const totalSurvivors = casualtyIncidentIds.length;
+
+    const buildTransportIntervalRows = (category: string) =>
+      intervalMinutes.map((minutes) => {
+        const cutoff =
+          responseInitiatedDate && !Number.isNaN(responseInitiatedDate.getTime())
+            ? new Date(
+                responseInitiatedDate.getTime() + minutes * 60 * 1000,
+              )
+            : null;
+        const count =
+          cutoff === null
+            ? 0
+            : emsTransportRows.filter((transport) => {
+                const triage = firstTriageByCasualty.get(
+                  transport.casualty_incident_id,
+                );
+
+                if (
+                  triage?.triage_category !== category ||
+                  !transport.departed_scene_at ||
+                  !transport.receiving_facility_id
+                ) {
+                  return false;
+                }
+
+                const departedSceneAt = new Date(
+                  transport.departed_scene_at,
+                );
+
+                return (
+                  !Number.isNaN(departedSceneAt.getTime()) &&
+                  departedSceneAt <= cutoff
+                );
+              }).length;
+
+        return {
+          minutes,
+          cutoffAt: cutoff?.toISOString() ?? null,
+          count,
+          totalSurvivors,
+          percentage:
+            totalSurvivors > 0
+              ? Number(((count / totalSurvivors) * 100).toFixed(2))
+              : 0,
+        };
+      });
+
+    const buildAmbulanceIntervalRows = (emsUnitType: string) =>
+      intervalMinutes.map((minutes) => {
+        const cutoff =
+          responseInitiatedDate && !Number.isNaN(responseInitiatedDate.getTime())
+            ? new Date(
+                responseInitiatedDate.getTime() + minutes * 60 * 1000,
+              )
+            : null;
+        const count =
+          cutoff === null
+            ? 0
+            : emsTransportRows.filter((transport) => {
+                if (
+                  transport.ems_unit_type !== emsUnitType ||
+                  !transport.arrived_scene_at
+                ) {
+                  return false;
+                }
+
+                const arrivedSceneAt = new Date(
+                  transport.arrived_scene_at,
+                );
+
+                return (
+                  !Number.isNaN(arrivedSceneAt.getTime()) &&
+                  arrivedSceneAt <= cutoff
+                );
+              }).length;
+
+        return {
+          minutes,
+          cutoffAt: cutoff?.toISOString() ?? null,
+          count,
+        };
+      });
+
+    response.status(200).json({
+      success: true,
+      data: {
+        incidentId: id,
+        totalSurvivors,
+        emsTransportedTotal: emsTransportRows.length,
+        firstEmsVehicleOnSceneAt,
+        firstTransportFromSceneAt,
+        lastTransportFromSceneAt,
+        responseInitiatedAt,
+        responseInitiationSource: timeline?.dmmp_activated_at
+          ? "dmmp_activated_at"
+          : "incident_started_at",
+        intervalMinutes,
+        transported: {
+          immediate: buildTransportIntervalRows("immediate"),
+          delayed: buildTransportIntervalRows("delayed"),
+        },
+        ambulances: {
+          bls: buildAmbulanceIntervalRows("bls"),
+          als: buildAmbulanceIntervalRows("als"),
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getIncidentSurvivorDistributionSummary(
+  request: Request<{ id: string }>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { id } = request.params;
+
+    const { data: incident, error: incidentError } = await supabase
+      .from("incidents")
+      .select("id, started_at")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (incidentError) {
+      throw new Error(
+        `Unable to retrieve incident: ${incidentError.message}`,
+      );
+    }
+
+    if (!incident) {
+      response.status(404).json({
+        success: false,
+        message: "Incident not found.",
+      });
+      return;
+    }
+
+    const { data: timeline, error: timelineError } = await supabase
+      .from("incident_response_timelines")
+      .select("dmmp_activated_at")
+      .eq("incident_id", id)
+      .maybeSingle();
+
+    if (timelineError) {
+      throw new Error(
+        `Unable to retrieve incident timeline: ${timelineError.message}`,
+      );
+    }
+
+    const { data: casualties, error: casualtiesError } =
+      await supabase
+        .from("casualty_incidents")
+        .select("id")
+        .eq("incident_id", id)
+        .is("deleted_at", null);
+
+    if (casualtiesError) {
+      throw new Error(
+        `Unable to retrieve incident casualties: ${casualtiesError.message}`,
+      );
+    }
+
+    const casualtyIncidentIds = (casualties ?? []).map(
+      (item) => item.id,
+    );
+
+    const transportResult =
+      casualtyIncidentIds.length > 0
+        ? await supabase
+            .from("casualty_transport_records")
+            .select(
+              "casualty_incident_id, transport_mode, arrived_facility_at, receiving_facility_id",
+            )
+            .in("casualty_incident_id", casualtyIncidentIds)
+            .not("receiving_facility_id", "is", null)
+            .not("arrived_facility_at", "is", null)
+            .order("arrived_facility_at", { ascending: true })
+        : { data: [], error: null };
+
+    if (transportResult.error) {
+      throw new Error(
+        `Unable to retrieve survivor distribution data: ${transportResult.error.message}`,
+      );
+    }
+
+    const transportRows = (transportResult.data ??
+      []) as TransportRecordRow[];
+    const facilityIds = Array.from(
+      new Set(
+        transportRows
+          .map((row) => row.receiving_facility_id)
+          .filter((value): value is string => Boolean(value)),
+      ),
+    );
+
+    const facilityResult =
+      facilityIds.length > 0
+        ? await supabase
+            .from("healthcare_facilities")
+            .select("id, facility_name, facility_level, municipality, province")
+            .in("id", facilityIds)
+        : { data: [], error: null };
+
+    if (facilityResult.error) {
+      throw new Error(
+        `Unable to retrieve healthcare facilities: ${facilityResult.error.message}`,
+      );
+    }
+
+    const facilityMap = new Map<string, FacilityRow>();
+
+    for (const facility of (facilityResult.data ?? []) as FacilityRow[]) {
+      facilityMap.set(facility.id, facility);
+    }
+
+    const facilityLevels = [
+      "primary",
+      "secondary",
+      "tertiary",
+      "specialized",
+    ] as const;
+    const arrivedRows = transportRows.filter((row) => {
+      const facility = row.receiving_facility_id
+        ? facilityMap.get(row.receiving_facility_id)
+        : null;
+
+      return (
+        Boolean(row.arrived_facility_at) &&
+        Boolean(facility?.facility_level) &&
+        facilityLevels.includes(
+          facility?.facility_level as (typeof facilityLevels)[number],
+        )
+      );
+    });
+
+    const buildFacilityMetric = (
+      level: (typeof facilityLevels)[number],
+      usesEms: boolean,
+    ) => {
+      const levelRows = arrivedRows.filter((row) => {
+        const facility = row.receiving_facility_id
+          ? facilityMap.get(row.receiving_facility_id)
+          : null;
+
+        return facility?.facility_level === level;
+      });
+      const numerator = levelRows.filter((row) =>
+        usesEms
+          ? row.transport_mode === "ems"
+          : ["private_vehicle", "independent", "walk_in", "other"].includes(
+              row.transport_mode ?? "",
+            ),
+      ).length;
+      const denominator = levelRows.length;
+
+      return {
+        level,
+        transportUse: usesEms ? "ems" : "non_ems",
+        numerator,
+        denominator,
+        percentage:
+          denominator > 0
+            ? Number(((numerator / denominator) * 100).toFixed(2))
+            : 0,
+      };
+    };
+
+    const responseInitiatedAt =
+      timeline?.dmmp_activated_at ?? incident.started_at ?? null;
+    const responseInitiatedDate = responseInitiatedAt
+      ? new Date(responseInitiatedAt)
+      : null;
+    const intervalMinutes = [1, 5, 10, 15, 30, 60];
+    const totalEdArrivals = arrivedRows.length;
+
+    const edArrivalsByInterval = intervalMinutes.map((minutes) => {
+      const cutoff =
+        responseInitiatedDate && !Number.isNaN(responseInitiatedDate.getTime())
+          ? new Date(
+              responseInitiatedDate.getTime() + minutes * 60 * 1000,
+            )
+          : null;
+      const count =
+        cutoff === null
+          ? 0
+          : arrivedRows.filter((row) => {
+              if (!row.arrived_facility_at) {
+                return false;
+              }
+
+              const arrivedAt = new Date(row.arrived_facility_at);
+
+              return (
+                !Number.isNaN(arrivedAt.getTime()) &&
+                arrivedAt <= cutoff
+              );
+            }).length;
+
+      return {
+        minutes,
+        cutoffAt: cutoff?.toISOString() ?? null,
+        count,
+        totalArrivals: totalEdArrivals,
+        percentage:
+          totalEdArrivals > 0
+            ? Number(((count / totalEdArrivals) * 100).toFixed(2))
+            : 0,
+      };
+    });
+
+    response.status(200).json({
+      success: true,
+      data: {
+        incidentId: id,
+        totalSurvivors: casualtyIncidentIds.length,
+        totalFacilityArrivals: arrivedRows.length,
+        responseInitiatedAt,
+        responseInitiationSource: timeline?.dmmp_activated_at
+          ? "dmmp_activated_at"
+          : "incident_started_at",
+        facilityLevels: {
+          primary: {
+            nonEms: buildFacilityMetric("primary", false),
+            ems: buildFacilityMetric("primary", true),
+          },
+          secondary: {
+            nonEms: buildFacilityMetric("secondary", false),
+            ems: buildFacilityMetric("secondary", true),
+          },
+          tertiary: {
+            nonEms: buildFacilityMetric("tertiary", false),
+            ems: buildFacilityMetric("tertiary", true),
+          },
+          specialized: {
+            nonEms: buildFacilityMetric("specialized", false),
+            ems: buildFacilityMetric("specialized", true),
+          },
+        },
+        edArrivalsByInterval,
       },
     });
   } catch (error) {
