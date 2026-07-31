@@ -1,0 +1,5 @@
+cd to mobile
+
+npx expo export -p web (this creates the dist folder)
+
+npx serve dist

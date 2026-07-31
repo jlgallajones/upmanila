@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "mobile",
+    "name": "DCMS",
     "slug": "mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -23,7 +23,11 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/dcms-app-icon.png"
+      "favicon": "./assets/images/dcms-app-icon.png",
+      "name": "Disaster Casualty Management System",
+      "shortName": "DCMS",
+      "themeColor": "#7B1113",
+      "backgroundColor": "#7B1113"
     },
     "plugins": [
       "expo-router",

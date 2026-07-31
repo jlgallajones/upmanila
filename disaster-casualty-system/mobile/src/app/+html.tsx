@@ -5,6 +5,7 @@ export default function Root({ children }: PropsWithChildren) {
   return (
     <html lang="en">
       <head>
+        <title>DCMS</title>
         <meta charSet="utf-8" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
         <meta
@@ -51,6 +52,19 @@ export default function Root({ children }: PropsWithChildren) {
           type="image/png"
           sizes="32x32"
           href="/icons/dcms-icon-32.png"
+        />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function () {
+    navigator.serviceWorker.register("/sw.js").catch(function (error) {
+      console.warn("Service worker registration failed:", error);
+    });
+  });
+}
+            `,
+          }}
         />
         <ScrollViewStyleReset />
       </head>

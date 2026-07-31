@@ -63,7 +63,6 @@ import {
   type SceneClearanceSummary,
   type SurvivorDistributionFacilityMetric,
   type SurvivorDistributionSummary,
-  type OnsiteTriageAccuracyMetric,
   type IncidentResponseTimeline,
   type IncidentSitrep,
   updateDmmpStaff,
@@ -139,14 +138,47 @@ const COORDINATION_RATING_OPTIONS: Array<{
   },
 ];
 
-const DISASTER_TYPES = [
-  "Typhoon",
-  "Flood",
-  "Fire",
-  "Earthquake",
-  "Landslide",
+const HAZARD_TYPE_OPTIONS = [
   "Volcanic Eruption",
+  "Earthquake",
+  "Tsunami",
+  "Landslide",
+  "Lahar / Volcanic Mudflow",
+  "Sink Hole",
+  "Geologic - Other",
+  "Infectious Diseases",
+  "Infestation",
+  "Poisoning",
+  "Biological - Other",
+  "Typhoon",
   "Storm Surge",
+  "LPA / ALPA",
+  "Tropical Depression",
+  "Monsoon Rain",
+  "Flooding",
+  "Flash Flood",
+  "Lightning",
+  "Drought",
+  "Meteorological / Hydrological - Other",
+  "Bombing",
+  "Armed Conflict",
+  "War",
+  "Mass Gathering",
+  "Ambush Incident",
+  "Terrorist Activities",
+  "Hostage Taking",
+  "Coup d'etat",
+  "Repatriation",
+  "Civil Unrest",
+  "Mass Shooting",
+  "Societal - Other",
+  "Fire",
+  "Explosion",
+  "Maritime Accident",
+  "Air Accident",
+  "Land Transportation Accident",
+  "Trash Slide",
+  "Technological - Other",
   "Other",
 ] as const;
 
@@ -860,6 +892,7 @@ function formatMinuteLabel(value: number): string {
 function IncidentCard({
   incident,
   canClose,
+  onAddCasualty,
   onClose,
   onEditTimeline,
   onManageStaff,
@@ -879,6 +912,7 @@ function IncidentCard({
 }: {
   incident: Incident;
   canClose: boolean;
+  onAddCasualty: () => void;
   onClose: () => void;
   onEditTimeline: () => void;
   onManageStaff: () => void;
@@ -925,6 +959,23 @@ function IncidentCard({
       </View>
 
       <View style={styles.cardDivider} />
+
+      <Pressable
+        onPress={onAddCasualty}
+        style={({ pressed }) => [
+          styles.addCasualtyButton,
+          pressed && styles.pressed,
+        ]}
+      >
+        <Ionicons
+          name="person-add-outline"
+          size={18}
+          color={COLORS.white}
+        />
+        <Text style={styles.addCasualtyButtonText}>
+          Add Casualty to This Incident
+        </Text>
+      </Pressable>
 
       <View style={styles.detailRow}>
         <Ionicons
@@ -1229,6 +1280,12 @@ export default function IncidentsPage() {
     useState(false);
   const [newIncidentName, setNewIncidentName] = useState("");
   const [newDisasterType, setNewDisasterType] = useState("");
+  const [hazardTypeSearchQuery, setHazardTypeSearchQuery] =
+    useState("");
+  const [
+    isHazardTypeSheetVisible,
+    setIsHazardTypeSheetVisible,
+  ] = useState(false);
   const [newLocation, setNewLocation] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [
@@ -1478,6 +1535,18 @@ export default function IncidentsPage() {
     });
   }, [incidents, query]);
 
+  const filteredHazardTypes = useMemo(() => {
+    const normalizedQuery = hazardTypeSearchQuery.trim().toLowerCase();
+
+    if (!normalizedQuery) {
+      return HAZARD_TYPE_OPTIONS;
+    }
+
+    return HAZARD_TYPE_OPTIONS.filter((type) =>
+      type.toLowerCase().includes(normalizedQuery),
+    );
+  }, [hazardTypeSearchQuery]);
+
   async function handleRefresh() {
     try {
       setIsRefreshing(true);
@@ -1511,7 +1580,7 @@ export default function IncidentsPage() {
     if (!incidentName || !disasterType) {
       Alert.alert(
         "Complete incident details",
-        "Enter an incident name and disaster type.",
+        "Enter an incident name and hazard type.",
       );
       return;
     }
@@ -1534,6 +1603,16 @@ export default function IncidentsPage() {
       Alert.alert(
         "Incident created",
         "The new disaster incident is now available for casualty records.",
+        [
+          {
+            text: "Add Casualty",
+            onPress: () => handleAddCasualty(created),
+          },
+          {
+            text: "Done",
+            style: "cancel",
+          },
+        ],
       );
     } catch (error) {
       console.error("Unable to create incident:", error);
@@ -1547,6 +1626,16 @@ export default function IncidentsPage() {
     } finally {
       setIsCreating(false);
     }
+  }
+
+  function handleAddCasualty(incident: Incident) {
+    router.push({
+      pathname: "/add-casualty",
+      params: {
+        incidentId: incident.id,
+        incidentName: incident.incident_name,
+      },
+    } as never);
   }
 
   function handleCloseIncident(incident: Incident) {
@@ -2787,78 +2876,77 @@ export default function IncidentsPage() {
     }
   }
 
-  function renderTimelineDateField(
-    label: string,
-    key: keyof TimelineFormState,
-  ) {
+  function renderCurrentTimeField({
+    label,
+    value,
+    onChangeText,
+    onUseCurrentTime,
+    editable = canUpdateOperations,
+  }: {
+    label: string;
+    value: string;
+    onChangeText: (value: string) => void;
+    onUseCurrentTime: () => void;
+    editable?: boolean;
+  }) {
     return (
       <View style={styles.timelineFieldGroup}>
-        <View style={styles.timelineLabelRow}>
-          <Text style={styles.fieldLabel}>{label}</Text>
-          {canUpdateOperations ? (
+        <Text style={styles.fieldLabel}>{label}</Text>
+        <View style={styles.currentTimeRow}>
+          <TextInput
+            value={value}
+            onChangeText={onChangeText}
+            style={[styles.input, styles.currentTimeInput]}
+            placeholder="mm/dd/yyyy hh:mm"
+            placeholderTextColor={COLORS.mutedText}
+            editable={editable}
+          />
+
+          {editable ? (
             <Pressable
-              onPress={() => setTimelineFieldToNow(key)}
+              onPress={onUseCurrentTime}
               style={({ pressed }) => [
-                styles.nowButton,
+                styles.currentTimeButton,
                 pressed && styles.pressed,
               ]}
             >
               <Ionicons
                 name="time-outline"
-                size={14}
+                size={16}
                 color={COLORS.maroon}
               />
-              <Text style={styles.nowButtonText}>Now</Text>
+              <Text style={styles.currentTimeButtonText}>
+                Use current time
+              </Text>
             </Pressable>
           ) : null}
         </View>
-        <TextInput
-          value={String(timelineForm[key])}
-          onChangeText={(value) => updateTimelineField(key, value)}
-          style={styles.input}
-          placeholder="mm/dd/yyyy hh:mm"
-          placeholderTextColor={COLORS.mutedText}
-          editable={canUpdateOperations}
-        />
       </View>
     );
+  }
+
+  function renderTimelineDateField(
+    label: string,
+    key: keyof TimelineFormState,
+  ) {
+    return renderCurrentTimeField({
+      label,
+      value: String(timelineForm[key]),
+      onChangeText: (value) => updateTimelineField(key, value),
+      onUseCurrentTime: () => setTimelineFieldToNow(key),
+    });
   }
 
   function renderStaffDateField(
     label: string,
     key: keyof StaffFormState,
   ) {
-    return (
-      <View style={styles.timelineFieldGroup}>
-        <View style={styles.timelineLabelRow}>
-          <Text style={styles.fieldLabel}>{label}</Text>
-          {canUpdateOperations ? (
-            <Pressable
-              onPress={() => setStaffFieldToNow(key)}
-              style={({ pressed }) => [
-                styles.nowButton,
-                pressed && styles.pressed,
-              ]}
-            >
-              <Ionicons
-                name="time-outline"
-                size={14}
-                color={COLORS.maroon}
-              />
-              <Text style={styles.nowButtonText}>Now</Text>
-            </Pressable>
-          ) : null}
-        </View>
-        <TextInput
-          value={String(staffForm[key])}
-          onChangeText={(value) => updateStaffField(key, value)}
-          style={styles.input}
-          placeholder="mm/dd/yyyy hh:mm"
-          placeholderTextColor={COLORS.mutedText}
-          editable={canUpdateOperations}
-        />
-      </View>
-    );
+    return renderCurrentTimeField({
+      label,
+      value: String(staffForm[key]),
+      onChangeText: (value) => updateStaffField(key, value),
+      onUseCurrentTime: () => setStaffFieldToNow(key),
+    });
   }
 
   function renderCoordinationRatingField(
@@ -2929,39 +3017,13 @@ export default function IncidentsPage() {
       "ppeDecisionAt" | "responseDeactivatedAt"
     >,
   ) {
-    return (
-      <View style={styles.timelineFieldGroup}>
-        <View style={styles.timelineLabelRow}>
-          <Text style={styles.fieldLabel}>{label}</Text>
-          {canUpdateOperations ? (
-            <Pressable
-              onPress={() => setResponderSafetyFieldToNow(key)}
-              style={({ pressed }) => [
-                styles.nowButton,
-                pressed && styles.pressed,
-              ]}
-            >
-              <Ionicons
-                name="time-outline"
-                size={14}
-                color={COLORS.maroon}
-              />
-              <Text style={styles.nowButtonText}>Now</Text>
-            </Pressable>
-          ) : null}
-        </View>
-        <TextInput
-          value={responderSafetyForm[key]}
-          onChangeText={(value) =>
-            updateResponderSafetyField(key, value)
-          }
-          style={styles.input}
-          placeholder="mm/dd/yyyy hh:mm"
-          placeholderTextColor={COLORS.mutedText}
-          editable={canUpdateOperations}
-        />
-      </View>
-    );
+    return renderCurrentTimeField({
+      label,
+      value: responderSafetyForm[key],
+      onChangeText: (value) =>
+        updateResponderSafetyField(key, value),
+      onUseCurrentTime: () => setResponderSafetyFieldToNow(key),
+    });
   }
 
   function renderResponderSafetyStatusField() {
@@ -3020,39 +3082,14 @@ export default function IncidentsPage() {
       "sceneDemobilizedAt" | "lastFacilityDeactivatedAt" | "assessedAt"
     >,
   ) {
-    return (
-      <View style={styles.timelineFieldGroup}>
-        <View style={styles.timelineLabelRow}>
-          <Text style={styles.fieldLabel}>{label}</Text>
-          {canUpdateOperations ? (
-            <Pressable
-              onPress={() => setDeactivationContinuityFieldToNow(key)}
-              style={({ pressed }) => [
-                styles.nowButton,
-                pressed && styles.pressed,
-              ]}
-            >
-              <Ionicons
-                name="time-outline"
-                size={14}
-                color={COLORS.maroon}
-              />
-              <Text style={styles.nowButtonText}>Now</Text>
-            </Pressable>
-          ) : null}
-        </View>
-        <TextInput
-          value={deactivationContinuityForm[key]}
-          onChangeText={(value) =>
-            updateDeactivationContinuityField(key, value)
-          }
-          style={styles.input}
-          placeholder="mm/dd/yyyy hh:mm"
-          placeholderTextColor={COLORS.mutedText}
-          editable={canUpdateOperations}
-        />
-      </View>
-    );
+    return renderCurrentTimeField({
+      label,
+      value: deactivationContinuityForm[key],
+      onChangeText: (value) =>
+        updateDeactivationContinuityField(key, value),
+      onUseCurrentTime: () =>
+        setDeactivationContinuityFieldToNow(key),
+    });
   }
 
   function renderDisruptionField(
@@ -3073,7 +3110,7 @@ export default function IncidentsPage() {
     return (
       <View style={styles.coordinationFieldGroup}>
         <Text style={styles.fieldLabel}>{label}</Text>
-        <View style={styles.ratingGrid}>
+        <View style={styles.disruptionGrid}>
           {options.map((option) => {
             const selected =
               deactivationContinuityForm[key] === option;
@@ -3086,15 +3123,15 @@ export default function IncidentsPage() {
                   updateDeactivationContinuityField(key, option)
                 }
                 style={({ pressed }) => [
-                  styles.ratingChip,
-                  selected && styles.ratingChipActive,
+                  styles.disruptionChip,
+                  selected && styles.disruptionChipActive,
                   pressed && styles.pressed,
                 ]}
               >
                 <Text
                   style={[
-                    styles.ratingChipText,
-                    selected && styles.ratingChipTextActive,
+                    styles.disruptionChipText,
+                    selected && styles.disruptionChipTextActive,
                   ]}
                 >
                   {formatDisruptionLevel(option)}
@@ -3138,26 +3175,6 @@ export default function IncidentsPage() {
             </Text>
           </View>
         ))}
-      </View>
-    );
-  }
-
-  function renderTriageAccuracyRow(
-    title: string,
-    metric: OnsiteTriageAccuracyMetric,
-  ) {
-    return (
-      <View style={styles.triageAccuracyRow}>
-        <View style={styles.triageAccuracyTextGroup}>
-          <Text style={styles.triageAccuracyTitle}>{title}</Text>
-          <Text style={styles.triageAccuracyDescription}>
-            {metric.label}
-          </Text>
-        </View>
-        <Text style={styles.triageAccuracyValue}>
-          {metric.numerator}/{metric.denominator} -{" "}
-          {metric.percentage}%
-        </Text>
       </View>
     );
   }
@@ -3445,39 +3462,13 @@ export default function IncidentsPage() {
   }
 
   function renderHospitalRecordedAtField() {
-    return (
-      <View style={styles.timelineFieldGroup}>
-        <View style={styles.timelineLabelRow}>
-          <Text style={styles.fieldLabel}>RECORDED AT</Text>
-          {canUpdateOperations ? (
-            <Pressable
-              onPress={setHospitalResourcesFieldToNow}
-              style={({ pressed }) => [
-                styles.nowButton,
-                pressed && styles.pressed,
-              ]}
-            >
-              <Ionicons
-                name="time-outline"
-                size={14}
-                color={COLORS.maroon}
-              />
-              <Text style={styles.nowButtonText}>Now</Text>
-            </Pressable>
-          ) : null}
-        </View>
-        <TextInput
-          value={hospitalResourcesForm.recordedAt}
-          onChangeText={(value) =>
-            updateHospitalResourcesField("recordedAt", value)
-          }
-          style={styles.input}
-          placeholder="mm/dd/yyyy hh:mm"
-          placeholderTextColor={COLORS.mutedText}
-          editable={canUpdateOperations}
-        />
-      </View>
-    );
+    return renderCurrentTimeField({
+      label: "RECORDED AT",
+      value: hospitalResourcesForm.recordedAt,
+      onChangeText: (value) =>
+        updateHospitalResourcesField("recordedAt", value),
+      onUseCurrentTime: setHospitalResourcesFieldToNow,
+    });
   }
 
   if (isLoading) {
@@ -3582,6 +3573,7 @@ export default function IncidentsPage() {
           <IncidentCard
             incident={item}
             canClose={canCreateIncident}
+            onAddCasualty={() => handleAddCasualty(item)}
             onClose={() => handleCloseIncident(item)}
             onEditTimeline={() => {
               void handleOpenTimeline(item);
@@ -3695,33 +3687,31 @@ export default function IncidentsPage() {
               placeholderTextColor={COLORS.mutedText}
             />
 
-            <Text style={styles.fieldLabel}>DISASTER TYPE</Text>
-            <View style={styles.typeGrid}>
-              {DISASTER_TYPES.map((type) => {
-                const selected = newDisasterType === type;
-
-                return (
-                  <Pressable
-                    key={type}
-                    onPress={() => setNewDisasterType(type)}
-                    style={({ pressed }) => [
-                      styles.typeChip,
-                      selected && styles.typeChipActive,
-                      pressed && styles.pressed,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.typeChipText,
-                        selected && styles.typeChipTextActive,
-                      ]}
-                    >
-                      {type}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+            <Text style={styles.fieldLabel}>HAZARD TYPE</Text>
+            <Pressable
+              onPress={() => {
+                setHazardTypeSearchQuery("");
+                setIsHazardTypeSheetVisible(true);
+              }}
+              style={({ pressed }) => [
+                styles.selectInput,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.selectText,
+                  !newDisasterType && styles.placeholderText,
+                ]}
+              >
+                {newDisasterType || "Select type of hazard"}
+              </Text>
+              <Ionicons
+                name="chevron-down-outline"
+                size={18}
+                color={COLORS.secondaryText}
+              />
+            </Pressable>
 
             <Text style={styles.fieldLabel}>LOCATION</Text>
             <TextInput
@@ -3759,6 +3749,106 @@ export default function IncidentsPage() {
                 />
               )}
             </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={isHazardTypeSheetVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsHazardTypeSheetVisible(false)}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => setIsHazardTypeSheetVisible(false)}
+        >
+          <Pressable style={styles.choiceSheet}>
+            <View style={styles.sheetHandle} />
+
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>
+                Select Type of Hazard
+              </Text>
+              <Pressable
+                onPress={() => setIsHazardTypeSheetVisible(false)}
+                style={styles.sheetCloseButton}
+              >
+                <Ionicons
+                  name="close"
+                  size={20}
+                  color={COLORS.secondaryText}
+                />
+              </Pressable>
+            </View>
+
+            <View style={styles.sheetSearchBar}>
+              <Ionicons
+                name="search-outline"
+                size={18}
+                color={COLORS.secondaryText}
+              />
+              <TextInput
+                value={hazardTypeSearchQuery}
+                onChangeText={setHazardTypeSearchQuery}
+                style={styles.sheetSearchInput}
+                placeholder="Search hazard type..."
+                placeholderTextColor={COLORS.mutedText}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+
+            <ScrollView
+              contentContainerStyle={styles.choiceList}
+              showsVerticalScrollIndicator={false}
+            >
+              {filteredHazardTypes.length === 0 ? (
+                <View style={styles.choiceEmptyState}>
+                  <Text style={styles.choiceEmptyTitle}>
+                    No hazard type found
+                  </Text>
+                  <Text style={styles.choiceEmptyText}>
+                    Try another keyword.
+                  </Text>
+                </View>
+              ) : null}
+
+              {filteredHazardTypes.map((type) => {
+                const selected = newDisasterType === type;
+
+                return (
+                  <Pressable
+                    key={type}
+                    onPress={() => {
+                      setNewDisasterType(type);
+                      setIsHazardTypeSheetVisible(false);
+                    }}
+                    style={({ pressed }) => [
+                      styles.choiceOption,
+                      selected && styles.choiceOptionSelected,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.choiceOptionText,
+                        selected && styles.choiceOptionTextSelected,
+                      ]}
+                    >
+                      {type}
+                    </Text>
+                    {selected ? (
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={19}
+                        color={COLORS.maroon}
+                      />
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
           </Pressable>
         </Pressable>
       </Modal>
@@ -4385,42 +4475,17 @@ export default function IncidentsPage() {
                   )}
                 </Text>
 
-                <View style={styles.timelineFieldGroup}>
-                  <View style={styles.timelineLabelRow}>
-                    <Text style={styles.fieldLabel}>ASSESSED AT</Text>
-                    {canUpdateOperations ? (
-                      <Pressable
-                        onPress={() =>
-                          updateCoordinationField(
-                            "assessedAt",
-                            formatDateTimeForInput(new Date()),
-                          )
-                        }
-                        style={({ pressed }) => [
-                          styles.nowButton,
-                          pressed && styles.pressed,
-                        ]}
-                      >
-                        <Ionicons
-                          name="time-outline"
-                          size={14}
-                          color={COLORS.maroon}
-                        />
-                        <Text style={styles.nowButtonText}>Now</Text>
-                      </Pressable>
-                    ) : null}
-                  </View>
-                  <TextInput
-                    value={coordinationForm.assessedAt}
-                    onChangeText={(value) =>
-                      updateCoordinationField("assessedAt", value)
-                    }
-                    style={styles.input}
-                    placeholder="mm/dd/yyyy hh:mm"
-                    placeholderTextColor={COLORS.mutedText}
-                    editable={canUpdateOperations}
-                  />
-                </View>
+                {renderCurrentTimeField({
+                  label: "ASSESSED AT",
+                  value: coordinationForm.assessedAt,
+                  onChangeText: (value) =>
+                    updateCoordinationField("assessedAt", value),
+                  onUseCurrentTime: () =>
+                    updateCoordinationField(
+                      "assessedAt",
+                      formatDateTimeForInput(new Date()),
+                    ),
+                })}
 
                 <Text style={styles.fieldLabel}>NOTES</Text>
                 <TextInput
@@ -4780,9 +4845,24 @@ export default function IncidentsPage() {
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.timelineScrollContent}
               >
-                <View style={styles.sitrepMetricGrid}>
-                  <View style={styles.sitrepMetric}>
-                    <Text style={styles.sitrepMetricValue}>
+                <View
+                  style={[
+                    styles.sitrepMetricGrid,
+                    styles.compactMetricGrid,
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.sitrepMetric,
+                      styles.compactMetric,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.sitrepMetricValue,
+                        styles.compactMetricValue,
+                      ]}
+                    >
                       {deactivationContinuitySummary?.sceneDemobilizedAt
                         ? "Set"
                         : "Not set"}
@@ -4791,8 +4871,18 @@ export default function IncidentsPage() {
                       Scene Demobilized
                     </Text>
                   </View>
-                  <View style={styles.sitrepMetric}>
-                    <Text style={styles.sitrepMetricValue}>
+                  <View
+                    style={[
+                      styles.sitrepMetric,
+                      styles.compactMetric,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.sitrepMetricValue,
+                        styles.compactMetricValue,
+                      ]}
+                    >
                       {formatDisruptionLevel(
                         deactivationContinuitySummary
                           ?.emsCoverageDisruption,
@@ -4802,8 +4892,18 @@ export default function IncidentsPage() {
                       EMS Coverage
                     </Text>
                   </View>
-                  <View style={styles.sitrepMetric}>
-                    <Text style={styles.sitrepMetricValue}>
+                  <View
+                    style={[
+                      styles.sitrepMetric,
+                      styles.compactMetric,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.sitrepMetricValue,
+                        styles.compactMetricValue,
+                      ]}
+                    >
                       {formatDisruptionLevel(
                         deactivationContinuitySummary
                           ?.facilityCareDisruption,
@@ -5032,26 +5132,6 @@ export default function IncidentsPage() {
                   onsiteTriageSummary.categories.delayed,
                 )}
 
-                <Text style={styles.fieldLabel}>TRIAGE ACCURACY</Text>
-                <View style={styles.triageAccuracyList}>
-                  {renderTriageAccuracyRow(
-                    "UNDERTRIAGED T1",
-                    onsiteTriageSummary.accuracy.undertriagedT1,
-                  )}
-                  {renderTriageAccuracyRow(
-                    "UNDERTRIAGED T2",
-                    onsiteTriageSummary.accuracy.undertriagedT2,
-                  )}
-                  {renderTriageAccuracyRow(
-                    "OVERTRIAGED T2",
-                    onsiteTriageSummary.accuracy.overtriagedT2,
-                  )}
-                  {renderTriageAccuracyRow(
-                    "OVERTRIAGED T3",
-                    onsiteTriageSummary.accuracy.overtriagedT3,
-                  )}
-                </View>
-
                 <Pressable
                   onPress={handleCloseOnsiteTriageModal}
                   style={({ pressed }) => [
@@ -5172,28 +5252,6 @@ export default function IncidentsPage() {
                     facilityTriageSummary.lastFacilityTriageAt,
                   )}
                 </Text>
-
-                <Text style={styles.fieldLabel}>
-                  FACILITY TRIAGE ACCURACY
-                </Text>
-                <View style={styles.triageAccuracyList}>
-                  {renderTriageAccuracyRow(
-                    "UNDERTRIAGED T1",
-                    facilityTriageSummary.accuracy.undertriagedT1,
-                  )}
-                  {renderTriageAccuracyRow(
-                    "UNDERTRIAGED T2",
-                    facilityTriageSummary.accuracy.undertriagedT2,
-                  )}
-                  {renderTriageAccuracyRow(
-                    "OVERTRIAGED T2",
-                    facilityTriageSummary.accuracy.overtriagedT2,
-                  )}
-                  {renderTriageAccuracyRow(
-                    "OVERTRIAGED T3",
-                    facilityTriageSummary.accuracy.overtriagedT3,
-                  )}
-                </View>
 
                 <Pressable
                   onPress={handleCloseFacilityTriageModal}
@@ -6605,6 +6663,21 @@ const styles = StyleSheet.create({
     marginBottom: 11,
     backgroundColor: COLORS.border,
   },
+  addCasualtyButton: {
+    minHeight: 42,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 11,
+    marginBottom: 10,
+    backgroundColor: COLORS.maroon,
+    gap: 8,
+  },
+  addCasualtyButtonText: {
+    color: COLORS.white,
+    fontSize: 12,
+    fontWeight: "900",
+  },
   detailRow: {
     minHeight: 24,
     flexDirection: "row",
@@ -6734,10 +6807,19 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 22,
     backgroundColor: COLORS.white,
   },
-  timelineSheet: {
-    height: "86%",
+  choiceSheet: {
+    maxHeight: "72%",
     paddingHorizontal: SCREEN_PADDING,
     paddingTop: 10,
+    paddingBottom: 24,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    backgroundColor: COLORS.white,
+  },
+  timelineSheet: {
+    height: "88%",
+    paddingHorizontal: SCREEN_PADDING,
+    paddingTop: 8,
     paddingBottom: 0,
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
@@ -6750,10 +6832,10 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     borderRadius: 2,
     backgroundColor: "#D7DDE8",
-    marginBottom: 14,
+    marginBottom: 11,
   },
   sheetHeader: {
-    minHeight: 42,
+    minHeight: 40,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -6800,6 +6882,90 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontSize: 14,
   },
+  selectInput: {
+    minHeight: 50,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: COLORS.fieldBorder,
+    borderRadius: 13,
+    backgroundColor: COLORS.fieldBackground,
+    gap: 10,
+  },
+  selectText: {
+    flex: 1,
+    color: COLORS.text,
+    fontSize: 14,
+  },
+  placeholderText: {
+    color: COLORS.mutedText,
+  },
+  sheetSearchBar: {
+    minHeight: 46,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: COLORS.fieldBorder,
+    borderRadius: 13,
+    backgroundColor: COLORS.fieldBackground,
+    marginBottom: 8,
+  },
+  sheetSearchInput: {
+    flex: 1,
+    minHeight: 44,
+    color: COLORS.text,
+    fontSize: 14,
+    paddingLeft: 9,
+  },
+  choiceList: {
+    paddingBottom: 4,
+  },
+  choiceOption: {
+    minHeight: 52,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: COLORS.fieldBorder,
+    borderRadius: 13,
+    backgroundColor: COLORS.white,
+    marginBottom: 9,
+    gap: 10,
+  },
+  choiceOptionSelected: {
+    borderColor: COLORS.maroon,
+    backgroundColor: "#FFF4F4",
+  },
+  choiceOptionText: {
+    flex: 1,
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  choiceOptionTextSelected: {
+    color: COLORS.maroon,
+  },
+  choiceEmptyState: {
+    alignItems: "center",
+    paddingVertical: 28,
+  },
+  choiceEmptyTitle: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  choiceEmptyText: {
+    color: COLORS.secondaryText,
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: "center",
+    marginTop: 7,
+  },
   timelineLoading: {
     minHeight: 220,
     alignItems: "center",
@@ -6818,29 +6984,36 @@ const styles = StyleSheet.create({
     paddingBottom: 30,
   },
   timelineFieldGroup: {
-    marginTop: 2,
+    marginTop: 4,
   },
-  timelineLabelRow: {
-    minHeight: 28,
+  currentTimeRow: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
+    alignItems: "flex-start",
+    gap: 8,
   },
-  nowButton: {
-    minHeight: 28,
+  currentTimeInput: {
+    flex: 1,
+  },
+  currentTimeButton: {
+    width: 128,
+    minHeight: 50,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 10,
-    borderRadius: 14,
-    backgroundColor: "#FFF2F2",
-    gap: 5,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: COLORS.maroon,
+    paddingHorizontal: 8,
+    backgroundColor: "#FFF8F8",
+    gap: 6,
   },
-  nowButtonText: {
+  currentTimeButtonText: {
+    flexShrink: 1,
     color: COLORS.maroon,
     fontSize: 11,
+    lineHeight: 14,
     fontWeight: "900",
+    textAlign: "center",
   },
   timelineOptionRow: {
     flexDirection: "row",
@@ -6949,7 +7122,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   coordinationFieldGroup: {
-    marginTop: 2,
+    marginTop: 4,
   },
   ratingGrid: {
     flexDirection: "row",
@@ -6985,6 +7158,34 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   ratingChipTextActive: {
+    color: COLORS.maroon,
+  },
+  disruptionGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  disruptionChip: {
+    width: "48.5%",
+    minHeight: 46,
+    justifyContent: "center",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.fieldBorder,
+    paddingHorizontal: 10,
+    backgroundColor: COLORS.fieldBackground,
+  },
+  disruptionChipActive: {
+    borderColor: COLORS.maroon,
+    backgroundColor: "#FFF2F2",
+  },
+  disruptionChipText: {
+    color: COLORS.secondaryText,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "800",
+  },
+  disruptionChipTextActive: {
     color: COLORS.maroon,
   },
   notesInput: {
@@ -7109,6 +7310,10 @@ const styles = StyleSheet.create({
     gap: 9,
     marginTop: 12,
   },
+  compactMetricGrid: {
+    marginTop: 5,
+    gap: 7,
+  },
   sitrepMetric: {
     flex: 1,
     minHeight: 70,
@@ -7119,10 +7324,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     backgroundColor: COLORS.white,
   },
+  compactMetric: {
+    minHeight: 58,
+    paddingHorizontal: 8,
+  },
   sitrepMetricValue: {
     color: COLORS.maroon,
     fontSize: 22,
     fontWeight: "900",
+  },
+  compactMetricValue: {
+    fontSize: 18,
+    lineHeight: 22,
   },
   sitrepMetricLabel: {
     color: COLORS.secondaryText,

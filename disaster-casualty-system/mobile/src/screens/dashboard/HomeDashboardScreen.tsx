@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -419,6 +419,7 @@ export default function HomeDashboardScreen() {
   const [queuedCasualtyCount, setQueuedCasualtyCount] =
     useState(0);
   const [isGuestMode, setIsGuestMode] = useState(false);
+  const [formattedDate, setFormattedDate] = useState("");
 
   const loadDashboard = useCallback(async () => {
     try {
@@ -484,6 +485,18 @@ export default function HomeDashboardScreen() {
     }, [loadDashboard]),
   );
 
+  useEffect(() => {
+    setFormattedDate(
+      new Intl.DateTimeFormat("en-US", {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      })
+        .format(new Date())
+        .toUpperCase(),
+    );
+  }, []);
+
   const handleRefresh = useCallback(async () => {
     try {
       setIsRefreshing(true);
@@ -492,17 +505,6 @@ export default function HomeDashboardScreen() {
       setIsRefreshing(false);
     }
   }, [loadDashboard]);
-
-  const formattedDate = new Intl.DateTimeFormat(
-    "en-US",
-    {
-      month: "long",
-      day: "numeric",
-      year: "numeric",
-    },
-  )
-    .format(new Date())
-    .toUpperCase();
 
   const activeIncidentCaption =
     summary.activeIncidents === 1
@@ -716,7 +718,11 @@ export default function HomeDashboardScreen() {
           QUICK ACTIONS
         </Text>
 
-        <View style={styles.quickActionsRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.quickActionsRow}
+        >
           <QuickAction
             icon="add-circle-outline"
             label="Add Casualty"
@@ -756,6 +762,15 @@ export default function HomeDashboardScreen() {
           />
 
           <QuickAction
+            icon="shield-checkmark-outline"
+            label="Verification Review"
+            caption="Review queue"
+            iconColor={COLORS.orange}
+            iconBackground={COLORS.paleOrange}
+            onPress={() => router.push("/verification-review" as never)}
+          />
+
+          <QuickAction
             icon="person-outline"
             label="My Profile"
             caption="Account"
@@ -763,7 +778,7 @@ export default function HomeDashboardScreen() {
             iconBackground={COLORS.paleBlue}
             onPress={() => router.push("/profile")}
           />
-        </View>
+        </ScrollView>
 
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>
@@ -1094,14 +1109,15 @@ const styles = StyleSheet.create({
   },
 
   quickActionsRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+    paddingRight: SCREEN_PADDING,
+    gap: 10,
     marginBottom: 25,
   },
 
   quickActionCard: {
-    width: "23.5%",
+    width: 112,
     minHeight: 120,
+    flexShrink: 0,
     borderRadius: 14,
     backgroundColor: COLORS.white,
     alignItems: "center",

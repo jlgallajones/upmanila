@@ -119,12 +119,32 @@ export default function LandingScreen() {
             ]}
           >
             <View style={styles.brandSection}>
-              <Image
-                source={require("../assets/UP-Logo.svg")}
-                style={styles.logo}
-                contentFit="contain"
-                accessibilityLabel="University of the Philippines logo"
-              />
+              <View style={styles.logoStrip}>
+                <Image
+                  source={require("../assets/UP-Logo.svg")}
+                  style={styles.sealLogo}
+                  contentFit="contain"
+                  accessibilityLabel="University of the Philippines logo"
+                />
+                <Image
+                  source={require("../assets/UPM DRRMH Logo.png")}
+                  style={styles.sealLogo}
+                  contentFit="contain"
+                  accessibilityLabel="UPM DRRMH logo"
+                />
+                <Image
+                  source={require("../assets/DOST Logo.png")}
+                  style={styles.partnerLogo}
+                  contentFit="contain"
+                  accessibilityLabel="DOST logo"
+                />
+                <Image
+                  source={require("../assets/DOST PCHRD Logo.png")}
+                  style={styles.partnerLogo}
+                  contentFit="contain"
+                  accessibilityLabel="DOST PCHRD logo"
+                />
+              </View>
 
               <View style={styles.institutionRow}>
                 <View style={styles.verticalLine} />
@@ -274,10 +294,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     width: "100%",
   },
-  logo: {
-    width: 112,
-    height: 112,
+  logoStrip: {
+    width: "100%",
+    maxWidth: 286,
+    minHeight: 54,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
     marginBottom: 20,
+  },
+  sealLogo: {
+    width: 48,
+    height: 48,
+  },
+  partnerLogo: {
+    width: 54,
+    height: 54,
   },
   institutionRow: {
     width: "100%",

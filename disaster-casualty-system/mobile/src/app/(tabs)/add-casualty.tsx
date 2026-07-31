@@ -74,21 +74,55 @@ const STEPS = [
   "Address",
   "Incident",
   "Triage",
-  "Transport",
   "Status",
+  "Transport",
+  "Hospital Care",
   "Remarks",
 ] as const;
 
 const SEX_OPTIONS = ["Male", "Female", "Unknown"] as const;
 
-const DISASTER_TYPE_OPTIONS = [
-  "Typhoon",
-  "Flood",
-  "Fire",
-  "Earthquake",
-  "Landslide",
+const HAZARD_TYPE_OPTIONS = [
   "Volcanic Eruption",
+  "Earthquake",
+  "Tsunami",
+  "Landslide",
+  "Lahar / Volcanic Mudflow",
+  "Sink Hole",
+  "Geologic - Other",
+  "Infectious Diseases",
+  "Infestation",
+  "Poisoning",
+  "Biological - Other",
+  "Typhoon",
   "Storm Surge",
+  "LPA / ALPA",
+  "Tropical Depression",
+  "Monsoon Rain",
+  "Flooding",
+  "Flash Flood",
+  "Lightning",
+  "Drought",
+  "Meteorological / Hydrological - Other",
+  "Bombing",
+  "Armed Conflict",
+  "War",
+  "Mass Gathering",
+  "Ambush Incident",
+  "Terrorist Activities",
+  "Hostage Taking",
+  "Coup d'etat",
+  "Repatriation",
+  "Civil Unrest",
+  "Mass Shooting",
+  "Societal - Other",
+  "Fire",
+  "Explosion",
+  "Maritime Accident",
+  "Air Accident",
+  "Land Transportation Accident",
+  "Trash Slide",
+  "Technological - Other",
   "Other",
 ] as const;
 
@@ -128,21 +162,6 @@ const TRIAGE_SYSTEM_OPTIONS = [
   "Other",
 ] as const;
 
-const TRIAGE_CATEGORY_OPTIONS = [
-  "Immediate",
-  "Delayed",
-  "Minimal",
-  "Expectant",
-  "Unknown",
-] as const;
-
-const FINAL_TRIAGE_OPTIONS = [
-  "Green",
-  "Black",
-  "Red",
-  "Yellow",
-] as const;
-
 type AppendixAnswerOption = {
   label: string;
   value: string;
@@ -164,11 +183,12 @@ const PRESENT_ABSENT_OPTIONS: AppendixAnswerOption[] = [
   { label: "Absent", value: "absent" },
 ];
 
-const FINAL_TRIAGE_COLOR_OPTIONS: AppendixAnswerOption[] =
-  FINAL_TRIAGE_OPTIONS.map((option) => ({
-    label: option,
-    value: option.toLowerCase(),
-  }));
+const FINAL_TRIAGE_COLOR_OPTIONS: AppendixAnswerOption[] = [
+  { label: "Green", value: "green" },
+  { label: "Yellow", value: "yellow" },
+  { label: "Red", value: "red" },
+  { label: "Black", value: "black" },
+];
 
 const APPENDIX_TRIAGE_FIELDS: Record<string, AppendixQuestion[]> = {
   start: [
@@ -242,9 +262,15 @@ const APPENDIX_TRIAGE_FIELDS: Record<string, AppendixQuestion[]> = {
       label: "Respirations",
       options: [
         { label: "Absent", value: "absent" },
-        { label: "Less than 10", value: "less_than_10" },
-        { label: "More than 29", value: "more_than_29" },
-        { label: "10-29", value: "ten_to_twenty_nine" },
+        {
+          label: "10 or below",
+          value: "less_than_or_equal_to_10",
+        },
+        {
+          label: "30 or above",
+          value: "more_than_or_equal_to_30",
+        },
+        { label: "11-29", value: "eleven_to_twenty_nine" },
       ],
     },
     {
@@ -296,8 +322,8 @@ const APPENDIX_TRIAGE_FIELDS: Record<string, AppendixQuestion[]> = {
       key: "systolicBp",
       label: "Systolic BP",
       options: [
-        { label: ">80", value: "more_than_80" },
-        { label: "76-80", value: "76_to_80" },
+        { label: ">=90", value: "more_than_or_equal_to_90" },
+        { label: "76-89", value: "76_to_89" },
         { label: "50-75", value: "50_to_75" },
         { label: "1-49", value: "1_to_49" },
         { label: "0", value: "0" },
@@ -410,13 +436,72 @@ const APPENDIX_TRIAGE_FIELDS: Record<string, AppendixQuestion[]> = {
       options: FINAL_TRIAGE_COLOR_OPTIONS,
     },
   ],
+  mass: [
+    {
+      key: "lifeSavingInterventionPerformed",
+      label: "Life-saving intervention already performed?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "breathing",
+      label: "With spontaneous breathing?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "obeysCommands",
+      label: "Obeys commands?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "breathingNormally",
+      label: "Breathing normally?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "purposefulMovements",
+      label: "With purposeful movements?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "majorBleedingControlled",
+      label: "Major bleeding is controlled?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "radialPulse",
+      label: "Radial pulse",
+      options: PRESENT_ABSENT_OPTIONS,
+    },
+    {
+      key: "minorInjuriesOnly",
+      label: "Minor injuries only?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "likelyToSurviveGivenResources",
+      label: "Likely to survive with current resources?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "finalTriage",
+      label: "Final triage",
+      options: FINAL_TRIAGE_COLOR_OPTIONS,
+    },
+  ],
 };
 
 const TRIAGE_STAGE_OPTIONS = [
-  "On-site",
-  "Facility Arrival",
-  "Reassessment",
+  "Primary Triage",
+  "Secondary Triage",
+  "Tertiary Triage",
 ] as const;
+
+type TriageStageOption = (typeof TRIAGE_STAGE_OPTIONS)[number];
+
+const TRIAGE_STAGE_OPTIONS_BY_ROLE: Record<string, TriageStageOption[]> = {
+  responder: ["Primary Triage", "Secondary Triage"],
+  medical_personnel: ["Tertiary Triage"],
+};
 
 const TRANSPORT_REQUIRED_OPTIONS = [
   "Yes",
@@ -479,6 +564,17 @@ const REFERENCE_MANAGER_ROLES = [
 
 type StepName = (typeof STEPS)[number];
 
+const STEP_PROGRESS_LABELS: Record<StepName, string> = {
+  Personal: "INFO",
+  Address: "ADDR",
+  Incident: "INC",
+  Triage: "TRIAGE",
+  Status: "STATUS",
+  Transport: "TRANS",
+  "Hospital Care": "CARE",
+  Remarks: "NOTES",
+};
+
 type ChoiceSheetName =
   | "sex"
   | "incident"
@@ -487,7 +583,6 @@ type ChoiceSheetName =
   | "disasterType"
   | "facilityLevel"
   | "triageSystem"
-  | "triageCategory"
   | "triageStage"
   | "transportRequired"
   | "transportMode"
@@ -865,30 +960,38 @@ function normalizeTriageSystem(value: string): TriageSystem {
   }
 }
 
-function normalizeTriageCategory(value: string): TriageCategory {
-  const normalized = normalizeEnumValue(value);
-  const allowed: TriageCategory[] = [
-    "immediate",
-    "delayed",
-    "minimal",
-    "expectant",
-    "unknown",
-  ];
-
-  return allowed.includes(normalized as TriageCategory)
-    ? (normalized as TriageCategory)
-    : "unknown";
-}
-
 function normalizeTriageStage(value: string): TriageStage {
   switch (value.trim().toLowerCase()) {
+    case "tertiary triage":
+    case "tertiary":
     case "facility arrival":
       return "facility_arrival";
+    case "secondary triage":
+    case "secondary":
     case "reassessment":
       return "reassessment";
+    case "primary triage":
+    case "primary":
     case "on-site":
     default:
       return "on_site";
+  }
+}
+
+function triageColorToCategory(
+  value: string | undefined,
+): TriageCategory {
+  switch (value) {
+    case "red":
+      return "immediate";
+    case "yellow":
+      return "delayed";
+    case "green":
+      return "minimal";
+    case "black":
+      return "expectant";
+    default:
+      return "unknown";
   }
 }
 
@@ -928,14 +1031,26 @@ function formatTriageSystem(value: string | null | undefined): string {
 function formatTriageStage(value: string | null | undefined): string {
   switch (value) {
     case "facility_arrival":
-      return "Facility Arrival";
+      return "Tertiary Triage";
     case "reassessment":
-      return "Reassessment";
+      return "Secondary Triage";
     case "on_site":
-      return "On-site";
+      return "Primary Triage";
     default:
       return "";
   }
+}
+
+function getTriageStageOptionsForRole(
+  role: string | null,
+): TriageStageOption[] {
+  if (!role) {
+    return [...TRIAGE_STAGE_OPTIONS];
+  }
+
+  return (
+    TRIAGE_STAGE_OPTIONS_BY_ROLE[role] ?? [...TRIAGE_STAGE_OPTIONS]
+  );
 }
 
 function normalizeTransportRequired(value: string): TransportRequired {
@@ -1233,13 +1348,12 @@ function getValidDateTimeInput(value: string): Date | null {
 }
 
 function getTriageFormSignature(form: FormState): string {
-  if (!form.triageCategory.trim()) {
+  if (!form.triageSystem.trim()) {
     return "";
   }
 
   return JSON.stringify({
     system: normalizeTriageSystem(form.triageSystem),
-    category: normalizeTriageCategory(form.triageCategory),
     stage: normalizeTriageStage(form.triageStage),
     time: parseDateTimeInput(form.triageTime) ?? "",
     location: form.triageLocation.trim(),
@@ -1262,10 +1376,6 @@ function coerceAppendixAnswer(
   key: string,
   value: string,
 ): string | boolean {
-  if (key === "finalTriage") {
-    return value;
-  }
-
   if (value === "yes") {
     return true;
   }
@@ -1635,6 +1745,50 @@ function FormField({
   );
 }
 
+type CurrentTimeFieldProps = FieldProps & {
+  buttonLabel: string;
+  icon?: keyof typeof Ionicons.glyphMap;
+  onUseCurrent: () => void;
+};
+
+function CurrentTimeField({
+  buttonLabel,
+  icon = "time-outline",
+  onUseCurrent,
+  ...fieldProps
+}: CurrentTimeFieldProps) {
+  return (
+    <View style={styles.currentTimeRow}>
+      <View style={styles.currentTimeField}>
+        <FormField {...fieldProps} />
+      </View>
+
+      <Pressable
+        onPress={onUseCurrent}
+        style={({ pressed }) => [
+          styles.locationButton,
+          styles.currentTimeButton,
+          pressed && styles.pressed,
+        ]}
+      >
+        <Ionicons
+          name={icon}
+          size={16}
+          color={COLORS.maroon}
+        />
+        <Text
+          style={[
+            styles.locationButtonText,
+            styles.currentTimeButtonText,
+          ]}
+        >
+          {buttonLabel}
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
 type SelectFieldProps = {
   label: string;
   value: string;
@@ -1688,6 +1842,27 @@ function SectionLabel({ title }: { title: string }) {
       <View style={styles.sectionLabelRule} />
     </View>
   );
+}
+
+function getTriageColorButtonStyle(value: string) {
+  switch (value) {
+    case "green":
+      return styles.finalTriageGreen;
+    case "yellow":
+      return styles.finalTriageYellow;
+    case "red":
+      return styles.finalTriageRed;
+    case "black":
+      return styles.finalTriageBlack;
+    default:
+      return null;
+  }
+}
+
+function getTriageColorTextStyle(value: string) {
+  return value === "yellow"
+    ? styles.finalTriageYellowText
+    : styles.finalTriageLightText;
 }
 
 type ChoiceOption = {
@@ -2074,19 +2249,29 @@ function DatePickerSheet({
 }
 
 export default function AddCasualtyScreen() {
-  const { editId } = useLocalSearchParams<{
+  const { editId, incidentId, incidentName } = useLocalSearchParams<{
     editId?: string;
+    incidentId?: string;
+    incidentName?: string;
   }>();
 
   const casualtyId = Array.isArray(editId) ? editId[0] : editId;
+  const presetIncidentId = Array.isArray(incidentId)
+    ? incidentId[0]
+    : incidentId;
+  const presetIncidentName = Array.isArray(incidentName)
+    ? incidentName[0]
+    : incidentName;
   const isEditing = Boolean(casualtyId);
   const [currentStep, setCurrentStep] = useState(0);
   const [form, setForm] = useState<FormState>(() => ({
     ...initialForm,
-    idNumber: isEditing ? "" : generateCasualtyIdNumber(),
+    idNumber: "",
+    incidentId: isEditing ? "" : presetIncidentId ?? "",
+    incidentName: isEditing ? "" : presetIncidentName ?? "",
     triageSystem: isEditing ? "" : "START",
-    triageStage: isEditing ? "" : "On-site",
-    triageTime: isEditing ? "" : formatDateTimeForInput(new Date()),
+    triageStage: isEditing ? "" : "Primary Triage",
+    triageTime: "",
     transportRequired: isEditing ? "" : "Unknown",
     transportMode: isEditing ? "" : "Unknown",
     emsUnitType: isEditing ? "" : "Unknown",
@@ -2118,6 +2303,10 @@ export default function AddCasualtyScreen() {
   const [activeChoiceSheet, setActiveChoiceSheet] =
     useState<ChoiceSheetName | null>(null);
   const [choiceSearchQuery, setChoiceSearchQuery] = useState("");
+  const [
+    isTriageAssessmentVisible,
+    setIsTriageAssessmentVisible,
+  ] = useState(false);
   const [isDatePickerVisible, setIsDatePickerVisible] =
     useState(false);
   const [incidents, setIncidents] = useState<Incident[]>([]);
@@ -2128,6 +2317,8 @@ export default function AddCasualtyScreen() {
   const [newIncidentName, setNewIncidentName] = useState("");
   const [newIncidentType, setNewIncidentType] = useState("");
   const [isCreatingIncident, setIsCreatingIncident] =
+    useState(false);
+  const [isIncidentQuickCreateExpanded, setIsIncidentQuickCreateExpanded] =
     useState(false);
   const [evacuationCenters, setEvacuationCenters] = useState<
     EvacuationCenter[]
@@ -2146,6 +2337,10 @@ export default function AddCasualtyScreen() {
   ] = useState("");
   const [isCreatingEvacuationCenter, setIsCreatingEvacuationCenter] =
     useState(false);
+  const [
+    isEvacuationQuickCreateExpanded,
+    setIsEvacuationQuickCreateExpanded,
+  ] = useState(false);
   const [healthcareFacilities, setHealthcareFacilities] = useState<
     HealthcareFacility[]
   >([]);
@@ -2164,6 +2359,10 @@ export default function AddCasualtyScreen() {
   const [
     isCreatingHealthcareFacility,
     setIsCreatingHealthcareFacility,
+  ] = useState(false);
+  const [
+    isHealthcareQuickCreateExpanded,
+    setIsHealthcareQuickCreateExpanded,
   ] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(
     null,
@@ -2241,7 +2440,7 @@ export default function AddCasualtyScreen() {
   const triageAssessmentPayload = useMemo<
     CreateCasualtyPayload["triageAssessment"]
   >(() => {
-    if (!form.triageCategory.trim()) {
+    if (!form.triageSystem.trim()) {
       return undefined;
     }
 
@@ -2254,7 +2453,9 @@ export default function AddCasualtyScreen() {
 
     return {
       triageSystem: normalizeTriageSystem(form.triageSystem),
-      triageCategory: normalizeTriageCategory(form.triageCategory),
+      triageCategory: triageColorToCategory(
+        form.triageAssessmentAnswers.finalTriage,
+      ),
       triageStage: normalizeTriageStage(form.triageStage),
       triagedAt: parseDateTimeInput(form.triageTime),
       location: form.triageLocation || form.currentLocation,
@@ -2492,6 +2693,59 @@ export default function AddCasualtyScreen() {
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (isEditing) {
+      return;
+    }
+
+    setForm((current) => ({
+      ...current,
+      idNumber: current.idNumber || generateCasualtyIdNumber(),
+      triageTime:
+        current.triageTime || formatDateTimeForInput(new Date()),
+    }));
+  }, [isEditing]);
+
+  useEffect(() => {
+    if (isEditing) {
+      return;
+    }
+
+    const allowedStages =
+      getTriageStageOptionsForRole(currentUserRole);
+
+    setForm((current) => {
+      if (allowedStages.includes(current.triageStage as TriageStageOption)) {
+        return current;
+      }
+
+      return {
+        ...current,
+        triageStage: allowedStages[0] ?? "Primary Triage",
+      };
+    });
+  }, [currentUserRole, isEditing]);
+
+  useEffect(() => {
+    if (isEditing || !presetIncidentId || form.incidentName.trim()) {
+      return;
+    }
+
+    const matchedIncident = incidents.find(
+      (incident) => incident.id === presetIncidentId,
+    );
+
+    if (!matchedIncident) {
+      return;
+    }
+
+    setForm((current) => ({
+      ...current,
+      incidentId: matchedIncident.id,
+      incidentName: matchedIncident.incident_name,
+    }));
+  }, [form.incidentName, incidents, isEditing, presetIncidentId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -2733,11 +2987,32 @@ export default function AddCasualtyScreen() {
     setActiveChoiceSheet(sheetName);
   }
 
+  function openTriageAssessment() {
+    if (!form.triageSystem.trim()) {
+      Alert.alert(
+        "Triage system required",
+        "Select a triage system before opening the assessment.",
+      );
+      return;
+    }
+
+    if (getAppendixQuestionsForSystem(form.triageSystem).length === 0) {
+      Alert.alert(
+        "Assessment unavailable",
+        "No assessment questions are configured for this triage system yet.",
+      );
+      return;
+    }
+
+    setIsTriageAssessmentVisible(true);
+  }
+
   function isActiveChoiceSheetSearchable(): boolean {
-    return (
-      activeChoiceSheet === "incident" ||
-      activeChoiceSheet === "evacuationCenter" ||
-      activeChoiceSheet === "healthcareFacility"
+  return (
+    activeChoiceSheet === "incident" ||
+    activeChoiceSheet === "evacuationCenter" ||
+      activeChoiceSheet === "healthcareFacility" ||
+      activeChoiceSheet === "disasterType"
     );
   }
 
@@ -2837,14 +3112,6 @@ export default function AddCasualtyScreen() {
           return false;
         }
 
-        if (!form.triageCategory.trim()) {
-          Alert.alert(
-            "Triage category required",
-            "Select the casualty triage category before continuing.",
-          );
-          return false;
-        }
-
         if (!form.triageStage.trim()) {
           Alert.alert(
             "Triage stage required",
@@ -2870,12 +3137,23 @@ export default function AddCasualtyScreen() {
         }
 
         if (
-          getAppendixQuestionsForSystem(form.triageSystem).length > 0 &&
-          !form.triageAssessmentAnswers.finalTriage
+          getAppendixQuestionsForSystem(form.triageSystem).find(
+            (question) =>
+              !form.triageAssessmentAnswers[question.key],
+          )
         ) {
+          const unansweredQuestion = getAppendixQuestionsForSystem(
+            form.triageSystem,
+          ).find(
+            (question) =>
+              !form.triageAssessmentAnswers[question.key],
+          );
+
           Alert.alert(
-            "Final triage required",
-            "Select the Appendix A final triage color for this triage system.",
+            "Assessment answer required",
+            unansweredQuestion
+              ? `Answer "${unansweredQuestion.label}" so the system can calculate the triage category.`
+              : "Complete the assessment so the system can calculate the triage category.",
           );
           return false;
         }
@@ -3001,7 +3279,7 @@ export default function AddCasualtyScreen() {
         return true;
       }
 
-      case "Status":
+      case "Status": {
         if (!form.casualtyStatus.trim()) {
           Alert.alert(
             "Casualty status required",
@@ -3018,6 +3296,65 @@ export default function AddCasualtyScreen() {
           return false;
         }
 
+        const statusTreatmentStrategy = normalizeTreatmentStrategy(
+          form.treatmentStrategy,
+        );
+        const statusStabilizationStartedAt =
+          form.stabilizationStartedTime.trim()
+            ? getValidDateTimeInput(form.stabilizationStartedTime)
+            : null;
+        const statusStabilizedAt = form.stabilizedTime.trim()
+          ? getValidDateTimeInput(form.stabilizedTime)
+          : null;
+
+        if (
+          form.stabilizationStartedTime.trim() &&
+          !statusStabilizationStartedAt
+        ) {
+          Alert.alert(
+            "Invalid care start time",
+            "Enter stabilization start time using mm/dd/yyyy hh:mm.",
+          );
+          return false;
+        }
+
+        if (form.stabilizedTime.trim() && !statusStabilizedAt) {
+          Alert.alert(
+            "Invalid stabilized time",
+            "Enter stabilized time using mm/dd/yyyy hh:mm.",
+          );
+          return false;
+        }
+
+        if (
+          ["stay_and_play", "play_and_run"].includes(
+            statusTreatmentStrategy,
+          ) &&
+          !statusStabilizedAt
+        ) {
+          Alert.alert(
+            "Stabilized time required",
+            "Enter the time this casualty was stabilized in the treatment area.",
+          );
+          return false;
+        }
+
+        if (
+          statusStabilizationStartedAt &&
+          statusStabilizedAt &&
+          statusStabilizedAt < statusStabilizationStartedAt
+        ) {
+          Alert.alert(
+            "Invalid care times",
+            "Stabilized time cannot be before the stabilization start time.",
+          );
+          return false;
+        }
+
+        return true;
+      }
+
+      case "Hospital Care": {
         if (
           form.healthcareFacilityId &&
           !form.transferredOutOfHospital.trim()
@@ -3414,6 +3751,7 @@ export default function AddCasualtyScreen() {
         }
 
         return true;
+      }
 
       case "Remarks":
         return true;
@@ -3443,7 +3781,7 @@ export default function AddCasualtyScreen() {
     if (!incidentName || !disasterType) {
       Alert.alert(
         "Complete incident details",
-        "Enter both the disaster incident name and disaster type.",
+        "Enter both the incident name and hazard type.",
       );
       return;
     }
@@ -3826,19 +4164,17 @@ export default function AddCasualtyScreen() {
       case "sex":
         return "Select Sex";
       case "incident":
-        return "Select Disaster Incident";
+        return "Select Incident Name";
       case "evacuationCenter":
         return "Select Evacuation Center";
       case "healthcareFacility":
         return "Select Healthcare Facility";
       case "disasterType":
-        return "Select Disaster Type";
+        return "Select Type of Hazard";
       case "facilityLevel":
         return "Select Facility Level";
       case "triageSystem":
         return "Select Triage System";
-      case "triageCategory":
-        return "Select Triage Category";
       case "triageStage":
         return "Select Triage Stage";
       case "transportRequired":
@@ -4012,7 +4348,7 @@ export default function AddCasualtyScreen() {
       }
 
       case "disasterType":
-        return DISASTER_TYPE_OPTIONS.map((option) => ({
+        return HAZARD_TYPE_OPTIONS.map((option) => ({
           label: option,
           selected:
             newIncidentType.toLowerCase() === option.toLowerCase(),
@@ -4034,20 +4370,19 @@ export default function AddCasualtyScreen() {
           selected:
             form.triageSystem.toLowerCase() ===
             option.toLowerCase(),
-          onSelect: () => updateField("triageSystem", option),
-        }));
+          onSelect: () => {
+            updateField("triageSystem", option);
 
-      case "triageCategory":
-        return TRIAGE_CATEGORY_OPTIONS.map((option) => ({
-          label: option,
-          selected:
-            form.triageCategory.toLowerCase() ===
-            option.toLowerCase(),
-          onSelect: () => updateField("triageCategory", option),
+            if (getAppendixQuestionsForSystem(option).length > 0) {
+              setTimeout(() => {
+                setIsTriageAssessmentVisible(true);
+              }, 180);
+            }
+          },
         }));
 
       case "triageStage":
-        return TRIAGE_STAGE_OPTIONS.map((option) => ({
+        return getTriageStageOptionsForRole(currentUserRole).map((option) => ({
           label: option,
           selected:
             form.triageStage.toLowerCase() === option.toLowerCase(),
@@ -4443,6 +4778,29 @@ export default function AddCasualtyScreen() {
   function renderPersonalStep() {
     return (
       <>
+        {!isEditing && form.incidentId ? (
+          <View style={styles.selectedIncidentBanner}>
+            <View style={styles.selectedIncidentIcon}>
+              <Ionicons
+                name="warning-outline"
+                size={18}
+                color={COLORS.maroon}
+              />
+            </View>
+            <View style={styles.selectedIncidentTextGroup}>
+              <Text style={styles.selectedIncidentLabel}>
+                SELECTED INCIDENT
+              </Text>
+              <Text
+                style={styles.selectedIncidentName}
+                numberOfLines={2}
+              >
+                {form.incidentName || form.incidentId}
+              </Text>
+            </View>
+          </View>
+        ) : null}
+
         <View style={styles.twoColumnRow}>
           <View style={styles.halfColumn}>
             <FormField
@@ -4575,7 +4933,7 @@ export default function AddCasualtyScreen() {
     return (
       <>
         <SelectField
-          label="DISASTER INCIDENT"
+          label="INCIDENT NAME"
           value={form.incidentName || form.incidentId}
           placeholder={
             !currentUserId && !isEditing
@@ -4615,61 +4973,87 @@ export default function AddCasualtyScreen() {
 
         {canManageReferenceData ? (
           <View style={styles.quickCreateCard}>
-            <View style={styles.quickCreateHeader}>
-              <Ionicons
-                name="add-circle-outline"
-                size={20}
-                color={COLORS.maroon}
-              />
-              <Text style={styles.quickCreateTitle}>
-                Quick create incident
-              </Text>
-            </View>
-
-            <FormField
-              label="NEW INCIDENT NAME"
-              value={newIncidentName}
-              placeholder="e.g. Flood in Barangay San Isidro"
-              onChangeText={setNewIncidentName}
-            />
-
-            <SelectField
-              label="DISASTER TYPE"
-              value={newIncidentType}
-              placeholder="Select disaster type"
-              onPress={() => openChoiceSheet("disasterType")}
-            />
-
             <Pressable
-              disabled={isCreatingIncident}
-              onPress={() => {
-                void handleCreateIncident();
-              }}
+              onPress={() =>
+                setIsIncidentQuickCreateExpanded((current) => !current)
+              }
               style={({ pressed }) => [
-                styles.createIncidentButton,
-                isCreatingIncident && styles.disabledButton,
-                pressed && styles.primaryButtonPressed,
+                styles.quickCreateHeader,
+                pressed && styles.pressed,
               ]}
+              accessibilityRole="button"
+              accessibilityLabel="Toggle quick create incident"
             >
-              <Text style={styles.createIncidentButtonText}>
-                {isCreatingIncident
-                  ? "Creating incident..."
-                  : "Create and select incident"}
-              </Text>
-
-              {isCreatingIncident ? (
-                <ActivityIndicator
-                  size="small"
-                  color={COLORS.white}
-                />
-              ) : (
+              <View style={styles.quickCreateHeaderTitle}>
                 <Ionicons
-                  name="checkmark-circle-outline"
-                  size={18}
-                  color={COLORS.white}
+                  name="add-circle-outline"
+                  size={20}
+                  color={COLORS.maroon}
                 />
-              )}
+                <Text style={styles.quickCreateTitle}>
+                  Quick create incident
+                </Text>
+              </View>
+
+              <Ionicons
+                name={
+                  isIncidentQuickCreateExpanded
+                    ? "chevron-up-outline"
+                    : "chevron-down-outline"
+                }
+                size={18}
+                color={COLORS.secondaryText}
+              />
             </Pressable>
+
+            {isIncidentQuickCreateExpanded ? (
+              <View style={styles.quickCreateBody}>
+                <FormField
+                  label="NEW INCIDENT NAME"
+                  value={newIncidentName}
+                  placeholder="e.g. Flood in Barangay San Isidro"
+                  onChangeText={setNewIncidentName}
+                />
+
+                <SelectField
+                  label="HAZARD TYPE"
+                  value={newIncidentType}
+                  placeholder="Select type of hazard"
+                  onPress={() => openChoiceSheet("disasterType")}
+                />
+
+                <Pressable
+                  disabled={isCreatingIncident}
+                  onPress={() => {
+                    void handleCreateIncident();
+                  }}
+                  style={({ pressed }) => [
+                    styles.createIncidentButton,
+                    isCreatingIncident && styles.disabledButton,
+                    pressed && styles.primaryButtonPressed,
+                  ]}
+                >
+                  <Text style={styles.createIncidentButtonText}>
+                    {isCreatingIncident
+                      ? "Creating incident..."
+                      : "Create and select incident"}
+                  </Text>
+
+                  {isCreatingIncident ? (
+                    <ActivityIndicator
+                      size="small"
+                      color={COLORS.white}
+                    />
+                  ) : (
+                    <Ionicons
+                      name="checkmark-circle-outline"
+                      size={18}
+                      color={COLORS.white}
+                    />
+                  )}
+                </Pressable>
+              </View>
+            ) : null}
           </View>
         ) : null}
 
@@ -4712,72 +5096,100 @@ export default function AddCasualtyScreen() {
 
         {canManageReferenceData ? (
           <View style={styles.quickCreateCard}>
-            <View style={styles.quickCreateHeader}>
-              <Ionicons
-                name="business-outline"
-                size={20}
-                color={COLORS.maroon}
-              />
-              <Text style={styles.quickCreateTitle}>
-                Quick create evacuation center
-              </Text>
-            </View>
-
-            <FormField
-              label="CENTER NAME"
-              value={newEvacuationCenterName}
-              placeholder="e.g. San Isidro Covered Court"
-              onChangeText={setNewEvacuationCenterName}
-            />
-
-            <FormField
-              label="ADDRESS"
-              value={newEvacuationCenterAddress}
-              placeholder="Street, building, or landmark"
-              onChangeText={setNewEvacuationCenterAddress}
-            />
-
-            <FormField
-              label="CAPACITY"
-              value={newEvacuationCenterCapacity}
-              placeholder="Estimated capacity"
-              keyboardType="numeric"
-              onChangeText={setNewEvacuationCenterCapacity}
-            />
-
             <Pressable
-              disabled={
-                isCreatingEvacuationCenter || !form.incidentId
+              onPress={() =>
+                setIsEvacuationQuickCreateExpanded(
+                  (current) => !current,
+                )
               }
-              onPress={() => {
-                void handleCreateEvacuationCenter();
-              }}
               style={({ pressed }) => [
-                styles.createIncidentButton,
-                (isCreatingEvacuationCenter || !form.incidentId) &&
-                  styles.disabledButton,
-                pressed && styles.primaryButtonPressed,
+                styles.quickCreateHeader,
+                pressed && styles.pressed,
               ]}
+              accessibilityRole="button"
+              accessibilityLabel="Toggle quick create evacuation center"
             >
-              <Text style={styles.createIncidentButtonText}>
-                {isCreatingEvacuationCenter
-                  ? "Creating center..."
-                  : "Create and select center"}
-              </Text>
-
-              {isCreatingEvacuationCenter ? (
-                <ActivityIndicator
-                  size="small"
-                  color={COLORS.white}
-                />
-              ) : (
+              <View style={styles.quickCreateHeaderTitle}>
                 <Ionicons
-                  name="checkmark-circle-outline"
-                  size={18}
-                  color={COLORS.white}
+                  name="business-outline"
+                  size={20}
+                  color={COLORS.maroon}
                 />
-              )}
+                <Text style={styles.quickCreateTitle}>
+                  Quick create evacuation center
+                </Text>
+              </View>
+
+              <Ionicons
+                name={
+                  isEvacuationQuickCreateExpanded
+                    ? "chevron-up-outline"
+                    : "chevron-down-outline"
+                }
+                size={18}
+                color={COLORS.secondaryText}
+              />
             </Pressable>
+
+            {isEvacuationQuickCreateExpanded ? (
+              <View style={styles.quickCreateBody}>
+                <FormField
+                  label="CENTER NAME"
+                  value={newEvacuationCenterName}
+                  placeholder="e.g. San Isidro Covered Court"
+                  onChangeText={setNewEvacuationCenterName}
+                />
+
+                <FormField
+                  label="ADDRESS"
+                  value={newEvacuationCenterAddress}
+                  placeholder="Street, building, or landmark"
+                  onChangeText={setNewEvacuationCenterAddress}
+                />
+
+                <FormField
+                  label="CAPACITY"
+                  value={newEvacuationCenterCapacity}
+                  placeholder="Estimated capacity"
+                  keyboardType="numeric"
+                  onChangeText={setNewEvacuationCenterCapacity}
+                />
+
+                <Pressable
+                  disabled={
+                    isCreatingEvacuationCenter || !form.incidentId
+                  }
+                  onPress={() => {
+                    void handleCreateEvacuationCenter();
+                  }}
+                  style={({ pressed }) => [
+                    styles.createIncidentButton,
+                    (isCreatingEvacuationCenter || !form.incidentId) &&
+                      styles.disabledButton,
+                    pressed && styles.primaryButtonPressed,
+                  ]}
+                >
+                  <Text style={styles.createIncidentButtonText}>
+                    {isCreatingEvacuationCenter
+                      ? "Creating center..."
+                      : "Create and select center"}
+                  </Text>
+
+                  {isCreatingEvacuationCenter ? (
+                    <ActivityIndicator
+                      size="small"
+                      color={COLORS.white}
+                    />
+                  ) : (
+                    <Ionicons
+                      name="checkmark-circle-outline"
+                      size={18}
+                      color={COLORS.white}
+                    />
+                  )}
+                </Pressable>
+              </View>
+            ) : null}
           </View>
         ) : null}
 
@@ -4842,6 +5254,7 @@ export default function AddCasualtyScreen() {
   function renderAppendixQuestion(question: AppendixQuestion) {
     const selectedValue =
       form.triageAssessmentAnswers[question.key] ?? "";
+    const isFinalTriageQuestion = question.key === "finalTriage";
 
     return (
       <View key={question.key} style={styles.appendixQuestion}>
@@ -4863,7 +5276,14 @@ export default function AddCasualtyScreen() {
                 }
                 style={({ pressed }) => [
                   styles.appendixOption,
+                  isFinalTriageQuestion &&
+                    styles.finalTriageOption,
                   selected && styles.appendixOptionSelected,
+                  isFinalTriageQuestion &&
+                    getTriageColorButtonStyle(option.value),
+                  isFinalTriageQuestion &&
+                    selected &&
+                    styles.finalTriageOptionSelected,
                   pressed && styles.pressed,
                 ]}
               >
@@ -4871,7 +5291,12 @@ export default function AddCasualtyScreen() {
                   numberOfLines={2}
                   style={[
                     styles.appendixOptionText,
+                    isFinalTriageQuestion &&
+                      getTriageColorTextStyle(option.value),
                     selected && styles.appendixOptionTextSelected,
+                    isFinalTriageQuestion &&
+                      selected &&
+                      getTriageColorTextStyle(option.value),
                   ]}
                 >
                   {option.label}
@@ -4884,34 +5309,100 @@ export default function AddCasualtyScreen() {
     );
   }
 
-  function renderAppendixAssessmentFields() {
+  function getTriageAssessmentSummary(): string {
     const questions = getAppendixQuestionsForSystem(form.triageSystem);
 
     if (questions.length === 0) {
-      return null;
+      return "";
     }
 
-    return (
-      <View style={styles.appendixBlock}>
-        <View style={styles.appendixHeader}>
-          <Ionicons
-            name="clipboard-outline"
-            size={18}
-            color={COLORS.maroon}
-          />
-          <Text style={styles.appendixTitle}>
-            Appendix A Assessment
-          </Text>
-        </View>
+    const answeredCount = questions.filter(
+      (question) => form.triageAssessmentAnswers[question.key],
+    ).length;
 
-        {questions.map(renderAppendixQuestion)}
-      </View>
+    return answeredCount === questions.length
+      ? `Complete (${answeredCount}/${questions.length})`
+      : `${answeredCount}/${questions.length} answered`;
+  }
+
+  function renderTriageAssessmentSheet() {
+    const questions = getAppendixQuestionsForSystem(form.triageSystem);
+
+    return (
+      <Modal
+        visible={isTriageAssessmentVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsTriageAssessmentVisible(false)}
+      >
+        <Pressable
+          style={styles.sheetBackdrop}
+          onPress={() => setIsTriageAssessmentVisible(false)}
+        >
+          <Pressable style={styles.assessmentSheet}>
+            <View style={styles.sheetHandle} />
+
+            <View style={styles.sheetHeader}>
+              <View>
+                <Text style={styles.sheetTitle}>
+                  Triage Assessment
+                </Text>
+                <Text style={styles.assessmentSubtitle}>
+                  {form.triageSystem}
+                </Text>
+              </View>
+
+              <Pressable
+                onPress={() => setIsTriageAssessmentVisible(false)}
+                style={({ pressed }) => [
+                  styles.sheetCloseButton,
+                  pressed && styles.pressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Close assessment"
+              >
+                <Ionicons
+                  name="close"
+                  size={20}
+                  color={COLORS.secondaryText}
+                />
+              </Pressable>
+            </View>
+
+            <ScrollView
+              contentContainerStyle={styles.assessmentList}
+              showsVerticalScrollIndicator={false}
+            >
+              {questions.map(renderAppendixQuestion)}
+            </ScrollView>
+
+            <Pressable
+              onPress={() => setIsTriageAssessmentVisible(false)}
+              style={({ pressed }) => [
+                styles.assessmentDoneButton,
+                pressed && styles.primaryButtonPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Done with triage assessment"
+            >
+              <Text style={styles.assessmentDoneButtonText}>Done</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     );
   }
 
   function renderTriageStep() {
     return (
       <>
+        <SelectField
+          label="TRIAGE STAGE"
+          value={form.triageStage}
+          placeholder="Select triage stage"
+          onPress={() => openChoiceSheet("triageStage")}
+        />
+
         <SelectField
           label="TRIAGE SYSTEM"
           value={form.triageSystem}
@@ -4920,51 +5411,28 @@ export default function AddCasualtyScreen() {
         />
 
         <SelectField
-          label="TRIAGE CATEGORY"
-          value={form.triageCategory}
-          placeholder="Select triage category"
-          onPress={() => openChoiceSheet("triageCategory")}
+          label="TRIAGE ASSESSMENT"
+          value={getTriageAssessmentSummary()}
+          placeholder="Open assessment"
+          icon="clipboard-outline"
+          onPress={openTriageAssessment}
         />
 
-        <SelectField
-          label="TRIAGE STAGE"
-          value={form.triageStage}
-          placeholder="Select triage stage"
-          onPress={() => openChoiceSheet("triageStage")}
-        />
-
-        {renderAppendixAssessmentFields()}
-
-        <FormField
+        <CurrentTimeField
           label="TRIAGE TIME"
           value={form.triageTime}
           placeholder="mm/dd/yyyy hh:mm"
+          buttonLabel="Use current triage time"
           onChangeText={(value) =>
             updateField("triageTime", value)
           }
-        />
-
-        <Pressable
-          onPress={() =>
+          onUseCurrent={() =>
             updateField(
               "triageTime",
               formatDateTimeForInput(new Date()),
             )
           }
-          style={({ pressed }) => [
-            styles.locationButton,
-            pressed && styles.pressed,
-          ]}
-        >
-          <Ionicons
-            name="time-outline"
-            size={19}
-            color={COLORS.maroon}
-          />
-          <Text style={styles.locationButtonText}>
-            Use current triage time
-          </Text>
-        </Pressable>
+        />
 
         <FormField
           label="TRIAGE LOCATION"
@@ -5012,98 +5480,56 @@ export default function AddCasualtyScreen() {
           onPress={() => openChoiceSheet("emsUnitType")}
         />
 
-        <FormField
+        <CurrentTimeField
           label="EMS SCENE ARRIVAL TIME"
           value={form.arrivedSceneTime}
           placeholder="mm/dd/yyyy hh:mm"
+          icon="car-outline"
+          buttonLabel="Use current EMS arrival time"
           onChangeText={(value) =>
             updateField("arrivedSceneTime", value)
           }
-        />
-
-        <Pressable
-          onPress={() =>
+          onUseCurrent={() =>
             updateField(
               "arrivedSceneTime",
               formatDateTimeForInput(new Date()),
             )
           }
-          style={({ pressed }) => [
-            styles.locationButton,
-            pressed && styles.pressed,
-          ]}
-        >
-          <Ionicons
-            name="car-outline"
-            size={19}
-            color={COLORS.maroon}
-          />
-          <Text style={styles.locationButtonText}>
-            Use current EMS arrival time
-          </Text>
-        </Pressable>
+        />
 
-        <FormField
+        <CurrentTimeField
           label="DEPARTED SCENE TIME"
           value={form.departedSceneTime}
           placeholder="mm/dd/yyyy hh:mm"
+          icon="exit-outline"
+          buttonLabel="Use current departure time"
           onChangeText={(value) =>
             updateField("departedSceneTime", value)
           }
-        />
-
-        <Pressable
-          onPress={() =>
+          onUseCurrent={() =>
             updateField(
               "departedSceneTime",
               formatDateTimeForInput(new Date()),
             )
           }
-          style={({ pressed }) => [
-            styles.locationButton,
-            pressed && styles.pressed,
-          ]}
-        >
-          <Ionicons
-            name="exit-outline"
-            size={19}
-            color={COLORS.maroon}
-          />
-          <Text style={styles.locationButtonText}>
-            Use current departure time
-          </Text>
-        </Pressable>
+        />
 
-        <FormField
+        <CurrentTimeField
           label="ARRIVED FACILITY TIME"
           value={form.arrivedFacilityTime}
           placeholder="mm/dd/yyyy hh:mm"
+          icon="enter-outline"
+          buttonLabel="Use current arrival time"
           onChangeText={(value) =>
             updateField("arrivedFacilityTime", value)
           }
-        />
-
-        <Pressable
-          onPress={() =>
+          onUseCurrent={() =>
             updateField(
               "arrivedFacilityTime",
               formatDateTimeForInput(new Date()),
             )
           }
-          style={({ pressed }) => [
-            styles.locationButton,
-            pressed && styles.pressed,
-          ]}
-        >
-          <Ionicons
-            name="enter-outline"
-            size={19}
-            color={COLORS.maroon}
-          />
-          <Text style={styles.locationButtonText}>
-            Use current arrival time
-          </Text>
-        </Pressable>
+        />
 
         <SelectField
           label="RECEIVING FACILITY"
@@ -5131,69 +5557,97 @@ export default function AddCasualtyScreen() {
 
         {canManageReferenceData ? (
           <View style={styles.quickCreateCard}>
-            <View style={styles.quickCreateHeader}>
-              <Ionicons
-                name="medkit-outline"
-                size={20}
-                color={COLORS.maroon}
-              />
-              <Text style={styles.quickCreateTitle}>
-                Quick create healthcare facility
-              </Text>
-            </View>
-
-            <FormField
-              label="FACILITY NAME"
-              value={newHealthcareFacilityName}
-              placeholder="e.g. Philippine General Hospital"
-              onChangeText={setNewHealthcareFacilityName}
-            />
-
-            <SelectField
-              label="FACILITY LEVEL"
-              value={newHealthcareFacilityLevel}
-              placeholder="Select facility level"
-              onPress={() => openChoiceSheet("facilityLevel")}
-            />
-
-            <FormField
-              label="ADDRESS"
-              value={newHealthcareFacilityAddress}
-              placeholder="Street, building, or landmark"
-              onChangeText={setNewHealthcareFacilityAddress}
-            />
-
             <Pressable
-              disabled={isCreatingHealthcareFacility}
-              onPress={() => {
-                void handleCreateHealthcareFacility();
-              }}
+              onPress={() =>
+                setIsHealthcareQuickCreateExpanded(
+                  (current) => !current,
+                )
+              }
               style={({ pressed }) => [
-                styles.createIncidentButton,
-                isCreatingHealthcareFacility &&
-                  styles.disabledButton,
-                pressed && styles.primaryButtonPressed,
+                styles.quickCreateHeader,
+                pressed && styles.pressed,
               ]}
+              accessibilityRole="button"
+              accessibilityLabel="Toggle quick create healthcare facility"
             >
-              <Text style={styles.createIncidentButtonText}>
-                {isCreatingHealthcareFacility
-                  ? "Creating facility..."
-                  : "Create and select facility"}
-              </Text>
-
-              {isCreatingHealthcareFacility ? (
-                <ActivityIndicator
-                  size="small"
-                  color={COLORS.white}
-                />
-              ) : (
+              <View style={styles.quickCreateHeaderTitle}>
                 <Ionicons
-                  name="checkmark-circle-outline"
-                  size={18}
-                  color={COLORS.white}
+                  name="medkit-outline"
+                  size={20}
+                  color={COLORS.maroon}
                 />
-              )}
+                <Text style={styles.quickCreateTitle}>
+                  Quick create healthcare facility
+                </Text>
+              </View>
+
+              <Ionicons
+                name={
+                  isHealthcareQuickCreateExpanded
+                    ? "chevron-up-outline"
+                    : "chevron-down-outline"
+                }
+                size={18}
+                color={COLORS.secondaryText}
+              />
             </Pressable>
+
+            {isHealthcareQuickCreateExpanded ? (
+              <View style={styles.quickCreateBody}>
+                <FormField
+                  label="FACILITY NAME"
+                  value={newHealthcareFacilityName}
+                  placeholder="e.g. Philippine General Hospital"
+                  onChangeText={setNewHealthcareFacilityName}
+                />
+
+                <SelectField
+                  label="FACILITY LEVEL"
+                  value={newHealthcareFacilityLevel}
+                  placeholder="Select facility level"
+                  onPress={() => openChoiceSheet("facilityLevel")}
+                />
+
+                <FormField
+                  label="ADDRESS"
+                  value={newHealthcareFacilityAddress}
+                  placeholder="Street, building, or landmark"
+                  onChangeText={setNewHealthcareFacilityAddress}
+                />
+
+                <Pressable
+                  disabled={isCreatingHealthcareFacility}
+                  onPress={() => {
+                    void handleCreateHealthcareFacility();
+                  }}
+                  style={({ pressed }) => [
+                    styles.createIncidentButton,
+                    isCreatingHealthcareFacility &&
+                      styles.disabledButton,
+                    pressed && styles.primaryButtonPressed,
+                  ]}
+                >
+                  <Text style={styles.createIncidentButtonText}>
+                    {isCreatingHealthcareFacility
+                      ? "Creating facility..."
+                      : "Create and select facility"}
+                  </Text>
+
+                  {isCreatingHealthcareFacility ? (
+                    <ActivityIndicator
+                      size="small"
+                      color={COLORS.white}
+                    />
+                  ) : (
+                    <Ionicons
+                      name="checkmark-circle-outline"
+                      size={18}
+                      color={COLORS.white}
+                    />
+                  )}
+                </Pressable>
+              </View>
+            ) : null}
           </View>
         ) : null}
 
@@ -5211,8 +5665,6 @@ export default function AddCasualtyScreen() {
   }
 
   function renderStatusStep() {
-    const showDeathDetails = normalizeYesNoUnknown(form.died) === true;
-
     return (
       <>
         <SectionLabel title="Clinical status" />
@@ -5251,67 +5703,38 @@ export default function AddCasualtyScreen() {
           }
         />
 
-        <FormField
+        <CurrentTimeField
           label="STABILIZATION START TIME"
           value={form.stabilizationStartedTime}
           placeholder="mm/dd/yyyy hh:mm"
+          buttonLabel="Use current care start time"
           onChangeText={(value) =>
             updateField("stabilizationStartedTime", value)
           }
-        />
-
-        <Pressable
-          onPress={() =>
+          onUseCurrent={() =>
             updateField(
               "stabilizationStartedTime",
               formatDateTimeForInput(new Date()),
             )
           }
-          style={({ pressed }) => [
-            styles.locationButton,
-            pressed && styles.pressed,
-          ]}
-        >
-          <Ionicons
-            name="time-outline"
-            size={19}
-            color={COLORS.maroon}
-          />
-          <Text style={styles.locationButtonText}>
-            Use current care start time
-          </Text>
-        </Pressable>
+        />
 
-        <FormField
+        <CurrentTimeField
           label="STABILIZED TIME"
           value={form.stabilizedTime}
           placeholder="mm/dd/yyyy hh:mm"
+          icon="checkmark-circle-outline"
+          buttonLabel="Use current stabilized time"
           onChangeText={(value) =>
             updateField("stabilizedTime", value)
           }
-        />
-
-        <Pressable
-          onPress={() =>
+          onUseCurrent={() =>
             updateField(
               "stabilizedTime",
               formatDateTimeForInput(new Date()),
             )
           }
-          style={({ pressed }) => [
-            styles.locationButton,
-            pressed && styles.pressed,
-          ]}
-        >
-          <Ionicons
-            name="checkmark-circle-outline"
-            size={19}
-            color={COLORS.maroon}
-          />
-          <Text style={styles.locationButtonText}>
-            Use current stabilized time
-          </Text>
-        </Pressable>
+        />
 
         <FormField
           label="TREATMENT NOTES"
@@ -5323,23 +5746,64 @@ export default function AddCasualtyScreen() {
           }
         />
 
+        <SectionLabel title="Clinical notes" />
+
+        <FormField
+          label="VISIBLE INJURY"
+          value={form.visibleInjury}
+          placeholder="Describe visible injuries"
+          multiline
+          onChangeText={(value) =>
+            updateField("visibleInjury", value)
+          }
+        />
+
+        <FormField
+          label="MEDICAL CONDITION"
+          value={form.medicalCondition}
+          placeholder="Known medical condition"
+          multiline
+          onChangeText={(value) =>
+            updateField("medicalCondition", value)
+          }
+        />
+
+        <FormField
+          label="ASSISTANCE NEEDED"
+          value={form.assistanceNeeded}
+          placeholder="Required assistance"
+          multiline
+          onChangeText={(value) =>
+            updateField("assistanceNeeded", value)
+          }
+        />
+
+        <FormField
+          label="ASSISTANCE PROVIDED"
+          value={form.assistanceProvided}
+          placeholder="Assistance already provided"
+          multiline
+          onChangeText={(value) =>
+            updateField("assistanceProvided", value)
+          }
+        />
+      </>
+    );
+  }
+
+  function renderHospitalCareStep() {
+    const showDeathDetails = normalizeYesNoUnknown(form.died) === true;
+
+    return (
+      <>
+        <SectionLabel title="ED and hospital care" />
+
         <FormField
           label="HOSPITAL / FACILITY"
           value={form.hospitalName}
           placeholder="Hospital or medical facility"
           onChangeText={(value) =>
             updateField("hospitalName", value)
-          }
-        />
-
-        <SectionLabel title="ED and hospital care" />
-
-        <SelectField
-          label="TRANSFERRED OUT OF HOSPITAL"
-          value={form.transferredOutOfHospital}
-          placeholder="Select transfer status"
-          onPress={() =>
-            openChoiceSheet("transferredOutOfHospital")
           }
         />
 
@@ -5382,36 +5846,22 @@ export default function AddCasualtyScreen() {
           }
         />
 
-        <FormField
+        <CurrentTimeField
           label="ED RESUSCITATION ROOM TIME"
           value={form.edResuscitationTime}
           placeholder="mm/dd/yyyy hh:mm"
+          icon="medical-outline"
+          buttonLabel="Use current ED resuscitation time"
           onChangeText={(value) =>
             updateField("edResuscitationTime", value)
           }
-        />
-
-        <Pressable
-          onPress={() =>
+          onUseCurrent={() =>
             updateField(
               "edResuscitationTime",
               formatDateTimeForInput(new Date()),
             )
           }
-          style={({ pressed }) => [
-            styles.locationButton,
-            pressed && styles.pressed,
-          ]}
-        >
-          <Ionicons
-            name="medical-outline"
-            size={19}
-            color={COLORS.maroon}
-          />
-          <Text style={styles.locationButtonText}>
-            Use current ED resuscitation time
-          </Text>
-        </Pressable>
+        />
 
         <FormField
           label="HOSPITAL ADMISSION TIME"
@@ -5558,6 +6008,15 @@ export default function AddCasualtyScreen() {
           onPress={() => openChoiceSheet("alternativeIcuUsed")}
         />
 
+        <SelectField
+          label="TRANSFERRED OUT OF HOSPITAL"
+          value={form.transferredOutOfHospital}
+          placeholder="Select transfer status"
+          onPress={() =>
+            openChoiceSheet("transferredOutOfHospital")
+          }
+        />
+
         <SectionLabel title="Outcome" />
 
         <SelectField
@@ -5608,47 +6067,6 @@ export default function AddCasualtyScreen() {
           </>
         ) : null}
 
-        <SectionLabel title="Clinical notes" />
-
-        <FormField
-          label="VISIBLE INJURY"
-          value={form.visibleInjury}
-          placeholder="Describe visible injuries"
-          multiline
-          onChangeText={(value) =>
-            updateField("visibleInjury", value)
-          }
-        />
-
-        <FormField
-          label="MEDICAL CONDITION"
-          value={form.medicalCondition}
-          placeholder="Known medical condition"
-          multiline
-          onChangeText={(value) =>
-            updateField("medicalCondition", value)
-          }
-        />
-
-        <FormField
-          label="ASSISTANCE NEEDED"
-          value={form.assistanceNeeded}
-          placeholder="Required assistance"
-          multiline
-          onChangeText={(value) =>
-            updateField("assistanceNeeded", value)
-          }
-        />
-
-        <FormField
-          label="ASSISTANCE PROVIDED"
-          value={form.assistanceProvided}
-          placeholder="Assistance already provided"
-          multiline
-          onChangeText={(value) =>
-            updateField("assistanceProvided", value)
-          }
-        />
       </>
     );
   }
@@ -5739,6 +6157,9 @@ export default function AddCasualtyScreen() {
 
       case "Status":
         return renderStatusStep();
+
+      case "Hospital Care":
+        return renderHospitalCareStep();
 
       case "Remarks":
         return renderRemarksStep();
@@ -5846,12 +6267,14 @@ export default function AddCasualtyScreen() {
                   />
 
                   <Text
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
                     style={[
                       styles.progressLabel,
                       isActive && styles.progressLabelActive,
                     ]}
                   >
-                    {step.toUpperCase()}
+                    {STEP_PROGRESS_LABELS[step]}
                   </Text>
                 </View>
               );
@@ -5938,6 +6361,8 @@ export default function AddCasualtyScreen() {
         onClose={() => setActiveChoiceSheet(null)}
       />
 
+      {renderTriageAssessmentSheet()}
+
       <DatePickerSheet
         visible={isDatePickerVisible}
         value={form.dateOfBirth}
@@ -6005,6 +6430,15 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 22,
     backgroundColor: COLORS.white,
   },
+  assessmentSheet: {
+    maxHeight: "82%",
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 24,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    backgroundColor: COLORS.white,
+  },
   sheetHandle: {
     width: 42,
     height: 4,
@@ -6024,6 +6458,12 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontSize: 16,
     fontWeight: "900",
+  },
+  assessmentSubtitle: {
+    color: COLORS.secondaryText,
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 3,
   },
   sheetCloseButton: {
     width: 36,
@@ -6259,6 +6699,7 @@ const styles = StyleSheet.create({
   },
   progressItem: {
     flex: 1,
+    minWidth: 0,
   },
   progressLine: {
     height: 4,
@@ -6270,7 +6711,7 @@ const styles = StyleSheet.create({
   },
   progressLabel: {
     color: "rgba(255,255,255,0.42)",
-    fontSize: 8,
+    fontSize: 7,
     fontWeight: "700",
     textAlign: "center",
     marginTop: 6,
@@ -6286,6 +6727,44 @@ const styles = StyleSheet.create({
   },
   fieldGroup: {
     marginBottom: 17,
+  },
+  selectedIncidentBanner: {
+    minHeight: 64,
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E8D4D6",
+    borderRadius: 13,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 17,
+    backgroundColor: "#FFF8F8",
+    gap: 10,
+  },
+  selectedIncidentIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.white,
+  },
+  selectedIncidentTextGroup: {
+    flex: 1,
+    minWidth: 0,
+  },
+  selectedIncidentLabel: {
+    color: COLORS.maroon,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.4,
+  },
+  selectedIncidentName: {
+    color: COLORS.text,
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: "800",
+    marginTop: 3,
   },
   sectionLabelRow: {
     flexDirection: "row",
@@ -6357,6 +6836,27 @@ const styles = StyleSheet.create({
   halfColumn: {
     flex: 1,
   },
+  currentTimeRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  currentTimeField: {
+    flex: 1,
+  },
+  currentTimeButton: {
+    width: 148,
+    minHeight: 50,
+    marginTop: 22,
+    paddingHorizontal: 8,
+    gap: 6,
+  },
+  currentTimeButtonText: {
+    flexShrink: 1,
+    fontSize: 11,
+    lineHeight: 14,
+    textAlign: "center",
+  },
 
   locationButton: {
     minHeight: 50,
@@ -6399,6 +6899,24 @@ const styles = StyleSheet.create({
   appendixQuestion: {
     marginBottom: 12,
   },
+  assessmentList: {
+    paddingTop: 4,
+    paddingBottom: 10,
+  },
+  assessmentDoneButton: {
+    minHeight: 47,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+    backgroundColor: COLORS.maroon,
+  },
+  assessmentDoneButtonText: {
+    color: COLORS.white,
+    fontSize: 13,
+    fontWeight: "900",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
   appendixQuestionLabel: {
     color: COLORS.text,
     fontSize: 11,
@@ -6423,9 +6941,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 7,
   },
+  finalTriageOption: {
+    flexBasis: "48%",
+    flexGrow: 0,
+    minWidth: "48%",
+    borderColor: "rgba(255,255,255,0.72)",
+  },
   appendixOptionSelected: {
     borderColor: COLORS.maroon,
     backgroundColor: "#FFF4F4",
+  },
+  finalTriageOptionSelected: {
+    borderWidth: 2,
+    borderColor: COLORS.text,
+  },
+  finalTriageGreen: {
+    backgroundColor: "#2E7D4F",
+  },
+  finalTriageYellow: {
+    backgroundColor: "#F4C542",
+  },
+  finalTriageRed: {
+    backgroundColor: "#C62828",
+  },
+  finalTriageBlack: {
+    backgroundColor: "#1F2933",
   },
   appendixOptionText: {
     color: COLORS.secondaryText,
@@ -6436,6 +6976,12 @@ const styles = StyleSheet.create({
   },
   appendixOptionTextSelected: {
     color: COLORS.maroon,
+  },
+  finalTriageLightText: {
+    color: COLORS.white,
+  },
+  finalTriageYellowText: {
+    color: "#2B2100",
   },
 
   inlineWarning: {
@@ -6463,21 +7009,31 @@ const styles = StyleSheet.create({
     borderColor: "#E8D4D6",
     borderRadius: 14,
     paddingHorizontal: 12,
-    paddingTop: 13,
-    paddingBottom: 12,
+    paddingVertical: 12,
     marginBottom: 17,
     backgroundColor: "#FFF9F9",
   },
   quickCreateHeader: {
+    minHeight: 32,
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 13,
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  quickCreateHeaderTitle: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
   quickCreateTitle: {
+    flex: 1,
     color: COLORS.maroon,
     fontSize: 13,
     fontWeight: "900",
+  },
+  quickCreateBody: {
+    marginTop: 13,
   },
   createIncidentButton: {
     minHeight: 47,

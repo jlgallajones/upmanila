@@ -292,6 +292,7 @@ export default function RecordsScreen() {
   const [errorMessage, setErrorMessage] =
     useState<string | null>(null);
   const [isGuestMode, setIsGuestMode] = useState(false);
+  const [formattedDate, setFormattedDate] = useState("");
 
   const loadRecords = useCallback(async () => {
     try {
@@ -388,6 +389,16 @@ export default function RecordsScreen() {
     }, []),
   );
 
+  useEffect(() => {
+    setFormattedDate(
+      new Intl.DateTimeFormat("en-US", {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      }).format(new Date()),
+    );
+  }, []);
+
   const handleRefresh = useCallback(async () => {
     try {
       setIsRefreshing(true);
@@ -420,12 +431,6 @@ export default function RecordsScreen() {
       return matchesFilter && matchesSearch;
     });
   }, [activeFilter, records, searchQuery]);
-
-  const formattedDate = new Intl.DateTimeFormat("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  }).format(new Date());
 
   if (isLoading) {
     return (
