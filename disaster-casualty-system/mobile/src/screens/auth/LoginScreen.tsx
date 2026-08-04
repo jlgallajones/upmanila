@@ -36,8 +36,8 @@ const COLORS = {
 };
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState("responder@ndrrmc.gov.ph");
-  const [password, setPassword] = useState("password");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
