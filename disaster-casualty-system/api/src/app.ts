@@ -19,10 +19,39 @@ import { incidentOperationsRouter } from "./routes/incident-operations.routes.js
 
 export const app = express();
 
+const allowedOrigins = [
+  "http://localhost:8081",
+  "http://localhost:3000",
+  "https://elegant-torte-168a64.netlify.app",
+];
+
 app.use(
   cors({
-    origin: true,
+    origin(origin, callback) {
+      // Allow requests without an Origin, such as Postman
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+
+      const isAllowed =
+        allowedOrigins.includes(origin) ||
+        origin.endsWith(".netlify.app");
+
+      if (isAllowed) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`CORS blocked origin: ${origin}`));
+    },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "ngrok-skip-browser-warning",
+    ],
   }),
 );
 

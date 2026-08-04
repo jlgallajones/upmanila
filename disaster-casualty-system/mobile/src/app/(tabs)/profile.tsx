@@ -5,6 +5,7 @@ import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -236,7 +237,38 @@ export default function ProfileScreen() {
     }
   }, [loadProfile]);
 
+  async function performLogout() {
+    try {
+      setIsLoggingOut(true);
+
+      await clearSession();
+
+      setProfile(null);
+      setErrorMessage(null);
+      setLastLoadedAt(null);
+
+      router.replace("/login");
+    } finally {
+      setIsLoggingOut(false);
+    }
+  }
+
   function handleLogout() {
+    if (Platform.OS === "web") {
+      const shouldLogout =
+        typeof window === "undefined"
+          ? true
+          : window.confirm(
+              "Are you sure you want to log out from DCMS?",
+            );
+
+      if (shouldLogout) {
+        void performLogout();
+      }
+
+      return;
+    }
+
     Alert.alert(
       "Log out",
       "Are you sure you want to log out from DCMS?",
@@ -249,17 +281,7 @@ export default function ProfileScreen() {
           text: "Log out",
           style: "destructive",
           onPress: async () => {
-            try {
-              setIsLoggingOut(true);
-
-              await clearSession();
-
-              setProfile(null);
-              setErrorMessage(null);
-              setLastLoadedAt(null);
-            } finally {
-              setIsLoggingOut(false);
-            }
+            await performLogout();
           },
         },
       ],

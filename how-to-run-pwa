@@ -3,3 +3,14 @@ cd to mobile
 npx expo export -p web (this creates the dist folder)
 
 npx serve dist
+
+
+ngrok auth token: 3HSMJyrV7Njbu7Ijqqp2LbWoiao_7TSPJmmQSXdbJLphw4jX7
+
+
+how to test deploy using ngrok
+
+1. go to mobile directory then run: npx expo export -p web
+2. npx serve -s dist -l 3000
+3. open new terminal
+4. npx serve -s dist -l 3000

@@ -41,9 +41,54 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+
+  function getLoginErrorMessage(error: unknown): string {
+    const message =
+      error instanceof Error ? error.message.trim() : "";
+    const normalizedMessage = message.toLowerCase();
+
+    if (
+      normalizedMessage.includes("invalid email or password") ||
+      normalizedMessage.includes("invalid login credentials")
+    ) {
+      return "Invalid login credentials. Please reset the password in Supabase Authentication and try again.";
+    }
+
+    if (normalizedMessage.includes("email is not confirmed")) {
+      return "Email is not confirmed in Supabase Auth. Please confirm this account before logging in.";
+    }
+
+    if (normalizedMessage.includes("inactive")) {
+      return "This account exists but is inactive. Please set is_active to true in the users table.";
+    }
+
+    if (
+      normalizedMessage.includes("network error") ||
+      normalizedMessage.includes("timeout")
+    ) {
+      return "Unable to reach the server. Please check the API URL, ngrok tunnel, or internet connection.";
+    }
+
+    return (
+      message ||
+      "Unable to sign in. Please check your credentials and try again."
+    );
+  }
+
+  function handleEmailChange(value: string) {
+    setEmail(value);
+    setLoginError(null);
+  }
+
+  function handlePasswordChange(value: string) {
+    setPassword(value);
+    setLoginError(null);
+  }
 
   async function handleLogin() {
     if (!email.trim() || !password) {
+      setLoginError("Please enter your email address and password.");
       Alert.alert(
         "Incomplete credentials",
         "Please enter your email address and password.",
@@ -53,17 +98,18 @@ export default function LoginScreen() {
 
     try {
       setIsSubmitting(true);
+      setLoginError(null);
 
       const session = await login(email.trim(), password);
       await saveSession(session);
 
       router.replace("/home");
     } catch (error) {
+      const message = getLoginErrorMessage(error);
+      setLoginError(message);
       Alert.alert(
         "Login failed",
-        error instanceof Error
-          ? error.message
-          : "Unable to sign in. Please check your credentials.",
+        message,
       );
     } finally {
       setIsSubmitting(false);
@@ -133,7 +179,7 @@ export default function LoginScreen() {
 
               <TextInput
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={handleEmailChange}
                 style={styles.input}
                 placeholder="responder@ndrrmc.gov.ph"
                 placeholderTextColor={COLORS.mutedText}
@@ -158,7 +204,7 @@ export default function LoginScreen() {
 
               <TextInput
                 value={password}
-                onChangeText={setPassword}
+                onChangeText={handlePasswordChange}
                 style={styles.input}
                 placeholder="Enter your password"
                 placeholderTextColor={COLORS.mutedText}
@@ -189,6 +235,20 @@ export default function LoginScreen() {
                 />
               </Pressable>
             </View>
+
+            {loginError ? (
+              <View style={styles.loginErrorCard}>
+                <Ionicons
+                  name="alert-circle-outline"
+                  size={18}
+                  color={COLORS.warningText}
+                />
+
+                <Text style={styles.loginErrorText}>
+                  {loginError}
+                </Text>
+              </View>
+            ) : null}
 
             <View style={styles.optionsRow}>
               <Pressable
@@ -381,6 +441,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
     color: COLORS.primaryText,
     fontSize: 14,
+  },
+  loginErrorCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    borderWidth: 1,
+    borderColor: COLORS.warningBorder,
+    borderRadius: 11,
+    backgroundColor: COLORS.warningBackground,
+  },
+  loginErrorText: {
+    flex: 1,
+    marginLeft: 8,
+    color: COLORS.warningText,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "600",
   },
 
   optionsRow: {

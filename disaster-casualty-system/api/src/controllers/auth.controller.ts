@@ -24,6 +24,24 @@ function getFallbackFullName(email: string): string {
   return email.split("@")[0]?.trim() || "Responder";
 }
 
+function getAuthenticationFailureMessage(message?: string): string {
+  const normalizedMessage = message?.toLowerCase() ?? "";
+
+  if (normalizedMessage.includes("email not confirmed")) {
+    return "Email is not confirmed in Supabase Auth. Please confirm this account before logging in.";
+  }
+
+  if (normalizedMessage.includes("invalid login credentials")) {
+    return "Invalid login credentials. Please reset the password in Supabase Authentication and try again.";
+  }
+
+  if (message) {
+    return `Supabase Auth rejected the login: ${message}`;
+  }
+
+  return "Invalid email or password. Make sure this account exists in Supabase Auth.";
+}
+
 async function findProfileByEmail(email: string) {
   const { data: user, error } = await supabase
     .from("users")
@@ -62,10 +80,14 @@ export async function login(
       });
 
     if (authError || !authData.user) {
+      console.warn("Supabase Auth login rejected", {
+        email,
+        reason: authError?.message ?? "No authenticated user returned.",
+      });
+
       response.status(401).json({
         success: false,
-        message:
-          "Invalid email or password. Make sure this account exists in Supabase Auth.",
+        message: getAuthenticationFailureMessage(authError?.message),
       });
       return;
     }
