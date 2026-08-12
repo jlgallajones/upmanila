@@ -22,8 +22,30 @@ export const app = express();
 const allowedOrigins = [
   "http://localhost:8081",
   "http://localhost:3000",
+  "http://localhost:5173",
+  "http://localhost:4173",
   "https://elegant-torte-168a64.netlify.app",
 ];
+
+function isLocalDevelopmentOrigin(origin: string): boolean {
+  try {
+    const url = new URL(origin);
+    const hostname = url.hostname;
+
+    return (
+      url.protocol === "http:" &&
+      (
+        hostname === "localhost" ||
+        hostname === "127.0.0.1" ||
+        /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
+        /^192\.168\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
+        /^172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$/.test(hostname)
+      )
+    );
+  } catch {
+    return false;
+  }
+}
 
 app.use(
   cors({
@@ -36,6 +58,7 @@ app.use(
 
       const isAllowed =
         allowedOrigins.includes(origin) ||
+        isLocalDevelopmentOrigin(origin) ||
         origin.endsWith(".netlify.app");
 
       if (isAllowed) {
