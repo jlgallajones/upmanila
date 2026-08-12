@@ -25,3 +25,8 @@ Remove-Item -Recurse -Force dist -ErrorAction SilentlyContinue
 npx expo export -p web --clear
 
 then recommit and upload new dist in render and netlify
+
+
+
+env.local EXPO_PUBLIC_API_URL=http://localhost:5000/api
+env.prod https://dcms-api-ljco.onrender.com/api
