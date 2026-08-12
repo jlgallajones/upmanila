@@ -1,8 +1,8 @@
 import * as FileSystem from "expo-file-system/legacy";
+import { Platform } from "react-native";
 
 import { getAccessToken } from "../auth/session";
-import { api } from "./client";
-import { API_BASE_URL } from "./client";
+import { API_BASE_URL, api } from "./client";
 
 export type Incident = {
   id: string;
@@ -1024,6 +1024,35 @@ export async function downloadIncidentExport(
   const fileName = sanitizeFileName(
     `dcms-${incidentId}-${kind}.${exportExtensions[kind]}`,
   );
+
+  if (Platform.OS === "web") {
+    const response = await api.get<Blob>(
+      `/incidents/${encodedIncidentId}/export/${exportPaths[kind]}`,
+      {
+        responseType: "blob",
+      },
+    );
+    const contentType =
+      response.headers["content-type"] ??
+      (kind === "sitrep-pdf"
+        ? "application/pdf"
+        : "text/csv;charset=utf-8");
+    const blob = new Blob([response.data], {
+      type: contentType,
+    });
+    const downloadUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = downloadUrl;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(downloadUrl);
+
+    return fileName;
+  }
+
   const directory =
     FileSystem.documentDirectory ?? FileSystem.cacheDirectory;
 
