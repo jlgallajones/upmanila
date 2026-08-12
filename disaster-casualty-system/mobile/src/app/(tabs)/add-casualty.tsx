@@ -49,6 +49,10 @@ import {
   getHealthcareFacilities,
   type HealthcareFacility,
 } from "../../api/healthcare-facilities";
+import type {
+  ReportingContext,
+  UserRole,
+} from "../../api/profile";
 import { getCurrentUser } from "../../auth/session";
 import {
   isNetworkSubmissionError,
@@ -146,21 +150,48 @@ const SEVERITY_OPTIONS = [
   "Critical",
 ] as const;
 
-const TRIAGE_SYSTEM_OPTIONS = [
+const PRIMARY_TRIAGE_SYSTEM_OPTIONS = [
+  "STIEVE",
   "START",
-  "NATO",
+  "mSTART",
+  "JumpSTART",
   "SIEVE",
-  "SORT",
-  "SIEVE/SORT",
-  "SMART",
-  "RTS",
   "Care Flight",
-  "MASS",
   "SALT",
-  "ED Triage",
+  "PTT",
+  "MITT",
+  "Homebush",
+  "MPTT",
+  "STM",
+] as const;
+
+const SECONDARY_TRIAGE_SYSTEM_OPTIONS = [
+  "SAVE",
+  "SORT",
+  "META",
+  "SwiFT",
+  "SMART",
   "Urgent/Non-urgent",
+] as const;
+
+const TERTIARY_TRIAGE_SYSTEM_OPTIONS = [
+  "ESI",
+  "NATO",
+  "MASS",
+  "METTS",
+  "ED Triage",
   "Other",
 ] as const;
+
+const TRIAGE_SYSTEM_OPTIONS = [
+  ...PRIMARY_TRIAGE_SYSTEM_OPTIONS,
+  ...SECONDARY_TRIAGE_SYSTEM_OPTIONS,
+  ...TERTIARY_TRIAGE_SYSTEM_OPTIONS,
+  "SIEVE/SORT",
+  "RTS",
+] as const;
+
+type TriageSystemOption = (typeof TRIAGE_SYSTEM_OPTIONS)[number];
 
 type AppendixAnswerOption = {
   label: string;
@@ -170,7 +201,8 @@ type AppendixAnswerOption = {
 type AppendixQuestion = {
   key: string;
   label: string;
-  options: AppendixAnswerOption[];
+  options?: AppendixAnswerOption[];
+  inputType?: "numeric";
 };
 
 const YES_NO_OPTIONS: AppendixAnswerOption[] = [
@@ -190,35 +222,214 @@ const FINAL_TRIAGE_COLOR_OPTIONS: AppendixAnswerOption[] = [
   { label: "Black", value: "black" },
 ];
 
+const FINAL_TRIAGE_WITH_WHITE_OPTIONS: AppendixAnswerOption[] = [
+  { label: "Green", value: "green" },
+  { label: "Yellow", value: "yellow" },
+  { label: "Red", value: "red" },
+  { label: "Black", value: "black" },
+  { label: "White", value: "white" },
+];
+
+const ESI_TRIAGE_OPTIONS: AppendixAnswerOption[] = [
+  { label: "ESI 1", value: "esi_1" },
+  { label: "ESI 2", value: "esi_2" },
+  { label: "ESI 3", value: "esi_3" },
+  { label: "ESI 4", value: "esi_4" },
+  { label: "ESI 5", value: "esi_5" },
+];
+
+const METTS_TRIAGE_OPTIONS: AppendixAnswerOption[] = [
+  { label: "Red", value: "red" },
+  { label: "Orange", value: "orange" },
+  { label: "Yellow", value: "yellow" },
+  { label: "Green", value: "green" },
+  { label: "Blue", value: "blue" },
+];
+
+const START_RESPIRATION_OPTIONS: AppendixAnswerOption[] = [
+  { label: "Absent", value: "absent" },
+  { label: "More than 30", value: "more_than_30" },
+  { label: "Less than 30", value: "less_than_30" },
+];
+
+const START_AIRWAY_QUESTION: AppendixQuestion = {
+  key: "breathingAfterAirwayManagement",
+  label: "Breathing after airway management?",
+  options: YES_NO_OPTIONS,
+};
+
+const CAPILLARY_REFILL_OPTIONS: AppendixAnswerOption[] = [
+  { label: "More than 2 sec", value: "more_than_2_seconds" },
+  { label: "2 sec or less", value: "less_than_or_equal_to_2_seconds" },
+];
+
+const SIMPLE_COMMAND_OPTIONS: AppendixAnswerOption[] = [
+  { label: "Follows commands", value: "yes" },
+  { label: "Cannot follow", value: "no" },
+];
+
 const APPENDIX_TRIAGE_FIELDS: Record<string, AppendixQuestion[]> = {
-  start: [
-    { key: "canWalk", label: "Can walk?", options: YES_NO_OPTIONS },
+  stieve: [
+    {
+      key: "specialPopulation",
+      label: "Considered special population?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "canWalkOrNoVisibleInjuries",
+      label: "Can walk or has no visible injuries?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "catastrophicHemorrhage",
+      label: "Catastrophic hemorrhage?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "suckingChestWound",
+      label: "Sucking chest wound?",
+      options: YES_NO_OPTIONS,
+    },
     {
       key: "respirations",
       label: "Respirations",
       options: [
         { label: "Absent", value: "absent" },
+        { label: "Less than 10", value: "less_than_10" },
+        { label: "10-29", value: "10_to_29" },
         { label: "More than 30", value: "more_than_30" },
-        { label: "30 or below", value: "less_than_or_equal_to_30" },
+      ],
+    },
+    START_AIRWAY_QUESTION,
+    {
+      key: "pulse",
+      label: "Pulse",
+      options: [
+        { label: "Absent", value: "absent" },
+        { label: "Weak", value: "weak" },
+        { label: "Strong", value: "strong" },
       ],
     },
     {
       key: "capillaryRefill",
       label: "Capillary refill",
-      options: [
-        { label: "More than 2 sec", value: "more_than_2_seconds" },
-        {
-          label: "2 sec or less",
-          value: "less_than_or_equal_to_2_seconds",
-        },
-      ],
+      options: CAPILLARY_REFILL_OPTIONS,
     },
     {
       key: "followsSimpleCommands",
       label: "Mental status",
+      options: SIMPLE_COMMAND_OPTIONS,
+    },
+    {
+      key: "finalTriage",
+      label: "Final triage",
+      options: FINAL_TRIAGE_COLOR_OPTIONS,
+    },
+  ],
+  start: [
+    { key: "canWalk", label: "Can walk?", options: YES_NO_OPTIONS },
+    {
+      key: "spontaneousBreathing",
+      label: "Spontaneous breathing?",
+      options: YES_NO_OPTIONS,
+    },
+    START_AIRWAY_QUESTION,
+    {
+      key: "respirations",
+      label: "Respirations",
+      options: START_RESPIRATION_OPTIONS,
+    },
+    {
+      key: "capillaryRefill",
+      label: "Capillary refill",
+      options: CAPILLARY_REFILL_OPTIONS,
+    },
+    {
+      key: "radialPulse",
+      label: "Radial pulse",
+      options: PRESENT_ABSENT_OPTIONS,
+    },
+    {
+      key: "followsSimpleCommands",
+      label: "Mental status",
+      options: SIMPLE_COMMAND_OPTIONS,
+    },
+    {
+      key: "finalTriage",
+      label: "Final triage",
+      options: FINAL_TRIAGE_COLOR_OPTIONS,
+    },
+  ],
+  mstart: [
+    { key: "canWalk", label: "Can walk?", options: YES_NO_OPTIONS },
+    {
+      key: "spontaneousBreathing",
+      label: "Spontaneous breathing?",
+      options: YES_NO_OPTIONS,
+    },
+    START_AIRWAY_QUESTION,
+    {
+      key: "respirations",
+      label: "Respirations",
+      options: START_RESPIRATION_OPTIONS,
+    },
+    {
+      key: "radialPulse",
+      label: "Radial pulse",
+      options: PRESENT_ABSENT_OPTIONS,
+    },
+    {
+      key: "followsSimpleCommands",
+      label: "Mental status",
+      options: SIMPLE_COMMAND_OPTIONS,
+    },
+    {
+      key: "finalTriage",
+      label: "Final triage",
+      options: FINAL_TRIAGE_COLOR_OPTIONS,
+    },
+  ],
+  jumpstart: [
+    { key: "canWalk", label: "Can walk?", options: YES_NO_OPTIONS },
+    {
+      key: "spontaneousBreathing",
+      label: "Spontaneous breathing?",
+      options: YES_NO_OPTIONS,
+    },
+    START_AIRWAY_QUESTION,
+    {
+      key: "palpablePulseAfterAirwayManagement",
+      label: "Palpable pulse after airway management?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "breathingAfterRescueBreaths",
+      label: "Breathing after 5 rescue breaths?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "respirations",
+      label: "Respirations",
       options: [
-        { label: "Follows commands", value: "yes" },
-        { label: "Cannot follow", value: "no" },
+        { label: "Absent", value: "absent" },
+        { label: "More than 45", value: "more_than_45" },
+        { label: "Less than 15", value: "less_than_15" },
+        { label: "15-45", value: "15_to_45" },
+      ],
+    },
+    {
+      key: "radialPulse",
+      label: "Radial pulse",
+      options: PRESENT_ABSENT_OPTIONS,
+    },
+    {
+      key: "mentalStatus",
+      label: "Mental status",
+      options: [
+        { label: "Alert", value: "alert" },
+        { label: "Responds to verbal stimuli", value: "verbal" },
+        { label: "Responds to painful stimuli", value: "painful" },
+        { label: "Unresponsive to noxious stimuli", value: "unresponsive" },
       ],
     },
     {
@@ -257,6 +468,7 @@ const APPENDIX_TRIAGE_FIELDS: Record<string, AppendixQuestion[]> = {
   ],
   sieve: [
     { key: "canWalk", label: "Can walk?", options: YES_NO_OPTIONS },
+    { key: "injury", label: "Injury", options: PRESENT_ABSENT_OPTIONS },
     {
       key: "respirations",
       label: "Respirations",
@@ -273,6 +485,7 @@ const APPENDIX_TRIAGE_FIELDS: Record<string, AppendixQuestion[]> = {
         { label: "11-29", value: "eleven_to_twenty_nine" },
       ],
     },
+    START_AIRWAY_QUESTION,
     {
       key: "heartRate",
       label: "Heart rate",
@@ -333,6 +546,68 @@ const APPENDIX_TRIAGE_FIELDS: Record<string, AppendixQuestion[]> = {
       key: "finalTriage",
       label: "Final triage",
       options: FINAL_TRIAGE_COLOR_OPTIONS,
+    },
+  ],
+  save: [
+    {
+      key: "saveCategory",
+      label: "SAVE category",
+      options: [
+        {
+          label: "Requires immediate interventions to live",
+          value: "immediate_intervention_to_live",
+        },
+        {
+          label: "Requires interventions but can tolerate brief delay",
+          value: "brief_delay_tolerated",
+        },
+        {
+          label: "No intervention needed to prevent loss of life or limb",
+          value: "no_life_or_limb_intervention_needed",
+        },
+        { label: "Dead / unsalvageable", value: "dead_unsalvageable" },
+      ],
+    },
+    {
+      key: "finalTriage",
+      label: "Final triage",
+      options: FINAL_TRIAGE_COLOR_OPTIONS,
+    },
+  ],
+  meta: [
+    {
+      key: "airwayRisk",
+      label: "Actual or potential airway risk?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "breathingRisk",
+      label: "Actual or potential breathing risk?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "circulationRisk",
+      label: "Actual or potential circulation risk?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "disabilityRisk",
+      label: "Actual or potential disability risk?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "exposureRisk",
+      label: "Actual or potential exposure risk?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "finalTriage",
+      label: "Final triage",
+      options: [
+        { label: "Green", value: "green" },
+        { label: "Yellow", value: "yellow" },
+        { label: "Red", value: "red" },
+      ],
     },
   ],
   rts: [
@@ -399,7 +674,15 @@ const APPENDIX_TRIAGE_FIELDS: Record<string, AppendixQuestion[]> = {
     },
   ],
   salt: [
+    { key: "canWalk", label: "Can walk?", options: YES_NO_OPTIONS },
+    { key: "canWave", label: "Can wave?", options: YES_NO_OPTIONS },
     { key: "breathing", label: "Breathing?", options: YES_NO_OPTIONS },
+    {
+      key: "respirations",
+      label: "Respirations",
+      options: PRESENT_ABSENT_OPTIONS,
+    },
+    START_AIRWAY_QUESTION,
     {
       key: "obeysCommandsOrPurposefulMovement",
       label: "Obeys commands or purposeful movement?",
@@ -429,6 +712,173 @@ const APPENDIX_TRIAGE_FIELDS: Record<string, AppendixQuestion[]> = {
       key: "likelyToSurviveGivenResources",
       label: "Likely to survive with current resources?",
       options: YES_NO_OPTIONS,
+    },
+    {
+      key: "finalTriage",
+      label: "Final triage",
+      options: FINAL_TRIAGE_COLOR_OPTIONS,
+    },
+  ],
+  ptt: [
+    {
+      key: "height",
+      label: "Height",
+      options: [
+        { label: "40-80 cm", value: "40_to_80_cm" },
+        { label: "80-100 cm", value: "80_to_100_cm" },
+        { label: "100-140 cm", value: "100_to_140_cm" },
+      ],
+    },
+    {
+      key: "alertAndMovingAllLimbs",
+      label: "Alert and moving all limbs?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "spontaneousBreathing",
+      label: "Spontaneous breathing?",
+      options: YES_NO_OPTIONS,
+    },
+    START_AIRWAY_QUESTION,
+    {
+      key: "pttRespiratoryRate",
+      label: "Respiratory rate",
+      inputType: "numeric",
+    },
+    {
+      key: "capillaryRefill",
+      label: "Capillary refill",
+      options: CAPILLARY_REFILL_OPTIONS,
+    },
+    {
+      key: "pttPulseRate",
+      label: "Pulse rate",
+      inputType: "numeric",
+    },
+    {
+      key: "finalTriage",
+      label: "Final triage",
+      options: FINAL_TRIAGE_COLOR_OPTIONS,
+    },
+  ],
+  mitt: [
+    {
+      key: "catastrophicHemorrhage",
+      label: "Catastrophic hemorrhage?",
+      options: YES_NO_OPTIONS,
+    },
+    { key: "canWalk", label: "Can walk?", options: YES_NO_OPTIONS },
+    {
+      key: "spontaneousBreathing",
+      label: "Spontaneous breathing?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "respondsToVoice",
+      label: "Responds to voice?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "agedOverTwoYears",
+      label: "Aged over 2 years?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "respirations",
+      label: "Respirations",
+      options: [
+        { label: "Absent", value: "absent" },
+        { label: "Less than 12", value: "less_than_12" },
+        { label: "More than 23", value: "more_than_23" },
+        { label: "12-23", value: "12_to_23" },
+      ],
+    },
+    {
+      key: "heartRate",
+      label: "Heart rate",
+      options: [
+        { label: "Absent", value: "absent" },
+        { label: "More than 100", value: "more_than_100" },
+        { label: "Less than 100", value: "less_than_100" },
+        { label: "100", value: "100" },
+      ],
+    },
+    {
+      key: "finalTriage",
+      label: "Final triage",
+      options: FINAL_TRIAGE_COLOR_OPTIONS,
+    },
+  ],
+  homebush: [
+    { key: "canWalk", label: "Can walk?", options: YES_NO_OPTIONS },
+    {
+      key: "spontaneousBreathing",
+      label: "Spontaneous breathing?",
+      options: YES_NO_OPTIONS,
+    },
+    START_AIRWAY_QUESTION,
+    {
+      key: "respirations",
+      label: "Respirations",
+      options: START_RESPIRATION_OPTIONS,
+    },
+    {
+      key: "capillaryRefill",
+      label: "Capillary refill",
+      options: CAPILLARY_REFILL_OPTIONS,
+    },
+    {
+      key: "radialPulse",
+      label: "Radial pulse",
+      options: PRESENT_ABSENT_OPTIONS,
+    },
+    {
+      key: "followsSimpleCommands",
+      label: "Mental status",
+      options: SIMPLE_COMMAND_OPTIONS,
+    },
+    {
+      key: "finalTriage",
+      label: "Final triage",
+      options: FINAL_TRIAGE_WITH_WHITE_OPTIONS,
+    },
+  ],
+  mptt: [
+    {
+      key: "catastrophicHemorrhage",
+      label: "Catastrophic hemorrhage?",
+      options: YES_NO_OPTIONS,
+    },
+    { key: "canWalk", label: "Can walk?", options: YES_NO_OPTIONS },
+    {
+      key: "spontaneousBreathing",
+      label: "Spontaneous breathing?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "respondsToVoice",
+      label: "Responds to voice?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "respirations",
+      label: "Respirations",
+      options: [
+        { label: "Absent", value: "absent" },
+        { label: "Less than 12", value: "less_than_12" },
+        { label: "More than 23", value: "more_than_23" },
+        { label: "12-23", value: "12_to_23" },
+      ],
+    },
+    {
+      key: "heartRate",
+      label: "Heart rate",
+      options: [
+        { label: "Absent", value: "absent" },
+        { label: "More than 100", value: "more_than_100" },
+        { label: "Less than 100", value: "less_than_100" },
+        { label: "100", value: "100" },
+      ],
     },
     {
       key: "finalTriage",
@@ -488,6 +938,131 @@ const APPENDIX_TRIAGE_FIELDS: Record<string, AppendixQuestion[]> = {
       options: FINAL_TRIAGE_COLOR_OPTIONS,
     },
   ],
+  esi: [
+    {
+      key: "requiresImmediateLifeSavingIntervention",
+      label: "Requires immediate life-saving intervention?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "highRiskSituation",
+      label: "High-risk situation?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "painScore",
+      label: "Pain score",
+      inputType: "numeric",
+    },
+    {
+      key: "resourcesNeeded",
+      label: "Resources needed to stabilize patient",
+      options: [
+        { label: "None", value: "none" },
+        { label: "One", value: "one" },
+        { label: "Multiple", value: "multiple" },
+      ],
+    },
+    {
+      key: "finalTriage",
+      label: "Final triage",
+      options: ESI_TRIAGE_OPTIONS,
+    },
+  ],
+  metts: [
+    {
+      key: "airway",
+      label: "Airway",
+      options: [
+        { label: "Obstructed", value: "obstructed" },
+        { label: "Unobstructed", value: "unobstructed" },
+      ],
+    },
+    {
+      key: "stridor",
+      label: "Stridor",
+      options: PRESENT_ABSENT_OPTIONS,
+    },
+    {
+      key: "oxygenSaturation",
+      label: "Oxygen saturation",
+      options: [
+        { label: "Less than 90%", value: "less_than_90" },
+        { label: "90-95%", value: "90_to_95" },
+        { label: "More than 95%", value: "more_than_95" },
+      ],
+    },
+    {
+      key: "oxygenSupport",
+      label: "Oxygen support",
+      options: PRESENT_ABSENT_OPTIONS,
+    },
+    {
+      key: "respirations",
+      label: "Respirations",
+      options: [
+        { label: "More than 30", value: "more_than_30" },
+        { label: "26-29", value: "26_to_29" },
+        { label: "8-25", value: "8_to_25" },
+        { label: "Less than 8", value: "less_than_8" },
+      ],
+    },
+    {
+      key: "pulseRate",
+      label: "Pulse rate",
+      options: [
+        { label: "Irregular more than 150", value: "irregular_more_than_150" },
+        { label: "Regular more than 130", value: "regular_more_than_130" },
+        { label: "121-130", value: "121_to_130" },
+        { label: "111-120", value: "111_to_120" },
+        { label: "50-110", value: "50_to_110" },
+        { label: "40-49", value: "40_to_49" },
+        { label: "Less than 40", value: "less_than_40" },
+      ],
+    },
+    {
+      key: "systolicBloodPressure",
+      label: "Systolic blood pressure",
+      options: [
+        { label: "Less than 90 mmHg", value: "less_than_90" },
+        { label: "More than 90 mmHg", value: "more_than_90" },
+      ],
+    },
+    {
+      key: "consciousness",
+      label: "Consciousness",
+      options: [
+        { label: "Alert and conscious", value: "alert_conscious" },
+        { label: "Disoriented", value: "disoriented" },
+        { label: "Unconscious", value: "unconscious" },
+      ],
+    },
+    {
+      key: "ongoingSeizures",
+      label: "Ongoing seizures",
+      options: PRESENT_ABSENT_OPTIONS,
+    },
+    {
+      key: "glasgowComaScale",
+      label: "Glasgow Coma Scale",
+      inputType: "numeric",
+    },
+    {
+      key: "temperature",
+      label: "Temperature",
+      options: [
+        { label: "More than 41 C", value: "more_than_41" },
+        { label: "38.6-40.9 C", value: "38_6_to_40_9" },
+        { label: "35-38.5 C", value: "35_to_38_5" },
+        { label: "Less than 35 C", value: "less_than_35" },
+      ],
+    },
+    {
+      key: "finalTriage",
+      label: "Final triage",
+      options: METTS_TRIAGE_OPTIONS,
+    },
+  ],
 };
 
 const TRIAGE_STAGE_OPTIONS = [
@@ -501,6 +1076,18 @@ type TriageStageOption = (typeof TRIAGE_STAGE_OPTIONS)[number];
 const TRIAGE_STAGE_OPTIONS_BY_ROLE: Record<string, TriageStageOption[]> = {
   responder: ["Primary Triage", "Secondary Triage"],
   medical_personnel: ["Tertiary Triage"],
+};
+
+const TRIAGE_STAGE_OPTIONS_BY_REPORTING_CONTEXT: Record<
+  ReportingContext,
+  TriageStageOption[]
+> = {
+  scene: ["Primary Triage"],
+  transport: ["Secondary Triage"],
+  receiving_facility_ed: ["Tertiary Triage"],
+  hospital_ward: ["Tertiary Triage"],
+  evacuation_center: ["Secondary Triage"],
+  command_admin: [...TRIAGE_STAGE_OPTIONS],
 };
 
 const TRANSPORT_REQUIRED_OPTIONS = [
@@ -931,12 +1518,26 @@ function normalizeTriageSystem(value: string): TriageSystem {
     case "urgent/non-urgent":
     case "urgent / non-urgent":
       return "urgent_non_urgent";
+    case "stieve":
+      return "stieve";
     case "nato":
       return "nato";
+    case "mstart":
+    case "m start":
+      return "mstart";
+    case "jumpstart":
+    case "jump start":
+      return "jumpstart";
     case "sieve":
       return "sieve";
+    case "save":
+      return "save";
     case "sort":
       return "sort";
+    case "meta":
+      return "meta";
+    case "swift":
+      return "swift";
     case "sieve/sort":
     case "sieve / sort":
       return "sieve_sort";
@@ -948,8 +1549,22 @@ function normalizeTriageSystem(value: string): TriageSystem {
       return "care_flight";
     case "mass":
       return "mass";
+    case "esi":
+      return "esi";
+    case "metts":
+      return "metts";
     case "salt":
       return "salt";
+    case "ptt":
+      return "ptt";
+    case "mitt":
+      return "mitt";
+    case "homebush":
+      return "homebush";
+    case "mptt":
+      return "mptt";
+    case "stm":
+      return "stm";
     case "ed triage":
       return "ed_triage";
     case "other":
@@ -987,6 +1602,7 @@ function triageColorToCategory(
     case "yellow":
       return "delayed";
     case "green":
+    case "white":
       return "minimal";
     case "black":
       return "expectant";
@@ -995,18 +1611,43 @@ function triageColorToCategory(
   }
 }
 
+function triageFinalAnswerToCategory(
+  system: string,
+  value: string | undefined,
+): TriageCategory {
+  const normalizedSystem = normalizeTriageSystem(system);
+
+  if (normalizedSystem === "esi" || normalizedSystem === "metts") {
+    return "unknown";
+  }
+
+  return triageColorToCategory(value);
+}
+
 function formatTriageSystem(value: string | null | undefined): string {
   switch (value) {
     case "urgent_non_urgent":
       return "Urgent/Non-urgent";
+    case "stieve":
+      return "STIEVE";
     case "nato":
       return "NATO";
     case "start":
       return "START";
+    case "mstart":
+      return "mSTART";
+    case "jumpstart":
+      return "JumpSTART";
     case "sieve":
       return "SIEVE";
+    case "save":
+      return "SAVE";
     case "sort":
       return "SORT";
+    case "meta":
+      return "META";
+    case "swift":
+      return "SwiFT";
     case "sieve_sort":
       return "SIEVE/SORT";
     case "smart":
@@ -1017,8 +1658,22 @@ function formatTriageSystem(value: string | null | undefined): string {
       return "Care Flight";
     case "mass":
       return "MASS";
+    case "esi":
+      return "ESI";
+    case "metts":
+      return "METTS";
     case "salt":
       return "SALT";
+    case "ptt":
+      return "PTT";
+    case "mitt":
+      return "MITT";
+    case "homebush":
+      return "Homebush";
+    case "mptt":
+      return "MPTT";
+    case "stm":
+      return "STM";
     case "ed_triage":
       return "ED Triage";
     case "other":
@@ -1043,14 +1698,59 @@ function formatTriageStage(value: string | null | undefined): string {
 
 function getTriageStageOptionsForRole(
   role: string | null,
+  reportingContext: ReportingContext | null,
 ): TriageStageOption[] {
-  if (!role) {
+  const isAdminOverride =
+    role !== null &&
+    REFERENCE_MANAGER_ROLES.includes(
+      role as (typeof REFERENCE_MANAGER_ROLES)[number],
+    );
+
+  if (isAdminOverride) {
     return [...TRIAGE_STAGE_OPTIONS];
   }
 
-  return (
-    TRIAGE_STAGE_OPTIONS_BY_ROLE[role] ?? [...TRIAGE_STAGE_OPTIONS]
-  );
+  const roleOptions = role
+    ? TRIAGE_STAGE_OPTIONS_BY_ROLE[role]
+    : undefined;
+  const contextOptions = reportingContext
+    ? TRIAGE_STAGE_OPTIONS_BY_REPORTING_CONTEXT[reportingContext]
+    : undefined;
+
+  if (roleOptions && contextOptions) {
+    const matchedOptions = contextOptions.filter((stage) =>
+      roleOptions.includes(stage),
+    );
+
+    return matchedOptions.length > 0
+      ? [...matchedOptions]
+      : [...roleOptions];
+  }
+
+  if (roleOptions) {
+    return [...roleOptions];
+  }
+
+  if (contextOptions) {
+    return [...contextOptions];
+  }
+
+  return [...TRIAGE_STAGE_OPTIONS];
+}
+
+function getTriageSystemOptionsForStage(
+  triageStage: string,
+): TriageSystemOption[] {
+  switch (normalizeTriageStage(triageStage)) {
+    case "on_site":
+      return [...PRIMARY_TRIAGE_SYSTEM_OPTIONS];
+    case "reassessment":
+      return [...SECONDARY_TRIAGE_SYSTEM_OPTIONS];
+    case "facility_arrival":
+      return [...TERTIARY_TRIAGE_SYSTEM_OPTIONS];
+    default:
+      return [...TRIAGE_SYSTEM_OPTIONS];
+  }
 }
 
 function normalizeTransportRequired(value: string): TransportRequired {
@@ -1375,7 +2075,17 @@ function getAppendixQuestionsForSystem(
 function coerceAppendixAnswer(
   key: string,
   value: string,
-): string | boolean {
+): string | number | boolean {
+  if (
+    key === "pttRespiratoryRate" ||
+    key === "pttPulseRate" ||
+    key === "painScore" ||
+    key === "glasgowComaScale"
+  ) {
+    const numericValue = Number(value);
+    return Number.isFinite(numericValue) ? numericValue : value;
+  }
+
   if (value === "yes") {
     return true;
   }
@@ -1850,17 +2560,23 @@ function getTriageColorButtonStyle(value: string) {
       return styles.finalTriageGreen;
     case "yellow":
       return styles.finalTriageYellow;
+    case "orange":
+      return styles.finalTriageOrange;
     case "red":
       return styles.finalTriageRed;
     case "black":
       return styles.finalTriageBlack;
+    case "blue":
+      return styles.finalTriageBlue;
+    case "white":
+      return styles.finalTriageWhite;
     default:
       return null;
   }
 }
 
 function getTriageColorTextStyle(value: string) {
-  return value === "yellow"
+  return value === "yellow" || value === "orange" || value === "white"
     ? styles.finalTriageYellowText
     : styles.finalTriageLightText;
 }
@@ -2368,8 +3084,10 @@ export default function AddCasualtyScreen() {
     null,
   );
   const [currentUserRole, setCurrentUserRole] = useState<
-    string | null
+    UserRole | null
   >(null);
+  const [currentReportingContext, setCurrentReportingContext] =
+    useState<ReportingContext | null>(null);
   const [selectedPhoto, setSelectedPhoto] =
     useState<SelectedPhoto | null>(null);
   const [isCapturingLocation, setIsCapturingLocation] =
@@ -2453,7 +3171,8 @@ export default function AddCasualtyScreen() {
 
     return {
       triageSystem: normalizeTriageSystem(form.triageSystem),
-      triageCategory: triageColorToCategory(
+      triageCategory: triageFinalAnswerToCategory(
+        form.triageSystem,
         form.triageAssessmentAnswers.finalTriage,
       ),
       triageStage: normalizeTriageStage(form.triageStage),
@@ -2684,6 +3403,7 @@ export default function AddCasualtyScreen() {
       if (isMounted) {
         setCurrentUserId(user?.id ?? null);
         setCurrentUserRole(user?.role ?? null);
+        setCurrentReportingContext(user?.reporting_context ?? null);
       }
     }
 
@@ -2713,19 +3433,41 @@ export default function AddCasualtyScreen() {
     }
 
     const allowedStages =
-      getTriageStageOptionsForRole(currentUserRole);
+      getTriageStageOptionsForRole(
+        currentUserRole,
+        currentReportingContext,
+      );
 
     setForm((current) => {
-      if (allowedStages.includes(current.triageStage as TriageStageOption)) {
+      const triageStage = allowedStages.includes(
+        current.triageStage as TriageStageOption,
+      )
+        ? current.triageStage
+        : allowedStages[0] ?? "Primary Triage";
+      const allowedSystems = getTriageSystemOptionsForStage(triageStage);
+      const currentSystemIsAllowed = allowedSystems.includes(
+        current.triageSystem as TriageSystemOption,
+      );
+
+      if (
+        triageStage === current.triageStage &&
+        currentSystemIsAllowed
+      ) {
         return current;
       }
 
       return {
         ...current,
-        triageStage: allowedStages[0] ?? "Primary Triage",
+        triageStage,
+        triageSystem: currentSystemIsAllowed
+          ? current.triageSystem
+          : allowedSystems[0] ?? "",
+        triageAssessmentAnswers: currentSystemIsAllowed
+          ? current.triageAssessmentAnswers
+          : {},
       };
     });
-  }, [currentUserRole, isEditing]);
+  }, [currentReportingContext, currentUserRole, isEditing]);
 
   useEffect(() => {
     if (isEditing || !presetIncidentId || form.incidentName.trim()) {
@@ -2959,6 +3701,25 @@ export default function AddCasualtyScreen() {
           ...current,
           [key]: value,
           triageAssessmentAnswers: {},
+        };
+      }
+
+      if (key === "triageStage") {
+        const nextStage = String(value);
+        const allowedSystems = getTriageSystemOptionsForStage(nextStage);
+        const currentSystemIsAllowed = allowedSystems.includes(
+          current.triageSystem as TriageSystemOption,
+        );
+
+        return {
+          ...current,
+          [key]: value,
+          triageSystem: currentSystemIsAllowed
+            ? current.triageSystem
+            : allowedSystems[0] ?? "",
+          triageAssessmentAnswers: currentSystemIsAllowed
+            ? current.triageAssessmentAnswers
+            : {},
         };
       }
 
@@ -4365,7 +5126,7 @@ export default function AddCasualtyScreen() {
         }));
 
       case "triageSystem":
-        return TRIAGE_SYSTEM_OPTIONS.map((option) => ({
+        return getTriageSystemOptionsForStage(form.triageStage).map((option) => ({
           label: option,
           selected:
             form.triageSystem.toLowerCase() ===
@@ -4382,7 +5143,10 @@ export default function AddCasualtyScreen() {
         }));
 
       case "triageStage":
-        return getTriageStageOptionsForRole(currentUserRole).map((option) => ({
+        return getTriageStageOptionsForRole(
+          currentUserRole,
+          currentReportingContext,
+        ).map((option) => ({
           label: option,
           selected:
             form.triageStage.toLowerCase() === option.toLowerCase(),
@@ -5256,13 +6020,38 @@ export default function AddCasualtyScreen() {
       form.triageAssessmentAnswers[question.key] ?? "";
     const isFinalTriageQuestion = question.key === "finalTriage";
 
+    if (question.inputType === "numeric") {
+      return (
+        <View key={question.key} style={styles.appendixQuestion}>
+          <Text style={styles.appendixQuestionLabel}>
+            {question.label}
+          </Text>
+
+          <TextInput
+            value={selectedValue}
+            placeholder="Numbers only"
+            placeholderTextColor={COLORS.muted}
+            keyboardType="number-pad"
+            inputMode="numeric"
+            onChangeText={(value) =>
+              updateTriageAssessmentAnswer(
+                question.key,
+                value.replace(/[^0-9]/g, ""),
+              )
+            }
+            style={styles.appendixNumericInput}
+          />
+        </View>
+      );
+    }
+
     return (
       <View key={question.key} style={styles.appendixQuestion}>
         <Text style={styles.appendixQuestionLabel}>
           {question.label}
         </Text>
         <View style={styles.appendixOptionGrid}>
-          {question.options.map((option) => {
+          {(question.options ?? []).map((option) => {
             const selected = selectedValue === option.value;
 
             return (
@@ -6961,11 +7750,32 @@ const styles = StyleSheet.create({
   finalTriageYellow: {
     backgroundColor: "#F4C542",
   },
+  finalTriageOrange: {
+    backgroundColor: "#F39C12",
+  },
   finalTriageRed: {
     backgroundColor: "#C62828",
   },
   finalTriageBlack: {
     backgroundColor: "#1F2933",
+  },
+  finalTriageBlue: {
+    backgroundColor: "#1D4ED8",
+  },
+  finalTriageWhite: {
+    borderColor: COLORS.fieldBorder,
+    backgroundColor: COLORS.white,
+  },
+  appendixNumericInput: {
+    minHeight: 42,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: COLORS.fieldBorder,
+    backgroundColor: COLORS.fieldBackground,
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: "800",
+    paddingHorizontal: 12,
   },
   appendixOptionText: {
     color: COLORS.secondaryText,

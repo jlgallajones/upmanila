@@ -8,12 +8,21 @@ export type UserRole =
   | "medical_personnel"
   | "viewer";
 
+export type ReportingContext =
+  | "scene"
+  | "transport"
+  | "receiving_facility_ed"
+  | "hospital_ward"
+  | "evacuation_center"
+  | "command_admin";
+
 export type ProfileUser = {
   id: string;
   full_name: string;
   email: string;
   phone_number: string | null;
   role: UserRole;
+  reporting_context: ReportingContext | null;
   assigned_barangay: string | null;
   assigned_municipality: string | null;
   is_active: boolean;

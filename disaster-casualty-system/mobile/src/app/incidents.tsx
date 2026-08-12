@@ -769,14 +769,26 @@ function formatTriageSystemLabel(value: string | null | undefined): string {
   switch (value) {
     case "urgent_non_urgent":
       return "Urgent/non-urgent";
+    case "stieve":
+      return "STIEVE";
     case "nato":
       return "NATO";
     case "start":
       return "START";
+    case "mstart":
+      return "mSTART";
+    case "jumpstart":
+      return "JumpSTART";
     case "sieve_sort":
       return "SIEVE/SORT";
     case "sieve":
       return "SIEVE";
+    case "save":
+      return "SAVE";
+    case "meta":
+      return "META";
+    case "swift":
+      return "SwiFT";
     case "sort":
       return "SORT";
     case "smart":
@@ -787,8 +799,22 @@ function formatTriageSystemLabel(value: string | null | undefined): string {
       return "Care Flight";
     case "mass":
       return "MASS";
+    case "esi":
+      return "ESI";
+    case "metts":
+      return "METTS";
     case "salt":
       return "SALT";
+    case "ptt":
+      return "PTT";
+    case "mitt":
+      return "MITT";
+    case "homebush":
+      return "Homebush";
+    case "mptt":
+      return "MPTT";
+    case "stm":
+      return "STM";
     case "ed_triage":
       return "ED Triage";
     case "other":

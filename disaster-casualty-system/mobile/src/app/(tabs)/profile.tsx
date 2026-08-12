@@ -133,6 +133,27 @@ function formatRole(role: string): string {
     .join(" ");
 }
 
+function formatReportingContext(
+  reportingContext: string | null | undefined,
+): string {
+  switch (reportingContext) {
+    case "scene":
+      return "Scene";
+    case "transport":
+      return "Transport / Ambulance";
+    case "receiving_facility_ed":
+      return "Receiving Facility / ED";
+    case "hospital_ward":
+      return "Hospital Ward";
+    case "evacuation_center":
+      return "Evacuation Center";
+    case "command_admin":
+      return "Command / Admin";
+    default:
+      return "Not assigned";
+  }
+}
+
 function formatDate(dateString: string): string {
   const date = new Date(dateString);
 
@@ -312,6 +333,10 @@ export default function ProfileScreen() {
   const assignedMunicipality =
     user?.assigned_municipality ??
     "No assigned municipality";
+
+  const reportingContext = formatReportingContext(
+    user?.reporting_context,
+  );
 
   const appVersion =
     Constants.expoConfig?.version ?? "1.0.0";
@@ -569,6 +594,12 @@ export default function ProfileScreen() {
             icon="briefcase-outline"
             label="Role"
             value={role}
+          />
+
+          <InformationRow
+            icon="navigate-outline"
+            label="Reporting Context"
+            value={reportingContext}
           />
 
           <InformationRow

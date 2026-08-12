@@ -11,16 +11,22 @@ export function calculateStartTriage(
     return "minimal";
   }
 
+  if (
+    answers.spontaneousBreathing === false ||
+    answers.respirations === "absent"
+  ) {
+    if (answers.breathingAfterAirwayManagement === true) {
+      return "immediate";
+    }
+
+    return "expectant";
+  }
+
   // Non-walking patients must have respiration data.
   if (!answers.respirations) {
     throw new Error(
       "Respiration status is required when the patient cannot walk.",
     );
-  }
-
-  // Not breathing after airway assessment.
-  if (answers.respirations === "absent") {
-    return "expectant";
   }
 
   // Respiratory rate greater than 30.
@@ -36,6 +42,10 @@ export function calculateStartTriage(
   }
 
   if (answers.capillaryRefill === "more_than_2_seconds") {
+    return "immediate";
+  }
+
+  if (answers.radialPulse === "absent") {
     return "immediate";
   }
 

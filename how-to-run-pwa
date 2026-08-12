@@ -14,3 +14,14 @@ how to test deploy using ngrok
 2. npx serve -s dist -l 3000
 3. open new terminal
 4. npx serve -s dist -l 3000
+
+
+to upload the new commit
+
+upload everything to github
+
+then cd to mobile and run
+Remove-Item -Recurse -Force dist -ErrorAction SilentlyContinue
+npx expo export -p web --clear
+
+then recommit and upload new dist in render and netlify

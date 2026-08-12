@@ -208,17 +208,30 @@ export type UpdateCasualtyVerificationPayload = {
 
 export type CasualtyTriageAssessmentPayload = {
   triageSystem:
+    | "stieve"
     | "urgent_non_urgent"
     | "nato"
     | "start"
+    | "mstart"
+    | "jumpstart"
     | "sieve"
     | "sieve_sort"
+    | "save"
     | "sort"
+    | "meta"
+    | "swift"
     | "smart"
     | "rts"
     | "care_flight"
     | "mass"
+    | "esi"
+    | "metts"
     | "salt"
+    | "ptt"
+    | "mitt"
+    | "homebush"
+    | "mptt"
+    | "stm"
     | "ed_triage"
     | "other";
   triageCategory:

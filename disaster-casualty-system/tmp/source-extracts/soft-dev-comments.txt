@@ -1,0 +1,115 @@
+PAGES: 11
+
+--- PAGE 1 ---
+Legend for revisions:
+action
+REVISIONS. Outlined in
+red for emphasis only.
+recommendations
+
+--- PAGE 2 ---
+OVERALL APP COMMENTS:
+When there are already separate sections per user (iba yung magpapakita kapag bystander ka, EMT ka, nurse ka,
+etc.) the menus should also change depending kung saan ka nag-report, especially in making triage.
+e.g. Kapag EMT ka, ang menus sayo ay dapat primary and secondary triage options
+Kapag nurse ka sa receiving facility, tertiary triage menus lang magpapakita sayo.
+
+--- PAGE 3 ---
+INCIDENT NAME
+collapsible
+
+--- PAGE 4 ---
+Have an option to input a
+disaster first.
+Then when adding victims, the
+user would only have to select
+that disaster before inputting
+victim details para hindi
+repetitive to add disaster
+details every time mag-lolog
+ng victim.
+
+--- PAGE 5 ---
+HAZARD TYPE
+Select type of hazard
+Select type of hazard
+Considering po na mahaba yung list na magigng
+kalabasan nito. Would it be possible na maging
+combobox po yung text field?
+
+--- PAGE 6 ---
+collapsible
+
+--- PAGE 7 ---
+Switch arrangement:
+1.Triage stage
+2.Triage system
+remove
+Triage Assessment
+pop up assessment
+once the triage
+system is selected
+
+--- PAGE 8 ---
+Remove this triage
+category na po. Same lang
+po siya with the final triage
+FINAL TRIAGE
+Green Yellow Red Black
+
+--- PAGE 9 ---
+Consistent across
+other variables
+with “Use current
+time”
+
+--- PAGE 10 ---
+For convenience
+po, the utstein
+template matrix
+is already by
+Pre-hospital Transport Hospital Care
+sequence Status
+*include
+Clinical
+triage upon
+Status to
+arrival at the
+Onsite care
+healthcare
+(except
+facility* -
+hospital
+matrix
+facility)
+reference
+ED and
+Hospital Care
+*transferred
+out of
+hospital care
+should be at
+the end
+The onsite care
+section should
+This section have a separate
+should come section from the
+after the “status” ED and hospital
+section. care.
+
+--- PAGE 11 ---
+Is it better na huwag nalang ipakita sa app yung
+summary lalo na yung over/undertriage? Kasi editable
+yung data eh. Kapag nakita ng user na may
+naover/undertriage siya, babaguhin niya yun tas
+magiging perfect na lahat ng data.
+That’s what we want naman in the end para walang
+mali pero at this stage, we still need unbiased data
+kung ilan over/undertriage.
+Point of inquiry: Sa Utstein elements na may
+percentages, lalo sa undertriage/overtriage, does the
+system have a sariling result na triage bukod sa iiinput
+ng user? The correct triage by the system should be
+based on the algorithms on the GDocs. Wondering
+lang if nalagay na yun sa system since may menus na
+to see ilan over/undertriaged.

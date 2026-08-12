@@ -7,7 +7,8 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:triage": "tsc && node dist/services/triage/calculate-triage.test.js && node dist/services/triage/triage-accuracy.test.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.0.0",

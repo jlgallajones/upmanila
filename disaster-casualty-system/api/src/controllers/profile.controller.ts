@@ -55,6 +55,7 @@ export async function getProfile(
           email,
           phone_number,
           role,
+          reporting_context,
           assigned_barangay,
           assigned_municipality,
           is_active,

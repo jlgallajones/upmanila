@@ -13,6 +13,7 @@ const userSelect = `
   email,
   phone_number,
   role,
+  reporting_context,
   assigned_barangay,
   assigned_municipality,
   is_active,
@@ -121,6 +122,7 @@ export async function login(
                 : getFallbackFullName(email),
             email,
             role: "responder",
+            reporting_context: "scene",
             is_active: true,
           })
           .select(userSelect)

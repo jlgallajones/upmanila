@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 
 import { supabase } from "../config/supabase.js";
 import { getAuthenticatedUser } from "../middleware/auth.js";
+import { buildTriageAccuracySummary } from "../services/triage/accuracy-summary.js";
 
 type CreateIncidentRequest = {
   incidentName: string;
@@ -1382,36 +1383,6 @@ export async function getIncidentOnsiteTriageSummary(
         };
       });
 
-    const buildAccuracyMetric = (
-      label: string,
-      trueCategory: string,
-      assignedCategories: string[],
-    ) => {
-      const denominator = firstOnsiteRows.filter(
-        (row) => row.calculated_category === trueCategory,
-      ).length;
-      const numerator = firstOnsiteRows.filter((row) => {
-        const assignedCategory =
-          row.responder_category ?? row.triage_category;
-
-        return (
-          row.calculated_category === trueCategory &&
-          assignedCategory !== null &&
-          assignedCategories.includes(assignedCategory)
-        );
-      }).length;
-
-      return {
-        label,
-        numerator,
-        denominator,
-        percentage:
-          denominator > 0
-            ? Number(((numerator / denominator) * 100).toFixed(2))
-            : 0,
-      };
-    };
-
     const firstTriageSystemCounts = countBy(
       firstOnsiteRows,
       (row) => row.triage_system,
@@ -1438,28 +1409,7 @@ export async function getIncidentOnsiteTriageSummary(
           immediate: buildIntervalRows("immediate"),
           delayed: buildIntervalRows("delayed"),
         },
-        accuracy: {
-          undertriagedT1: buildAccuracyMetric(
-            "T1 survivors assigned T2, T3, or T4",
-            "immediate",
-            ["delayed", "minimal", "expectant"],
-          ),
-          undertriagedT2: buildAccuracyMetric(
-            "T2 survivors assigned T3 or T4",
-            "delayed",
-            ["minimal", "expectant"],
-          ),
-          overtriagedT2: buildAccuracyMetric(
-            "T2 survivors assigned T1",
-            "delayed",
-            ["immediate"],
-          ),
-          overtriagedT3: buildAccuracyMetric(
-            "T3 survivors assigned T1 or T2",
-            "minimal",
-            ["immediate", "delayed"],
-          ),
-        },
+        accuracy: buildTriageAccuracySummary(firstOnsiteRows),
         formula:
           "(number of first on-site triaged category survivors by interval / total survivors) x 100",
         accuracyFormula:
@@ -1557,36 +1507,6 @@ export async function getIncidentFacilityTriageSummary(
       .map((row) => (row.triaged_at ? new Date(row.triaged_at) : null))
       .filter((value): value is Date => Boolean(value));
 
-    const buildAccuracyMetric = (
-      label: string,
-      trueCategory: string,
-      assignedCategories: string[],
-    ) => {
-      const denominator = facilityRows.filter(
-        (row) => row.calculated_category === trueCategory,
-      ).length;
-      const numerator = facilityRows.filter((row) => {
-        const assignedCategory =
-          row.responder_category ?? row.triage_category;
-
-        return (
-          row.calculated_category === trueCategory &&
-          assignedCategory !== null &&
-          assignedCategories.includes(assignedCategory)
-        );
-      }).length;
-
-      return {
-        label,
-        numerator,
-        denominator,
-        percentage:
-          denominator > 0
-            ? Number(((numerator / denominator) * 100).toFixed(2))
-            : 0,
-      };
-    };
-
     const firstTriageSystemCounts = countBy(
       facilityRows,
       (row) => row.triage_system,
@@ -1608,28 +1528,7 @@ export async function getIncidentFacilityTriageSummary(
         lastFacilityTriageAt:
           triagedAtValues[triagedAtValues.length - 1]?.toISOString() ??
           null,
-        accuracy: {
-          undertriagedT1: buildAccuracyMetric(
-            "T1 survivors assigned T2, T3, or T4",
-            "immediate",
-            ["delayed", "minimal", "expectant"],
-          ),
-          undertriagedT2: buildAccuracyMetric(
-            "T2 survivors assigned T3 or T4",
-            "delayed",
-            ["minimal", "expectant"],
-          ),
-          overtriagedT2: buildAccuracyMetric(
-            "T2 survivors assigned T1",
-            "delayed",
-            ["immediate"],
-          ),
-          overtriagedT3: buildAccuracyMetric(
-            "T3 survivors assigned T1 or T2",
-            "minimal",
-            ["immediate", "delayed"],
-          ),
-        },
+        accuracy: buildTriageAccuracySummary(facilityRows),
         accuracyFormula:
           "(number of true category survivors assigned to listed categories / number of true category survivors) x 100",
       },

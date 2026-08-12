@@ -17,12 +17,21 @@ export type UserRole =
   | "medical_personnel"
   | "viewer";
 
+export type ReportingContext =
+  | "scene"
+  | "transport"
+  | "receiving_facility_ed"
+  | "hospital_ward"
+  | "evacuation_center"
+  | "command_admin";
+
 export type AuthenticatedUser = {
   id: string;
   authUserId: string;
   fullName: string;
   email: string;
   role: UserRole;
+  reportingContext: ReportingContext;
   isActive: boolean;
 };
 
@@ -35,6 +44,7 @@ const userSelect = `
   full_name,
   email,
   role,
+  reporting_context,
   is_active
 `;
 
@@ -158,6 +168,7 @@ export async function requireAuth(
       fullName: profile.full_name,
       email: profile.email,
       role: profile.role as UserRole,
+      reportingContext: profile.reporting_context as ReportingContext,
       isActive: profile.is_active,
     };
 

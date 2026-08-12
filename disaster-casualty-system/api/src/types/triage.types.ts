@@ -1,14 +1,27 @@
 export type TriageSystem =
+  | "stieve"
   | "start"
+  | "mstart"
+  | "jumpstart"
   | "nato"
   | "sieve"
   | "sieve_sort"
+  | "save"
   | "sort"
+  | "meta"
+  | "swift"
   | "smart"
   | "rts"
   | "care_flight"
   | "mass"
+  | "esi"
+  | "metts"
   | "salt"
+  | "ptt"
+  | "mitt"
+  | "homebush"
+  | "mptt"
+  | "stm"
   | "urgent_non_urgent"
   | "ed_triage"
   | "other";
@@ -28,6 +41,7 @@ export type TriageStage =
 export type StartRespirationStatus =
   | "absent"
   | "more_than_30"
+  | "less_than_30"
   | "less_than_or_equal_to_30";
 
 export type StartCapillaryRefill =
@@ -36,8 +50,11 @@ export type StartCapillaryRefill =
 
 export interface StartAssessmentAnswers {
   canWalk: boolean;
+  spontaneousBreathing?: boolean;
+  breathingAfterAirwayManagement?: boolean;
   respirations: StartRespirationStatus;
   capillaryRefill?: StartCapillaryRefill;
+  radialPulse?: "present" | "absent";
   followsSimpleCommands?: boolean;
 }
 

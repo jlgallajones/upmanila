@@ -24,11 +24,71 @@ function readBoolean(
   return typeof value === "boolean" ? value : null;
 }
 
+function readNumber(
+  answers: Record<string, unknown>,
+  key: string,
+): number | null {
+  const value = answers[key];
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
 function scoreSortValue(
   value: string | null,
   scores: Record<string, number>,
 ): number | null {
   return value ? scores[value] ?? null : null;
+}
+
+function calculateStieveTriage(
+  answers: Record<string, unknown>,
+): TriageCategory {
+  if (
+    readBoolean(answers, "catastrophicHemorrhage") === true ||
+    readBoolean(answers, "suckingChestWound") === true
+  ) {
+    return "immediate";
+  }
+
+  if (
+    readBoolean(answers, "canWalkOrNoVisibleInjuries") === true &&
+    readBoolean(answers, "specialPopulation") !== true
+  ) {
+    return "minimal";
+  }
+
+  if (readString(answers, "respirations") === "absent") {
+    return readBoolean(answers, "breathingAfterAirwayManagement") === true
+      ? "immediate"
+      : "expectant";
+  }
+
+  if (
+    readString(answers, "respirations") === "less_than_10" ||
+    readString(answers, "respirations") === "more_than_30"
+  ) {
+    return "immediate";
+  }
+
+  if (
+    readString(answers, "pulse") === "absent" ||
+    readString(answers, "pulse") === "weak" ||
+    readString(answers, "capillaryRefill") === "more_than_2_seconds" ||
+    readBoolean(answers, "followsSimpleCommands") === false
+  ) {
+    return "immediate";
+  }
+
+  return readString(answers, "respirations") ? "delayed" : "unknown";
 }
 
 function calculateNatoTriage(
@@ -56,17 +116,88 @@ function calculateNatoTriage(
   return "unknown";
 }
 
-function calculateSieveTriage(
+function calculateMstartTriage(
   answers: Record<string, unknown>,
 ): TriageCategory {
   if (readBoolean(answers, "canWalk") === true) {
     return "minimal";
   }
 
+  if (
+    readBoolean(answers, "spontaneousBreathing") === false ||
+    readString(answers, "respirations") === "absent"
+  ) {
+    return readBoolean(answers, "breathingAfterAirwayManagement") === true
+      ? "immediate"
+      : "expectant";
+  }
+
+  if (readString(answers, "respirations") === "more_than_30") {
+    return "immediate";
+  }
+
+  if (
+    readString(answers, "radialPulse") === "absent" ||
+    readBoolean(answers, "followsSimpleCommands") === false
+  ) {
+    return "immediate";
+  }
+
+  return readString(answers, "respirations") ? "delayed" : "unknown";
+}
+
+function calculateJumpstartTriage(
+  answers: Record<string, unknown>,
+): TriageCategory {
+  if (readBoolean(answers, "canWalk") === true) {
+    return "minimal";
+  }
+
+  if (
+    readBoolean(answers, "spontaneousBreathing") === false ||
+    readString(answers, "respirations") === "absent"
+  ) {
+    if (readBoolean(answers, "breathingAfterAirwayManagement") === true) {
+      return "immediate";
+    }
+
+    if (readBoolean(answers, "palpablePulseAfterAirwayManagement") === false) {
+      return "expectant";
+    }
+
+    return readBoolean(answers, "breathingAfterRescueBreaths") === true
+      ? "immediate"
+      : "expectant";
+  }
+
+  const respirations = readString(answers, "respirations");
+
+  if (
+    respirations === "less_than_15" ||
+    respirations === "more_than_45" ||
+    readString(answers, "radialPulse") === "absent" ||
+    readString(answers, "mentalStatus") === "painful" ||
+    readString(answers, "mentalStatus") === "unresponsive"
+  ) {
+    return "immediate";
+  }
+
+  return respirations ? "delayed" : "unknown";
+}
+
+function calculateSieveTriage(
+  answers: Record<string, unknown>,
+): TriageCategory {
+  if (readBoolean(answers, "canWalk") === true) {
+    return readString(answers, "injury") === "present" ? "delayed" : "minimal";
+  }
+
   const respirations = readString(answers, "respirations");
 
   if (respirations === "absent") {
-    return "expectant";
+    return readBoolean(answers, "breathingAfterAirwayManagement") === true
+      ? "immediate"
+      : "expectant";
   }
 
   if (
@@ -149,6 +280,55 @@ function calculateSortTriage(
   return "minimal";
 }
 
+function calculateSaveTriage(
+  answers: Record<string, unknown>,
+): TriageCategory {
+  switch (readString(answers, "saveCategory")) {
+    case "immediate_intervention_to_live":
+      return "immediate";
+    case "brief_delay_tolerated":
+      return "delayed";
+    case "no_life_or_limb_intervention_needed":
+      return "minimal";
+    case "dead_unsalvageable":
+      return "expectant";
+    default:
+      return "unknown";
+  }
+}
+
+function calculateMetaTriage(
+  answers: Record<string, unknown>,
+): TriageCategory {
+  if (
+    readBoolean(answers, "airwayRisk") === true ||
+    readBoolean(answers, "breathingRisk") === true ||
+    readBoolean(answers, "circulationRisk") === true
+  ) {
+    return "immediate";
+  }
+
+  if (
+    readBoolean(answers, "disabilityRisk") === true ||
+    readBoolean(answers, "exposureRisk") === true
+  ) {
+    return "delayed";
+  }
+
+  const answeredKeys = [
+    "airwayRisk",
+    "breathingRisk",
+    "circulationRisk",
+    "disabilityRisk",
+    "exposureRisk",
+  ];
+  const allAnswered = answeredKeys.every(
+    (key) => readBoolean(answers, key) !== null,
+  );
+
+  return allAnswered ? "minimal" : "unknown";
+}
+
 function calculateCareFlightTriage(
   answers: Record<string, unknown>,
 ): TriageCategory {
@@ -175,8 +355,20 @@ function calculateCareFlightTriage(
 function calculateSaltTriage(
   answers: Record<string, unknown>,
 ): TriageCategory {
-  if (readBoolean(answers, "breathing") === false) {
-    return "expectant";
+  if (
+    readBoolean(answers, "canWalk") === true ||
+    readBoolean(answers, "canWave") === true
+  ) {
+    return "minimal";
+  }
+
+  if (
+    readBoolean(answers, "breathing") === false ||
+    readString(answers, "respirations") === "absent"
+  ) {
+    return readBoolean(answers, "breathingAfterAirwayManagement") === true
+      ? "immediate"
+      : "expectant";
   }
 
   const stable =
@@ -208,6 +400,108 @@ function calculateSaltTriage(
   }
 
   return "unknown";
+}
+
+function getPttNormalRanges(
+  height: string | null,
+): { minRespiratoryRate: number; maxRespiratoryRate: number; minPulseRate: number; maxPulseRate: number } | null {
+  switch (height) {
+    case "40_to_80_cm":
+      return {
+        minRespiratoryRate: 20,
+        maxRespiratoryRate: 50,
+        minPulseRate: 90,
+        maxPulseRate: 180,
+      };
+    case "80_to_100_cm":
+      return {
+        minRespiratoryRate: 15,
+        maxRespiratoryRate: 40,
+        minPulseRate: 80,
+        maxPulseRate: 160,
+      };
+    case "100_to_140_cm":
+      return {
+        minRespiratoryRate: 10,
+        maxRespiratoryRate: 30,
+        minPulseRate: 70,
+        maxPulseRate: 140,
+      };
+    default:
+      return null;
+  }
+}
+
+function calculatePttTriage(
+  answers: Record<string, unknown>,
+): TriageCategory {
+  if (
+    readBoolean(answers, "spontaneousBreathing") === false &&
+    readBoolean(answers, "breathingAfterAirwayManagement") !== true
+  ) {
+    return "expectant";
+  }
+
+  if (readBoolean(answers, "breathingAfterAirwayManagement") === true) {
+    return "immediate";
+  }
+
+  if (readBoolean(answers, "alertAndMovingAllLimbs") === false) {
+    return "immediate";
+  }
+
+  const ranges = getPttNormalRanges(readString(answers, "height"));
+  const respiratoryRate = readNumber(answers, "pttRespiratoryRate");
+  const pulseRate = readNumber(answers, "pttPulseRate");
+
+  if (!ranges || respiratoryRate === null || pulseRate === null) {
+    return "unknown";
+  }
+
+  if (
+    respiratoryRate < ranges.minRespiratoryRate ||
+    respiratoryRate > ranges.maxRespiratoryRate ||
+    pulseRate < ranges.minPulseRate ||
+    pulseRate > ranges.maxPulseRate ||
+    readString(answers, "capillaryRefill") === "more_than_2_seconds"
+  ) {
+    return "immediate";
+  }
+
+  return readBoolean(answers, "alertAndMovingAllLimbs") === true
+    ? "minimal"
+    : "delayed";
+}
+
+function calculateMittTriage(
+  answers: Record<string, unknown>,
+): TriageCategory {
+  if (readBoolean(answers, "catastrophicHemorrhage") === true) {
+    return "immediate";
+  }
+
+  if (readBoolean(answers, "canWalk") === true) {
+    return "minimal";
+  }
+
+  if (
+    readBoolean(answers, "spontaneousBreathing") === false ||
+    readString(answers, "respirations") === "absent"
+  ) {
+    return "expectant";
+  }
+
+  if (
+    readBoolean(answers, "respondsToVoice") === false ||
+    readString(answers, "respirations") === "less_than_12" ||
+    readString(answers, "respirations") === "more_than_23" ||
+    readString(answers, "heartRate") === "absent" ||
+    readString(answers, "heartRate") === "more_than_100"
+  ) {
+    return "immediate";
+  }
+
+  return readString(answers, "respirations") ? "delayed" : "unknown";
 }
 
 function calculateMassTriage(
@@ -300,6 +594,15 @@ export function calculateTriageCategory(
         algorithmAnswers as unknown as StartAssessmentAnswers,
       );
 
+    case "stieve":
+      return calculateStieveTriage(algorithmAnswers);
+
+    case "mstart":
+      return calculateMstartTriage(algorithmAnswers);
+
+    case "jumpstart":
+      return calculateJumpstartTriage(algorithmAnswers);
+
     case "nato":
       return calculateNatoTriage(algorithmAnswers);
 
@@ -313,12 +616,34 @@ export function calculateTriageCategory(
     case "salt":
       return calculateSaltTriage(algorithmAnswers);
 
+    case "ptt":
+      return calculatePttTriage(algorithmAnswers);
+
+    case "mitt":
+    case "mptt":
+      return calculateMittTriage(algorithmAnswers);
+
+    case "homebush":
+      return calculateStartTriage(
+        algorithmAnswers as unknown as StartAssessmentAnswers,
+      );
+
     case "sort":
     case "rts":
       return calculateSortTriage(algorithmAnswers);
 
+    case "save":
+      return calculateSaveTriage(algorithmAnswers);
+
+    case "meta":
+      return calculateMetaTriage(algorithmAnswers);
+
     case "mass":
       return calculateMassTriage(algorithmAnswers);
+
+    case "esi":
+    case "metts":
+      return "unknown";
 
     case "urgent_non_urgent":
       return calculateUrgentNonUrgentTriage(algorithmAnswers);
@@ -327,6 +652,8 @@ export function calculateTriageCategory(
       return calculateSmartTriage(algorithmAnswers);
 
     case "ed_triage":
+    case "stm":
+    case "swift":
     case "other":
       return "unknown";
 

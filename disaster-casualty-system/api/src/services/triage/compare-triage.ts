@@ -4,12 +4,14 @@ import type {
 } from "../../types/triage.types.js";
 
 /**
- * Priority is used only for Immediate, Delayed, and Minimal.
+ * Lower numbers mean less resource priority in the T1-T4 Utstein
+ * comparison set: T4 expectant/black, T3 minimal/green, T2 delayed/yellow,
+ * T1 immediate/red.
  *
- * Expectant is handled separately because it should not be treated
- * as simply lower or higher than the other categories.
+ * Unknown is excluded because it is not a clinical triage category.
  */
 const triagePriority: Partial<Record<TriageCategory, number>> = {
+  expectant: 0,
   minimal: 1,
   delayed: 2,
   immediate: 3,
@@ -27,11 +29,8 @@ export function compareTriageCategories(
     };
   }
 
-  // Do not automatically classify comparisons involving
-  // expectant or unknown until the medical team defines the rule.
+  // Unknown and non-T1-T4 systems are not comparable.
   if (
-    responderCategory === "expectant" ||
-    calculatedCategory === "expectant" ||
     responderCategory === "unknown" ||
     calculatedCategory === "unknown"
   ) {

@@ -1,0 +1,329 @@
+PARAGRAPHS: 213
+TABLES: 4
+
+--- PARAGRAPHS ---
+[1] TASK 1
+[2] Utstein Template Formula Table
+[4] Legend:
+[5] Written in black: Should be incorporated in the Patient Care Report/App
+[6] Written in green: Already in the Patient Care Report
+[7] Highlighted in green: Okay with the team
+[8] Cell color blue/highlighted in blue: Updated
+[10] Menu user legend:
+[11] Evacuation camp managers
+[12] EMS first responders
+[13] Hospital/health facility staff
+[14] Civilian witnesses
+[16] Notes:
+[17] Other variables may be collected using a different form that is not patient-centered (e.g., responder safety: responder-centered, not patient-centered)
+[20] APPENDICES
+[22] Appendix A: Primary Triage Assessment Details that Should be Encoded in-App
+[24] STIEVE (Gundran et al., 2025)
+[25] Considered as special population?: Yes/No
+[26] Can walk or with no visible injuries?: Yes/No
+[27] With catastrophic hemorrhage?: Yes/No
+[28] With sucking chest wound?: Yes/No
+[29] Respirations: Absent/Less than 10/10-29/More than 30
+[30] If answer to previous is “Absent”
+[31] With respiration after airway management?: Yes/No
+[32] Pulse: Absent/Weak/Strong
+[33] Capillary refill: Less than 2 secconds/More than 2 seconds
+[34] Mental status: Can follow simple commands/Cannot follow simple commands
+[35] Final triage: Green/Black/Red/Yellow
+[36] START (Gundran et al., 2025) (Clarkson & Williams, 2023)
+[37] Able to walk?: Yes/No
+[38] With spontaneous breathing? Yes/No
+[39] If answer to previous is “No”
+[40] With spontaneous breathing after airway management?: Yes/No
+[41] Respirations: Absent/More than 30/Less than 30
+[42] Capillary refill: More than 2 seconds/Less than 2 seconds
+[43] Radial pulse: Absent/Present
+[44] Mental status: Can follow simple commands/Cannot follow simple commands
+[45] Final triage: Green/Black/Red/Yellow
+[46] mSTART (Gundran et al., 2025)
+[47] Able to walk?: Yes/No
+[48] With spontaneous breathing? Yes/No
+[49] If answer to previous is “No”
+[50] With spontaneous breathing after airway management?: Yes/No
+[51] Respirations: Absent/More than 30/Less than 30
+[52] Radial pulse: Absent/Present
+[53] Mental status: Can follow simple commands/Cannot follow simple commands
+[54] Final triage: Green/Black/Red/Yellow
+[55] JumpSTART (Gundran et al., 2025)
+[56] Able to walk?: Yes/No
+[57] With spontaneous breathing? Yes/No
+[58] If answer to previous is “No”
+[59] With spontaneous breathing after airway management?: Yes/No
+[60] If answer to previous is “No”
+[61] With palpable pulse after airway management?: Yes/No
+[62] If answer to previous is “No”
+[63] With spontaneous breathing after airway management (5 rescue breaths)?: Yes/No
+[64] Respirations: Absent/More than 45/Less than 15/15-45
+[65] Radial pulse: Absent/Present
+[66] Mental status: Alert/Responds to verbal stimuli/Responds to painful stimuli/Unresponsive to noxious stimuli
+[67] Final triage: Green/Black/Red/Yellow
+[69] SIEVE (Gundran et al., 2025) (Chumvanichaya, et al., 2025)
+[70] Able t0 walk?: Yes/No
+[71] Injury: Absent/Present
+[72] Respirations: Absent/Less than or equal to 10/11-29/More than or equal to 30
+[73] If answer to previous is “Absent”
+[74] With spontaneous breathing after airway management?: Yes/No
+[75] Heart rate: >120 bpm/<120 bpm
+[76] Capillary refill: More than 2 seconds/Less than 2 seconds
+[77] Final triage: Green/Black/Red/Yellow
+[78] CARE FLIGHT (Gundran et al., 2025) (Klepacka et al., 2019)
+[79] Able to walk?: Yes/No
+[80] Can obey commands?: Yes/No
+[81] Palpable radial pulse: Absent/Present
+[82] Breathing with open airway: Absent/Present
+[83] Final triage: Green/Black/Red/Yellow
+[84] SALT (Gundran et al., 2025) (Wang et al., 2022)
+[85] Able to walk?: Yes/No
+[86] Can wave?: Yes/No
+[87] Breathing?: Yes/No
+[88] Respirations: Absent/Present
+[89] If answer to previous is “Absent”
+[90] With spontaneous breathing after airway management?: Yes/No
+[91] Obeys commands or makes purposeful movements?: Yes/No
+[92] Radial pulse?: Present/Absent
+[93] In respiratory distress?: Yes/No
+[94] Major hemorrhage is controlled?: Yes/No
+[95] If all five are Yes:
+[96] Minor injuries only?: Yes/No
+[97] If any of the five is No:
+[98] Likely to survive given current resources?: Yes/No
+[99] PTT (Gundran et al., 2025)
+[100] Height: 40–80 cm/80–100 cm/100–140 cm
+[101] Alert and moving all limbs?: Yes/No
+[102] With spontaneous breathing?: Yes/No
+[103] If answer to previous is “No”
+[104] With spontaneous breathing after airway management?: Yes/No
+[105] Respirations: [Short answer response, should be numbers only]
+[106] Capillary refill: More than 2 seconds/Less than 2 seconds
+[107] Pulse rate: [Short answer response, should be numbers only]
+[108] Final triage: Green/Black/Red/Yellow
+[109] MITT (Gundran et al., 2025)
+[110] With catastrophic hemorrhage?: Yes/No
+[111] Able to walk?: Yes/No
+[112] With spontaneous breathing?: Yes/No
+[113] Responds to voice?: Yes/No
+[114] Aged over 2 years?: Yes/No
+[115] Respirations: Absent/Less than 12/More than 23/12–23
+[116] Heart rate: Absent/More than 100/Less than 100/100
+[117] Final triage: Green/Black/Red/Yellow
+[118] Homebush (Gundran et al., 2025)
+[119] Able to walk?: Yes/No
+[120] With spontaneous breathing? Yes/No
+[121] If answer to previous is “No”
+[122] With spontaneous breathing after airway management?: Yes/No
+[123] Respirations: Absent/More than 30/Less than 30
+[124] Capillary refill: More than 2 seconds/Less than 2 seconds
+[125] Radial pulse: Absent/Present
+[126] Mental status: Can follow simple commands/Cannot follow simple commands
+[127] Final triage: Green/Black/White/Red/Yellow
+[128] MPTT (Gundran et al., 2025)
+[129] With catastrophic hemorrhage?: Yes/No
+[130] Able to walk?: Yes/No
+[131] With spontaneous breathing?: Yes/No
+[132] Responds to voice?: Yes/No
+[133] Respirations: Absent/Less than 12/More than 23/12–23
+[134] Heart rate: Absent/More than 100/Less than 100/100
+[135] Final triage: Green/Black/Red/Yellow
+[137] Appendix B: Secondary Triage Assessment Details that Should be Encoded in-App
+[139] SAVE (Gundran et al., 2025)
+[140] Choose one:
+[141] Requires immediate intervention/s based on available resources in order to live
+[142] Requires intervention/s but can tolerate a brief delay
+[143] Does not require intervention/s to prevent loss of life or limb
+[144] Dead/unsalvageable
+[145] SORT (Gundran et al., 2025) (Chumvanichaya, et al., 2025)
+[146] Glasgow Coma Scale (GCS): 13–15/9–12/6–8/4–5/3
+[147] RR: 10–29/More than or equal to 30/6–9 /1–5/0
+[148] Systolic Blood Pressure (SBP): More than or equal to 90/76–89/50–75/1–49/0
+[149] Final triage: Green/Black/Red/Yellow
+[150] META (Gundran et al., 2025)
+[151] With actual or potential risk to airway?: Yes/No
+[152] With actual or potential risk to breathing?: Yes/No
+[153] With actual or potential risk to circulation?: Yes/No
+[154] With actual or potential risk for disability?: Yes/No
+[155] With actual or potential risk for exposure?: Yes/No
+[156] Final triage: Green/Red/Yellow
+[158] Appendix C: Tertiary Triage Assessment Details that Should be Encoded in-App
+[160] ESI (Gundran et al., 2025)
+[161] Requires immediate life-saving intervention?: Yes/No
+[162] In a high-risk situation?: Yes/No
+[163] Pain score: [Short answer, 0–10]
+[164] Resource/s needed to stabilize the patient?: None/One/Multiple
+[165] Final triage: ESI 1/ESI 2/ESI 3/ES 4/ESI 5
+[166] NATO (Gundran et al., 2025) (Falzone et al., 2017)
+[167] Able to walk?: Yes/No
+[168] With minor injuries but can care for themselves?: Yes/No
+[169] With life-threatening injuries but with a good chance of survival?: Yes/No
+[170] Can delay treatment and wait for a few hours without unduly endangering life?: Yes/No
+[171] With serious and often multiple injuries whose treatment would be time-consuming and complicated with a low chance of survival?: Yes/No
+[172] Final triage: Green/Black/Red/Yellow
+[173] MASS (Gundran et al., 2025)
+[174] Life-saving intervention already performed?: Yes/No
+[175] With spontaneous breathing? Yes/No
+[176] —————————————————————————
+[177] Obeys commands?: Yes/No
+[178] Breathing normally?: Yes/No
+[179] With purposeful movements?: Yes/No
+[180] Major bleeding is controlled?: Yes/No
+[181] Radial pulse: Absent/Present
+[182] If all five are Yes:
+[183] Minor injuries only?: Yes/No
+[184] If any of the five is No:
+[185] Likely to survive given current resources?: Yes/No
+[186] Final triage: Green/Black/Red/Yellow
+[187] METTS (Gundran et al., 2025)
+[188] Airway: Obstructed/Unobstructed
+[189] Stridor: Present/Absent
+[190] Oxygen saturation: Less than 90%/90–95%/More than 95%
+[191] Oxygen support: Present/Absent
+[192] Respirations: More than 30/26–29/8–25/Less than 8
+[193] Pulse rate: Irregular more than 150/Regular more than 130/121—130/111–120/50–110/40–49/Less than 40
+[194] Systolic blood pressure: Less than 90 mmHg/More than 90 mmHg
+[195] Consciousness: Alert and conscious/Disoriented/Unconscious
+[196] Ongoing seizures: Present/Absent
+[197] Glasgow Coma Scale: [Short answer, should be number only from 3–15]
+[198] Temperature: More than 41°C/38.6–40.9°C/35–38.5°C/Less than 35°C
+[199] Final triage: Red/Orange/Yellow/Green/Blue
+[204] Appendix B: Algorithms for Calculating the Correct Triage Result in-Web
+
+--- TABLES ---
+
+TABLE 1 rows=114 cols=3
+R1: Utstein Data Element || Formula || Variables to collect
+R2: Event notification || Event notification || Event notification
+R3: Time point of occurrence of disaster ||  || DD:HH:MM of occurrence of disaster
+R4: Activation of disaster medical management plan (DMMP) || Activation of disaster medical management plan (DMMP) || Activation of disaster medical management plan (DMMP)
+R5: Systemic trigger criteria for activation of the DMMP ||  || 
+R6: Time point of activation of the DMMP ||  || DD:HH:MM of 	DMMP activation
+R7: Time point of notifications of the first appropriate staff person to assume medical management coordination role ||  || DD:HH:MM of notification of point person to assume medical management coordination
+R8: Time point that the last staff person notified has reported to the appropriate location mentioned in the DMMP ||  || DD:HH:MM of the arrival of the last person notified as per the DMMP
+R9: The percentage of medical staff on the call-down list who reported at the appropriate location in the predetermined time delineated in the DMMP ||  || Number of medical staff on a fixed contact list who arrived at the designated location by time t based on the specific DMMP standard | Time of arrival of medical staff at the designated location | Total number of medical staff on a fixed contact list contacted
+R10: Disaster medical operations coordination || Disaster medical operations coordination || Disaster medical operations coordination
+R11: On-scene initial actions by first medical responder ||  || Adequacy of on-scene initial actions | 1 = Not Done | 2 = Inadequate | 3 = Somewhat Adequate | 4 = Mostly Adequate | 5 = Completely Adequate | 6 = N/S | 7 = N/D
+R12: On-scene medical control and coordination ||  || Adequacy of on-scene medical control and coordination | 1 = Not Done | 2 = Inadequate | 3 = Somewhat Adequate | 4 = Mostly Adequate | 5 = Completely Adequate | 6 = N/S | 7 = N/D
+R13: System-level medical coordination ||  || Adequacy of system-level medical coordination | 1 = Not Done | 2 = Inadequate | 3 = Somewhat Adequate | 4 = Mostly Adequate | 5 = Completely Adequate | 6 = N/S | 7 = N/D
+R14: Medical communications and information management ||  || Adequacy of medical communications and information management | 1 = Not Done | 2 = Inadequate | 3 = Somewhat Adequate | 4 = Mostly Adequate | 5 = Completely Adequate | 6 = N/S | 7 = N/D
+R15: Medical resource management ||  || Adequacy of medical resource management | 1 = Not Done | 2 = Inadequate | 3 = Somewhat Adequate | 4 = Mostly Adequate | 5 = Completely Adequate | 6 = N/S | 7 = N/D
+R16: On-site triage || On-site triage || On-site triage
+R17: Primary triage system used ||  || Type of primary triage used: | STIEVE | Urgent/non-urgent | START | mSTART | JumpSTART | SIEVE | Care Flight | SALT | PTT | MITT | STM | Homebush | MPTT | Other
+R18: Secondary triage system used ||  || Type of secondary triage used: | Urgent/non-urgent | SAVE | SORT | META | SwiFT | SMART | Other
+R19: Time point at which triage was ordered by the medical incident commander ||  || DD:HH:MM of triage initiation by incident commander | Time when EMS responders are alerted (“Alerted”)
+R20: Time point at which the first ill/injured survivor has been primary triaged on the site of the disaster ||  || DD:HH:MM of the first ill/injured survivor who had primary triage at the disaster site | Time of primary triage of each survivor onsite (“Arrival on scene”)
+R21: Time point at which the first ill/injured survivor has been secondary triaged on the site of the disaster ||  || DD:HH:MM of the first ill/injured survivor who had secondary triage at the disaster site | Time of secondary triage of each survivor onsite (“Arrival on scene”)
+R22: Time point at which the last ill/injured survivor has been primary triaged on the site of the MCI/disaster ||  || DD:HH:MM of the last ill/injured survivor who had primary triage at the disaster site | Time of primary triage of each survivor onsite (“Arrival on scene”)
+R23: Time point at which the last ill/injured survivor has been secondary triaged on the site of the MCI/disaster ||  || DD:HH:MM of the last ill/injured survivor who had secondary triage at the disaster site | Time of secondary triage of each survivor onsite (“Arrival on scene”)
+R24: Percentage of “immediate” category (T1) survivors primary triaged by first responders per time unit after initiation of the response |  |  | *initiation of the response is Time point of the activation of the DMMP ||  || Number of primary triaged T1 survivors within each identified time interval after the activation of the DMMP:  | 1 minute1 | 5 minutes1 | 10 minutes1 | 15 minutes2 | 30 minutes2 | 1 hour2 | Time of primary triage of T1 survivors onsite | Total number of survivors onsite | Time point of the activation of the DMMP
+R25: Percentage of “immediate” category (T1) survivors primary triaged by first responders per time unit after initiation of the response |  |  | *initiation of the response is Time point of the activation of the DMMP ||  || Number of secondary triaged T1 survivors within each identified time interval after the activation of the DMMP:  | 1 minute1 | 5 minutes1 | 10 minutes1 | 15 minutes2 | 30 minutes2 | 1 hour2 | Time of secondary triage of T1 survivors onsite | Total number of survivors onsite | Time point of the activation of the DMMP
+R26: Percentage of “delayed” category (T2) survivors triaged by first responders per time unit after initiation of the response* |  | *initiation of the response is Time point of the activation of the DMMP ||  || Number of primary triaged T2 survivors within each identified time interval after the activation of the DMMP: | 1 minute1 | 5 minutes1 | 10 minutes1 | 15 minutes2 | 30 minutes2 | 1 hour2 | Time of primary triage of T2 survivors onsite | Total number of survivors onsite | Time point of the activation of the DMMP |  | 1Added by the project team | 2 Originally recommended by the template
+R27: Percentage of “delayed” category (T2) survivors triaged by first responders per time unit after initiation of the response* |  | *initiation of the response is Time point of the activation of the DMMP ||  || Number of secondary triaged T2 survivors within each identified time interval after the activation of the DMMP: | 1 minute1 | 5 minutes1 | 10 minutes1 | 15 minutes2 | 30 minutes2 | 1 hour2 | Time of secondary triage of T2 survivors onsite | Total number of survivors onsite | Time point of the activation of the DMMP
+R28: Percentage of “immediate” category (T1) survivors triaged as “delayed” (T2), “minor” (T3) or “expectant” (T4) ||  || App: Symptom-centered triage assessment and decision of the EMS responder (menus shown after the triage system had been previously selected) (See variables on Appendix A for the primary triage variables to be encoded in-app) | Number of survivors whose actual primary triage category is T1 but who were assigned T2, T3, or T4 by first responders | Number of survivors whose actual primary triage category is T1
+R29: Percentage of “immediate” category (T1) survivors triaged as “delayed” (T2), “minor” (T3) or “expectant” (T4) ||  || App: Symptom-centered triage assessment and decision of the EMS responder (menus shown after the triage system had been previously selected) (See variables on Appendix B for the secondary triage variables to be encoded in-app) | Number of survivors whose actual secondary triage category is T1 but who were assigned T2, T3, or T4 by first responders | Number of survivors whose actual secondary triage category is T1
+R30: Percentage of “delayed” category (T2) survivors triaged as “minor” (T3) or “expectant” (T4) ||  || App: Symptom-centered triage assessment and decision of the EMS responder (menus shown after the triage system had been previously selected) (See variables on Appendix A for the primary triage variables to be encoded in-app) | Number of survivors whose actual primary triage category is T2 but who were assigned T3 or T4 by first responders | Number of survivors whose actual primary triage category is T2
+R31: Percentage of “delayed” category (T2) survivors triaged as “minor” (T3) or “expectant” (T4) ||  || App: Symptom-centered triage assessment and decision of the EMS responder (menus shown after the triage system had been previously selected) (See variables on Appendix B for the secondary triage variables to be encoded in-app) | Number of survivors whose actual secondary triage category is T2 but who were assigned T3 or T4 by first responders | Number of survivors whose actual secondary triage category is T2
+R32: Percentage of “delayed” category (T2) survivors triaged as “immediate” (T1) ||  || App: Symptom-centered triage assessment and decision of the EMS responder (See variables on Appendix A for the primary triage variables to be encoded per triage system in-app) | Number of survivors whose actual primary triage category is T2 but who were assigned T1 by first responders | Number of survivors whose actual primary triage category is T2
+R33:  ||  || App: Symptom-centered triage assessment and decision of the EMS responder (See variables on Appendix B for the secondary triage variables to be encoded per triage system in-app) | Number of survivors whose actual secondary triage category is T2 but who were assigned T1 by first responders | Number of survivors whose actual secondary triage category is T2
+R34: Percentage of “minor” category (T3) survivors triaged as “immediate” (T1) or “delayed” (T2) ||  || App: Symptom-centered triage assessment and decision of the EMS responder (menus shown after the triage system had been previously selected) (See variables on Appendix A for the primary triage variables to be encoded in-app) | Number of survivors whose actual primary triage category is T3 but who were assigned T1 or T2 by first responders | Number of survivors whose actual primary triage category is T3
+R35: Percentage of “minor” category (T3) survivors triaged as “immediate” (T1) or “delayed” (T2) ||  || App: Symptom-centered triage assessment and decision of the EMS responder (menus shown after the triage system had been previously selected) (See variables on Appendix B for the secondary triage variables to be encoded in-app) | Number of survivors whose actual secondary triage category is T3 but who were assigned T1 or T2 by first responders | Number of survivors whose actual secondary triage category is T3
+R36: On-site medical care || On-site medical care || On-site medical care
+R37: On-site stabilization or treatment ||  || On-site stabilization or treatment done and type | No (Scoop and Run) | No (SCOOTER) | Yes (Stay and Play) | Partly (1+3 or Play and Run) | Unknown
+R38: Percentage of “immediate” category survivors stabilized in a “treatment area” per time unit after initiation of the response ||  || Number of stabilized T1 survivors within each identified time interval after the activation of the DMMP:  | 1 minute | 5 minutes | 10 minutes | 15 minutes | 30 minutes | 1 hour | Time of stabilization of T1 survivors in a treatment area (Stabilized) | Total number of survivors on site | Time point of the activation of the DMMP
+R39: Percentage of “delayed” category survivors stabilized in a “treatment area” per time unit after initiation of the response ||  || Number of stabilized T2 survivors within each identified time interval after the activation of the DMMP:  | 1 minute | 5 minutes | 10 minutes | 15 minutes | 30 minutes | 1 hour | Time of stabilization of T2 survivors in a treatment area (Stabilized) | Total number of survivors on site | Time point of the activation of the DMMP
+R40: Scene casualty clearance || Scene casualty clearance || Scene casualty clearance
+R41: Time point of first EMS vehicle on scene ||  || DD:HH:MM of first EMS vehicle arrival at the scene
+R42: Time point of transportation of first ill/injured survivor from scene by EMS ||  || DD:HH:MM of first ill/injured survivor transported out of the scene by the EMS | DD:HH:MM of the transport out of each survivor (Departure from Scene)
+R43: Time point of transportation of last ill/injured survivor from scene by EMS ||  || DD:HH:MM of last ill/injured survivor transported out of the scene by the EMS | DD:HH:MM of the transport out of each survivor (Departure from Scene)
+R44: Percentage of “immediate” category survivors transported from the scene to receiving healthcare facilities per time unit after initiation of the response ||  || Number of transported T1 survivors from scene to healthcare facility within each identified time interval after the activation of the DMMP:  | 1 minute | 5 minutes | 10 minutes | 15 minutes | 30 minutes | 1 hour | Time of transport of T1 survivors from scene to healthcare facility (Departure from Scene) | Total number of survivors onsite | Time point of the activation of the DMMP
+R45: Percentage of “delayed” category survivors transported from the scene to receiving healthcare facilities per time unit after initiation of the response ||  || Number of transported T2 survivors from scene to healthcare facility within each identified time interval after the activation of the DMMP: | 1 minute | 5 minutes | 10 minutes | 15 minutes | 30 minutes | 1 hour | Time of transport of T2 survivors from scene to healthcare facility (Departure from Scene) | Total number of survivors onsite | Time point of the activation of the DMMP
+R46: Number of EMS BLS ambulances at the scene per time unit after initiation of the response ||  || Number of EMS BLS ambulances that arrived at the scene within each identified time interval after the activation of the DMMP: | 1 minute | 5 minutes | 10 minutes | 15 minutes | 30 minutes | 1 hour | Time point of the activation of the DMMP
+R47: Number of EMS ALS ambulances at the scene per time unit after initiation of the response ||  || Number of EMS ALS ambulances that arrived at the scene within each identified time interval after the activation of the DMMP: | 1 minute | 5 minutes | 10 minutes | 15 minutes | 30 minutes | 1 hour | Time point of the activation of the DMMP
+R48: Distribution of ill/injured survivors || Distribution of ill/injured survivors || Distribution of ill/injured survivors
+R49: Percentage of ill/injured survivors arriving in primary healthcare facilities independent of EMS system ||  || Number of ill/injured survivors who arrived at any primary healthcare facility without using EMS transportation | EMS transport use: Yes/No | Total number of ill/injured survivors who arrived at any primary healthcare facility
+R50: Percentage of ill/injured survivors arriving in secondary healthcare facilities independent of EMS system ||  || Number of ill/injured survivors who arrived at any secondary healthcare facility without using EMS transportation | EMS transport use: Yes/No | Total number of ill/injured survivors who arrived at any secondary healthcare facility
+R51: Percentage of ill/injured survivors arriving in tertiary healthcare facilities independent of EMS system ||  || Number of ill/injured survivors who arrived at any tertiary healthcare facility without using EMS transportation | EMS transport use: Yes/No | Total number of ill/injured survivors who arrived at any tertiary healthcare facility
+R52: Percentage of ill/injured survivors arriving in specialized healthcare facilities independent of EMS system ||  || Number of ill/injured survivors who arrived at any specialized healthcare facility without using EMS transportation | EMS transport use: Yes/No | Total number of ill/injured survivors who arrived at any specialized healthcare facility
+R53: Percentage of ill/injured survivors arriving in primary healthcare facilities transported by EMS system ||  || Number of ill/injured survivors who arrived at any primary healthcare facility using EMS transportation | EMS transport use: Yes/No | Total number of ill/injured survivors who arrived at any primary healthcare facility
+R54: Percentage of ill/injured survivors arriving in secondary healthcare facilities transported by EMS system ||  || Number of ill/injured survivors who arrived at any secondary healthcare facility using EMS transportation | EMS transport use: Yes/No | Total number of ill/injured survivors who arrived at any secondary healthcare facility
+R55: Percentage of ill/injured survivors arriving in tertiary healthcare facilities transported by EMS system ||  || Number of ill/injured survivors who arrived at any tertiary healthcare facility using EMS transportation | EMS transport use: Yes/No | Total number of ill/injured survivors who arrived at any tertiary healthcare facility
+R56: Percentage of ill/injured survivors arriving in specialized healthcare centers transported by EMS system ||  || Number of ill/injured survivors who arrived at any specialized healthcare facility using EMS transportation | EMS transport use: Yes/No | Total number of ill/injured survivors who arrived at any specialized healthcare facility
+R57: Percentage of ill/injured survivors arriving at the emergency departments per time unit after initiation of the response ||  || Number of ill/injured survivors who arrived at the emergency department within each identified time interval after the activation of the DMMP:  | 1 minute | 5 minutes | 10 minutes | 15 minutes | 30 minutes | 1 hour | Time of arrival of ill/injured survivors at the emergency department | Total number of ill/injured survivors who arrived at the emergency department | Time point of the activation of the DMMP
+R58: Percentage of interhospital transfer of ill/injured survivors ||  || Number of ill/injured survivors who were transferred out of the hospital | Transferred to other hospital: Yes/No | Total number of ill/injured survivors who arrived at the hospital
+R59: Triage upon arrival at the healthcare facility || Triage upon arrival at the healthcare facility || Triage upon arrival at the healthcare facility
+R60: Triage system used ||  || Tertiary triage system used at the healthcare facility | ESI (If selected, succeeding Utstein elements cannot be computed since it doesn’t use T1, T2, T3, and T4 categories) | MASS | NATO | METTS (If selected, succeeding Utstein elements cannot be computed since it doesn’t use T1, T2, T3, and T4 categories; the color system has an additional orange and blue which will not fall under any of the T codes) | Other
+R61: Time point at which the first ill/injured survivor has been triaged at the receiving healthcare facility ||  || DD:HH:MM of first triaged ill/injured survivor at the healthcare facility | DD:HH:MM of each ill/injured survivor at the healthcare facility
+R62: Time point at which the last ill/injured survivor has been triaged at the receiving healthcare facility ||  || DD:HH:MM of last triaged ill/injured survivor at the healthcare facility | DD:HH:MM of each ill/injured survivor at the healthcare facility
+R63: Percentage of “immediate” category (T1) survivors triaged as “delayed” (T2), “minor” (T3), or “expectant” (T4) ||  || App: Symptom-centered triage assessment and decision of the healthcare facility staff (menus shown after the triage system had been previously selected) (See variables on Appendix C for the tertiary triage variables to be encoded in-app) | Number of true T1 survivors triaged as T2 | Number of true T1 survivors triaged as T3 | Number of true T1 survivors triaged as T4 | Total number of true T1 survivors triaged as T1
+R64: Percentage of “delayed” category (T2) survivors triaged as “minor” (T3) or “expectant” (T4) ||  || App: Symptom-centered triage assessment and decision of the healthcare facility staff (menus shown after the triage system had been previously selected) (See variables on Appendix C for the tertiary triage variables to be encoded in-app) | Number of true T2 survivors triaged as T3 | Number of true T1 survivors triaged as T4 | Total number of true T2 survivors triaged as T2
+R65: Percentage of “delayed” category (T2) survivors triaged as “immediate” (T1) ||  || App: Symptom-centered triage assessment and decision of the healthcare facility staff (menus shown after the triage system had been previously selected) (See variables on Appendix C for the tertiary triage variables to be encoded in-app) | Number of true T2 survivors triaged as T1 | Total number of true T2 survivors triaged as T2
+R66: Percentage of “minor” category (T3) survivors triaged as “immediate” (T1) or “delayed” (T2) ||  || App: Symptom-centered triage assessment and decision of the healthcare facility staff (menus shown after the triage system had been previously selected) (See variables on Appendix C for the tertiary triage variables to be encoded in-app) | Number of true T3 survivors triaged as T1 | Number of true T3 survivors triaged as T2 | Total number of true T3 survivors triaged as T3
+R67: Responder safety and health || Responder safety and health || Responder safety and health
+R68: Establishment of responder safety and health actions ||  || Responder safety | Yes | No | Unknown
+R69: Time point at which the decision is made to provide responders with personal protective equipment (PPE) ||  || DD:HH:MM of decision time for responders to wear PPE
+R70: Percentage of killed responders during the acute response phase ||  || Time of DMMP activation | Time of the last healthcare facility’s deactivation of disaster response plan | Number of killed responders from DMMP activation to the last healthcare facility’s deactivation of disaster response plan | Total number of deployed responders from DMMP activation to the last healthcare facility’s deactivation of disaster response plan
+R71: Percentage of ill/injured responders seeking medical care during the acute response phase ||  || Time of DMMP activation | Time of the last healthcare facility’s deactivation of disaster response plan | Number of ill/injured responders from DMMP activation to the last healthcare facility’s deactivation of disaster response plan | Total number of deployed responders from DMMP activation to the last healthcare facility’s deactivation of disaster response plan
+R72: Deactivation of disaster medical management plan || Deactivation of disaster medical management plan || Deactivation of disaster medical management plan
+R73: Time point at which scene medical responders at the scene are demobilized ||  || DD:HH:MM of the discontinuation of care by responders
+R74: Time point at which the last healthcare facility deactivates its disaster response plan ||  || DD:HH:MM of the last healthcare facility’s deactivation of disaster response plan
+R75: Continuity of care for non-disaster-related ill and injured patients || Continuity of care for non-disaster-related ill and injured patients || Continuity of care for non-disaster-related ill and injured patients
+R76: The extent of disruption of the normal EMS call coverage ||  || Normal EMS call coverage disruption | No | Minimal | Moderate | Total | Unknown
+R77: The extent of disruption of the routine care in the healthcare facilities ||  || Healthcare facility routine care disruption | No | Minimal | Moderate | Total | Unknown
+R78: Emergency department (ED) resources utilization || Emergency department (ED) resources utilization || Emergency department (ED) resources utilization
+R79: Percentage of ill/injured survivors seeking emergency care at ED or similar type of facility, categorized by triage category ||  || Number of ill/injured T1 survivors who sought ED/similar facility care | ED/similar facility care use: Yes/No (Yes if box for “For Referral/Transfer to Health Facility” was ticked) | Number of ill/injured T2 survivors who sought ED/similar facility care | ED/similar facility care use: Yes/No (Yes if box for “For Referral/Transfer to Health Facility” was ticked) | Number of ill/injured T3 survivors who sought ED/similar facility care | ED/similar facility care use: Yes/No (Yes if box for “For Referral/Transfer to Health Facility” was ticked) | Number of ill/injured T4 survivors who sought ED/similar facility care | ED/similar facility care use: Yes/No (Yes if box for “For Referral/Transfer to Health Facility” was ticked) | Total number of ill/injured survivors who sought ED/similar facility care
+R80: Percentage of ill/injured survivors seeking emergency care at ED or similar type of facility admitted to hospital, categorized by triage category ||  || Number of ill/injured T1 survivors who were admitted after ED/similar facility care | Hospital admission after ED/similar facility care: Yes/No | Number of ill/injured T2 survivors who were admitted after ED/similar facility care | Hospital admission after ED/similar facility care: Yes/No | Number of ill/injured T3 survivors who were admitted after ED/similar facility care | Hospital admission after ED/similar facility care: Yes/No | Number of ill/injured T4 survivors who were admitted after ED/similar facility care | Hospital admission after ED/similar facility care: Yes/No | Total number of ill/injured survivors who were admitted after ED/similar facility care
+R81: Percentage of ill/injured survivors seeking emergency care at ED or similar type of facility discharged to home, categorized by triage category ||  || Number of ill/injured T1 survivors who were discharged after ED/similar facility care | Hospital discharge after ED/similar facility care: Yes/No | Number of ill/injured T2 survivors who were discharged after ED/similar facility care | Hospital discharge after ED/similar facility care: Yes/No | Number of ill/injured T3 survivors who were discharged after ED/similar facility care | Hospital discharge after ED/similar facility care: Yes/No | Number of ill/injured T4 survivors who were discharged after ED/similar facility care | Hospital discharge after ED/similar facility care: Yes/No | Total number of ill/injured survivors who were discharged after ED/similar facility care
+R82: Median time interval from onset of disaster to the arrival of ill/injured survivors at the ED or similar type of facility, categorized by triage category || Example: | Disaster onset: 12:00 | T1 A Arrival: 12:30 = 30 minutes | T2 B Arrival: 12:45 = 45 minutes | T2 C Arrival: 13:00 = 60 minutes | Median of 30, 45, and 60 = 45 minutes || Time of disaster onset | Time of arrival of ill/injured T1 survivors at the ED/similar facility | Time of arrival of ill/injured T2 survivors at the ED/similar facility | Time of arrival of ill/injured T3 survivors at the ED/similar facility | Time of arrival of ill/injured T4 survivors at the ED/similar facility
+R83: Number of “immediate category” survivors in the ED resuscitation rooms or equivalent at 15 minutes interval after initiation of the response ||  || Number of T1 survivors arrived in the ED resuscitation rooms or equivalent after the following minutes of the activation of the DMMP: | 0 minutes | 15 minutes | 30 minutes | 45 minutes | 60 minutes | etc. | Time point of resuscitation room use for each T1 survivor | Time point of the activation of the DMMP
+R84: Percentage of ED resuscitation rooms used simultaneously for “immediate category” survivors at 15 minutes intervals after initiation of the response || Where: | t = 15-minute time interval (e.g., 15 minutes, 30 minutes, 45 minutes, etc.) || Number of resuscitation rooms used for T1 survivors after the following minutes of the activation of the DMMP: | 0 minutes | 15 minutes | 30 minutes | 45 minutes | 60 minutes | etc. | Time point of resuscitation room use for each T1 survivor | Total number of resuscitation rooms in the ED | Time point of the activation of the DMMP
+R85: Hospital resources utilization || Hospital resources utilization || Hospital resources utilization
+R86: Time point of the first surgical intervention of a critically injured survivor ||  || DD:HH:MM of first surgical intervention of a critically injured survivor
+R87: Time point of the last surgical intervention of a critically injured survivor ||  || DD:HH:MM of last surgical intervention of a critically injured survivor
+R88: Mean duration of surgical intervention for critically injured survivors || OR || Time point of the surgery start time for each critically injured survivor | Time point of the surgery end time for each critically injured survivor | Total number of critically injured survivors who had surgery
+R89: The numbers of “immediate category” injured survivors in operating rooms at 30 minutes intervals, after initiation of the response ||  || Number of T1 survivors sent to operating rooms after the following minutes of the activation of the DMMP: | 0 minutes | 30 minutes | 60 minutes | etc. | Time point of the operating room use of each T1 survivor | Time point of the activation of the DMMP
+R90: The percentage of operating rooms used simultaneously for “immediate category” injured survivors at 30 minutes intervals, after initiation of the response || Where: | t = 30-minute time interval (e.g., 30 minutes, 60 minutes, etc.) || Number of operating rooms used for T1 survivors after the following minutes of the activation of the DMMP: | 0 minutes | 30 minutes | 60 minutes | etc. | Time point of the initiation of each operating room use (operating room-centered, not patient-centered) | Total number of operating rooms | Time point of the activation of the DMMP
+R91: The number of “immediate” and “delayed” survivors admitted to the ED, requiring plain radiography at 30 minutes intervals after initiation of the response ||  || Number of T1 survivors admitted to the ED requiring X-ray after the following minutes of the activation of the DMMP: | 0 minutes | 30 minutes | 60 minutes | etc. | Number of T2 survivors admitted to the ED requiring X-ray after the following minutes of the activation of the DMMP: | 0 minutes | 30 minutes | 60 minutes | etc. | Time point of X-ray use for each T1 and T2 survivor | Time point of the activation of the DMMP
+R92: The number of “immediate” and “delayed” survivors admitted to the ED, requiring ultrasonography at 30 minutes intervals after initiation of the response ||  || Number of T1 survivors admitted to the ED requiring ultrasound after the following minutes of the activation of the DMMP: | 0 minutes | 30 minutes | 60 minutes | etc. | Number of T2 survivors admitted to the ED requiring ultrasound after the following minutes of the activation of the DMMP: | 0 minutes | 30 minutes | 60 minutes | etc. | Time point of ultrasound use for each T1 and T2 survivor | Time point of the activation of the DMMP
+R93: The number of “immediate” and “delayed” survivors admitted to the ED, requiring computed tomography at 30 minutes intervals after initiation of the response ||  || Number of T1 survivors admitted to the ED requiring CT scan after the following minutes of the activation of the DMMP: | 0 minutes | 30 minutes | 60 minutes | etc. | Number of T2 survivors admitted to the ED requiring CT scan after the following minutes of the activation of the DMMP: | 0 minutes | 30 minutes | 60 minutes | etc. | Time point of CT scan use for each T1 and T2 survivor | Time point of the activation of the DMMP
+R94: The number of critically ill/injured survivors admitted to intensive care units (ICU) at 30 minutes interval after initiation of the response ||  || Number of critically ill/injured survivors admitted to any ICU after the following minutes of the activation of the DMMP: | 0 minutes | 30 minutes | 60 minutes | etc. | Time point of the admission of each critically ill/injured survivor in any ICU | Time point of the activation of the DMMP
+R95: The percentage of ill/injured survivors admitted to the ICU, requiring artificial ventilation ||  || Number of critically ill/injured survivors admitted to any ICU and with mechanical ventilation | Total number of critically ill/injured survivors admitted to any ICU
+R96: The mean time interval of critically ill/injured survivors from the onset of disaster to admission to ICU ||  || Time point of the admission of each critically ill/injured survivor in any ICU | Time point of the disaster onset | Total number of critically ill/injured survivors admitted to any ICU
+R97: The mean time interval of critically ill/injured survivors from admission to the ED to admission to the intensive care unit ||  || Time point of the admission of each critically ill/injured survivor in any ICU | Time point of the admission of each critically injured survivor in the ED | Total number of critically ill/injured survivors admitted to any ICU
+R98: Use of alternative ICUs ||  || Alternative ICU use: | 1 = Yes | 2 = No | 3 = Unknown
+R99: Morbidity (length of stay) || Morbidity (length of stay) || Morbidity (length of stay)
+R100: Mean length of stay in minutes of “immediate category” survivors in the ED ||  || Time point of the successful transfer of each T1 survivor out of the ED | Time point of the admission of each T1 survivor in the ED | Total number of T1 survivors successfully transferred out of the ED
+R101: Median length of stay of “immediate category” survivors in the ED || Example: | ER Admission Time: 12:00 | T1 A Transfer Out: 12:30 = 30 minutes | T1 B Transfer Out: 12:45 = 45 minutes | T1 C Transfer Out: 13:00 = 60 minutes | Median of 30, 45, and 60 = 45 minutes || Time point of the successful transfer of each T1 survivor out of the ED | Time point of the admission of each T1 survivor in the ED
+R102: Mean length of stay in minutes of “delayed category” survivors in the ED ||  || Time point of the successful transfer of each T2 survivor out of the ED | Time point of the admission of each T2 survivor in the ED | Total number of T2 survivors successfully transferred out of the ED
+R103: Median length of stay of “delayed category” survivors in the ED || Example: | ER Admission Time: 12:00 | T2 A Transfer Out: 12:30 = 30 minutes | T2 B Transfer Out: 12:45 = 45 minutes | T2 C Transfer Out: 13:00 = 60 minutes | Median of 30, 45, and 60 = 45 minutes || Time point of the successful transfer of each T2 survivor out of the ED | Time point of the admission of each T2 survivor in the ED
+R104: The mean length of stay in days of “immediate category” survivors in the ICU ||  || Day of the successful transfer of each T1 survivor out of the ICU | Day of the admission of each T1 survivor in the ICU | Total number of T1 survivors successfully transferred out of the ICU
+R105: The median length of stay of “immediate category” survivors in the ICU || Example: | ICU Admission Day: January 1 | T1 A  Transfer Out Day: January 2 = 1 day | T1 B Transfer Out Day: January 4 = 3 days | T1 C Transfer Out Day: January 6 = 5 days | Median of 1, 3, and 5 days = 3 days || Day of the successful transfer of each T1 survivor out of the ICU | Day of the admission of each T1 survivor in the ICU
+R106: The mean number of patient-days spent on a mechanical ventilator ||  || Day of the ventilation discontinuation of each survivor in the ICU | Day of the ventilation initiation of each survivor in the ICU | Total number of survivors successfully discontinued from a mechanical ventilator
+R107: The median of total number of patient-days spent on a mechanical ventilator || Example: | Ventilation Initiation Day: January 1 | Patient A Discontinuation Day: January 2 = 1 day | Patient B Discontinuation Day: January 4 = 3 days | Patient C Discontinuation Day: January 6 = 5 days | Median of 1, 3, and 5 days = 3 days || Day of the ventilation discontinuation of each survivor in the ICU | Day of the ventilation initiation of each survivor in the ICU
+R108: The mean length of hospital stay in days of ill/injured survivors ||  || Day of the hospital discharge of each survivor | Day of the hospital admission of each survivor | Total number of survivors successfully discharged from the hospital
+R109: The median length of hospital stay of ill/injured survivors || Example: | Hospital Admission Day: January 1 | Patient A Discharge Day: January 2 = 1 day | Patient B Discharge Day: January 4 = 3 days | Patient C Discharge Day: January 6 = 5 days | Median of 1, 3, and 5 days = 3 days || Day of the hospital discharge of each survivor | Day of the hospital admission of each survivor
+R110: Mortality || Mortality || Mortality
+R111: Percentage of impact deaths within the total population of disaster victims ||  || Number of disaster victims who died before experiencing any medical contact/intervention | Disposition before hospital arrival: | Dead: Yes/No | If Yes: With/Without medical contact | Total number of disaster victims
+R112: Percentage of pre-hospital deaths within the total population of disaster victims ||  || Number of disaster victims who experienced any medical contact/intervention but died before reaching the hospital | Disposition before hospital arrival: | Dead: Yes/No | If Yes: With/Without medical contact | Total number of disaster victims
+R113: In-hospital deaths within the total population of disaster victims ||  || Number of disaster victims who died within the hospital premises after reaching the hospital | Disposition after hospital arrival: | Reached the hospital: Yes/No | If Yes: In active care/Dead | Total number of disaster victims
+R114: “Immediate category” deaths within the total population of “immediate category” survivors ||  || Number of dead T1 victims | Total number of T1 victims
+
+TABLE 2 rows=7 cols=4
+R1: PRIMARY TRIAGE || PRIMARY TRIAGE || PRIMARY TRIAGE || PRIMARY TRIAGE
+R2: STIEVE ||  || START || 
+R3: mSTART ||  || JumpSTART || 
+R4: SIEVE ||  || CARE FLIGHT || 
+R5: SALT ||  || PTT || IMPORTANT NOTE!: Respiratory rate and pulse rate thresholds change with height. | 40–80cm: RR: 20–50; PR: 90–180 | 80–100cm: RR: 15–40; PR: 80–160 | 100–140cm: RR: 10–30; PR: 70–140
+R6: MITT ||  || SALT || 
+R7: Homebush ||  || MPTT || 
+
+TABLE 3 rows=3 cols=4
+R1: SECONDARY TRIAGE || SECONDARY TRIAGE || SECONDARY TRIAGE || SECONDARY TRIAGE
+R2: SAVE ||  || SORT || 
+R3: META ||  ||  || 
+
+TABLE 4 rows=3 cols=4
+R1: TERTIARY TRIAGE || TERTIARY TRIAGE || TERTIARY TRIAGE || TERTIARY TRIAGE
+R2: NATO || Can walk?: Yes: Green / No: Proceed to next |  | With minor injuries but can care for themselves?: Yes: Green / No: Proceed to next |  | With life-threatening injuries but with a good chance of survival?: Yes: Red / No: Proceed to next |  | Can delay treatment and wait for a few hours without unduly endangering life?: Yes: Yellow / No: Proceed to next |  | With serious and often multiple injuries whose treatment requires significant resources and with signs of impending death?: Yes: Black |  | Final triage: Green/Black/Red/Yellow || MASS || 
+R3: ESI ||  || METTS || 
