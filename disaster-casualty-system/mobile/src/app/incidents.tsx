@@ -92,15 +92,20 @@ const SCREEN_PADDING = 16;
 
 const REFERENCE_MANAGER_ROLES = [
   "super_admin",
+  "admin",
   "administrator",
   "encoder",
 ] as const;
 
 const OPERATION_WRITER_ROLES = [
   "super_admin",
+  "admin",
   "administrator",
+  "field_responder",
   "responder",
+  "sa_responder",
   "encoder",
+  "documenter",
   "medical_personnel",
 ] as const;
 
@@ -1724,7 +1729,11 @@ export default function IncidentsPage() {
   }
 
   async function handleGenerateSitrep(incident: Incident) {
-    if (!canCreateIncident && currentUserRole !== "medical_personnel") {
+    if (
+      !canCreateIncident &&
+      currentUserRole !== "documenter" &&
+      currentUserRole !== "medical_personnel"
+    ) {
       Alert.alert(
         "Permission required",
         "Your account is not allowed to generate incident SitReps.",

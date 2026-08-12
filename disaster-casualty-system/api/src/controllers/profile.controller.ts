@@ -30,6 +30,7 @@ export async function getProfile(
 
     const canViewAnyProfile = [
       "super_admin",
+      "admin",
       "administrator",
     ].includes(authenticatedUser.role);
 

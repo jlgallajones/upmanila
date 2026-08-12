@@ -11,9 +11,13 @@ import {
 
 export type UserRole =
   | "super_admin"
+  | "admin"
   | "administrator"
+  | "field_responder"
   | "responder"
+  | "sa_responder"
   | "encoder"
+  | "documenter"
   | "medical_personnel"
   | "viewer";
 
@@ -203,11 +207,7 @@ export function requireRole(
       return;
     }
 
-    if (
-      !roles.includes(
-        authenticatedUser.role,
-      )
-    ) {
+    if (!isRoleAllowed(authenticatedUser.role, roles)) {
       response.status(403).json({
         success: false,
         message:
@@ -218,6 +218,37 @@ export function requireRole(
 
     next();
   };
+}
+
+function getEquivalentRoles(role: UserRole): UserRole[] {
+  switch (role) {
+    case "admin":
+      return ["admin", "administrator"];
+    case "administrator":
+      return ["administrator", "admin"];
+    case "field_responder":
+    case "sa_responder":
+      return [role, "responder"];
+    case "responder":
+      return ["responder", "field_responder", "sa_responder"];
+    case "documenter":
+      return ["documenter", "medical_personnel"];
+    case "medical_personnel":
+      return ["medical_personnel", "documenter"];
+    default:
+      return [role];
+  }
+}
+
+function isRoleAllowed(
+  userRole: UserRole,
+  allowedRoles: UserRole[],
+): boolean {
+  const equivalentRoles = getEquivalentRoles(userRole);
+
+  return allowedRoles.some((allowedRole) =>
+    equivalentRoles.includes(allowedRole),
+  );
 }
 
 export function getAuthenticatedUser(

@@ -2,9 +2,13 @@ import { api } from "./client";
 
 export type UserRole =
   | "super_admin"
+  | "admin"
   | "administrator"
+  | "field_responder"
   | "responder"
+  | "sa_responder"
   | "encoder"
+  | "documenter"
   | "medical_personnel"
   | "viewer";
 

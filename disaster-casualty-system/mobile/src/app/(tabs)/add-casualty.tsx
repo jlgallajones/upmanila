@@ -1,9 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
-import { router, useLocalSearchParams } from "expo-router";
+import {
+  router,
+  useFocusEffect,
+  useLocalSearchParams,
+} from "expo-router";
 import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -55,6 +59,10 @@ import type {
 } from "../../api/profile";
 import { getCurrentUser } from "../../auth/session";
 import {
+  getResponderAssignment,
+  type ResponderAssignment,
+} from "../../auth/responderAssignment";
+import {
   isNetworkSubmissionError,
   queueCasualtySubmission,
   type QueuedCasualtyPayload,
@@ -83,6 +91,8 @@ const STEPS = [
   "Hospital Care",
   "Remarks",
 ] as const;
+
+const FIELD_RESPONDER_STEPS = ["Triage", "Status"] as const;
 
 const SEX_OPTIONS = ["Male", "Female", "Unknown"] as const;
 
@@ -1074,8 +1084,11 @@ const TRIAGE_STAGE_OPTIONS = [
 type TriageStageOption = (typeof TRIAGE_STAGE_OPTIONS)[number];
 
 const TRIAGE_STAGE_OPTIONS_BY_ROLE: Record<string, TriageStageOption[]> = {
+  field_responder: ["Primary Triage"],
   responder: ["Primary Triage", "Secondary Triage"],
+  sa_responder: ["Secondary Triage"],
   medical_personnel: ["Tertiary Triage"],
+  documenter: ["Tertiary Triage"],
 };
 
 const TRIAGE_STAGE_OPTIONS_BY_REPORTING_CONTEXT: Record<
@@ -1145,11 +1158,14 @@ const FACILITY_LEVEL_OPTIONS = [
 
 const REFERENCE_MANAGER_ROLES = [
   "super_admin",
+  "admin",
   "administrator",
   "encoder",
 ] as const;
 
 type StepName = (typeof STEPS)[number];
+
+type AddCasualtyStep = StepName;
 
 const STEP_PROGRESS_LABELS: Record<StepName, string> = {
   Personal: "INFO",
@@ -1699,6 +1715,7 @@ function formatTriageStage(value: string | null | undefined): string {
 function getTriageStageOptionsForRole(
   role: string | null,
   reportingContext: ReportingContext | null,
+  responderAssignment: ResponderAssignment | null = null,
 ): TriageStageOption[] {
   const isAdminOverride =
     role !== null &&
@@ -1708,6 +1725,14 @@ function getTriageStageOptionsForRole(
 
   if (isAdminOverride) {
     return [...TRIAGE_STAGE_OPTIONS];
+  }
+
+  if (responderAssignment === "field_responder") {
+    return ["Primary Triage"];
+  }
+
+  if (responderAssignment === "sa_responder") {
+    return ["Secondary Triage"];
   }
 
   const roleOptions = role
@@ -1736,6 +1761,21 @@ function getTriageStageOptionsForRole(
   }
 
   return [...TRIAGE_STAGE_OPTIONS];
+}
+
+function isFieldResponderCaptureFlow(
+  role: string | null,
+  responderAssignment: ResponderAssignment | null,
+): boolean {
+  if (responderAssignment === "field_responder") {
+    return true;
+  }
+
+  if (responderAssignment === "sa_responder") {
+    return false;
+  }
+
+  return role === "field_responder";
 }
 
 function getTriageSystemOptionsForStage(
@@ -3088,12 +3128,24 @@ export default function AddCasualtyScreen() {
   >(null);
   const [currentReportingContext, setCurrentReportingContext] =
     useState<ReportingContext | null>(null);
+  const [
+    currentResponderAssignment,
+    setCurrentResponderAssignment,
+  ] = useState<ResponderAssignment | null>(null);
   const [selectedPhoto, setSelectedPhoto] =
     useState<SelectedPhoto | null>(null);
   const [isCapturingLocation, setIsCapturingLocation] =
     useState(false);
 
-  const stepName: StepName = STEPS[currentStep];
+  const isFieldResponderFlow = isFieldResponderCaptureFlow(
+    currentUserRole,
+    currentResponderAssignment,
+  );
+  const activeSteps: AddCasualtyStep[] = isFieldResponderFlow
+    ? [...FIELD_RESPONDER_STEPS]
+    : [...STEPS];
+  const stepName: AddCasualtyStep =
+    activeSteps[currentStep] ?? activeSteps[0];
   const screenTitle = isEditing ? "Edit Casualty" : "Add Casualty";
   const finalActionLabel = isEditing
     ? "Save Changes"
@@ -3394,16 +3446,19 @@ export default function AddCasualtyScreen() {
     ],
   );
 
-  useEffect(() => {
+  useFocusEffect(
+    useCallback(() => {
     let isMounted = true;
 
     async function loadCurrentUser() {
       const user = await getCurrentUser();
+      const responderAssignment = await getResponderAssignment();
 
       if (isMounted) {
         setCurrentUserId(user?.id ?? null);
         setCurrentUserRole(user?.role ?? null);
         setCurrentReportingContext(user?.reporting_context ?? null);
+        setCurrentResponderAssignment(responderAssignment);
       }
     }
 
@@ -3412,7 +3467,14 @@ export default function AddCasualtyScreen() {
     return () => {
       isMounted = false;
     };
-  }, []);
+    }, []),
+  );
+
+  useEffect(() => {
+    setCurrentStep((step) =>
+      Math.min(step, Math.max(activeSteps.length - 1, 0)),
+    );
+  }, [activeSteps.length]);
 
   useEffect(() => {
     if (isEditing) {
@@ -3436,6 +3498,7 @@ export default function AddCasualtyScreen() {
       getTriageStageOptionsForRole(
         currentUserRole,
         currentReportingContext,
+        currentResponderAssignment,
       );
 
     setForm((current) => {
@@ -3467,7 +3530,12 @@ export default function AddCasualtyScreen() {
           : {},
       };
     });
-  }, [currentReportingContext, currentUserRole, isEditing]);
+  }, [
+    currentReportingContext,
+    currentResponderAssignment,
+    currentUserRole,
+    isEditing,
+  ]);
 
   useEffect(() => {
     if (isEditing || !presetIncidentId || form.incidentName.trim()) {
@@ -3881,7 +3949,7 @@ export default function AddCasualtyScreen() {
           return false;
         }
 
-        if (!form.triageTime.trim()) {
+        if (!isFieldResponderFlow && !form.triageTime.trim()) {
           Alert.alert(
             "Triage time required",
             "Enter the time this triage assessment was performed.",
@@ -3889,7 +3957,10 @@ export default function AddCasualtyScreen() {
           return false;
         }
 
-        if (!getValidDateTimeInput(form.triageTime)) {
+        if (
+          !isFieldResponderFlow &&
+          !getValidDateTimeInput(form.triageTime)
+        ) {
           Alert.alert(
             "Invalid triage time",
             "Enter triage time using mm/dd/yyyy hh:mm.",
@@ -5146,6 +5217,7 @@ export default function AddCasualtyScreen() {
         return getTriageStageOptionsForRole(
           currentUserRole,
           currentReportingContext,
+          currentResponderAssignment,
         ).map((option) => ({
           label: option,
           selected:
@@ -5384,7 +5456,9 @@ export default function AddCasualtyScreen() {
           "Select a disaster incident",
           "Choose or create a disaster incident before submitting this casualty.",
         );
-        setCurrentStep(2);
+        setCurrentStep(
+          Math.max(activeSteps.indexOf("Incident"), 0),
+        );
         return;
       }
 
@@ -5522,7 +5596,7 @@ export default function AddCasualtyScreen() {
       return;
     }
 
-    if (currentStep < STEPS.length - 1) {
+    if (currentStep < activeSteps.length - 1) {
       setCurrentStep((step) => step + 1);
       return;
     }
@@ -6207,40 +6281,44 @@ export default function AddCasualtyScreen() {
           onPress={openTriageAssessment}
         />
 
-        <CurrentTimeField
-          label="TRIAGE TIME"
-          value={form.triageTime}
-          placeholder="mm/dd/yyyy hh:mm"
-          buttonLabel="Use current triage time"
-          onChangeText={(value) =>
-            updateField("triageTime", value)
-          }
-          onUseCurrent={() =>
-            updateField(
-              "triageTime",
-              formatDateTimeForInput(new Date()),
-            )
-          }
-        />
+        {!isFieldResponderFlow ? (
+          <>
+            <CurrentTimeField
+              label="TRIAGE TIME"
+              value={form.triageTime}
+              placeholder="mm/dd/yyyy hh:mm"
+              buttonLabel="Use current triage time"
+              onChangeText={(value) =>
+                updateField("triageTime", value)
+              }
+              onUseCurrent={() =>
+                updateField(
+                  "triageTime",
+                  formatDateTimeForInput(new Date()),
+                )
+              }
+            />
 
-        <FormField
-          label="TRIAGE LOCATION"
-          value={form.triageLocation}
-          placeholder="Where triage was performed"
-          onChangeText={(value) =>
-            updateField("triageLocation", value)
-          }
-        />
+            <FormField
+              label="TRIAGE LOCATION"
+              value={form.triageLocation}
+              placeholder="Where triage was performed"
+              onChangeText={(value) =>
+                updateField("triageLocation", value)
+              }
+            />
 
-        <FormField
-          label="TRIAGE NOTES"
-          value={form.triageNotes}
-          placeholder="Additional triage observations"
-          multiline
-          onChangeText={(value) =>
-            updateField("triageNotes", value)
-          }
-        />
+            <FormField
+              label="TRIAGE NOTES"
+              value={form.triageNotes}
+              placeholder="Additional triage observations"
+              multiline
+              onChangeText={(value) =>
+                updateField("triageNotes", value)
+              }
+            />
+          </>
+        ) : null}
       </>
     );
   }
@@ -6454,6 +6532,20 @@ export default function AddCasualtyScreen() {
   }
 
   function renderStatusStep() {
+    if (isFieldResponderFlow) {
+      return (
+        <FormField
+          label="NOTES"
+          value={form.remarks}
+          placeholder="Add status notes"
+          multiline
+          onChangeText={(value) =>
+            updateField("remarks", value)
+          }
+        />
+      );
+    }
+
     return (
       <>
         <SectionLabel title="Clinical status" />
@@ -7035,13 +7127,13 @@ export default function AddCasualtyScreen() {
               {screenTitle}
             </Text>
             <Text style={styles.headerSubtitle}>
-              Step {currentStep + 1} of {STEPS.length} -{" "}
+              Step {currentStep + 1} of {activeSteps.length} -{" "}
               {stepName}
             </Text>
           </View>
 
           <View style={styles.progressRow}>
-            {STEPS.map((step, index) => {
+            {activeSteps.map((step, index) => {
               const isActive = index === currentStep;
               const isCompleted = index < currentStep;
 
@@ -7114,7 +7206,7 @@ export default function AddCasualtyScreen() {
               ]}
             >
               <Text style={styles.primaryButtonText}>
-                {currentStep === STEPS.length - 1
+                {currentStep === activeSteps.length - 1
                   ? finalActionLabel
                   : "Continue"}
               </Text>
@@ -7127,7 +7219,7 @@ export default function AddCasualtyScreen() {
               ) : (
                 <Ionicons
                   name={
-                    currentStep === STEPS.length - 1
+                    currentStep === activeSteps.length - 1
                       ? "checkmark-circle-outline"
                       : "arrow-forward-outline"
                   }

@@ -19,6 +19,7 @@ type CreateEvacuationCenterRequest = {
 
 const evacuationCenterManagerRoles = new Set([
   "super_admin",
+  "admin",
   "administrator",
   "encoder",
 ]);

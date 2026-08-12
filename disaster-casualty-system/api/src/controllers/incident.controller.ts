@@ -247,6 +247,7 @@ type ExportCasualtyRow = {
 
 const incidentManagerRoles = new Set([
   "super_admin",
+  "admin",
   "administrator",
   "encoder",
 ]);

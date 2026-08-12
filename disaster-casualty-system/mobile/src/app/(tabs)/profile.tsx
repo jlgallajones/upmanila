@@ -22,6 +22,11 @@ import {
 } from "../../api/profile";
 import { isAuthenticationTokenError } from "../../api/client";
 import { clearSession, getCurrentUserId } from "../../auth/session";
+import {
+  getResponderAssignment,
+  saveResponderAssignment,
+  type ResponderAssignment,
+} from "../../auth/responderAssignment";
 
 const COLORS = {
   maroon: "#7B1113",
@@ -133,6 +138,41 @@ function formatRole(role: string): string {
     .join(" ");
 }
 
+function isResponderRole(role: string | null | undefined): boolean {
+  return (
+    role === "responder" ||
+    role === "field_responder" ||
+    role === "sa_responder"
+  );
+}
+
+function getDefaultResponderAssignment(
+  role: string | null | undefined,
+): ResponderAssignment | null {
+  if (role === "field_responder") {
+    return "field_responder";
+  }
+
+  if (role === "sa_responder") {
+    return "sa_responder";
+  }
+
+  return null;
+}
+
+function formatResponderAssignment(
+  assignment: ResponderAssignment | null,
+): string {
+  switch (assignment) {
+    case "field_responder":
+      return "Field Responder";
+    case "sa_responder":
+      return "Stabilization Area Responder";
+    default:
+      return "Not selected";
+  }
+}
+
 function formatReportingContext(
   reportingContext: string | null | undefined,
 ): string {
@@ -201,6 +241,11 @@ export default function ProfileScreen() {
   const [lastLoadedAt, setLastLoadedAt] =
     useState<Date | null>(null);
 
+  const [
+    selectedResponderAssignment,
+    setSelectedResponderAssignment,
+  ] = useState<ResponderAssignment | null>(null);
+
   const loadProfile = useCallback(async () => {
     const currentUserId = await getCurrentUserId();
 
@@ -246,6 +291,9 @@ export default function ProfileScreen() {
     useCallback(() => {
       setIsLoading(true);
       void loadProfile();
+      void getResponderAssignment().then(
+        setSelectedResponderAssignment,
+      );
     }, [loadProfile]),
   );
 
@@ -309,7 +357,18 @@ export default function ProfileScreen() {
     );
   }
 
+  async function handleResponderAssignmentChange(
+    assignment: ResponderAssignment,
+  ) {
+    await saveResponderAssignment(assignment);
+    setSelectedResponderAssignment(assignment);
+  }
+
   const user = profile?.user;
+  const isResponderAccount = isResponderRole(user?.role);
+  const effectiveResponderAssignment =
+    selectedResponderAssignment ??
+    getDefaultResponderAssignment(user?.role);
 
   const statistics = profile?.statistics ?? {
     encoded: 0,
@@ -602,6 +661,16 @@ export default function ProfileScreen() {
             value={reportingContext}
           />
 
+          {isResponderAccount ? (
+            <InformationRow
+              icon="swap-horizontal-outline"
+              label="Responder Function"
+              value={formatResponderAssignment(
+                effectiveResponderAssignment,
+              )}
+            />
+          ) : null}
+
           <InformationRow
             icon="shield-checkmark-outline"
             label="Account Status"
@@ -614,6 +683,122 @@ export default function ProfileScreen() {
             }
           />
         </View>
+
+        {isResponderAccount ? (
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>
+              RESPONDER FUNCTION
+            </Text>
+
+            <Text style={styles.assignmentHelpText}>
+              Choose which responder window this account should use when adding casualties.
+            </Text>
+
+            <View style={styles.assignmentOptions}>
+              <Pressable
+                onPress={() =>
+                  void handleResponderAssignmentChange(
+                    "field_responder",
+                  )
+                }
+                style={({ pressed }) => [
+                  styles.assignmentOption,
+                  effectiveResponderAssignment ===
+                    "field_responder" &&
+                    styles.assignmentOptionSelected,
+                  pressed && styles.assignmentOptionPressed,
+                ]}
+              >
+                <View style={styles.assignmentOptionIcon}>
+                  <Ionicons
+                    name="medkit-outline"
+                    size={19}
+                    color={
+                      effectiveResponderAssignment ===
+                      "field_responder"
+                        ? COLORS.white
+                        : COLORS.maroon
+                    }
+                  />
+                </View>
+
+                <View style={styles.assignmentOptionTextGroup}>
+                  <Text
+                    style={[
+                      styles.assignmentOptionTitle,
+                      effectiveResponderAssignment ===
+                        "field_responder" &&
+                        styles.assignmentOptionTitleSelected,
+                    ]}
+                  >
+                    Field Responder
+                  </Text>
+                  <Text
+                    style={[
+                      styles.assignmentOptionDescription,
+                      effectiveResponderAssignment ===
+                        "field_responder" &&
+                        styles.assignmentOptionDescriptionSelected,
+                    ]}
+                  >
+                    Add Casualty shows only Triage and Status notes.
+                  </Text>
+                </View>
+              </Pressable>
+
+              <Pressable
+                onPress={() =>
+                  void handleResponderAssignmentChange(
+                    "sa_responder",
+                  )
+                }
+                style={({ pressed }) => [
+                  styles.assignmentOption,
+                  effectiveResponderAssignment ===
+                    "sa_responder" &&
+                    styles.assignmentOptionSelected,
+                  pressed && styles.assignmentOptionPressed,
+                ]}
+              >
+                <View style={styles.assignmentOptionIcon}>
+                  <Ionicons
+                    name="bandage-outline"
+                    size={19}
+                    color={
+                      effectiveResponderAssignment ===
+                      "sa_responder"
+                        ? COLORS.white
+                        : COLORS.maroon
+                    }
+                  />
+                </View>
+
+                <View style={styles.assignmentOptionTextGroup}>
+                  <Text
+                    style={[
+                      styles.assignmentOptionTitle,
+                      effectiveResponderAssignment ===
+                        "sa_responder" &&
+                        styles.assignmentOptionTitleSelected,
+                    ]}
+                  >
+                    Stabilization Area Responder
+                  </Text>
+                  <Text
+                    style={[
+                      styles.assignmentOptionDescription,
+                      effectiveResponderAssignment ===
+                        "sa_responder" &&
+                        styles.assignmentOptionDescriptionSelected,
+                    ]}
+                  >
+                    Add Casualty keeps the original full form for now.
+                  </Text>
+                </View>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
 
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>
@@ -1061,6 +1246,77 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontWeight: "700",
     marginTop: 4,
+  },
+
+  assignmentHelpText: {
+    color: COLORS.secondaryText,
+    fontSize: 11,
+    lineHeight: 16,
+    marginBottom: 12,
+  },
+
+  assignmentOptions: {
+    gap: 10,
+    paddingBottom: 7,
+  },
+
+  assignmentOption: {
+    minHeight: 70,
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 13,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    backgroundColor: COLORS.iconBackground,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+
+  assignmentOptionSelected: {
+    backgroundColor: COLORS.maroon,
+    borderColor: COLORS.maroon,
+  },
+
+  assignmentOptionPressed: {
+    opacity: 0.82,
+    transform: [{ scale: 0.99 }],
+  },
+
+  assignmentOptionIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 11,
+    backgroundColor: "rgba(255,255,255,0.16)",
+  },
+
+  assignmentOptionTextGroup: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  assignmentOptionTitle: {
+    color: COLORS.text,
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: "900",
+  },
+
+  assignmentOptionTitleSelected: {
+    color: COLORS.white,
+  },
+
+  assignmentOptionDescription: {
+    color: COLORS.secondaryText,
+    fontSize: 10,
+    lineHeight: 15,
+    marginTop: 4,
+  },
+
+  assignmentOptionDescriptionSelected: {
+    color: "rgba(255,255,255,0.78)",
   },
 
   logoutButton: {

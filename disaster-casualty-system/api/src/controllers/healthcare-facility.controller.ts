@@ -25,6 +25,7 @@ type CreateHealthcareFacilityRequest = {
 
 const facilityManagerRoles = new Set([
   "super_admin",
+  "admin",
   "administrator",
   "encoder",
 ]);

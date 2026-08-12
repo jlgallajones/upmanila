@@ -3,6 +3,7 @@ import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 
 import type { ProfileUser } from "../api/profile";
+import { clearResponderAssignment } from "./responderAssignment";
 
 const userKey = "dcms.currentUser";
 const accessTokenKey = "dcms.accessToken";
@@ -81,4 +82,5 @@ export async function clearSession(): Promise<void> {
   await deleteSessionItem(userKey);
   await deleteSessionItem(accessTokenKey);
   await deleteSessionItem(refreshTokenKey);
+  await clearResponderAssignment();
 }

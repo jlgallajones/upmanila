@@ -65,7 +65,9 @@ type VerificationAction =
 function canReviewRecords(role: string | null): boolean {
   return (
     role === "super_admin" ||
+    role === "admin" ||
     role === "administrator" ||
+    role === "documenter" ||
     role === "medical_personnel"
   );
 }
