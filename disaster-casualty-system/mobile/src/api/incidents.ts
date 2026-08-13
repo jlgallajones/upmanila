@@ -1032,11 +1032,13 @@ export async function downloadIncidentExport(
         responseType: "blob",
       },
     );
+    const responseContentType = response.headers["content-type"];
     const contentType =
-      response.headers["content-type"] ??
-      (kind === "sitrep-pdf"
-        ? "application/pdf"
-        : "text/csv;charset=utf-8");
+      typeof responseContentType === "string"
+        ? responseContentType
+        : kind === "sitrep-pdf"
+          ? "application/pdf"
+          : "text/csv;charset=utf-8";
     const blob = new Blob([response.data], {
       type: contentType,
     });

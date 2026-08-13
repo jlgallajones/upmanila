@@ -710,7 +710,6 @@ export default function HomeDashboardScreen() {
             iconBackground={COLORS.paleBlue}
             iconColor={COLORS.blue}
             loading={isLoading}
-            onPress={() => router.push("/incidents")}
           />
         </View>
 
@@ -750,15 +749,6 @@ export default function HomeDashboardScreen() {
             iconColor={COLORS.orange}
             iconBackground={COLORS.paleOrange}
             onPress={() => void handleRefresh()}
-          />
-
-          <QuickAction
-            icon="warning-outline"
-            label="Incidents"
-            caption="Manage"
-            iconColor={COLORS.blue}
-            iconBackground={COLORS.paleBlue}
-            onPress={() => router.push("/incidents")}
           />
 
           <QuickAction

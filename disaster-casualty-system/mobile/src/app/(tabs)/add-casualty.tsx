@@ -81,7 +81,7 @@ const COLORS = {
   green: "#2E7D4F",
 };
 
-const STEPS = [
+const DEFAULT_STEPS = [
   "Personal",
   "Address",
   "Incident",
@@ -94,7 +94,65 @@ const STEPS = [
 
 const FIELD_RESPONDER_STEPS = ["Triage", "Status"] as const;
 
+const SA_RESPONDER_STEPS = [
+  "Intro",
+  "Info",
+  "Address",
+  "Triage",
+  "Treatment",
+  "Transport",
+  "Remarks",
+] as const;
+
+const ALL_STEPS = [
+  ...DEFAULT_STEPS,
+  ...FIELD_RESPONDER_STEPS,
+  ...SA_RESPONDER_STEPS,
+] as const;
+
 const SEX_OPTIONS = ["Male", "Female", "Unknown"] as const;
+
+const YES_NO_OPTIONS_TEXT = ["Yes", "No"] as const;
+
+const WITNESS_PRESENT_OPTIONS = [
+  "Bystander",
+  "EMS",
+  "Police Officer",
+  "Traffic Enforcer",
+  "Fire Volunteer",
+  "Relative",
+  "Others",
+] as const;
+
+const WITNESS_RESPONSE_OPTIONS = [
+  "First Aid",
+  "CPR",
+  "AED",
+  "Unknown",
+  "None",
+] as const;
+
+const CPR_TYPE_OPTIONS = [
+  "Compression only",
+  "Compression with ventilation",
+] as const;
+
+const PATIENT_FOR_OPTIONS = [
+  "Release",
+  "Referral or Transfer to Health Facility",
+] as const;
+
+const PRECAUTION_OPTIONS = [
+  "Standard",
+  "Airborne",
+  "Droplet",
+  "Contact",
+  "Protective Isolation",
+  "Source Isolation",
+] as const;
+
+const RELEASE_OF_LIABILITY_TEXT =
+  "The patient or authorized representative was informed of the risks, benefits, and possible consequences of refusing referral, transfer, or further medical care. The patient or representative accepts responsibility for the decision to release from care.";
 
 const HAZARD_TYPE_OPTIONS = [
   "Volcanic Eruption",
@@ -181,7 +239,7 @@ const SECONDARY_TRIAGE_SYSTEM_OPTIONS = [
   "META",
   "SwiFT",
   "SMART",
-  "Urgent/Non-urgent",
+  "Other",
 ] as const;
 
 const TERTIARY_TRIAGE_SYSTEM_OPTIONS = [
@@ -1163,16 +1221,19 @@ const REFERENCE_MANAGER_ROLES = [
   "encoder",
 ] as const;
 
-type StepName = (typeof STEPS)[number];
+type StepName = (typeof ALL_STEPS)[number];
 
 type AddCasualtyStep = StepName;
 
 const STEP_PROGRESS_LABELS: Record<StepName, string> = {
+  Intro: "INTRO",
+  Info: "INFO",
   Personal: "INFO",
   Address: "ADDR",
   Incident: "INC",
   Triage: "TRIAGE",
   Status: "STATUS",
+  Treatment: "CARE",
   Transport: "TRANS",
   "Hospital Care": "CARE",
   Remarks: "NOTES",
@@ -1180,6 +1241,15 @@ const STEP_PROGRESS_LABELS: Record<StepName, string> = {
 
 type ChoiceSheetName =
   | "sex"
+  | "witnessPresent"
+  | "witnessResponse"
+  | "cprType"
+  | "newborn"
+  | "pregnant"
+  | "fillPatientCareReport"
+  | "patientFor"
+  | "transferPrecaution"
+  | "releaseLiabilityAccepted"
   | "incident"
   | "evacuationCenter"
   | "healthcareFacility"
@@ -1224,6 +1294,12 @@ const MONTH_NAMES = [
 ] as const;
 
 type FormState = {
+  witnessPresent: string;
+  witnessOther: string;
+  witnessResponse: string;
+  cprType: string;
+
+  victimCode: string;
   idNumber: string;
   age: string;
   firstName: string;
@@ -1231,6 +1307,10 @@ type FormState = {
   lastName: string;
   sex: string;
   dateOfBirth: string;
+  newborn: string;
+  pregnant: string;
+  religion: string;
+  contactNumber: string;
 
   houseStreet: string;
   barangay: string;
@@ -1255,6 +1335,14 @@ type FormState = {
   triageAssessmentAnswers: Record<string, string>;
 
   transportRequired: string;
+  patientFor: string;
+  conditionBeforeTransfer: string;
+  transferPrecaution: string;
+  receivingFacilityText: string;
+  vehicleMakeModelPlate: string;
+  patientReceivedByPhysician: string;
+  patientReceivedByNurse: string;
+  releaseLiabilityAccepted: string;
   transportMode: string;
   emsUnitType: string;
   arrivedSceneTime: string;
@@ -1263,6 +1351,7 @@ type FormState = {
   transportNotes: string;
 
   treatmentStrategy: string;
+  fillPatientCareReport: string;
   treatmentAreaName: string;
   stabilizationStartedTime: string;
   stabilizedTime: string;
@@ -1329,6 +1418,12 @@ type HealthcareFacilityLabelSource = Pick<
 >;
 
 const initialForm: FormState = {
+  witnessPresent: "",
+  witnessOther: "",
+  witnessResponse: "",
+  cprType: "",
+
+  victimCode: "",
   idNumber: "",
   age: "",
   firstName: "",
@@ -1336,6 +1431,10 @@ const initialForm: FormState = {
   lastName: "",
   sex: "",
   dateOfBirth: "",
+  newborn: "",
+  pregnant: "",
+  religion: "",
+  contactNumber: "",
 
   houseStreet: "",
   barangay: "",
@@ -1360,6 +1459,14 @@ const initialForm: FormState = {
   triageAssessmentAnswers: {},
 
   transportRequired: "",
+  patientFor: "",
+  conditionBeforeTransfer: "",
+  transferPrecaution: "",
+  receivingFacilityText: "",
+  vehicleMakeModelPlate: "",
+  patientReceivedByPhysician: "",
+  patientReceivedByNurse: "",
+  releaseLiabilityAccepted: "",
   transportMode: "",
   emsUnitType: "",
   arrivedSceneTime: "",
@@ -1368,6 +1475,7 @@ const initialForm: FormState = {
   transportNotes: "",
 
   treatmentStrategy: "",
+  fillPatientCareReport: "",
   treatmentAreaName: "",
   stabilizationStartedTime: "",
   stabilizedTime: "",
@@ -1776,6 +1884,21 @@ function isFieldResponderCaptureFlow(
   }
 
   return role === "field_responder";
+}
+
+function isSaResponderCaptureFlow(
+  role: string | null,
+  responderAssignment: ResponderAssignment | null,
+): boolean {
+  if (responderAssignment === "sa_responder") {
+    return true;
+  }
+
+  if (responderAssignment === "field_responder") {
+    return false;
+  }
+
+  return role === "sa_responder";
 }
 
 function getTriageSystemOptionsForStage(
@@ -2305,6 +2428,37 @@ function generateCasualtyIdNumber(): string {
   return `CAS-${year}${month}${day}-${hour}${minute}${second}${millisecond}-${suffix}`;
 }
 
+function buildUnitCode(
+  municipality?: string | null,
+  barangay?: string | null,
+): string {
+  const source = [municipality, barangay]
+    .filter(
+      (value): value is string =>
+        typeof value === "string" && value.trim().length > 0,
+    )
+    .join(" ");
+  const normalized = source
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "")
+    .slice(0, 8);
+
+  return normalized || "UNIT";
+}
+
+function generateCasualtyUnitIdNumber(
+  municipality?: string | null,
+  barangay?: string | null,
+): string {
+  const unitCode = buildUnitCode(municipality, barangay);
+  const sequence = String(Math.floor(Math.random() * 999) + 1).padStart(
+    3,
+    "0",
+  );
+
+  return `CAS-${unitCode}-${sequence}`;
+}
+
 function generateUuid(): string {
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
     /[xy]/g,
@@ -2324,6 +2478,12 @@ function mapRecordToForm(
   latestTransport?: CasualtyTransportHistoryItem,
 ): FormState {
   return {
+    witnessPresent: "",
+    witnessOther: "",
+    witnessResponse: "",
+    cprType: "",
+
+    victimCode: "",
     idNumber: valueOrEmpty(record.casualty.id_number),
     age: valueOrEmpty(record.casualty.estimated_age),
     firstName: valueOrEmpty(record.casualty.first_name),
@@ -2331,6 +2491,10 @@ function mapRecordToForm(
     lastName: valueOrEmpty(record.casualty.last_name),
     sex: valueOrEmpty(record.casualty.sex),
     dateOfBirth: valueOrEmpty(record.casualty.date_of_birth),
+    newborn: "",
+    pregnant: "",
+    religion: "",
+    contactNumber: valueOrEmpty(record.casualty.contact_number),
 
     houseStreet: valueOrEmpty(record.casualty.house_street),
     barangay: valueOrEmpty(record.casualty.barangay),
@@ -2374,6 +2538,19 @@ function mapRecordToForm(
     transportRequired: formatTransportRequired(
       latestTransport?.transport_required,
     ),
+    patientFor:
+      latestTransport?.transport_required === "yes"
+        ? "Referral or Transfer to Health Facility"
+        : latestTransport?.transport_required === "no"
+          ? "Release"
+          : "",
+    conditionBeforeTransfer: "",
+    transferPrecaution: "",
+    receivingFacilityText: "",
+    vehicleMakeModelPlate: "",
+    patientReceivedByPhysician: "",
+    patientReceivedByNurse: "",
+    releaseLiabilityAccepted: "",
     transportMode: formatTransportMode(latestTransport?.transport_mode),
     emsUnitType: formatEmsUnitType(latestTransport?.ems_unit_type),
     arrivedSceneTime: latestTransport?.arrived_scene_at
@@ -2392,6 +2569,7 @@ function mapRecordToForm(
     transportNotes: valueOrEmpty(latestTransport?.notes),
 
     treatmentStrategy: "",
+    fillPatientCareReport: "",
     treatmentAreaName: "",
     stabilizationStartedTime: "",
     stabilizedTime: "",
@@ -2493,6 +2671,67 @@ function FormField({
       />
     </View>
   );
+}
+
+function appendSectionNote(
+  baseValue: string,
+  title: string,
+  rows: Array<[string, string | undefined]>,
+): string {
+  const filledRows = rows.filter(
+    ([, value]) => typeof value === "string" && value.trim().length > 0,
+  );
+
+  if (filledRows.length === 0) {
+    return baseValue;
+  }
+
+  const section = [
+    `[${title}]`,
+    ...filledRows.map(([label, value]) => `${label}: ${value?.trim()}`),
+  ].join("\n");
+
+  return [baseValue.trim(), section].filter(Boolean).join("\n\n");
+}
+
+function buildSaResponderRemarks(form: FormState): string {
+  return appendSectionNote(form.remarks, "SA Responder Details", [
+    ["Victim code", form.victimCode],
+    ["Witness present", form.witnessPresent],
+    ["Witness other", form.witnessOther],
+    ["Witness response", form.witnessResponse],
+    ["CPR type", form.cprType],
+    ["Newborn", form.newborn],
+    ["Pregnant", form.pregnant],
+    ["Religion", form.religion],
+  ]);
+}
+
+function buildSaResponderTreatmentNotes(form: FormState): string {
+  return appendSectionNote(form.treatmentNotes, "Patient Care Report", [
+    ["Fill in Patient Care Report", form.fillPatientCareReport],
+    ["Stabilized time", form.stabilizedTime],
+  ]);
+}
+
+function buildSaResponderTransportNotes(form: FormState): string {
+  const releaseText =
+    form.patientFor === "Release" &&
+    form.releaseLiabilityAccepted === "Yes"
+      ? RELEASE_OF_LIABILITY_TEXT
+      : "";
+
+  return appendSectionNote(form.transportNotes, "SA Transport / Release", [
+    ["Patient for", form.patientFor],
+    ["Condition before release/transfer", form.conditionBeforeTransfer],
+    ["Precaution", form.transferPrecaution],
+    ["Receiving facility", form.receivingFacilityText],
+    ["Vehicle make/model/plate", form.vehicleMakeModelPlate],
+    ["Patient received by physician", form.patientReceivedByPhysician],
+    ["Patient received by nurse", form.patientReceivedByNurse],
+    ["Release of liability accepted", form.releaseLiabilityAccepted],
+    ["Release of liability text", releaseText],
+  ]);
 }
 
 type CurrentTimeFieldProps = FieldProps & {
@@ -3129,6 +3368,12 @@ export default function AddCasualtyScreen() {
   const [currentReportingContext, setCurrentReportingContext] =
     useState<ReportingContext | null>(null);
   const [
+    currentAssignedMunicipality,
+    setCurrentAssignedMunicipality,
+  ] = useState<string | null>(null);
+  const [currentAssignedBarangay, setCurrentAssignedBarangay] =
+    useState<string | null>(null);
+  const [
     currentResponderAssignment,
     setCurrentResponderAssignment,
   ] = useState<ResponderAssignment | null>(null);
@@ -3141,9 +3386,15 @@ export default function AddCasualtyScreen() {
     currentUserRole,
     currentResponderAssignment,
   );
+  const isSaResponderFlow = isSaResponderCaptureFlow(
+    currentUserRole,
+    currentResponderAssignment,
+  );
   const activeSteps: AddCasualtyStep[] = isFieldResponderFlow
     ? [...FIELD_RESPONDER_STEPS]
-    : [...STEPS];
+    : isSaResponderFlow
+      ? [...SA_RESPONDER_STEPS]
+      : [...DEFAULT_STEPS];
   const stepName: AddCasualtyStep =
     activeSteps[currentStep] ?? activeSteps[0];
   const screenTitle = isEditing ? "Edit Casualty" : "Add Casualty";
@@ -3175,6 +3426,7 @@ export default function AddCasualtyScreen() {
       dateOfBirth: normalizeDate(form.dateOfBirth),
       estimatedAge: parseOptionalInteger(form.age),
       sex: form.sex,
+      contactNumber: form.contactNumber,
       houseStreet: form.houseStreet,
       barangay: form.barangay,
       municipality: form.municipality,
@@ -3200,11 +3452,13 @@ export default function AddCasualtyScreen() {
       medicalCondition: form.medicalCondition,
       assistanceNeeded: form.assistanceNeeded,
       assistanceProvided: form.assistanceProvided,
-      remarks: form.remarks,
+      remarks: isSaResponderFlow
+        ? buildSaResponderRemarks(form)
+        : form.remarks,
       latitude: parseOptionalNumber(form.latitude),
       longitude: parseOptionalNumber(form.longitude),
     }),
-    [form],
+    [form, isSaResponderFlow],
   );
 
   const triageAssessmentPayload = useMemo<
@@ -3238,7 +3492,7 @@ export default function AddCasualtyScreen() {
   const transportRecordPayload = useMemo<
     CreateCasualtyPayload["transportRecord"]
   >(() => {
-    if (!form.transportRequired.trim()) {
+    if (!form.transportRequired.trim() && !form.patientFor.trim()) {
       return undefined;
     }
 
@@ -3250,18 +3504,26 @@ export default function AddCasualtyScreen() {
     }
 
     return {
-      transportRequired: normalizeTransportRequired(
-        form.transportRequired,
-      ),
+      transportRequired: isSaResponderFlow
+        ? form.patientFor === "Referral or Transfer to Health Facility"
+          ? "yes"
+          : form.patientFor === "Release"
+            ? "no"
+            : "unknown"
+        : normalizeTransportRequired(form.transportRequired),
       transportMode: normalizeTransportMode(form.transportMode),
       emsUnitType: normalizeEmsUnitType(form.emsUnitType),
-      arrivedSceneAt: parseDateTimeInput(form.arrivedSceneTime),
+      arrivedSceneAt: isSaResponderFlow
+        ? undefined
+        : parseDateTimeInput(form.arrivedSceneTime),
       departedSceneAt: parseDateTimeInput(form.departedSceneTime),
       arrivedFacilityAt: parseDateTimeInput(form.arrivedFacilityTime),
       receivingFacilityId: form.healthcareFacilityId || undefined,
-      notes: form.transportNotes,
+      notes: isSaResponderFlow
+        ? buildSaResponderTransportNotes(form)
+        : form.transportNotes,
     };
-  }, [form, initialTransportSignature, isEditing]);
+  }, [form, initialTransportSignature, isEditing, isSaResponderFlow]);
 
   const treatmentRecordPayload = useMemo<
     CreateCasualtyPayload["treatmentRecord"]
@@ -3281,14 +3543,18 @@ export default function AddCasualtyScreen() {
       treatmentStrategy: normalizeTreatmentStrategy(
         form.treatmentStrategy,
       ),
-      treatmentAreaName: form.treatmentAreaName || undefined,
-      stabilizationStartedAt: parseDateTimeInput(
-        form.stabilizationStartedTime,
-      ),
+      treatmentAreaName: isSaResponderFlow
+        ? undefined
+        : form.treatmentAreaName || undefined,
+      stabilizationStartedAt: isSaResponderFlow
+        ? undefined
+        : parseDateTimeInput(form.stabilizationStartedTime),
       stabilizedAt: parseDateTimeInput(form.stabilizedTime),
-      notes: form.treatmentNotes,
+      notes: isSaResponderFlow
+        ? buildSaResponderTreatmentNotes(form)
+        : form.treatmentNotes,
     };
-  }, [form, initialTreatmentSignature, isEditing]);
+  }, [form, initialTreatmentSignature, isEditing, isSaResponderFlow]);
 
   const facilityEncounterPayload = useMemo<
     CreateCasualtyPayload["facilityEncounter"]
@@ -3458,6 +3724,10 @@ export default function AddCasualtyScreen() {
         setCurrentUserId(user?.id ?? null);
         setCurrentUserRole(user?.role ?? null);
         setCurrentReportingContext(user?.reporting_context ?? null);
+        setCurrentAssignedMunicipality(
+          user?.assigned_municipality ?? null,
+        );
+        setCurrentAssignedBarangay(user?.assigned_barangay ?? null);
         setCurrentResponderAssignment(responderAssignment);
       }
     }
@@ -3483,11 +3753,25 @@ export default function AddCasualtyScreen() {
 
     setForm((current) => ({
       ...current,
-      idNumber: current.idNumber || generateCasualtyIdNumber(),
+      idNumber:
+        current.idNumber &&
+        !(isSaResponderFlow && current.idNumber.startsWith("CAS-UNIT-"))
+          ? current.idNumber
+          : isSaResponderFlow
+            ? generateCasualtyUnitIdNumber(
+                currentAssignedMunicipality,
+                currentAssignedBarangay,
+              )
+            : generateCasualtyIdNumber(),
       triageTime:
         current.triageTime || formatDateTimeForInput(new Date()),
     }));
-  }, [isEditing]);
+  }, [
+    currentAssignedBarangay,
+    currentAssignedMunicipality,
+    isEditing,
+    isSaResponderFlow,
+  ]);
 
   useEffect(() => {
     if (isEditing) {
@@ -3837,9 +4121,9 @@ export default function AddCasualtyScreen() {
   }
 
   function isActiveChoiceSheetSearchable(): boolean {
-  return (
-    activeChoiceSheet === "incident" ||
-    activeChoiceSheet === "evacuationCenter" ||
+    return (
+      activeChoiceSheet === "incident" ||
+      activeChoiceSheet === "evacuationCenter" ||
       activeChoiceSheet === "healthcareFacility" ||
       activeChoiceSheet === "disasterType"
     );
@@ -3847,6 +4131,79 @@ export default function AddCasualtyScreen() {
 
   function validateCurrentStep(): boolean {
     switch (stepName) {
+      case "Intro":
+        if (!form.incidentId && currentUserId) {
+          Alert.alert(
+            "Incident required",
+            "Select the incident before encoding victim details.",
+          );
+          return false;
+        }
+
+        if (!form.incidentName.trim()) {
+          Alert.alert(
+            "Incident name required",
+            "Select or enter the incident name before continuing.",
+          );
+          return false;
+        }
+
+        if (!form.witnessPresent.trim()) {
+          Alert.alert(
+            "Witness required",
+            "Select who was present as witness.",
+          );
+          return false;
+        }
+
+        if (
+          form.witnessPresent === "Others" &&
+          !form.witnessOther.trim()
+        ) {
+          Alert.alert(
+            "Witness details required",
+            "Enter the other witness type.",
+          );
+          return false;
+        }
+
+        if (!form.witnessResponse.trim()) {
+          Alert.alert(
+            "Witness response required",
+            "Select the witness response.",
+          );
+          return false;
+        }
+
+        if (form.witnessResponse === "CPR" && !form.cprType.trim()) {
+          Alert.alert(
+            "CPR type required",
+            "Select compression only or compression with ventilation.",
+          );
+          return false;
+        }
+
+        return true;
+
+      case "Info":
+        if (!form.firstName.trim() && !form.lastName.trim()) {
+          Alert.alert(
+            "Name required",
+            "Enter at least a first name or last name before continuing.",
+          );
+          return false;
+        }
+
+        if (!form.sex.trim()) {
+          Alert.alert(
+            "Sex required",
+            "Select the casualty sex before continuing.",
+          );
+          return false;
+        }
+
+        return true;
+
       case "Personal":
         if (!form.firstName.trim() && !form.lastName.trim()) {
           Alert.alert(
@@ -3993,6 +4350,57 @@ export default function AddCasualtyScreen() {
         return true;
 
       case "Transport": {
+        if (isSaResponderFlow) {
+          if (!form.patientFor.trim()) {
+            Alert.alert(
+              "Patient disposition required",
+              "Select Release or Referral/Transfer to Health Facility.",
+            );
+            return false;
+          }
+
+          if (
+            form.patientFor === "Referral or Transfer to Health Facility"
+          ) {
+            if (!form.conditionBeforeTransfer.trim()) {
+              Alert.alert(
+                "Condition required",
+                "Enter the condition of patient before release or transfer.",
+              );
+              return false;
+            }
+
+            if (!form.transferPrecaution.trim()) {
+              Alert.alert(
+                "Precaution required",
+                "Select the transfer precaution.",
+              );
+              return false;
+            }
+
+            if (!form.receivingFacilityText.trim()) {
+              Alert.alert(
+                "Receiving facility required",
+                "Enter the receiving facility.",
+              );
+              return false;
+            }
+          }
+
+          if (
+            form.patientFor === "Release" &&
+            form.releaseLiabilityAccepted !== "Yes"
+          ) {
+            Alert.alert(
+              "Release of liability required",
+              "Confirm release of liability before submitting a released patient.",
+            );
+            return false;
+          }
+
+          return true;
+        }
+
         if (!form.transportRequired.trim()) {
           Alert.alert(
             "Transport status required",
@@ -4104,6 +4512,38 @@ export default function AddCasualtyScreen() {
           Alert.alert(
             "Invalid transport times",
             "Arrived facility time cannot be before departed scene time.",
+          );
+          return false;
+        }
+
+        return true;
+      }
+
+      case "Treatment": {
+        if (!form.treatmentStrategy.trim()) {
+          Alert.alert(
+            "Treatment required",
+            "Select the treatment type.",
+          );
+          return false;
+        }
+
+        const statusStabilizedAt = form.stabilizedTime.trim()
+          ? getValidDateTimeInput(form.stabilizedTime)
+          : null;
+
+        if (form.stabilizedTime.trim() && !statusStabilizedAt) {
+          Alert.alert(
+            "Invalid stabilized time",
+            "Enter stabilized time using mm/dd/yyyy hh:mm.",
+          );
+          return false;
+        }
+
+        if (!form.fillPatientCareReport.trim()) {
+          Alert.alert(
+            "PCR selection required",
+            "Select whether to fill in the Patient Care Report.",
           );
           return false;
         }
@@ -4995,6 +5435,24 @@ export default function AddCasualtyScreen() {
     switch (activeChoiceSheet) {
       case "sex":
         return "Select Sex";
+      case "witnessPresent":
+        return "Witness Present";
+      case "witnessResponse":
+        return "Witness Response";
+      case "cprType":
+        return "CPR Type";
+      case "newborn":
+        return "Newborn?";
+      case "pregnant":
+        return "Pregnant?";
+      case "fillPatientCareReport":
+        return "Patient Care Report";
+      case "patientFor":
+        return "Patient For";
+      case "transferPrecaution":
+        return "Transfer Precaution";
+      case "releaseLiabilityAccepted":
+        return "Release of Liability";
       case "incident":
         return "Select Incident Name";
       case "evacuationCenter":
@@ -5062,6 +5520,70 @@ export default function AddCasualtyScreen() {
           selected:
             form.sex.toLowerCase() === option.toLowerCase(),
           onSelect: () => updateField("sex", option),
+        }));
+
+      case "witnessPresent":
+        return WITNESS_PRESENT_OPTIONS.map((option) => ({
+          label: option,
+          selected: form.witnessPresent === option,
+          onSelect: () => updateField("witnessPresent", option),
+        }));
+
+      case "witnessResponse":
+        return WITNESS_RESPONSE_OPTIONS.map((option) => ({
+          label: option,
+          selected: form.witnessResponse === option,
+          onSelect: () => updateField("witnessResponse", option),
+        }));
+
+      case "cprType":
+        return CPR_TYPE_OPTIONS.map((option) => ({
+          label: option,
+          selected: form.cprType === option,
+          onSelect: () => updateField("cprType", option),
+        }));
+
+      case "newborn":
+        return YES_NO_OPTIONS_TEXT.map((option) => ({
+          label: option,
+          selected: form.newborn === option,
+          onSelect: () => updateField("newborn", option),
+        }));
+
+      case "pregnant":
+        return YES_NO_OPTIONS_TEXT.map((option) => ({
+          label: option,
+          selected: form.pregnant === option,
+          onSelect: () => updateField("pregnant", option),
+        }));
+
+      case "fillPatientCareReport":
+        return YES_NO_OPTIONS_TEXT.map((option) => ({
+          label: option,
+          selected: form.fillPatientCareReport === option,
+          onSelect: () => updateField("fillPatientCareReport", option),
+        }));
+
+      case "patientFor":
+        return PATIENT_FOR_OPTIONS.map((option) => ({
+          label: option,
+          selected: form.patientFor === option,
+          onSelect: () => updateField("patientFor", option),
+        }));
+
+      case "transferPrecaution":
+        return PRECAUTION_OPTIONS.map((option) => ({
+          label: option,
+          selected: form.transferPrecaution === option,
+          onSelect: () => updateField("transferPrecaution", option),
+        }));
+
+      case "releaseLiabilityAccepted":
+        return YES_NO_OPTIONS_TEXT.map((option) => ({
+          label: option,
+          selected: form.releaseLiabilityAccepted === option,
+          onSelect: () =>
+            updateField("releaseLiabilityAccepted", option),
         }));
 
       case "incident": {
@@ -5611,6 +6133,185 @@ export default function AddCasualtyScreen() {
     }
 
     router.back();
+  }
+
+  function renderSaIntroStep() {
+    return (
+      <>
+        <SelectField
+          label="INCIDENT NAME"
+          value={form.incidentName || form.incidentId}
+          placeholder={
+            isLoadingIncidents
+              ? "Loading active incidents..."
+              : "Select active incident"
+          }
+          onPress={() => openChoiceSheet("incident")}
+        />
+
+        <SelectField
+          label="WITNESS PRESENT"
+          value={form.witnessPresent}
+          placeholder="Select witness"
+          onPress={() => openChoiceSheet("witnessPresent")}
+        />
+
+        {form.witnessPresent === "Others" ? (
+          <FormField
+            label="OTHER WITNESS"
+            value={form.witnessOther}
+            placeholder="Specify witness"
+            onChangeText={(value) =>
+              updateField("witnessOther", value)
+            }
+          />
+        ) : null}
+
+        <SelectField
+          label="WITNESS RESPONSE"
+          value={form.witnessResponse}
+          placeholder="Select response"
+          onPress={() => openChoiceSheet("witnessResponse")}
+        />
+
+        {form.witnessResponse === "CPR" ? (
+          <SelectField
+            label="CPR TYPE"
+            value={form.cprType}
+            placeholder="Select CPR type"
+            onPress={() => openChoiceSheet("cprType")}
+          />
+        ) : null}
+      </>
+    );
+  }
+
+  function renderSaInfoStep() {
+    return (
+      <>
+        <FormField
+          label="VICTIM CODE"
+          value={form.victimCode}
+          placeholder="e.g. A1, A2, B1"
+          onChangeText={(value) =>
+            updateField("victimCode", value)
+          }
+        />
+
+        <View style={styles.twoColumnRow}>
+          <View style={styles.halfColumn}>
+            <FormField
+              label="ID NUMBER"
+              value={form.idNumber}
+              placeholder="CAS-UNIT-001"
+              editable={false}
+              onChangeText={(value) =>
+                updateField("idNumber", value)
+              }
+            />
+          </View>
+
+          <View style={styles.halfColumn}>
+            <FormField
+              label="AGE"
+              value={form.age}
+              placeholder="Age"
+              keyboardType="numeric"
+              onChangeText={(value) =>
+                updateField("age", value)
+              }
+            />
+          </View>
+        </View>
+
+        <FormField
+          label="FIRST NAME"
+          value={form.firstName}
+          placeholder="First name"
+          onChangeText={(value) =>
+            updateField("firstName", value)
+          }
+        />
+
+        <FormField
+          label="MIDDLE NAME"
+          value={form.middleName}
+          placeholder="Middle name"
+          onChangeText={(value) =>
+            updateField("middleName", value)
+          }
+        />
+
+        <FormField
+          label="LAST NAME"
+          value={form.lastName}
+          placeholder="Last name"
+          onChangeText={(value) =>
+            updateField("lastName", value)
+          }
+        />
+
+        <View style={styles.twoColumnRow}>
+          <View style={styles.halfColumn}>
+            <SelectField
+              label="SEX"
+              value={form.sex}
+              placeholder="Select sex"
+              onPress={() => openChoiceSheet("sex")}
+            />
+          </View>
+
+          <View style={styles.halfColumn}>
+            <SelectField
+              label="DATE OF BIRTH"
+              value={form.dateOfBirth}
+              placeholder="mm/dd/yyyy"
+              icon="calendar-outline"
+              onPress={() => setIsDatePickerVisible(true)}
+            />
+          </View>
+        </View>
+
+        <View style={styles.twoColumnRow}>
+          <View style={styles.halfColumn}>
+            <SelectField
+              label="NEWBORN?"
+              value={form.newborn}
+              placeholder="Yes or No"
+              onPress={() => openChoiceSheet("newborn")}
+            />
+          </View>
+
+          <View style={styles.halfColumn}>
+            <SelectField
+              label="PREGNANT?"
+              value={form.pregnant}
+              placeholder="Yes or No"
+              onPress={() => openChoiceSheet("pregnant")}
+            />
+          </View>
+        </View>
+
+        <FormField
+          label="RELIGION"
+          value={form.religion}
+          placeholder="Religion"
+          onChangeText={(value) =>
+            updateField("religion", value)
+          }
+        />
+
+        <FormField
+          label="CONTACT NUMBER"
+          value={form.contactNumber}
+          placeholder="Contact number"
+          keyboardType="phone-pad"
+          onChangeText={(value) =>
+            updateField("contactNumber", value)
+          }
+        />
+      </>
+    );
   }
 
   function renderPersonalStep() {
@@ -6324,6 +7025,146 @@ export default function AddCasualtyScreen() {
   }
 
   function renderTransportStep() {
+    if (isSaResponderFlow) {
+      const isTransfer =
+        form.patientFor === "Referral or Transfer to Health Facility";
+      const isRelease = form.patientFor === "Release";
+
+      return (
+        <>
+          <SelectField
+            label="PATIENT FOR"
+            value={form.patientFor}
+            placeholder="Release or referral/transfer"
+            onPress={() => openChoiceSheet("patientFor")}
+          />
+
+          {isTransfer ? (
+            <>
+              <FormField
+                label="CONDITION BEFORE RELEASE / TRANSFER"
+                value={form.conditionBeforeTransfer}
+                placeholder="Condition of patient before release/transfer"
+                multiline
+                onChangeText={(value) =>
+                  updateField("conditionBeforeTransfer", value)
+                }
+              />
+
+              <SelectField
+                label="PRECAUTION"
+                value={form.transferPrecaution}
+                placeholder="Select precaution"
+                onPress={() => openChoiceSheet("transferPrecaution")}
+              />
+
+              <FormField
+                label="RECEIVING FACILITY"
+                value={form.receivingFacilityText}
+                placeholder="Type clinic or hospital name"
+                onChangeText={(value) =>
+                  updateField("receivingFacilityText", value)
+                }
+              />
+
+              <FormField
+                label="VEHICLE MAKE, MODEL, AND PLATE NUMBER"
+                value={form.vehicleMakeModelPlate}
+                placeholder="e.g. Toyota Hiace ABC 1234"
+                onChangeText={(value) =>
+                  updateField("vehicleMakeModelPlate", value)
+                }
+              />
+
+              <CurrentTimeField
+                label="DEPARTED SCENE TIME"
+                value={form.departedSceneTime}
+                placeholder="mm/dd/yyyy hh:mm"
+                icon="exit-outline"
+                buttonLabel="Use current departure time"
+                onChangeText={(value) =>
+                  updateField("departedSceneTime", value)
+                }
+                onUseCurrent={() =>
+                  updateField(
+                    "departedSceneTime",
+                    formatDateTimeForInput(new Date()),
+                  )
+                }
+              />
+
+              <CurrentTimeField
+                label="ARRIVED FACILITY TIME"
+                value={form.arrivedFacilityTime}
+                placeholder="mm/dd/yyyy hh:mm"
+                icon="enter-outline"
+                buttonLabel="Use current arrival time"
+                onChangeText={(value) =>
+                  updateField("arrivedFacilityTime", value)
+                }
+                onUseCurrent={() =>
+                  updateField(
+                    "arrivedFacilityTime",
+                    formatDateTimeForInput(new Date()),
+                  )
+                }
+              />
+
+              <FormField
+                label="PATIENT RECEIVED BY - PHYSICIAN IN CHARGE"
+                value={form.patientReceivedByPhysician}
+                placeholder="Physician in charge"
+                onChangeText={(value) =>
+                  updateField("patientReceivedByPhysician", value)
+                }
+              />
+
+              <FormField
+                label="PATIENT RECEIVED BY - NURSE IN CHARGE"
+                value={form.patientReceivedByNurse}
+                placeholder="Nurse in charge"
+                onChangeText={(value) =>
+                  updateField("patientReceivedByNurse", value)
+                }
+              />
+            </>
+          ) : null}
+
+          {isRelease ? (
+            <>
+              <View style={styles.releaseTextCard}>
+                <Text style={styles.releaseTextTitle}>
+                  Release of Liability
+                </Text>
+                <Text style={styles.releaseTextBody}>
+                  {RELEASE_OF_LIABILITY_TEXT}
+                </Text>
+              </View>
+
+              <SelectField
+                label="RELEASE OF LIABILITY ACCEPTED?"
+                value={form.releaseLiabilityAccepted}
+                placeholder="Yes or No"
+                onPress={() =>
+                  openChoiceSheet("releaseLiabilityAccepted")
+                }
+              />
+            </>
+          ) : null}
+
+          <FormField
+            label="TRANSPORT / RELEASE NOTES"
+            value={form.transportNotes}
+            placeholder="Additional transfer or release notes"
+            multiline
+            onChangeText={(value) =>
+              updateField("transportNotes", value)
+            }
+          />
+        </>
+      );
+    }
+
     return (
       <>
         <SelectField
@@ -6666,6 +7507,91 @@ export default function AddCasualtyScreen() {
           multiline
           onChangeText={(value) =>
             updateField("assistanceProvided", value)
+          }
+        />
+      </>
+    );
+  }
+
+  function renderSaTreatmentStep() {
+    const showPcr = form.fillPatientCareReport === "Yes";
+
+    return (
+      <>
+        <SelectField
+          label="TREATMENT"
+          value={form.treatmentStrategy}
+          placeholder="Select treatment type"
+          onPress={() => openChoiceSheet("treatmentStrategy")}
+        />
+
+        <CurrentTimeField
+          label="STABILIZED TIME"
+          value={form.stabilizedTime}
+          placeholder="mm/dd/yyyy hh:mm"
+          icon="checkmark-circle-outline"
+          buttonLabel="Use current stabilized time"
+          onChangeText={(value) =>
+            updateField("stabilizedTime", value)
+          }
+          onUseCurrent={() =>
+            updateField(
+              "stabilizedTime",
+              formatDateTimeForInput(new Date()),
+            )
+          }
+        />
+
+        <SelectField
+          label="FILL IN PATIENT CARE REPORT?"
+          value={form.fillPatientCareReport}
+          placeholder="Yes or No"
+          onPress={() => openChoiceSheet("fillPatientCareReport")}
+        />
+
+        {showPcr ? (
+          <>
+            <SectionLabel title="PCR Patient Assessment" />
+
+            <FormField
+              label="VISIBLE INJURY"
+              value={form.visibleInjury}
+              placeholder="Describe visible injuries"
+              multiline
+              onChangeText={(value) =>
+                updateField("visibleInjury", value)
+              }
+            />
+
+            <FormField
+              label="MEDICAL CONDITION"
+              value={form.medicalCondition}
+              placeholder="Patient assessment findings"
+              multiline
+              onChangeText={(value) =>
+                updateField("medicalCondition", value)
+              }
+            />
+
+            <FormField
+              label="ASSISTANCE PROVIDED"
+              value={form.assistanceProvided}
+              placeholder="Care rendered"
+              multiline
+              onChangeText={(value) =>
+                updateField("assistanceProvided", value)
+              }
+            />
+          </>
+        ) : null}
+
+        <FormField
+          label="TREATMENT NOTES"
+          value={form.treatmentNotes}
+          placeholder="Treatment observations"
+          multiline
+          onChangeText={(value) =>
+            updateField("treatmentNotes", value)
           }
         />
       </>
@@ -7021,6 +7947,12 @@ export default function AddCasualtyScreen() {
 
   function renderCurrentStep() {
     switch (stepName) {
+      case "Intro":
+        return renderSaIntroStep();
+
+      case "Info":
+        return renderSaInfoStep();
+
       case "Personal":
         return renderPersonalStep();
 
@@ -7038,6 +7970,9 @@ export default function AddCasualtyScreen() {
 
       case "Status":
         return renderStatusStep();
+
+      case "Treatment":
+        return renderSaTreatmentStep();
 
       case "Hospital Care":
         return renderHospitalCareStep();
@@ -8002,6 +8937,27 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 17,
     marginLeft: 10,
+  },
+  releaseTextCard: {
+    borderWidth: 1,
+    borderColor: "#E8D4D6",
+    borderRadius: 14,
+    paddingHorizontal: 13,
+    paddingVertical: 12,
+    backgroundColor: "#FFF9F9",
+    marginBottom: 14,
+  },
+  releaseTextTitle: {
+    color: COLORS.maroon,
+    fontSize: 12,
+    fontWeight: "900",
+    marginBottom: 6,
+    textTransform: "uppercase",
+  },
+  releaseTextBody: {
+    color: COLORS.secondaryText,
+    fontSize: 12,
+    lineHeight: 18,
   },
 
   footerSafeArea: {
