@@ -1,0 +1,499 @@
+Project DCMS {
+  database_type: 'PostgreSQL'
+  Note: '''
+    Disaster Casualty Management System database schema.
+    This DBML file is formatted for dbdiagram.io import.
+  '''
+}
+
+Enum user_role {
+  super_admin
+  admin
+  administrator
+  responder
+  documenter
+  encoder
+  medical_personnel
+  viewer
+}
+
+Enum reporting_context {
+  scene
+  transport
+  receiving_facility_ed
+  hospital_ward
+  evacuation_center
+  command_admin
+}
+
+Enum verification_status {
+  submitted
+  under_review
+  verified
+  rejected
+}
+
+Enum casualty_status {
+  alive
+  injured
+  missing
+  deceased
+  transferred
+  discharged
+  unknown
+}
+
+Enum casualty_severity {
+  none
+  minor
+  moderate
+  severe
+  critical
+  fatal
+  unknown
+}
+
+Enum identification_status {
+  identified
+  partially_identified
+  unidentified
+}
+
+Table users {
+  id uuid [pk]
+  full_name varchar
+  email varchar [unique]
+  phone_number varchar
+  role user_role
+  reporting_context reporting_context
+  assigned_barangay varchar
+  assigned_municipality varchar
+  is_active boolean
+  created_by uuid
+  created_at timestamptz
+  updated_at timestamptz
+  last_seen_at timestamptz
+
+  Note: 'Application profile table linked to Supabase Auth users by id.'
+}
+
+Table incidents {
+  id uuid [pk]
+  incident_code varchar [unique]
+  incident_name varchar
+  disaster_type varchar
+  description text
+  province varchar
+  municipality varchar
+  barangay varchar
+  started_at timestamptz
+  ended_at timestamptz
+  status varchar
+  created_by uuid
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table casualties {
+  id uuid [pk]
+  id_number varchar
+  id_type varchar
+  identification_status identification_status
+  first_name varchar
+  middle_name varchar
+  last_name varchar
+  suffix varchar
+  date_of_birth date
+  estimated_age integer
+  sex varchar
+  civil_status varchar
+  nationality varchar
+  contact_number varchar
+  house_street varchar
+  barangay varchar
+  municipality varchar
+  province varchar
+  region varchar
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table casualty_incidents {
+  id uuid [pk]
+  client_record_id uuid
+  casualty_id uuid [not null]
+  incident_id uuid [not null]
+  evacuation_center_id uuid
+  healthcare_facility_id uuid
+  current_status casualty_status
+  severity casualty_severity
+  verification_status verification_status
+  verified_by uuid
+  verified_at timestamptz
+  current_location text
+  hospital_name varchar
+  visible_injury text
+  medical_condition text
+  assistance_needed text
+  assistance_provided text
+  remarks text
+  encoded_by uuid
+  reported_at timestamptz
+  latitude decimal
+  longitude decimal
+  created_at timestamptz
+  updated_at timestamptz
+  deleted_at timestamptz
+
+  Note: 'Central operational table: one casualty report within one incident.'
+}
+
+Table casualty_triage_assessments {
+  id uuid [pk]
+  casualty_incident_id uuid [not null]
+  triage_system varchar
+  triage_category varchar
+  responder_category varchar
+  calculated_category varchar
+  triage_stage varchar
+  assessment_answers jsonb
+  algorithm_version varchar
+  is_over_triage boolean
+  is_under_triage boolean
+  triaged_at timestamptz
+  triaged_by uuid
+  location text
+  notes text
+  created_at timestamptz
+}
+
+Table casualty_transport_records {
+  id uuid [pk]
+  casualty_incident_id uuid [not null]
+  transport_required varchar
+  transport_mode varchar
+  ems_unit_type varchar
+  arrived_scene_at timestamptz
+  departed_scene_at timestamptz
+  arrived_facility_at timestamptz
+  receiving_facility_id uuid
+  recorded_by uuid
+  notes text
+  created_at timestamptz
+}
+
+Table casualty_status_history {
+  id uuid [pk]
+  casualty_incident_id uuid [not null]
+  old_status varchar
+  new_status varchar
+  changed_by uuid
+  change_reason text
+  created_at timestamptz
+}
+
+Table casualty_verification_history {
+  id uuid [pk]
+  casualty_incident_id uuid [not null]
+  old_status varchar
+  new_status varchar
+  reviewed_by uuid
+  review_notes text
+  created_at timestamptz
+}
+
+Table evacuation_centers {
+  id uuid [pk]
+  incident_id uuid [not null]
+  center_name varchar
+  address text
+  barangay varchar
+  municipality varchar
+  province varchar
+  capacity integer
+  contact_person varchar
+  contact_number varchar
+  latitude decimal
+  longitude decimal
+  is_active boolean
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table healthcare_facilities {
+  id uuid [pk]
+  facility_name varchar
+  facility_level varchar
+  address text
+  barangay varchar
+  municipality varchar
+  province varchar
+  contact_person varchar
+  contact_number varchar
+  latitude decimal
+  longitude decimal
+  is_active boolean
+  created_by uuid
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table facility_encounters {
+  id uuid [pk]
+  casualty_incident_id uuid [not null]
+  facility_id uuid
+  arrived_at timestamptz
+  ed_admitted_at timestamptz
+  ed_departed_at timestamptz
+  hospital_admitted_at timestamptz
+  hospital_discharged_at timestamptz
+  admitted_to_hospital boolean
+  discharged_home_after_ed boolean
+  transferred_out_of_hospital boolean
+  recorded_by uuid
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table icu_encounters {
+  id uuid [pk]
+  casualty_incident_id uuid [not null]
+  healthcare_facility_id uuid
+  icu_admitted_at timestamptz
+  icu_discharged_at timestamptz
+  mechanical_ventilation_required boolean
+  ventilation_started_at timestamptz
+  ventilation_ended_at timestamptz
+  created_at timestamptz
+}
+
+Table clinical_procedures {
+  id uuid [pk]
+  casualty_incident_id uuid [not null]
+  healthcare_facility_id uuid
+  procedure_type varchar
+  procedure_required boolean
+  procedure_started_at timestamptz
+  procedure_ended_at timestamptz
+  notes text
+  created_at timestamptz
+}
+
+Table casualty_treatments {
+  id uuid [pk]
+  casualty_incident_id uuid [not null]
+  treatment_strategy varchar
+  treatment_area_name varchar
+  stabilization_started_at timestamptz
+  stabilized_at timestamptz
+  treated_by uuid
+  notes text
+  created_at timestamptz
+}
+
+Table casualty_outcomes {
+  id uuid [pk]
+  casualty_incident_id uuid [not null]
+  reached_hospital boolean
+  medical_contact_before_death boolean
+  died boolean
+  death_stage varchar
+  death_at timestamptz
+  final_disposition varchar
+  recorded_by uuid
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table incident_response_timelines {
+  id uuid [pk]
+  incident_id uuid [not null]
+  event_notification_at timestamptz
+  dmmp_activated_at timestamptz
+  first_ems_on_scene_at timestamptz
+  triage_ordered_at timestamptz
+  first_site_triage_at timestamptz
+  last_site_triage_at timestamptz
+  first_transport_from_scene_at timestamptz
+  last_transport_from_scene_at timestamptz
+  scene_demobilized_at timestamptz
+  updated_by uuid
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table dmmp_staff_call_downs {
+  id uuid [pk]
+  incident_id uuid [not null]
+  staff_group varchar
+  contacted_count integer
+  arrived_count integer
+  recorded_by uuid
+  created_at timestamptz
+}
+
+Table medical_coordination_assessments {
+  id uuid [pk]
+  incident_id uuid [not null]
+  coordination_status varchar
+  communication_status varchar
+  assessed_by uuid
+  created_at timestamptz
+}
+
+Table continuity_of_care_assessments {
+  id uuid [pk]
+  incident_id uuid [not null]
+  scene_medical_responders_demobilized_at timestamptz
+  last_healthcare_facility_deactivated_at timestamptz
+  normal_ems_coverage_disruption varchar
+  healthcare_facility_routine_care_disruption varchar
+  assessed_by uuid
+  assessed_at timestamptz
+  notes text
+  created_at timestamptz
+}
+
+Table responder_safety_reports {
+  id uuid [pk]
+  incident_id uuid [not null]
+  responder_injuries integer
+  responder_deaths integer
+  safety_issues text
+  reported_by uuid
+  created_at timestamptz
+}
+
+Table ems_vehicle_arrivals {
+  id uuid [pk]
+  incident_id uuid [not null]
+  vehicle_identifier varchar
+  arrived_at timestamptz
+  departed_at timestamptz
+  recorded_by uuid
+  created_at timestamptz
+}
+
+Table facility_resource_snapshots {
+  id uuid [pk]
+  incident_id uuid [not null]
+  healthcare_facility_id uuid
+  beds_available integer
+  beds_occupied integer
+  icu_beds_available integer
+  icu_beds_occupied integer
+  recorded_by uuid
+  recorded_at timestamptz
+  created_at timestamptz
+}
+
+Table sitreps {
+  id uuid [pk]
+  incident_id uuid [not null]
+  report_number varchar [unique]
+  period_start timestamptz
+  period_end timestamptz
+  summary text
+  generated_payload jsonb
+  generated_by uuid
+  generated_at timestamptz
+  status varchar
+  approved_by uuid
+  approved_at timestamptz
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table notifications {
+  id uuid [pk]
+  user_id uuid [not null]
+  title varchar
+  message text
+  notification_type varchar
+  is_read boolean
+  created_at timestamptz
+}
+
+Table attachments {
+  id uuid [pk]
+  casualty_incident_id uuid [not null]
+  file_name varchar
+  file_type varchar
+  file_size integer
+  storage_path text
+  uploaded_by uuid
+  created_at timestamptz
+}
+
+Ref: users.created_by > users.id
+Ref: incidents.created_by > users.id
+
+Ref: casualty_incidents.casualty_id > casualties.id
+Ref: casualty_incidents.incident_id > incidents.id
+Ref: casualty_incidents.evacuation_center_id > evacuation_centers.id
+Ref: casualty_incidents.healthcare_facility_id > healthcare_facilities.id
+Ref: casualty_incidents.encoded_by > users.id
+Ref: casualty_incidents.verified_by > users.id
+
+Ref: casualty_triage_assessments.casualty_incident_id > casualty_incidents.id
+Ref: casualty_triage_assessments.triaged_by > users.id
+
+Ref: casualty_transport_records.casualty_incident_id > casualty_incidents.id
+Ref: casualty_transport_records.receiving_facility_id > healthcare_facilities.id
+Ref: casualty_transport_records.recorded_by > users.id
+
+Ref: casualty_status_history.casualty_incident_id > casualty_incidents.id
+Ref: casualty_status_history.changed_by > users.id
+
+Ref: casualty_verification_history.casualty_incident_id > casualty_incidents.id
+Ref: casualty_verification_history.reviewed_by > users.id
+
+Ref: evacuation_centers.incident_id > incidents.id
+Ref: healthcare_facilities.created_by > users.id
+
+Ref: facility_encounters.casualty_incident_id > casualty_incidents.id
+Ref: facility_encounters.facility_id > healthcare_facilities.id
+Ref: facility_encounters.recorded_by > users.id
+
+Ref: icu_encounters.casualty_incident_id > casualty_incidents.id
+Ref: icu_encounters.healthcare_facility_id > healthcare_facilities.id
+
+Ref: clinical_procedures.casualty_incident_id > casualty_incidents.id
+Ref: clinical_procedures.healthcare_facility_id > healthcare_facilities.id
+
+Ref: casualty_treatments.casualty_incident_id > casualty_incidents.id
+Ref: casualty_treatments.treated_by > users.id
+
+Ref: casualty_outcomes.casualty_incident_id > casualty_incidents.id
+Ref: casualty_outcomes.recorded_by > users.id
+
+Ref: incident_response_timelines.incident_id > incidents.id
+Ref: incident_response_timelines.updated_by > users.id
+
+Ref: dmmp_staff_call_downs.incident_id > incidents.id
+Ref: dmmp_staff_call_downs.recorded_by > users.id
+
+Ref: medical_coordination_assessments.incident_id > incidents.id
+Ref: medical_coordination_assessments.assessed_by > users.id
+
+Ref: continuity_of_care_assessments.incident_id > incidents.id
+Ref: continuity_of_care_assessments.assessed_by > users.id
+
+Ref: responder_safety_reports.incident_id > incidents.id
+Ref: responder_safety_reports.reported_by > users.id
+
+Ref: ems_vehicle_arrivals.incident_id > incidents.id
+Ref: ems_vehicle_arrivals.recorded_by > users.id
+
+Ref: facility_resource_snapshots.incident_id > incidents.id
+Ref: facility_resource_snapshots.healthcare_facility_id > healthcare_facilities.id
+Ref: facility_resource_snapshots.recorded_by > users.id
+
+Ref: sitreps.incident_id > incidents.id
+Ref: sitreps.generated_by > users.id
+Ref: sitreps.approved_by > users.id
+
+Ref: notifications.user_id > users.id
+
+Ref: attachments.casualty_incident_id > casualty_incidents.id
+Ref: attachments.uploaded_by > users.id

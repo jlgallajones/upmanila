@@ -1,0 +1,146 @@
+erDiagram
+  USERS ||--o{ USERS : creates
+  USERS ||--o{ INCIDENTS : creates
+  USERS ||--o{ CASUALTY_INCIDENTS : encodes
+  USERS ||--o{ CASUALTY_INCIDENTS : verifies
+  USERS ||--o{ CASUALTY_TRIAGE_ASSESSMENTS : triages
+  USERS ||--o{ CASUALTY_TRANSPORT_RECORDS : records
+  USERS ||--o{ CASUALTY_STATUS_HISTORY : changes
+  USERS ||--o{ CASUALTY_VERIFICATION_HISTORY : reviews
+  USERS ||--o{ HEALTHCARE_FACILITIES : creates
+  USERS ||--o{ SITREPS : generates
+  USERS ||--o{ NOTIFICATIONS : receives
+
+  INCIDENTS ||--o{ CASUALTY_INCIDENTS : includes
+  INCIDENTS ||--o{ EVACUATION_CENTERS : assigns
+  INCIDENTS ||--o{ INCIDENT_RESPONSE_TIMELINES : has
+  INCIDENTS ||--o{ DMMP_STAFF_CALL_DOWNS : has
+  INCIDENTS ||--o{ MEDICAL_COORDINATION_ASSESSMENTS : has
+  INCIDENTS ||--o{ CONTINUITY_OF_CARE_ASSESSMENTS : has
+  INCIDENTS ||--o{ RESPONDER_SAFETY_REPORTS : has
+  INCIDENTS ||--o{ EMS_VEHICLE_ARRIVALS : has
+  INCIDENTS ||--o{ FACILITY_RESOURCE_SNAPSHOTS : has
+  INCIDENTS ||--o{ SITREPS : has
+
+  CASUALTIES ||--o{ CASUALTY_INCIDENTS : reported_in
+  EVACUATION_CENTERS ||--o{ CASUALTY_INCIDENTS : shelters
+  HEALTHCARE_FACILITIES ||--o{ CASUALTY_INCIDENTS : receives
+  HEALTHCARE_FACILITIES ||--o{ CASUALTY_TRANSPORT_RECORDS : receiving_facility
+  HEALTHCARE_FACILITIES ||--o{ FACILITY_ENCOUNTERS : hosts
+  HEALTHCARE_FACILITIES ||--o{ ICU_ENCOUNTERS : hosts
+  HEALTHCARE_FACILITIES ||--o{ CLINICAL_PROCEDURES : hosts
+  HEALTHCARE_FACILITIES ||--o{ FACILITY_RESOURCE_SNAPSHOTS : reports
+
+  CASUALTY_INCIDENTS ||--o{ CASUALTY_TRIAGE_ASSESSMENTS : has
+  CASUALTY_INCIDENTS ||--o{ CASUALTY_TRANSPORT_RECORDS : has
+  CASUALTY_INCIDENTS ||--o{ FACILITY_ENCOUNTERS : has
+  CASUALTY_INCIDENTS ||--o{ ICU_ENCOUNTERS : has
+  CASUALTY_INCIDENTS ||--o{ CLINICAL_PROCEDURES : has
+  CASUALTY_INCIDENTS ||--o{ CASUALTY_TREATMENTS : has
+  CASUALTY_INCIDENTS ||--o{ CASUALTY_OUTCOMES : has
+  CASUALTY_INCIDENTS ||--o{ CASUALTY_STATUS_HISTORY : has
+  CASUALTY_INCIDENTS ||--o{ CASUALTY_VERIFICATION_HISTORY : has
+
+  USERS {
+    uuid id PK
+    text full_name
+    text email
+    user_role role
+    text reporting_context
+    boolean is_active
+    uuid created_by FK
+    timestamptz last_seen_at
+  }
+
+  INCIDENTS {
+    uuid id PK
+    text incident_code
+    text incident_name
+    text disaster_type
+    text status
+    timestamptz started_at
+    timestamptz ended_at
+  }
+
+  CASUALTIES {
+    uuid id PK
+    text id_number
+    text identification_status
+    text first_name
+    text middle_name
+    text last_name
+    int estimated_age
+    text sex
+  }
+
+  CASUALTY_INCIDENTS {
+    uuid id PK
+    uuid casualty_id FK
+    uuid incident_id FK
+    uuid evacuation_center_id FK
+    uuid healthcare_facility_id FK
+    uuid encoded_by FK
+    uuid verified_by FK
+    text current_status
+    text severity
+    text verification_status
+    timestamptz reported_at
+  }
+
+  CASUALTY_TRIAGE_ASSESSMENTS {
+    uuid id PK
+    uuid casualty_incident_id FK
+    text triage_system
+    text triage_stage
+    text responder_category
+    text calculated_category
+    text triage_category
+    timestamptz triaged_at
+    uuid triaged_by FK
+  }
+
+  CASUALTY_TRANSPORT_RECORDS {
+    uuid id PK
+    uuid casualty_incident_id FK
+    text transport_required
+    text transport_mode
+    text ems_unit_type
+    uuid receiving_facility_id FK
+    uuid recorded_by FK
+  }
+
+  HEALTHCARE_FACILITIES {
+    uuid id PK
+    text facility_name
+    text facility_level
+    text address
+    boolean is_active
+    uuid created_by FK
+  }
+
+  EVACUATION_CENTERS {
+    uuid id PK
+    uuid incident_id FK
+    text center_name
+    text address
+    int capacity
+    boolean is_active
+  }
+
+  FACILITY_ENCOUNTERS {
+    uuid id PK
+    uuid casualty_incident_id FK
+    uuid facility_id FK
+    timestamptz arrived_at
+    boolean admitted_to_hospital
+  }
+
+  SITREPS {
+    uuid id PK
+    uuid incident_id FK
+    text report_number
+    jsonb generated_payload
+    uuid generated_by FK
+    uuid approved_by FK
+    text status
+  }

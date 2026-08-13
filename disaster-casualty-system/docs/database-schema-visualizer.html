@@ -1,0 +1,643 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DCMS Database Schema Visualizer</title>
+    <style>
+      :root {
+        --maroon: #7b1113;
+        --maroon-dark: #5e0b0d;
+        --gold: #fdbb30;
+        --ink: #17213a;
+        --muted: #667085;
+        --line: #dbe3ef;
+        --soft: #f6f8fb;
+        --panel: #ffffff;
+        --green: #2e7d4f;
+        --blue: #267abd;
+        --orange: #d96d12;
+        --red: #c92d32;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 86% -12%, rgba(123, 17, 19, 0.13), transparent 34%),
+          linear-gradient(180deg, #fbfcfe, #eef2f7);
+      }
+
+      header {
+        padding: 34px 34px 24px;
+        color: #fff;
+        background:
+          linear-gradient(135deg, rgba(94, 11, 13, 0.98), rgba(123, 17, 19, 0.98)),
+          var(--maroon);
+      }
+
+      header h1 {
+        margin: 0;
+        font-size: clamp(30px, 5vw, 52px);
+        line-height: 1.05;
+      }
+
+      header p {
+        max-width: 980px;
+        margin: 12px 0 0;
+        color: rgba(255, 255, 255, 0.78);
+        line-height: 1.6;
+      }
+
+      main {
+        padding: 26px 34px 42px;
+      }
+
+      .toolbar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: grid;
+        grid-template-columns: minmax(240px, 1fr) auto;
+        gap: 12px;
+        align-items: center;
+        margin: -26px -34px 24px;
+        padding: 14px 34px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.92);
+        backdrop-filter: blur(10px);
+      }
+
+      .toolbar input {
+        min-height: 44px;
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 0 14px;
+        color: var(--ink);
+        background: #fff;
+        outline: none;
+      }
+
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: flex-end;
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        padding: 0 10px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--muted);
+        background: #fff;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .chip.core {
+        color: var(--maroon);
+        background: #fff2f2;
+      }
+
+      .chip.ops {
+        color: var(--blue);
+        background: #edf5ff;
+      }
+
+      .chip.care {
+        color: var(--green);
+        background: #edf8f1;
+      }
+
+      .chip.audit {
+        color: var(--orange);
+        background: #fff4e7;
+      }
+
+      .section {
+        margin-top: 22px;
+      }
+
+      .section h2 {
+        margin: 0 0 10px;
+        font-size: 24px;
+      }
+
+      .note {
+        margin: 0 0 14px;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .diagram-shell {
+        overflow: auto;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: #fff;
+        box-shadow: 0 18px 44px rgba(33, 43, 64, 0.08);
+      }
+
+      .diagram {
+        position: relative;
+        width: 1320px;
+        height: 940px;
+        background:
+          linear-gradient(rgba(219, 227, 239, 0.48) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(219, 227, 239, 0.48) 1px, transparent 1px);
+        background-size: 28px 28px;
+      }
+
+      .links {
+        position: absolute;
+        inset: 0;
+        width: 1320px;
+        height: 940px;
+        pointer-events: none;
+      }
+
+      .links path,
+      .links line {
+        fill: none;
+        stroke: #9aa7b8;
+        stroke-width: 2;
+      }
+
+      .links .primary-link {
+        stroke: var(--maroon);
+        stroke-width: 3;
+      }
+
+      .links text {
+        fill: #5d6b82;
+        font-size: 11px;
+        font-weight: 800;
+        paint-order: stroke;
+        stroke: #fff;
+        stroke-width: 4px;
+      }
+
+      .entity {
+        position: absolute;
+        width: 250px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        overflow: hidden;
+        background: #fff;
+        box-shadow: 0 12px 28px rgba(23, 33, 58, 0.12);
+      }
+
+      .entity.hidden {
+        opacity: 0.18;
+        filter: grayscale(1);
+      }
+
+      .entity h3 {
+        margin: 0;
+        padding: 11px 13px;
+        color: #fff;
+        background: var(--maroon);
+        font-size: 14px;
+        letter-spacing: 0.01em;
+      }
+
+      .entity.core h3 {
+        background: var(--maroon);
+      }
+
+      .entity.ops h3 {
+        background: var(--blue);
+      }
+
+      .entity.care h3 {
+        background: var(--green);
+      }
+
+      .entity.audit h3 {
+        background: var(--orange);
+      }
+
+      .entity ul {
+        list-style: none;
+        margin: 0;
+        padding: 8px 12px 12px;
+      }
+
+      .entity li {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 5px 0;
+        border-bottom: 1px solid #edf1f6;
+        font-size: 12px;
+      }
+
+      .entity li:last-child {
+        border-bottom: 0;
+      }
+
+      .key {
+        color: var(--maroon);
+        font-weight: 950;
+      }
+
+      .fk {
+        color: var(--blue);
+        font-weight: 900;
+      }
+
+      .type {
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 14px;
+      }
+
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 16px;
+        background: #fff;
+        box-shadow: 0 12px 30px rgba(33, 43, 64, 0.06);
+      }
+
+      .card h3 {
+        margin: 0 0 8px;
+        color: var(--maroon);
+        font-size: 17px;
+      }
+
+      .card p,
+      .card li {
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .card ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+
+      .relationships {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: #fff;
+      }
+
+      .relationships th,
+      .relationships td {
+        padding: 12px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        font-size: 13px;
+        vertical-align: top;
+      }
+
+      .relationships th {
+        color: var(--muted);
+        background: #f8fafc;
+        font-size: 11px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .relationships tr:last-child td {
+        border-bottom: 0;
+      }
+
+      code {
+        padding: 2px 5px;
+        border-radius: 6px;
+        color: var(--maroon);
+        background: #fff2f2;
+      }
+
+      @media (max-width: 760px) {
+        header,
+        main {
+          padding-inline: 18px;
+        }
+
+        .toolbar {
+          grid-template-columns: 1fr;
+          margin-inline: -18px;
+          padding-inline: 18px;
+        }
+
+        .legend {
+          justify-content: flex-start;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>DCMS Database Schema Visualizer</h1>
+      <p>
+        Entity relationship diagram for the Disaster Casualty Management System.
+        This file is generated from the current API SQL migrations and controller
+        table usage. It focuses on the operational Supabase schema used by the
+        mobile app and admin dashboard.
+      </p>
+    </header>
+
+    <main>
+      <div class="toolbar">
+        <input id="schemaSearch" type="search" placeholder="Search tables, columns, or relationships..." />
+        <div class="legend">
+          <span class="chip core">Core records</span>
+          <span class="chip care">Care/facility</span>
+          <span class="chip ops">Operations</span>
+          <span class="chip audit">Audit/history</span>
+        </div>
+      </div>
+
+      <section class="section">
+        <h2>Core ERD</h2>
+        <p class="note">
+          Legend: <code>PK</code> means primary key, <code>FK</code> means foreign key.
+          The central table is <code>casualty_incidents</code>, which connects a person,
+          an incident, triage, transport, verification, facility care, and reporting.
+        </p>
+
+        <div class="diagram-shell">
+          <div class="diagram" id="diagram">
+            <svg class="links" viewBox="0 0 1320 940" aria-hidden="true">
+              <defs>
+                <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+                  <path d="M0,0 L0,6 L9,3 z" fill="#9aa7b8"></path>
+                </marker>
+                <marker id="arrowPrimary" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+                  <path d="M0,0 L0,6 L9,3 z" fill="#7b1113"></path>
+                </marker>
+              </defs>
+
+              <line class="primary-link" x1="320" y1="188" x2="520" y2="336" marker-end="url(#arrowPrimary)"></line>
+              <text x="388" y="248">created/encoded by</text>
+
+              <line class="primary-link" x1="568" y1="194" x2="582" y2="328" marker-end="url(#arrowPrimary)"></line>
+              <text x="586" y="258">incident_id</text>
+
+              <line class="primary-link" x1="1010" y1="196" x2="706" y2="344" marker-end="url(#arrowPrimary)"></line>
+              <text x="832" y="255">casualty_id</text>
+
+              <line x1="306" y1="404" x2="518" y2="408" marker-end="url(#arrow)"></line>
+              <text x="352" y="392">evacuation/facility</text>
+
+              <line x1="706" y1="406" x2="1000" y2="386" marker-end="url(#arrow)"></line>
+              <text x="792" y="380">triage + transport</text>
+
+              <line x1="620" y1="520" x2="620" y2="640" marker-end="url(#arrow)"></line>
+              <text x="638" y="586">history/review</text>
+
+              <line x1="1046" y1="506" x2="1046" y2="640" marker-end="url(#arrow)"></line>
+              <text x="1062" y="582">hospital care</text>
+
+              <line x1="540" y1="190" x2="298" y2="640" marker-end="url(#arrow)"></line>
+              <text x="318" y="534">incident operations</text>
+
+              <line x1="596" y1="520" x2="596" y2="790" marker-end="url(#arrow)"></line>
+              <text x="612" y="724">reports</text>
+            </svg>
+
+            <article class="entity core" style="left: 48px; top: 42px" data-search="users id full_name email role reporting_context assigned_municipality assigned_barangay is_active created_by last_seen_at">
+              <h3>users</h3>
+              <ul>
+                <li><span class="key">PK id</span><span class="type">uuid</span></li>
+                <li><span>full_name, email</span><span class="type">text</span></li>
+                <li><span>role</span><span class="type">enum</span></li>
+                <li><span>reporting_context</span><span class="type">text</span></li>
+                <li><span>is_active, last_seen_at</span><span class="type">status</span></li>
+                <li><span class="fk">FK created_by</span><span class="type">users.id</span></li>
+              </ul>
+            </article>
+
+            <article class="entity core" style="left: 392px; top: 42px" data-search="incidents id incident_code incident_name disaster_type status started_at ended_at province municipality barangay created_by">
+              <h3>incidents</h3>
+              <ul>
+                <li><span class="key">PK id</span><span class="type">uuid</span></li>
+                <li><span>incident_code</span><span class="type">unique</span></li>
+                <li><span>incident_name</span><span class="type">text</span></li>
+                <li><span>disaster_type, status</span><span class="type">text</span></li>
+                <li><span>province, city, barangay</span><span class="type">location</span></li>
+                <li><span>started_at, ended_at</span><span class="type">time</span></li>
+              </ul>
+            </article>
+
+            <article class="entity core" style="left: 1014px; top: 42px" data-search="casualties id id_number identification_status first_name middle_name last_name estimated_age sex contact_number address">
+              <h3>casualties</h3>
+              <ul>
+                <li><span class="key">PK id</span><span class="type">uuid</span></li>
+                <li><span>id_number, id_type</span><span class="type">text</span></li>
+                <li><span>identification_status</span><span class="type">enum</span></li>
+                <li><span>first/middle/last name</span><span class="type">text</span></li>
+                <li><span>estimated_age, sex</span><span class="type">demo</span></li>
+                <li><span>address fields</span><span class="type">location</span></li>
+              </ul>
+            </article>
+
+            <article class="entity core" style="left: 520px; top: 332px" data-search="casualty_incidents casualty_id incident_id evacuation_center_id healthcare_facility_id encoded_by verified_by current_status severity verification_status reported_at remarks">
+              <h3>casualty_incidents</h3>
+              <ul>
+                <li><span class="key">PK id</span><span class="type">uuid</span></li>
+                <li><span class="fk">FK casualty_id</span><span class="type">casualties</span></li>
+                <li><span class="fk">FK incident_id</span><span class="type">incidents</span></li>
+                <li><span class="fk">FK encoded_by</span><span class="type">users</span></li>
+                <li><span>current_status, severity</span><span class="type">enum</span></li>
+                <li><span>verification_status</span><span class="type">enum</span></li>
+                <li><span>reported_at, remarks</span><span class="type">time/text</span></li>
+              </ul>
+            </article>
+
+            <article class="entity care" style="left: 54px; top: 304px" data-search="evacuation_centers healthcare_facilities incident_id created_by facility_name center_name address capacity is_active">
+              <h3>reference locations</h3>
+              <ul>
+                <li><span class="key">healthcare_facilities</span><span class="type">table</span></li>
+                <li><span class="fk">FK created_by</span><span class="type">users</span></li>
+                <li><span>facility_name, level</span><span class="type">fields</span></li>
+                <li><span class="key">evacuation_centers</span><span class="type">table</span></li>
+                <li><span class="fk">FK incident_id</span><span class="type">incidents</span></li>
+                <li><span>center_name, capacity</span><span class="type">fields</span></li>
+              </ul>
+            </article>
+
+            <article class="entity core" style="left: 1000px; top: 304px" data-search="casualty_triage_assessments casualty_transport_records triage_system triage_category calculated_category responder_category transport_required receiving_facility_id">
+              <h3>triage + transport</h3>
+              <ul>
+                <li><span class="key">casualty_triage_assessments</span><span class="type">table</span></li>
+                <li><span class="fk">FK casualty_incident_id</span><span class="type">casualty_incidents</span></li>
+                <li><span>triage_system/category/stage</span><span class="type">fields</span></li>
+                <li><span class="key">casualty_transport_records</span><span class="type">table</span></li>
+                <li><span class="fk">FK receiving_facility_id</span><span class="type">healthcare</span></li>
+                <li><span>transport mode, EMS times</span><span class="type">fields</span></li>
+              </ul>
+            </article>
+
+            <article class="entity audit" style="left: 520px; top: 640px" data-search="casualty_status_history casualty_verification_history old_status new_status changed_by reviewed_by review_notes">
+              <h3>status + verification history</h3>
+              <ul>
+                <li><span class="key">casualty_status_history</span><span class="type">table</span></li>
+                <li><span class="fk">FK casualty_incident_id</span><span class="type">casualty_incidents</span></li>
+                <li><span class="fk">FK changed_by</span><span class="type">users</span></li>
+                <li><span class="key">casualty_verification_history</span><span class="type">table</span></li>
+                <li><span class="fk">FK reviewed_by</span><span class="type">users</span></li>
+                <li><span>old_status, new_status, notes</span><span class="type">fields</span></li>
+              </ul>
+            </article>
+
+            <article class="entity care" style="left: 1000px; top: 640px" data-search="facility_encounters icu_encounters clinical_procedures casualty_treatments casualty_outcomes healthcare_facilities casualty_incident_id">
+              <h3>facility care records</h3>
+              <ul>
+                <li><span>facility_encounters</span><span class="type">ED/hospital</span></li>
+                <li><span>icu_encounters</span><span class="type">ICU</span></li>
+                <li><span>clinical_procedures</span><span class="type">procedures</span></li>
+                <li><span>casualty_treatments</span><span class="type">onsite care</span></li>
+                <li><span>casualty_outcomes</span><span class="type">mortality</span></li>
+                <li><span class="fk">FK casualty_incident_id</span><span class="type">common</span></li>
+              </ul>
+            </article>
+
+            <article class="entity ops" style="left: 54px; top: 640px" data-search="incident_response_timelines dmmp_staff_call_downs medical_coordination_assessments continuity_of_care_assessments responder_safety_reports ems_vehicle_arrivals incident_id users">
+              <h3>incident operations</h3>
+              <ul>
+                <li><span>incident_response_timelines</span><span class="type">timeline</span></li>
+                <li><span>dmmp_staff_call_downs</span><span class="type">staffing</span></li>
+                <li><span>medical_coordination</span><span class="type">coordination</span></li>
+                <li><span>continuity_of_care</span><span class="type">assessment</span></li>
+                <li><span>responder_safety_reports</span><span class="type">safety</span></li>
+                <li><span>ems_vehicle_arrivals</span><span class="type">EMS</span></li>
+              </ul>
+            </article>
+
+            <article class="entity audit" style="left: 520px; top: 790px" data-search="sitreps notifications incident_id generated_by approved_by user_id generated_payload report_number">
+              <h3>reports + notifications</h3>
+              <ul>
+                <li><span class="key">sitreps</span><span class="type">table</span></li>
+                <li><span class="fk">FK incident_id</span><span class="type">incidents</span></li>
+                <li><span class="fk">FK generated_by</span><span class="type">users</span></li>
+                <li><span class="fk">FK approved_by</span><span class="type">users</span></li>
+                <li><span class="key">notifications</span><span class="type">table</span></li>
+                <li><span class="fk">FK user_id</span><span class="type">users</span></li>
+              </ul>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Module Map</h2>
+        <div class="grid">
+          <article class="card">
+            <h3>Mobile casualty workflow</h3>
+            <ul>
+              <li><code>incidents</code> provides the official incident picker.</li>
+              <li><code>casualties</code> stores person-level identity/demographics.</li>
+              <li><code>casualty_incidents</code> stores one casualty report within one incident.</li>
+              <li><code>casualty_triage_assessments</code> stores system-calculated and responder triage data.</li>
+            </ul>
+          </article>
+
+          <article class="card">
+            <h3>Admin dashboard</h3>
+            <ul>
+              <li><code>users</code> stores admin, responder, and documenter accounts.</li>
+              <li><code>created_by</code> ties responder/documenter accounts to their admin.</li>
+              <li><code>last_seen_at</code> supports online/offline account display.</li>
+              <li><code>healthcare_facilities</code> and <code>evacuation_centers</code> are admin-managed references.</li>
+            </ul>
+          </article>
+
+          <article class="card">
+            <h3>Verification review</h3>
+            <ul>
+              <li><code>casualty_incidents.verification_status</code> stores submitted, under review, verified, or rejected.</li>
+              <li><code>verified_by</code> and <code>verified_at</code> store final approval metadata.</li>
+              <li><code>casualty_verification_history</code> records each review action and notes.</li>
+            </ul>
+          </article>
+
+          <article class="card">
+            <h3>SitRep/reporting</h3>
+            <ul>
+              <li><code>sitreps</code> stores generated report payloads per incident.</li>
+              <li>Report payloads summarize casualties, triage, transport, facility use, and status.</li>
+              <li><code>incident_response_timelines</code> and operations tables feed Utstein-style reporting.</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Relationship Inventory</h2>
+        <table class="relationships">
+          <thead>
+            <tr>
+              <th>Source table</th>
+              <th>Foreign key</th>
+              <th>Target table</th>
+              <th>Purpose</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>users</td><td>created_by</td><td>users.id</td><td>Admin who created a responder/documenter account.</td></tr>
+            <tr><td>casualty_incidents</td><td>casualty_id</td><td>casualties.id</td><td>Connects a casualty report to the person identity record.</td></tr>
+            <tr><td>casualty_incidents</td><td>incident_id</td><td>incidents.id</td><td>Connects a casualty report to the official incident.</td></tr>
+            <tr><td>casualty_incidents</td><td>evacuation_center_id</td><td>evacuation_centers.id</td><td>Optional evacuation center location.</td></tr>
+            <tr><td>casualty_incidents</td><td>healthcare_facility_id</td><td>healthcare_facilities.id</td><td>Optional facility reference.</td></tr>
+            <tr><td>casualty_incidents</td><td>encoded_by</td><td>users.id</td><td>User who submitted or encoded the casualty record.</td></tr>
+            <tr><td>casualty_incidents</td><td>verified_by</td><td>users.id</td><td>User who approved the casualty record.</td></tr>
+            <tr><td>casualty_triage_assessments</td><td>casualty_incident_id</td><td>casualty_incidents.id</td><td>One or more triage assessments for a casualty report.</td></tr>
+            <tr><td>casualty_triage_assessments</td><td>triaged_by</td><td>users.id</td><td>User who performed or recorded triage.</td></tr>
+            <tr><td>casualty_transport_records</td><td>casualty_incident_id</td><td>casualty_incidents.id</td><td>Transport details for a casualty report.</td></tr>
+            <tr><td>casualty_transport_records</td><td>receiving_facility_id</td><td>healthcare_facilities.id</td><td>Receiving healthcare facility.</td></tr>
+            <tr><td>casualty_transport_records</td><td>recorded_by</td><td>users.id</td><td>User who recorded transport data.</td></tr>
+            <tr><td>facility_encounters</td><td>casualty_incident_id</td><td>casualty_incidents.id</td><td>ED or hospital encounter tied to casualty report.</td></tr>
+            <tr><td>facility_encounters</td><td>facility_id</td><td>healthcare_facilities.id</td><td>Facility where encounter happened.</td></tr>
+            <tr><td>casualty_status_history</td><td>casualty_incident_id</td><td>casualty_incidents.id</td><td>History of casualty status changes.</td></tr>
+            <tr><td>casualty_verification_history</td><td>casualty_incident_id</td><td>casualty_incidents.id</td><td>History of verification review actions.</td></tr>
+            <tr><td>incident_response_timelines</td><td>incident_id</td><td>incidents.id</td><td>Incident-level response timestamps.</td></tr>
+            <tr><td>evacuation_centers</td><td>incident_id</td><td>incidents.id</td><td>Evacuation centers assigned to an incident.</td></tr>
+            <tr><td>healthcare_facilities</td><td>created_by</td><td>users.id</td><td>Admin/encoder who created the facility reference.</td></tr>
+            <tr><td>sitreps</td><td>incident_id</td><td>incidents.id</td><td>Generated report tied to an incident.</td></tr>
+            <tr><td>sitreps</td><td>generated_by / approved_by</td><td>users.id</td><td>Report author and approver.</td></tr>
+            <tr><td>notifications</td><td>user_id</td><td>users.id</td><td>Notifications delivered to a user.</td></tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+
+    <script>
+      const searchInput = document.getElementById("schemaSearch");
+      const entities = Array.from(document.querySelectorAll(".entity"));
+
+      searchInput.addEventListener("input", () => {
+        const query = searchInput.value.trim().toLowerCase();
+
+        for (const entity of entities) {
+          const haystack = `${entity.textContent} ${entity.dataset.search || ""}`.toLowerCase();
+          entity.classList.toggle("hidden", query.length > 0 && !haystack.includes(query));
+        }
+      });
+    </script>
+  </body>
+</html>
