@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -66,15 +66,17 @@ function canReviewRecords(role: string | null): boolean {
   return (
     role === "super_admin" ||
     role === "admin" ||
-    role === "administrator" ||
-    role === "documenter" ||
-    role === "medical_personnel"
+    role === "administrator"
   );
 }
 
 function formatStatus(status: string | null | undefined): string {
   if (!status) {
     return "Unknown";
+  }
+
+  if (status === "verified") {
+    return "Accepted";
   }
 
   return status
@@ -191,6 +193,15 @@ export default function VerificationReviewScreen() {
   const [isSavingReview, setIsSavingReview] = useState(false);
 
   const canReview = canReviewRecords(currentUserRole);
+  const visibleFilters = canReview
+    ? filters
+    : filters.filter((filter) => filter !== "Needs Review");
+
+  useEffect(() => {
+    if (!canReview && activeFilter === "Needs Review") {
+      setActiveFilter("All");
+    }
+  }, [activeFilter, canReview]);
 
   const loadRecords = useCallback(async () => {
     try {
@@ -366,10 +377,23 @@ export default function VerificationReviewScreen() {
           </View>
         </View>
 
-        <Text style={styles.detailText}>
-          Encoded by {item.encoder.full_name}
-          {"\n"}Reported {formatDateTime(item.reported_at)}
-        </Text>
+      <Text style={styles.detailText}>
+        Encoded by {item.encoder.full_name}
+        {"\n"}Reported {formatDateTime(item.reported_at)}
+      </Text>
+
+      {!canReview ? (
+        <View style={styles.statusOnlyNotice}>
+          <Ionicons
+            name="information-circle-outline"
+            size={15}
+            color={palette.color}
+          />
+          <Text style={[styles.statusOnlyText, { color: palette.color }]}>
+            Admin review status: {formatStatus(item.verification_status)}
+          </Text>
+        </View>
+      ) : null}
 
         <Pressable
           onPress={() =>
@@ -510,7 +534,7 @@ export default function VerificationReviewScreen() {
       <View style={styles.filterSection}>
         <FlatList
           horizontal
-          data={filters}
+          data={visibleFilters}
           keyExtractor={(item) => item}
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.filterList}
@@ -837,6 +861,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     marginTop: 12,
+  },
+  statusOnlyNotice: {
+    minHeight: 34,
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 11,
+    paddingHorizontal: 10,
+    marginTop: 10,
+    backgroundColor: COLORS.fieldBackground,
+    gap: 6,
+  },
+  statusOnlyText: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: "900",
   },
   viewButton: {
     minHeight: 38,

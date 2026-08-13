@@ -1,6 +1,7 @@
 import { Router } from "express";
 
 import {
+  deleteUnitUser,
   getUnitUsers,
   login,
   registerAdmin,
@@ -35,4 +36,10 @@ authRouter.patch(
   requireAuth,
   requireRole(["super_admin", "admin", "administrator", "encoder"]),
   updateUnitUser,
+);
+authRouter.delete(
+  "/unit-users/:id",
+  requireAuth,
+  requireRole(["super_admin", "admin", "administrator", "encoder"]),
+  deleteUnitUser,
 );

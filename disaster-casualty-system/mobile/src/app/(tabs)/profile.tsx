@@ -146,6 +146,40 @@ function isResponderRole(role: string | null | undefined): boolean {
   );
 }
 
+function getProfileSubtitle(role: string | null | undefined): string {
+  if (role === "documenter" || role === "medical_personnel") {
+    return "Healthcare Facility Dashboard";
+  }
+
+  if (isResponderRole(role)) {
+    return "Responder Dashboard";
+  }
+
+  if (role === "admin" || role === "administrator") {
+    return "Administrator Dashboard";
+  }
+
+  if (role === "super_admin") {
+    return "Super Admin Dashboard";
+  }
+
+  return "Account Dashboard";
+}
+
+function getInformationSectionTitle(
+  role: string | null | undefined,
+): string {
+  if (role === "documenter" || role === "medical_personnel") {
+    return "DOCUMENTATION INFORMATION";
+  }
+
+  if (isResponderRole(role)) {
+    return "RESPONDER INFORMATION";
+  }
+
+  return "ACCOUNT INFORMATION";
+}
+
 function getDefaultResponderAssignment(
   role: string | null | undefined,
 ): ResponderAssignment | null {
@@ -396,6 +430,8 @@ export default function ProfileScreen() {
   const reportingContext = formatReportingContext(
     user?.reporting_context,
   );
+  const profileSubtitle = getProfileSubtitle(user?.role);
+  const informationSectionTitle = getInformationSectionTitle(user?.role);
 
   const appVersion =
     Constants.expoConfig?.version ?? "1.0.0";
@@ -428,7 +464,7 @@ export default function ProfileScreen() {
           </Text>
 
           <Text style={styles.headerSubtitle}>
-            Responder Dashboard
+            {profileSubtitle}
           </Text>
         </View>
       </SafeAreaView>
@@ -597,7 +633,7 @@ export default function ProfileScreen() {
 
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>
-            RESPONDER INFORMATION
+            {informationSectionTitle}
           </Text>
 
           <InformationRow

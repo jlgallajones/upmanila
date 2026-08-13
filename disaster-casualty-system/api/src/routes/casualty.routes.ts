@@ -35,8 +35,6 @@ casualtyRouter.patch(
     "super_admin",
     "admin",
     "administrator",
-    "encoder",
-    "medical_personnel",
   ]),
   updateCasualtyVerification,
 );

@@ -8,6 +8,7 @@ alter type public.user_role add value if not exists 'super_admin';
 alter type public.user_role add value if not exists 'admin';
 alter type public.user_role add value if not exists 'administrator';
 alter type public.user_role add value if not exists 'responder';
+alter type public.user_role add value if not exists 'bystander';
 alter type public.user_role add value if not exists 'encoder';
 alter type public.user_role add value if not exists 'documenter';
 alter type public.user_role add value if not exists 'medical_personnel';

@@ -147,6 +147,43 @@ function isObject(
 
 type VerificationStatus = (typeof verificationStatuses)[number];
 
+const casualtyDataEntryRoles = new Set([
+  "responder",
+  "field_responder",
+  "sa_responder",
+  "documenter",
+  "medical_personnel",
+  "bystander",
+]);
+
+function shouldScopeToOwnCasualties(role: string): boolean {
+  return casualtyDataEntryRoles.has(role);
+}
+
+async function canAccessCasualtyRecord(
+  casualtyIncidentId: string,
+  userId: string,
+  userRole: string,
+): Promise<boolean> {
+  if (!shouldScopeToOwnCasualties(userRole)) {
+    return true;
+  }
+
+  const { data, error } = await supabase
+    .from("casualty_incidents")
+    .select("id")
+    .eq("id", casualtyIncidentId)
+    .eq("encoded_by", userId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Unable to verify casualty access: ${error.message}`);
+  }
+
+  return Boolean(data);
+}
+
 type UpdateCasualtyVerificationRequest = {
   status: VerificationStatus;
   notes?: string;
@@ -1428,6 +1465,7 @@ export async function getCasualties(
   next: NextFunction,
 ): Promise<void> {
   try {
+    const user = getAuthenticatedUser(request);
     const incidentId =
       typeof request.query.incidentId === "string"
         ? request.query.incidentId
@@ -1450,6 +1488,10 @@ export async function getCasualties(
 
     if (status) {
       query = query.eq("current_status", status);
+    }
+
+    if (shouldScopeToOwnCasualties(user.role)) {
+      query = query.eq("encoded_by", user.id);
     }
 
     const { data, error } = await query;
@@ -1475,13 +1517,19 @@ export async function getCasualtyById(
 ): Promise<void> {
   try {
     const { id } = request.params;
+    const user = getAuthenticatedUser(request);
 
-    const { data, error } = await supabase
+    let query = supabase
       .from("casualty_incidents")
       .select(casualtyRecordSelect)
       .eq("id", id)
-      .is("deleted_at", null)
-      .maybeSingle();
+      .is("deleted_at", null);
+
+    if (shouldScopeToOwnCasualties(user.role)) {
+      query = query.eq("encoded_by", user.id);
+    }
+
+    const { data, error } = await query.maybeSingle();
 
     if (error) {
       throw new Error(`Unable to retrieve casualty: ${error.message}`);
@@ -1511,22 +1559,15 @@ export async function getCasualtyStatusHistory(
 ): Promise<void> {
   try {
     const { id } = request.params;
+    const user = getAuthenticatedUser(request);
 
-    const { data: existingRecord, error: existingError } =
-      await supabase
-        .from("casualty_incidents")
-        .select("id")
-        .eq("id", id)
-        .is("deleted_at", null)
-        .maybeSingle();
+    const hasAccess = await canAccessCasualtyRecord(
+      id,
+      user.id,
+      user.role,
+    );
 
-    if (existingError) {
-      throw new Error(
-        `Unable to retrieve casualty record: ${existingError.message}`,
-      );
-    }
-
-    if (!existingRecord) {
+    if (!hasAccess) {
       response.status(404).json({
         success: false,
         message: "Casualty record not found.",
@@ -1611,22 +1652,15 @@ export async function getCasualtyVerificationHistory(
 ): Promise<void> {
   try {
     const { id } = request.params;
+    const user = getAuthenticatedUser(request);
 
-    const { data: existingRecord, error: existingError } =
-      await supabase
-        .from("casualty_incidents")
-        .select("id")
-        .eq("id", id)
-        .is("deleted_at", null)
-        .maybeSingle();
+    const hasAccess = await canAccessCasualtyRecord(
+      id,
+      user.id,
+      user.role,
+    );
 
-    if (existingError) {
-      throw new Error(
-        `Unable to retrieve casualty record: ${existingError.message}`,
-      );
-    }
-
-    if (!existingRecord) {
+    if (!hasAccess) {
       response.status(404).json({
         success: false,
         message: "Casualty record not found.",
@@ -1823,22 +1857,15 @@ export async function getCasualtyTriageHistory(
 ): Promise<void> {
   try {
     const { id } = request.params;
+    const user = getAuthenticatedUser(request);
 
-    const { data: existingRecord, error: existingError } =
-      await supabase
-        .from("casualty_incidents")
-        .select("id")
-        .eq("id", id)
-        .is("deleted_at", null)
-        .maybeSingle();
+    const hasAccess = await canAccessCasualtyRecord(
+      id,
+      user.id,
+      user.role,
+    );
 
-    if (existingError) {
-      throw new Error(
-        `Unable to retrieve casualty record: ${existingError.message}`,
-      );
-    }
-
-    if (!existingRecord) {
+    if (!hasAccess) {
       response.status(404).json({
         success: false,
         message: "Casualty record not found.",
@@ -1944,7 +1971,7 @@ export async function createCasualtyTriageAssessment(
     const { data: existingRecord, error: existingError } =
       await supabase
         .from("casualty_incidents")
-        .select("id")
+        .select("id, encoded_by, verification_status")
         .eq("id", id)
         .is("deleted_at", null)
         .maybeSingle();
@@ -1961,6 +1988,25 @@ export async function createCasualtyTriageAssessment(
         message: "Casualty record not found.",
       });
       return;
+    }
+
+    if (shouldScopeToOwnCasualties(user.role)) {
+      if (existingRecord.encoded_by !== user.id) {
+        response.status(404).json({
+          success: false,
+          message: "Casualty record not found.",
+        });
+        return;
+      }
+
+      if (existingRecord.verification_status !== "rejected") {
+        response.status(403).json({
+          success: false,
+          message:
+            "This record cannot be edited unless an administrator rejects it for correction.",
+        });
+        return;
+      }
     }
 
     await insertTriageAssessment(id, user.id, request.body);
@@ -1981,22 +2027,15 @@ export async function getCasualtyTransportHistory(
 ): Promise<void> {
   try {
     const { id } = request.params;
+    const user = getAuthenticatedUser(request);
 
-    const { data: existingRecord, error: existingError } =
-      await supabase
-        .from("casualty_incidents")
-        .select("id")
-        .eq("id", id)
-        .is("deleted_at", null)
-        .maybeSingle();
+    const hasAccess = await canAccessCasualtyRecord(
+      id,
+      user.id,
+      user.role,
+    );
 
-    if (existingError) {
-      throw new Error(
-        `Unable to retrieve casualty record: ${existingError.message}`,
-      );
-    }
-
-    if (!existingRecord) {
+    if (!hasAccess) {
       response.status(404).json({
         success: false,
         message: "Casualty record not found.",
@@ -2157,7 +2196,7 @@ export async function createCasualtyTransportRecord(
     const { data: existingRecord, error: existingError } =
       await supabase
         .from("casualty_incidents")
-        .select("id")
+        .select("id, encoded_by, verification_status")
         .eq("id", id)
         .is("deleted_at", null)
         .maybeSingle();
@@ -2174,6 +2213,25 @@ export async function createCasualtyTransportRecord(
         message: "Casualty record not found.",
       });
       return;
+    }
+
+    if (shouldScopeToOwnCasualties(user.role)) {
+      if (existingRecord.encoded_by !== user.id) {
+        response.status(404).json({
+          success: false,
+          message: "Casualty record not found.",
+        });
+        return;
+      }
+
+      if (existingRecord.verification_status !== "rejected") {
+        response.status(403).json({
+          success: false,
+          message:
+            "This record cannot be edited unless an administrator rejects it for correction.",
+        });
+        return;
+      }
     }
 
     await insertTransportRecord(id, user.id, request.body);
@@ -2246,7 +2304,7 @@ export async function updateCasualty(
     const { data: existingRecord, error: existingError } =
       await supabase
         .from("casualty_incidents")
-        .select("id, casualty_id, current_status, encoded_by")
+        .select("id, casualty_id, current_status, encoded_by, verification_status")
         .eq("id", id)
         .is("deleted_at", null)
         .maybeSingle();
@@ -2263,6 +2321,25 @@ export async function updateCasualty(
         message: "Casualty record not found.",
       });
       return;
+    }
+
+    if (shouldScopeToOwnCasualties(user.role)) {
+      if (existingRecord.encoded_by !== user.id) {
+        response.status(404).json({
+          success: false,
+          message: "Casualty record not found.",
+        });
+        return;
+      }
+
+      if (existingRecord.verification_status !== "rejected") {
+        response.status(403).json({
+          success: false,
+          message:
+            "This record cannot be edited unless an administrator rejects it for correction.",
+        });
+        return;
+      }
     }
 
     if (

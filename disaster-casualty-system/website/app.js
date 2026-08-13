@@ -944,6 +944,8 @@ function renderAccountEditModal(user) {
           </div>
 
           <div class="modal-footer">
+            <button class="danger-button" type="button" data-delete-account="${escapeHtml(user.id)}">Delete account</button>
+            <div class="modal-footer-spacer"></div>
             <button class="ghost-button" type="button" data-close-modal>Cancel</button>
             <button class="primary-button" type="submit">Save account</button>
           </div>
@@ -973,6 +975,7 @@ function openAccountEditModal(userId) {
   });
 
   bindAccountEditForm(user.id);
+  bindAccountDeleteAction(user.id);
 }
 
 function bindAccountActions() {
@@ -1017,6 +1020,43 @@ function bindAccountEditForm(userId) {
       bindView();
       setMessage("accountMessage", "Account updated successfully.", "success");
     } catch (error) {
+      setMessage("accountEditMessage", error.message, "error");
+    }
+  });
+}
+
+function bindAccountDeleteAction(userId) {
+  const button = document.querySelector("[data-delete-account]");
+  if (!button) return;
+
+  button.addEventListener("click", async () => {
+    const user = state.unitUsers.find((item) => item.id === userId);
+    const label = user ? `${user.full_name} (${user.email})` : "this account";
+    const confirmed = window.confirm(
+      `Delete ${label}? This removes their login access. If records already reference this profile, it will be kept as inactive for history.`,
+    );
+
+    if (!confirmed) return;
+
+    setMessage("accountEditMessage", "Deleting account...");
+    button.disabled = true;
+
+    try {
+      const response = await apiRequest(`/auth/unit-users/${encodeURIComponent(userId)}`, {
+        method: "DELETE",
+      });
+
+      await loadSharedData();
+      closeRecordModal();
+      renderCurrentView();
+      bindView();
+      setMessage(
+        "accountMessage",
+        response.message || "Account deleted successfully.",
+        "success",
+      );
+    } catch (error) {
+      button.disabled = false;
       setMessage("accountEditMessage", error.message, "error");
     }
   });

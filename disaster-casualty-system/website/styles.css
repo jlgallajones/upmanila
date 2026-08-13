@@ -887,6 +887,10 @@ tbody tr:hover td {
   min-width: 250px;
 }
 
+.modal-footer-spacer {
+  flex: 1;
+}
+
 .mini {
   min-height: 34px;
   border-radius: 8px;

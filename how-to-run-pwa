@@ -30,3 +30,21 @@ then recommit and upload new dist in render and netlify
 
 env.local EXPO_PUBLIC_API_URL=http://localhost:5000/api
 env.prod https://dcms-api-ljco.onrender.com/api
+
+
+running local
+
+make .env EXPO_PUBLIC_API_URL=http://localhost:5000/api
+npm run dev
+npx expo start
+npx expo start --web
+
+
+
+
+how to run the  website
+cd api npm run dev
+
+root folder
+
+npx.cmd serve website -l 5173

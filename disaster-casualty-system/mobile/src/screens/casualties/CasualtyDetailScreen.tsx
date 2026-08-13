@@ -27,6 +27,7 @@ import {
   getAttachments,
   type Attachment,
 } from "../../api/attachments";
+import { getCurrentUser } from "../../auth/session";
 
 const COLORS = {
   maroon: "#7B1113",
@@ -52,6 +53,22 @@ const COLORS = {
 
   grayBackground: "#F2F5F9",
 };
+
+function canEditRecord(
+  role: string | null,
+  verificationStatus: string | null | undefined,
+): boolean {
+  if (
+    role === "super_admin" ||
+    role === "admin" ||
+    role === "administrator" ||
+    role === "encoder"
+  ) {
+    return true;
+  }
+
+  return verificationStatus === "rejected";
+}
 
 type DetailRowProps = {
   label: string;
@@ -477,6 +494,9 @@ export default function CasualtyDetailScreen() {
   const [transportHistory, setTransportHistory] = useState<
     CasualtyTransportHistoryItem[]
   >([]);
+  const [currentUserRole, setCurrentUserRole] = useState<string | null>(
+    null,
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] =
     useState<string | null>(null);
@@ -492,6 +512,7 @@ export default function CasualtyDetailScreen() {
       setErrorMessage(null);
 
       const [
+        user,
         data,
         attachmentData,
         historyData,
@@ -499,6 +520,7 @@ export default function CasualtyDetailScreen() {
         transportData,
       ] =
         await Promise.all([
+          getCurrentUser(),
           getCasualty(casualtyId),
           getAttachments(casualtyId),
           getCasualtyStatusHistory(casualtyId),
@@ -506,6 +528,7 @@ export default function CasualtyDetailScreen() {
           getCasualtyTransportHistory(casualtyId),
         ]);
 
+      setCurrentUserRole(user?.role ?? null);
       setRecord(data);
       setAttachments(attachmentData);
       setStatusHistory(historyData);
@@ -596,6 +619,11 @@ export default function CasualtyDetailScreen() {
       },
     } as never);
   }
+
+  const canEditCurrentRecord = canEditRecord(
+    currentUserRole,
+    casualty?.verificationStatusRaw,
+  );
 
   if (isLoading) {
     return (
@@ -772,21 +800,23 @@ export default function CasualtyDetailScreen() {
             </View>
           </View>
 
-          <Pressable
-            onPress={handleEdit}
-            style={({ pressed }) => [
-              styles.editButton,
-              pressed && styles.pressed,
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Edit casualty"
-          >
-            <Ionicons
-              name="create-outline"
-              size={20}
-              color={COLORS.maroon}
-            />
-          </Pressable>
+          {canEditCurrentRecord ? (
+            <Pressable
+              onPress={handleEdit}
+              style={({ pressed }) => [
+                styles.editButton,
+                pressed && styles.pressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Edit casualty"
+            >
+              <Ionicons
+                name="create-outline"
+                size={20}
+                color={COLORS.maroon}
+              />
+            </Pressable>
+          ) : null}
         </View>
       </View>
 

@@ -731,3 +731,130 @@ export async function updateUnitUser(
     next(error);
   }
 }
+
+export async function deleteUnitUser(
+  request: Request<{ id: string }>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const currentUser = (request as Request & {
+      user?: { role?: string; id?: string };
+    }).user;
+    const { id } = request.params;
+
+    if (!currentUser?.id) {
+      response.status(401).json({
+        success: false,
+        message: "Authentication token is required.",
+      });
+      return;
+    }
+
+    const { data: existingUser, error: existingError } = await supabase
+      .from("users")
+      .select(unitUserSelect)
+      .eq("id", id)
+      .maybeSingle();
+
+    if (existingError) {
+      throw new Error(`Unable to retrieve unit user: ${existingError.message}`);
+    }
+
+    if (!existingUser || !["responder", "documenter"].includes(existingUser.role)) {
+      response.status(404).json({
+        success: false,
+        message: "Only responder and documenter accounts can be deleted here.",
+      });
+      return;
+    }
+
+    let canDeleteUnitUser = currentUser.role === "super_admin";
+
+    if (!canDeleteUnitUser && existingUser.created_by === currentUser.id) {
+      canDeleteUnitUser = true;
+    }
+
+    if (!canDeleteUnitUser && !existingUser.created_by) {
+      const { data: creator, error: creatorError } = await supabase
+        .from("users")
+        .select("id, assigned_municipality, assigned_barangay")
+        .eq("id", currentUser.id)
+        .single();
+
+      if (creatorError || !creator) {
+        response.status(404).json({
+          success: false,
+          message: "Creator account not found.",
+        });
+        return;
+      }
+
+      canDeleteUnitUser =
+        existingUser.assigned_municipality === creator.assigned_municipality &&
+        existingUser.assigned_barangay === creator.assigned_barangay;
+    }
+
+    if (!canDeleteUnitUser) {
+      response.status(403).json({
+        success: false,
+        message: "You can only delete accounts created under your admin account.",
+      });
+      return;
+    }
+
+    const { error: authDeleteError } =
+      await supabaseAuth.auth.admin.deleteUser(id);
+
+    if (authDeleteError) {
+      throw new Error(
+        `Unable to delete Supabase Auth user: ${authDeleteError.message}`,
+      );
+    }
+
+    const { error: profileDeleteError } = await supabase
+      .from("users")
+      .delete()
+      .eq("id", id);
+
+    if (!profileDeleteError) {
+      response.status(200).json({
+        success: true,
+        message: "Unit user account deleted successfully.",
+        data: {
+          id,
+          deleted: true,
+          deactivated: false,
+        },
+      });
+      return;
+    }
+
+    const { error: deactivateError } = await supabase
+      .from("users")
+      .update({
+        is_active: false,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id);
+
+    if (deactivateError) {
+      throw new Error(
+        `Auth user was deleted, but profile deactivation failed: ${deactivateError.message}`,
+      );
+    }
+
+    response.status(200).json({
+      success: true,
+      message:
+        "Login access was deleted. The profile was kept inactive because existing records reference it.",
+      data: {
+        id,
+        deleted: false,
+        deactivated: true,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
