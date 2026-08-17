@@ -20,7 +20,10 @@ import {
   type RecentActivity,
 } from "../../api/dashboard";
 import { isAuthenticationTokenError } from "../../api/client";
-import { getAccessToken } from "../../auth/session";
+import {
+  getAccessToken,
+  getCurrentUser,
+} from "../../auth/session";
 import {
   getQueuedCasualtyCount,
   syncQueuedCasualtySubmissions,
@@ -56,6 +59,12 @@ const initialSummary: DashboardSummary = {
 };
 
 const SCREEN_PADDING = 12;
+
+const INCIDENT_MANAGEMENT_ROLES = new Set([
+  "super_admin",
+  "administrator",
+  "admin",
+]);
 
 type SummaryCardProps = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -419,13 +428,28 @@ export default function HomeDashboardScreen() {
   const [queuedCasualtyCount, setQueuedCasualtyCount] =
     useState(0);
   const [isGuestMode, setIsGuestMode] = useState(false);
+  const [
+    canOpenIncidentManagement,
+    setCanOpenIncidentManagement,
+  ] = useState(false);
   const [formattedDate, setFormattedDate] = useState("");
 
   const loadDashboard = useCallback(async () => {
     try {
       setErrorMessage(null);
 
-      const token = await getAccessToken();
+      const [token, currentUser] = await Promise.all([
+        getAccessToken(),
+        getCurrentUser(),
+      ]);
+      const hasIncidentManagementAccess =
+        INCIDENT_MANAGEMENT_ROLES.has(
+          currentUser?.role ?? "",
+        );
+
+      setCanOpenIncidentManagement(
+        hasIncidentManagementAccess,
+      );
 
       if (!token) {
         const queuedCount = await getQueuedCasualtyCount();
@@ -433,6 +457,7 @@ export default function HomeDashboardScreen() {
         setSummary(initialSummary);
         setActivities([]);
         setIsGuestMode(true);
+        setCanOpenIncidentManagement(false);
         return;
       }
 
@@ -456,6 +481,7 @@ export default function HomeDashboardScreen() {
         setSummary(initialSummary);
         setActivities([]);
         setIsGuestMode(true);
+        setCanOpenIncidentManagement(false);
         setErrorMessage(null);
         return;
       }
@@ -573,7 +599,26 @@ export default function HomeDashboardScreen() {
             </Pressable>
           </View>
 
-          <View style={styles.incidentBanner}>
+          <Pressable
+            onPress={() => router.push("/incidents")}
+            disabled={!canOpenIncidentManagement}
+            style={({ pressed }) => [
+              styles.incidentBanner,
+              pressed &&
+                canOpenIncidentManagement &&
+                styles.pressed,
+            ]}
+            accessibilityRole={
+              canOpenIncidentManagement
+                ? "button"
+                : undefined
+            }
+            accessibilityLabel={
+              canOpenIncidentManagement
+                ? "Open active incidents"
+                : undefined
+            }
+          >
             <View
               style={[
                 styles.incidentDot,
@@ -587,7 +632,7 @@ export default function HomeDashboardScreen() {
                 ? `ACTIVE RESPONSE — ${activeIncidentCaption}`
                 : "NO ACTIVE DISASTER INCIDENT"}
             </Text>
-          </View>
+          </Pressable>
         </View>
       </SafeAreaView>
 
@@ -710,6 +755,11 @@ export default function HomeDashboardScreen() {
             iconBackground={COLORS.paleBlue}
             iconColor={COLORS.blue}
             loading={isLoading}
+            onPress={
+              canOpenIncidentManagement
+                ? () => router.push("/incidents")
+                : undefined
+            }
           />
         </View>
 

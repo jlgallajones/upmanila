@@ -66,7 +66,7 @@ const facilityLevels = [
 
 const superAdminViews = [
   ["home", "Summary"],
-  ["registration", "Admin Registration"],
+  ["registration", "Account Registration"],
   ["history", "Incident History"],
   ["logs", "Action Logs"],
 ];
@@ -471,7 +471,7 @@ function renderCurrentView(errorMessage = "") {
   const title = isSuperAdmin()
     ? {
         home: "Super Admin Summary",
-        registration: "Admin Registration",
+        registration: "Account Registration",
         history: "Reported Incident History",
         logs: "Action Logs",
       }[state.activeView]
@@ -727,19 +727,19 @@ function renderIncidentSummaryTable() {
 function renderRegistrationShell() {
   return `
     <section class="panel">
-      <h2>Admin registration</h2>
-      <p class="panel-subtitle">Create admin accounts with Supabase Auth login and a matching DCMS user profile.</p>
+      <h2>Account registration</h2>
+      <p class="panel-subtitle">Create command accounts with Supabase Auth login and a matching DCMS user profile.</p>
       <form id="registerAdminForm" class="form-grid" style="margin-top:14px">
         <div class="form-grid two">
-          <label class="field"><span>Full name</span><input name="fullName" required placeholder="Admin full name" /></label>
-          <label class="field"><span>Email</span><input name="email" type="email" required placeholder="admin@example.com" /></label>
+          <label class="field"><span>Full name</span><input name="fullName" required placeholder="Account holder full name" /></label>
+          <label class="field"><span>Email</span><input name="email" type="email" required placeholder="user@example.com" /></label>
           <label class="field"><span>Temporary password</span><input name="password" type="password" required minlength="6" /></label>
-          <label class="field"><span>Role</span><select name="role"><option value="administrator">Administrator</option><option value="encoder">Encoder</option></select></label>
+          <label class="field"><span>Role</span><select name="role"><option value="administrator">Administrator</option><option value="super_admin">Super Admin</option></select></label>
           <label class="field"><span>Phone number</span><input name="phoneNumber" /></label>
           <label class="field"><span>Assigned municipality</span><input name="assignedMunicipality" /></label>
         </div>
         <label class="field"><span>Assigned barangay</span><input name="assignedBarangay" /></label>
-        <button class="primary-button" type="submit">Create admin account</button>
+        <button class="primary-button" type="submit">Create account</button>
         <div id="registrationMessage" class="status-message" hidden></div>
       </form>
     </section>
@@ -752,7 +752,7 @@ function bindRegisterAdminForm() {
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
-    setMessage("registrationMessage", "Creating admin account...");
+    setMessage("registrationMessage", "Creating account...");
 
     try {
       await apiRequest("/auth/register-admin", {
@@ -769,7 +769,7 @@ function bindRegisterAdminForm() {
       });
 
       form.reset();
-      setMessage("registrationMessage", "Admin account created. The user can now log in with the temporary password.", "success");
+      setMessage("registrationMessage", "Account created. The user can now log in with the temporary password.", "success");
     } catch (error) {
       setMessage("registrationMessage", error.message, "error");
     }

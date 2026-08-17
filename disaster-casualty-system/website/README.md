@@ -40,7 +40,7 @@ http://localhost:5000/api
   - dashboard totals
   - incident list
   - recent mobile activity
-  - admin registration
+  - account registration for `administrator` and `super_admin` accounts
   - action log placeholder panel
 - Admin dashboard:
   - create official incidents

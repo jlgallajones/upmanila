@@ -11,7 +11,7 @@ type RegisterAdminRequest = {
   fullName: string;
   email: string;
   password: string;
-  role: "administrator" | "encoder";
+  role: "administrator" | "super_admin";
   phoneNumber?: string;
   assignedMunicipality?: string;
   assignedBarangay?: string;
@@ -245,7 +245,7 @@ export async function registerAdmin(
     if (currentUser?.role !== "super_admin") {
       response.status(403).json({
         success: false,
-        message: "Only super admin accounts can register admins.",
+        message: "Only super admin accounts can register command accounts.",
       });
       return;
     }
@@ -263,10 +263,10 @@ export async function registerAdmin(
       return;
     }
 
-    if (!["administrator", "encoder"].includes(role)) {
+    if (!["administrator", "super_admin"].includes(role)) {
       response.status(400).json({
         success: false,
-        message: "Only administrator and encoder roles can be created here.",
+        message: "Only administrator and super_admin roles can be created here.",
       });
       return;
     }
@@ -330,7 +330,7 @@ export async function registerAdmin(
 
     response.status(201).json({
       success: true,
-      message: "Admin account created successfully.",
+      message: "Account created successfully.",
       data: user,
     });
   } catch (error) {
