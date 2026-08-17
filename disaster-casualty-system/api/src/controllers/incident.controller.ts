@@ -728,12 +728,17 @@ function buildSitrepLines(sitrep: SitrepResponseRecord): string[] {
 }
 
 export async function getIncidents(
-  _request: Request,
+  request: Request,
   response: Response,
   next: NextFunction,
 ): Promise<void> {
   try {
-    const { data, error } = await supabase
+    const user = getAuthenticatedUser(request);
+    const includeAll =
+      request.query.scope === "all" &&
+      ["super_admin", "administrator", "admin"].includes(user.role);
+
+    let query = supabase
       .from("incidents")
       .select(`
         id,
@@ -750,8 +755,13 @@ export async function getIncidents(
         created_at,
         updated_at
       `)
-      .is("ended_at", null)
       .order("started_at", { ascending: false });
+
+    if (!includeAll) {
+      query = query.is("ended_at", null);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       throw new Error(`Supabase error: ${error.message}`);

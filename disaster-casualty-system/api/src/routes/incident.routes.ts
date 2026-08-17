@@ -89,6 +89,7 @@ incidentRouter.put(
   requireAuth,
   requireRole([
     "super_admin",
+    "admin",
     "administrator",
     "responder",
     "encoder",
@@ -101,6 +102,7 @@ incidentRouter.post(
   requireAuth,
   requireRole([
     "super_admin",
+    "admin",
     "administrator",
     "encoder",
     "medical_personnel",
@@ -110,12 +112,12 @@ incidentRouter.post(
 incidentRouter.post(
   "/",
   requireAuth,
-  requireRole(["super_admin", "administrator", "encoder"]),
+  requireRole(["super_admin", "admin", "administrator", "encoder"]),
   createIncident,
 );
 incidentRouter.patch(
   "/:id/close",
   requireAuth,
-  requireRole(["super_admin", "administrator", "encoder"]),
+  requireRole(["super_admin", "admin", "administrator", "encoder"]),
   closeIncident,
 );

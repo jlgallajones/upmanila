@@ -29,6 +29,7 @@ export const incidentOperationsRouter =
 
 const readableRoles: UserRole[] = [
   "super_admin",
+  "admin",
   "administrator",
   "responder",
   "encoder",
@@ -38,6 +39,7 @@ const readableRoles: UserRole[] = [
 
 const writableRoles: UserRole[] = [
   "super_admin",
+  "admin",
   "administrator",
   "responder",
   "encoder",

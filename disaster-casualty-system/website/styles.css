@@ -1103,6 +1103,211 @@ tbody tr:hover td {
   gap: 14px;
 }
 
+.incident-management-list {
+  display: grid;
+  gap: 14px;
+}
+
+.incident-management-item {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+}
+
+.incident-management-toggle {
+  width: 100%;
+  min-height: 92px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px;
+  border: 0;
+  text-align: left;
+  color: var(--ink);
+  background:
+    linear-gradient(90deg, #fffafa, #fff),
+    #fff;
+}
+
+.incident-management-toggle h3 {
+  margin: 5px 0 0;
+  font-size: 19px;
+}
+
+.incident-management-toggle p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.incident-management-toggle:hover {
+  background: #fff7f7;
+}
+
+.incident-management-meta {
+  display: grid;
+  justify-items: end;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.incident-management-meta strong {
+  color: var(--maroon);
+}
+
+.incident-management-body {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border-top: 1px solid var(--line);
+  background: #f8fafc;
+}
+
+.section-launcher-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.section-launcher {
+  min-height: 86px;
+  display: grid;
+  align-content: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+  text-align: left;
+  color: var(--ink);
+  background:
+    linear-gradient(180deg, #fff, #fbfcfe);
+  transition:
+    transform 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.section-launcher:hover {
+  transform: translateY(-1px);
+  border-color: #efc4c6;
+  box-shadow: 0 12px 26px rgba(33, 43, 64, 0.08);
+}
+
+.section-launcher span {
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.section-launcher small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.incident-section-modal {
+  width: min(940px, 100%);
+}
+
+.modal-inline-message {
+  margin: 0;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.incident-section-card {
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.section-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.section-card-header h3 {
+  margin: 0;
+  color: var(--maroon);
+  font-size: 14px;
+  font-weight: 950;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.section-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.summary-preview.full-width {
+  grid-column: 1 / -1;
+}
+
+.summary-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.summary-facts div {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fbfcfe;
+}
+
+.summary-facts span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.summary-facts strong {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.mini-table {
+  display: grid;
+  gap: 8px;
+}
+
+.mini-table-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1.3fr) minmax(120px, 1fr) minmax(110px, 0.8fr) minmax(150px, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fbfcfe;
+  font-size: 12px;
+}
+
+.mini-table-row span {
+  color: var(--muted);
+}
+
+.mini-table-row.readonly {
+  grid-template-columns: minmax(140px, 1.3fr) minmax(120px, 1fr) minmax(110px, 0.8fr) minmax(150px, 1fr);
+}
+
 .incident-info-card {
   min-height: 228px;
   display: flex;
@@ -1207,7 +1412,26 @@ tbody tr:hover td {
   .grid.two,
   .grid.three,
   .form-grid.two,
-  .timeline-fields {
+  .timeline-fields,
+  .section-launcher-grid,
+  .section-card-grid,
+  .summary-facts {
+    grid-template-columns: 1fr;
+  }
+
+  .incident-management-toggle,
+  .section-card-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .incident-management-meta {
+    justify-items: start;
+    white-space: normal;
+  }
+
+  .mini-table-row,
+  .mini-table-row.readonly {
     grid-template-columns: 1fr;
   }
 
