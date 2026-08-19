@@ -444,6 +444,122 @@ export default function ProfileScreen() {
       }).format(lastLoadedAt)
     : "Not synced";
 
+  const responderFunctionCard = isResponderAccount ? (
+    <View style={styles.sectionCard}>
+      <Text style={styles.sectionTitle}>
+        RESPONDER FUNCTION
+      </Text>
+
+      <Text style={styles.assignmentHelpText}>
+        Choose which responder window this account should use when adding casualties.
+      </Text>
+
+      <View style={styles.assignmentOptions}>
+        <Pressable
+          onPress={() =>
+            void handleResponderAssignmentChange(
+              "field_responder",
+            )
+          }
+          style={({ pressed }) => [
+            styles.assignmentOption,
+            effectiveResponderAssignment ===
+              "field_responder" &&
+              styles.assignmentOptionSelected,
+            pressed && styles.assignmentOptionPressed,
+          ]}
+        >
+          <View style={styles.assignmentOptionIcon}>
+            <Ionicons
+              name="medkit-outline"
+              size={19}
+              color={
+                effectiveResponderAssignment ===
+                "field_responder"
+                  ? COLORS.white
+                  : COLORS.maroon
+              }
+            />
+          </View>
+
+          <View style={styles.assignmentOptionTextGroup}>
+            <Text
+              style={[
+                styles.assignmentOptionTitle,
+                effectiveResponderAssignment ===
+                  "field_responder" &&
+                  styles.assignmentOptionTitleSelected,
+              ]}
+            >
+              Field Responder
+            </Text>
+            <Text
+              style={[
+                styles.assignmentOptionDescription,
+                effectiveResponderAssignment ===
+                  "field_responder" &&
+                  styles.assignmentOptionDescriptionSelected,
+              ]}
+            >
+              Add Casualty shows only Triage and Status notes.
+            </Text>
+          </View>
+        </Pressable>
+
+        <Pressable
+          onPress={() =>
+            void handleResponderAssignmentChange(
+              "sa_responder",
+            )
+          }
+          style={({ pressed }) => [
+            styles.assignmentOption,
+            effectiveResponderAssignment ===
+              "sa_responder" &&
+              styles.assignmentOptionSelected,
+            pressed && styles.assignmentOptionPressed,
+          ]}
+        >
+          <View style={styles.assignmentOptionIcon}>
+            <Ionicons
+              name="bandage-outline"
+              size={19}
+              color={
+                effectiveResponderAssignment ===
+                "sa_responder"
+                  ? COLORS.white
+                  : COLORS.maroon
+              }
+            />
+          </View>
+
+          <View style={styles.assignmentOptionTextGroup}>
+            <Text
+              style={[
+                styles.assignmentOptionTitle,
+                effectiveResponderAssignment ===
+                  "sa_responder" &&
+                  styles.assignmentOptionTitleSelected,
+              ]}
+            >
+              Stabilization Area Responder
+            </Text>
+            <Text
+              style={[
+                styles.assignmentOptionDescription,
+                effectiveResponderAssignment ===
+                  "sa_responder" &&
+                  styles.assignmentOptionDescriptionSelected,
+              ]}
+            >
+              Add Casualty keeps the original full form for now.
+            </Text>
+          </View>
+        </Pressable>
+      </View>
+    </View>
+  ) : null;
+
   return (
     <View style={styles.screen}>
       <StatusBar
@@ -631,6 +747,8 @@ export default function ProfileScreen() {
           </View>
         ) : null}
 
+        {responderFunctionCard}
+
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>
             {informationSectionTitle}
@@ -719,122 +837,6 @@ export default function ProfileScreen() {
             }
           />
         </View>
-
-        {isResponderAccount ? (
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>
-              RESPONDER FUNCTION
-            </Text>
-
-            <Text style={styles.assignmentHelpText}>
-              Choose which responder window this account should use when adding casualties.
-            </Text>
-
-            <View style={styles.assignmentOptions}>
-              <Pressable
-                onPress={() =>
-                  void handleResponderAssignmentChange(
-                    "field_responder",
-                  )
-                }
-                style={({ pressed }) => [
-                  styles.assignmentOption,
-                  effectiveResponderAssignment ===
-                    "field_responder" &&
-                    styles.assignmentOptionSelected,
-                  pressed && styles.assignmentOptionPressed,
-                ]}
-              >
-                <View style={styles.assignmentOptionIcon}>
-                  <Ionicons
-                    name="medkit-outline"
-                    size={19}
-                    color={
-                      effectiveResponderAssignment ===
-                      "field_responder"
-                        ? COLORS.white
-                        : COLORS.maroon
-                    }
-                  />
-                </View>
-
-                <View style={styles.assignmentOptionTextGroup}>
-                  <Text
-                    style={[
-                      styles.assignmentOptionTitle,
-                      effectiveResponderAssignment ===
-                        "field_responder" &&
-                        styles.assignmentOptionTitleSelected,
-                    ]}
-                  >
-                    Field Responder
-                  </Text>
-                  <Text
-                    style={[
-                      styles.assignmentOptionDescription,
-                      effectiveResponderAssignment ===
-                        "field_responder" &&
-                        styles.assignmentOptionDescriptionSelected,
-                    ]}
-                  >
-                    Add Casualty shows only Triage and Status notes.
-                  </Text>
-                </View>
-              </Pressable>
-
-              <Pressable
-                onPress={() =>
-                  void handleResponderAssignmentChange(
-                    "sa_responder",
-                  )
-                }
-                style={({ pressed }) => [
-                  styles.assignmentOption,
-                  effectiveResponderAssignment ===
-                    "sa_responder" &&
-                    styles.assignmentOptionSelected,
-                  pressed && styles.assignmentOptionPressed,
-                ]}
-              >
-                <View style={styles.assignmentOptionIcon}>
-                  <Ionicons
-                    name="bandage-outline"
-                    size={19}
-                    color={
-                      effectiveResponderAssignment ===
-                      "sa_responder"
-                        ? COLORS.white
-                        : COLORS.maroon
-                    }
-                  />
-                </View>
-
-                <View style={styles.assignmentOptionTextGroup}>
-                  <Text
-                    style={[
-                      styles.assignmentOptionTitle,
-                      effectiveResponderAssignment ===
-                        "sa_responder" &&
-                        styles.assignmentOptionTitleSelected,
-                    ]}
-                  >
-                    Stabilization Area Responder
-                  </Text>
-                  <Text
-                    style={[
-                      styles.assignmentOptionDescription,
-                      effectiveResponderAssignment ===
-                        "sa_responder" &&
-                        styles.assignmentOptionDescriptionSelected,
-                    ]}
-                  >
-                    Add Casualty keeps the original full form for now.
-                  </Text>
-                </View>
-              </Pressable>
-            </View>
-          </View>
-        ) : null}
 
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>

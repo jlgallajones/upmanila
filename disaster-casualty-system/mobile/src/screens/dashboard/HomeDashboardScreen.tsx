@@ -25,12 +25,9 @@ import { isAuthenticationTokenError } from "../../api/client";
 import {
   getDeactivationContinuity,
   getIncidents,
-  getResponderSafetyReport,
   saveDeactivationContinuity,
-  saveResponderSafetyReport,
   type DisruptionLevel,
   type Incident,
-  type ResponderSafetyStatus,
 } from "../../api/incidents";
 import {
   getAccessToken,
@@ -649,73 +646,6 @@ export default function HomeDashboardScreen() {
     }
   }
 
-  function showResponderSafetyPrompt(incident: Incident) {
-    setQuickChoice({
-      title: "Are you Safe?",
-      subtitle: `${incident.incident_name}\nPPE use time will be recorded as the current time.`,
-      options: [
-        {
-          label: "Yes",
-          caption: "Record responder as safe",
-          icon: "checkmark-circle-outline",
-          color: COLORS.green,
-          onSelect: () => {
-            void saveResponderSafetyQuickAction(incident, "yes");
-          },
-        },
-        {
-          label: "No",
-          caption: "Record responder as not safe",
-          icon: "close-circle-outline",
-          color: COLORS.red,
-          onSelect: () => {
-            void saveResponderSafetyQuickAction(incident, "no");
-          },
-        },
-      ],
-    });
-  }
-
-  async function saveResponderSafetyQuickAction(
-    incident: Incident,
-    safetyStatus: ResponderSafetyStatus,
-  ) {
-    try {
-      setIsSavingQuickAction(true);
-
-      const current = await getResponderSafetyReport(incident.id);
-      await saveResponderSafetyReport(incident.id, {
-        safetyActionsEstablished: safetyStatus,
-        ppeDecisionAt: new Date().toISOString(),
-        responseDeactivatedAt:
-          current.report?.response_deactivated_at ?? null,
-        deployedResponders:
-          current.report?.deployed_responders ?? 0,
-        injuredResponders:
-          current.report?.injured_responders ?? 0,
-        illResponders: current.report?.ill_responders ?? 0,
-        deceasedResponders:
-          current.report?.deceased_responders ?? 0,
-      });
-
-      setQuickChoice(null);
-      Alert.alert(
-        "Responder safety saved",
-        "Your safety response and PPE use time were recorded for this incident.",
-      );
-    } catch (error) {
-      console.error("Unable to save responder safety:", error);
-      Alert.alert(
-        "Unable to save safety response",
-        error instanceof Error
-          ? error.message
-          : "Please try again.",
-      );
-    } finally {
-      setIsSavingQuickAction(false);
-    }
-  }
-
   function showFacilityDisruptionPrompt(incident: Incident) {
     setQuickChoice({
       title: "Healthcare Facility Routine Care Disruption",
@@ -1081,23 +1011,6 @@ export default function HomeDashboardScreen() {
               onPress={() =>
                 router.push("/add-casualty")
               }
-            />
-          ) : null}
-
-          {isResponderAccount ? (
-            <QuickAction
-              icon="shield-checkmark-outline"
-              label="Are you Safe?"
-              caption="Record PPE time"
-              iconColor={COLORS.green}
-              iconBackground={COLORS.paleGreen}
-              onPress={() => {
-                void resolveActiveIncident(
-                  "Select Incident",
-                  "Choose the incident for this safety response.",
-                  showResponderSafetyPrompt,
-                );
-              }}
             />
           ) : null}
 

@@ -92,9 +92,10 @@ const DEFAULT_STEPS = [
   "Remarks",
 ] as const;
 
-const FIELD_RESPONDER_STEPS = ["Triage", "Status"] as const;
+const FIELD_RESPONDER_STEPS = ["Safety", "Triage", "Status"] as const;
 
 const SA_RESPONDER_STEPS = [
+  "Safety",
   "Intro",
   "Info",
   "Address",
@@ -1252,6 +1253,7 @@ type StepName = (typeof ALL_STEPS)[number];
 type AddCasualtyStep = StepName;
 
 const STEP_PROGRESS_LABELS: Record<StepName, string> = {
+  Safety: "SAFE",
   Intro: "INTRO",
   Info: "INFO",
   "General Information": "GENERAL",
@@ -1332,6 +1334,9 @@ const MONTH_NAMES = [
 ] as const;
 
 type FormState = {
+  responderSafetyStatus: string;
+  ppeUseTime: string;
+
   witnessPresent: string;
   witnessOther: string;
   witnessResponse: string;
@@ -1467,6 +1472,9 @@ type HealthcareFacilityLabelSource = Pick<
 >;
 
 const initialForm: FormState = {
+  responderSafetyStatus: "",
+  ppeUseTime: "",
+
   witnessPresent: "",
   witnessOther: "",
   witnessResponse: "",
@@ -1963,6 +1971,28 @@ function isSaResponderCaptureFlow(
 
 function isHealthcareDocumenterCaptureFlow(role: string | null): boolean {
   return role === "documenter" || role === "medical_personnel";
+}
+
+function isResponderAccountRole(role: string | null): boolean {
+  return (
+    role === "responder" ||
+    role === "field_responder" ||
+    role === "sa_responder"
+  );
+}
+
+function getDefaultResponderAssignment(
+  role: string | null,
+): ResponderAssignment | null {
+  if (role === "field_responder") {
+    return "field_responder";
+  }
+
+  if (role === "sa_responder") {
+    return "sa_responder";
+  }
+
+  return null;
 }
 
 function getTriageSystemOptionsForStage(
@@ -2557,6 +2587,9 @@ function mapRecordToForm(
   latestTransport?: CasualtyTransportHistoryItem,
 ): FormState {
   return {
+    responderSafetyStatus: "",
+    ppeUseTime: "",
+
     witnessPresent: "",
     witnessOther: "",
     witnessResponse: "",
@@ -2785,7 +2818,7 @@ function appendSectionNote(
 }
 
 function buildSaResponderRemarks(form: FormState): string {
-  return appendSectionNote(form.remarks, "SA Responder Details", [
+  return appendSectionNote(buildResponderSafetyRemarks(form), "SA Responder Details", [
     ["Victim code", form.victimCode],
     ["Witness present", form.witnessPresent],
     ["Witness other", form.witnessOther],
@@ -2794,6 +2827,13 @@ function buildSaResponderRemarks(form: FormState): string {
     ["Newborn", form.newborn],
     ["Pregnant", form.pregnant],
     ["Religion", form.religion],
+  ]);
+}
+
+function buildResponderSafetyRemarks(form: FormState): string {
+  return appendSectionNote(form.remarks, "Responder Safety", [
+    ["Are you safe", form.responderSafetyStatus],
+    ["Time of PPE Use", form.ppeUseTime],
   ]);
 }
 
@@ -3527,6 +3567,8 @@ export default function AddCasualtyScreen() {
     currentResponderAssignment,
     setCurrentResponderAssignment,
   ] = useState<ResponderAssignment | null>(null);
+  const [isLoadingUserContext, setIsLoadingUserContext] =
+    useState(true);
   const [selectedPhoto, setSelectedPhoto] =
     useState<SelectedPhoto | null>(null);
   const [isCapturingLocation, setIsCapturingLocation] =
@@ -3543,9 +3585,13 @@ export default function AddCasualtyScreen() {
   const isHealthcareDocumenterFlow =
     isHealthcareDocumenterCaptureFlow(currentUserRole);
   const activeSteps: AddCasualtyStep[] = isFieldResponderFlow
-    ? [...FIELD_RESPONDER_STEPS]
+    ? isEditing
+      ? FIELD_RESPONDER_STEPS.filter((step) => step !== "Safety")
+      : [...FIELD_RESPONDER_STEPS]
     : isSaResponderFlow
-      ? [...SA_RESPONDER_STEPS]
+      ? isEditing
+        ? SA_RESPONDER_STEPS.filter((step) => step !== "Safety")
+        : [...SA_RESPONDER_STEPS]
       : isHealthcareDocumenterFlow
         ? [...HEALTHCARE_DOCUMENTER_STEPS]
         : [...DEFAULT_STEPS];
@@ -3566,6 +3612,11 @@ export default function AddCasualtyScreen() {
     REFERENCE_MANAGER_ROLES.includes(
       currentUserRole as (typeof REFERENCE_MANAGER_ROLES)[number],
     );
+  const needsResponderFunctionSelection =
+    !isEditing &&
+    isResponderAccountRole(currentUserRole) &&
+    !currentResponderAssignment &&
+    !getDefaultResponderAssignment(currentUserRole);
 
   const personPayload = useMemo<CreateCasualtyPayload["person"]>(
     () => ({
@@ -3610,11 +3661,18 @@ export default function AddCasualtyScreen() {
         ? buildSaResponderRemarks(form)
         : isHealthcareDocumenterFlow
           ? buildHealthcareDocumenterRemarks(form)
-        : form.remarks,
+          : isFieldResponderFlow
+            ? buildResponderSafetyRemarks(form)
+            : form.remarks,
       latitude: parseOptionalNumber(form.latitude),
       longitude: parseOptionalNumber(form.longitude),
     }),
-    [form, isHealthcareDocumenterFlow, isSaResponderFlow],
+    [
+      form,
+      isFieldResponderFlow,
+      isHealthcareDocumenterFlow,
+      isSaResponderFlow,
+    ],
   );
 
   const triageAssessmentPayload = useMemo<
@@ -3939,6 +3997,7 @@ export default function AddCasualtyScreen() {
     let isMounted = true;
 
     async function loadCurrentUser() {
+      setIsLoadingUserContext(true);
       const user = await getCurrentUser();
       const responderAssignment = await getResponderAssignment();
 
@@ -3951,6 +4010,7 @@ export default function AddCasualtyScreen() {
         );
         setCurrentAssignedBarangay(user?.assigned_barangay ?? null);
         setCurrentResponderAssignment(responderAssignment);
+        setIsLoadingUserContext(false);
       }
     }
 
@@ -4504,6 +4564,33 @@ export default function AddCasualtyScreen() {
 
   function validateCurrentStep(): boolean {
     switch (stepName) {
+      case "Safety":
+        if (!form.responderSafetyStatus.trim()) {
+          Alert.alert(
+            "Safety response required",
+            "Answer Are you safe? before continuing.",
+          );
+          return false;
+        }
+
+        if (!form.ppeUseTime.trim()) {
+          Alert.alert(
+            "PPE time required",
+            "Enter the Time of PPE Use before continuing.",
+          );
+          return false;
+        }
+
+        if (!getValidDateTimeInput(form.ppeUseTime)) {
+          Alert.alert(
+            "Invalid PPE time",
+            "Enter Time of PPE Use using mm/dd/yyyy hh:mm.",
+          );
+          return false;
+        }
+
+        return true;
+
       case "Intro":
         if (!form.incidentId && currentUserId) {
           Alert.alert(
@@ -7040,6 +7127,80 @@ export default function AddCasualtyScreen() {
     router.back();
   }
 
+  function renderResponderSafetyStep() {
+    return (
+      <>
+        <SectionLabel title="Responder safety" />
+
+        <View style={styles.safetyPromptCard}>
+          <Text style={styles.safetyPromptTitle}>
+            Are you safe?
+          </Text>
+
+          <View style={styles.safetyOptionsRow}>
+            {YES_NO_OPTIONS_TEXT.map((option) => {
+              const selected =
+                form.responderSafetyStatus === option;
+
+              return (
+                <Pressable
+                  key={option}
+                  onPress={() =>
+                    updateField("responderSafetyStatus", option)
+                  }
+                  style={({ pressed }) => [
+                    styles.safetyOption,
+                    selected && styles.safetyOptionSelected,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Ionicons
+                    name={
+                      option === "Yes"
+                        ? "checkmark-circle-outline"
+                        : "close-circle-outline"
+                    }
+                    size={18}
+                    color={
+                      selected
+                        ? COLORS.white
+                        : option === "Yes"
+                          ? COLORS.green
+                          : COLORS.maroon
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.safetyOptionText,
+                      selected && styles.safetyOptionTextSelected,
+                    ]}
+                  >
+                    {option}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        <CurrentTimeField
+          label="TIME OF PPE USE"
+          value={form.ppeUseTime}
+          placeholder="mm/dd/yyyy hh:mm"
+          buttonLabel="Use current time"
+          icon="time-outline"
+          onChangeText={(value) => updateField("ppeUseTime", value)}
+          onUseCurrent={() =>
+            updateField(
+              "ppeUseTime",
+              formatDateTimeForInput(new Date()),
+            )
+          }
+        />
+      </>
+    );
+  }
+
   function renderHealthcareDocumenterGeneralStep() {
     return (
       <>
@@ -9402,6 +9563,9 @@ export default function AddCasualtyScreen() {
 
   function renderCurrentStep() {
     switch (stepName) {
+      case "Safety":
+        return renderResponderSafetyStep();
+
       case "Intro":
         return renderSaIntroStep();
 
@@ -9449,7 +9613,7 @@ export default function AddCasualtyScreen() {
     }
   }
 
-  if (isLoadingRecord) {
+  if (isLoadingRecord || isLoadingUserContext) {
     return (
       <View style={styles.centerState}>
         <ActivityIndicator
@@ -9458,8 +9622,42 @@ export default function AddCasualtyScreen() {
         />
 
         <Text style={styles.centerStateText}>
-          Loading casualty record...
+          {isLoadingRecord
+            ? "Loading casualty record..."
+            : "Loading responder profile..."}
         </Text>
+      </View>
+    );
+  }
+
+  if (needsResponderFunctionSelection) {
+    return (
+      <View style={styles.centerState}>
+        <Ionicons
+          name="person-circle-outline"
+          size={48}
+          color={COLORS.maroon}
+        />
+
+        <Text style={styles.centerStateTitle}>
+          Please Select Responder Function to continue
+        </Text>
+
+        <Text style={styles.centerStateText}>
+          Choose Field Responder or Stabilization Area Responder in Profile before adding a casualty.
+        </Text>
+
+        <Pressable
+          onPress={() => router.replace("/profile")}
+          style={({ pressed }) => [
+            styles.centerStateButton,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Text style={styles.centerStateButtonText}>
+            Open Profile
+          </Text>
+        </Pressable>
       </View>
     );
   }
@@ -10286,6 +10484,55 @@ const styles = StyleSheet.create({
   },
   finalTriageYellowText: {
     color: "#2B2100",
+  },
+
+  safetyPromptCard: {
+    borderWidth: 1,
+    borderColor: COLORS.fieldBorder,
+    borderRadius: 13,
+    backgroundColor: COLORS.fieldBackground,
+    padding: 13,
+    marginBottom: 14,
+  },
+
+  safetyPromptTitle: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: "900",
+    marginBottom: 10,
+  },
+
+  safetyOptionsRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+
+  safetyOption: {
+    minHeight: 44,
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: COLORS.fieldBorder,
+    borderRadius: 12,
+    backgroundColor: COLORS.white,
+    gap: 7,
+  },
+
+  safetyOptionSelected: {
+    borderColor: COLORS.maroon,
+    backgroundColor: COLORS.maroon,
+  },
+
+  safetyOptionText: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+
+  safetyOptionTextSelected: {
+    color: COLORS.white,
   },
 
   inlineWarning: {
