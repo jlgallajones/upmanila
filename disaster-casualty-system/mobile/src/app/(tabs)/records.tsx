@@ -19,7 +19,14 @@ import {
   type CasualtyRecord,
 } from "../../api/casualties";
 import { isAuthenticationTokenError } from "../../api/client";
-import { getAccessToken } from "../../auth/session";
+import {
+  getAccessToken,
+  getCurrentUser,
+} from "../../auth/session";
+import {
+  getResponderAssignment,
+  type ResponderAssignment,
+} from "../../auth/responderAssignment";
 
 const COLORS = {
   maroon: "#7B1113",
@@ -56,9 +63,29 @@ const filters = [
   "Safe",
 ] as const;
 
+const fieldResponderReviewFilters = [
+  "Draft",
+  "Unsynced",
+  "Under Review",
+  "Returned",
+  "Confirmed",
+] as const;
+
+const fieldResponderTriageFilters = [
+  "All",
+  "Immediate",
+  "Delayed",
+  "Minor",
+  "Expectant",
+] as const;
+
 const SCREEN_PADDING = 16;
 
 type FilterOption = (typeof filters)[number];
+type FieldResponderReviewFilter =
+  (typeof fieldResponderReviewFilters)[number];
+type FieldResponderTriageFilter =
+  (typeof fieldResponderTriageFilters)[number];
 
 function getFullName(record: CasualtyRecord): string {
   const parts = [
@@ -161,6 +188,56 @@ function getStatusStyle(status: string) {
 
 function isRecordSynced(record: CasualtyRecord): boolean {
   return record.verification_status !== "draft";
+}
+
+function isFieldResponderView(
+  role: string | null,
+  assignment: ResponderAssignment | null,
+): boolean {
+  return role === "field_responder" || assignment === "field_responder";
+}
+
+function getRecordReviewFilter(
+  record: CasualtyRecord,
+): FieldResponderReviewFilter | null {
+  switch (record.verification_status) {
+    case "draft":
+      return "Draft";
+    case "unsynced":
+      return "Unsynced";
+    case "submitted":
+    case "under_review":
+      return "Under Review";
+    case "rejected":
+      return "Returned";
+    case "verified":
+      return "Confirmed";
+    default:
+      return null;
+  }
+}
+
+function getRecordTriageFilter(
+  record: CasualtyRecord,
+): FieldResponderTriageFilter | null {
+  const category =
+    record.latest_triage_assessment?.calculated_category ??
+    record.latest_triage_assessment?.triage_category ??
+    "";
+
+  switch (category.toLowerCase()) {
+    case "immediate":
+      return "Immediate";
+    case "delayed":
+      return "Delayed";
+    case "minor":
+    case "minimal":
+      return "Minor";
+    case "expectant":
+      return "Expectant";
+    default:
+      return null;
+  }
 }
 
 function CasualtyCard({
@@ -281,11 +358,63 @@ function CasualtyCard({
   );
 }
 
+function FilterCheckbox({
+  label,
+  selected,
+  onPress,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.checkboxRow,
+        pressed && styles.pressed,
+      ]}
+    >
+      <View
+        style={[
+          styles.checkboxBox,
+          selected && styles.checkboxBoxSelected,
+        ]}
+      >
+        {selected ? (
+          <Ionicons
+            name="checkmark"
+            size={13}
+            color={COLORS.maroon}
+          />
+        ) : null}
+      </View>
+
+      <Text
+        style={[
+          styles.checkboxLabel,
+          selected && styles.checkboxLabelSelected,
+        ]}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 export default function RecordsScreen() {
   const [records, setRecords] = useState<CasualtyRecord[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] =
     useState<FilterOption>("All");
+  const [
+    activeReviewFilters,
+    setActiveReviewFilters,
+  ] = useState<FieldResponderReviewFilter[]>([]);
+  const [
+    activeTriageFilters,
+    setActiveTriageFilters,
+  ] = useState<FieldResponderTriageFilter[]>(["All"]);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -293,12 +422,28 @@ export default function RecordsScreen() {
     useState<string | null>(null);
   const [isGuestMode, setIsGuestMode] = useState(false);
   const [formattedDate, setFormattedDate] = useState("");
+  const [currentUserRole, setCurrentUserRole] =
+    useState<string | null>(null);
+  const [
+    currentResponderAssignment,
+    setCurrentResponderAssignment,
+  ] = useState<ResponderAssignment | null>(null);
+  const useFieldResponderFilters = isFieldResponderView(
+    currentUserRole,
+    currentResponderAssignment,
+  );
 
   const loadRecords = useCallback(async () => {
     try {
       setErrorMessage(null);
 
-      const token = await getAccessToken();
+      const [token, user, responderAssignment] = await Promise.all([
+        getAccessToken(),
+        getCurrentUser(),
+        getResponderAssignment(),
+      ]);
+      setCurrentUserRole(user?.role ?? null);
+      setCurrentResponderAssignment(responderAssignment);
 
       if (!token) {
         setRecords([]);
@@ -336,19 +481,27 @@ export default function RecordsScreen() {
       try {
         setIsLoading(true);
 
-        const token = await getAccessToken();
+        const [token, user, responderAssignment] = await Promise.all([
+          getAccessToken(),
+          getCurrentUser(),
+          getResponderAssignment(),
+        ]);
 
         if (!token) {
           if (isMounted) {
             setRecords([]);
             setErrorMessage(null);
             setIsGuestMode(true);
+            setCurrentUserRole(null);
+            setCurrentResponderAssignment(null);
           }
           return;
         }
 
         if (isMounted) {
           setIsGuestMode(false);
+          setCurrentUserRole(user?.role ?? null);
+          setCurrentResponderAssignment(responderAssignment);
         }
 
         const data = await getCasualties();
@@ -408,6 +561,29 @@ export default function RecordsScreen() {
     }
   }, [loadRecords]);
 
+  function toggleReviewFilter(filter: FieldResponderReviewFilter) {
+    setActiveReviewFilters((current) =>
+      current.includes(filter)
+        ? current.filter((item) => item !== filter)
+        : [...current, filter],
+    );
+  }
+
+  function toggleTriageFilter(filter: FieldResponderTriageFilter) {
+    setActiveTriageFilters((current) => {
+      if (filter === "All") {
+        return ["All"];
+      }
+
+      const withoutAll = current.filter((item) => item !== "All");
+      const next = withoutAll.includes(filter)
+        ? withoutAll.filter((item) => item !== filter)
+        : [...withoutAll, filter];
+
+      return next.length > 0 ? next : ["All"];
+    });
+  }
+
   const filteredRecords = useMemo(() => {
     const normalizedSearch = searchQuery.trim().toLowerCase();
 
@@ -418,9 +594,16 @@ export default function RecordsScreen() {
       const location = getLocation(record).toLowerCase();
       const status = formatStatus(record.current_status);
 
-      const matchesFilter =
-        activeFilter === "All" ||
-        status === activeFilter;
+      const matchesFilter = useFieldResponderFilters
+        ? (activeReviewFilters.length === 0 ||
+            activeReviewFilters.includes(
+              getRecordReviewFilter(record) as FieldResponderReviewFilter,
+            )) &&
+          (activeTriageFilters.includes("All") ||
+            activeTriageFilters.includes(
+              getRecordTriageFilter(record) as FieldResponderTriageFilter,
+            ))
+        : activeFilter === "All" || status === activeFilter;
 
       const matchesSearch =
         normalizedSearch.length === 0 ||
@@ -430,7 +613,14 @@ export default function RecordsScreen() {
 
       return matchesFilter && matchesSearch;
     });
-  }, [activeFilter, records, searchQuery]);
+  }, [
+    activeFilter,
+    activeReviewFilters,
+    activeTriageFilters,
+    records,
+    searchQuery,
+    useFieldResponderFilters,
+  ]);
 
   if (isLoading) {
     return (
@@ -504,37 +694,63 @@ export default function RecordsScreen() {
       </SafeAreaView>
 
       <View style={styles.filterSection}>
-        <FlatList
-          horizontal
-          data={filters}
-          keyExtractor={(item) => item}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterList}
-          renderItem={({ item }) => {
-            const isActive = activeFilter === item;
+        {useFieldResponderFilters ? (
+          <View style={styles.fieldResponderFilters}>
+            <View style={styles.filterGroup}>
+              {fieldResponderReviewFilters.map((item) => (
+                <FilterCheckbox
+                  key={item}
+                  label={item}
+                  selected={activeReviewFilters.includes(item)}
+                  onPress={() => toggleReviewFilter(item)}
+                />
+              ))}
+            </View>
 
-            return (
-              <Pressable
-                onPress={() => setActiveFilter(item)}
-                style={({ pressed }) => [
-                  styles.filterChip,
-                  isActive && styles.filterChipActive,
-                  pressed && styles.pressed,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.filterChipText,
-                    isActive &&
-                      styles.filterChipTextActive,
+            <View style={styles.filterGroup}>
+              {fieldResponderTriageFilters.map((item) => (
+                <FilterCheckbox
+                  key={item}
+                  label={item}
+                  selected={activeTriageFilters.includes(item)}
+                  onPress={() => toggleTriageFilter(item)}
+                />
+              ))}
+            </View>
+          </View>
+        ) : (
+          <FlatList
+            horizontal
+            data={filters}
+            keyExtractor={(item) => item}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterList}
+            renderItem={({ item }) => {
+              const isActive = activeFilter === item;
+
+              return (
+                <Pressable
+                  onPress={() => setActiveFilter(item)}
+                  style={({ pressed }) => [
+                    styles.filterChip,
+                    isActive && styles.filterChipActive,
+                    pressed && styles.pressed,
                   ]}
                 >
-                  {item}
-                </Text>
-              </Pressable>
-            );
-          }}
-        />
+                  <Text
+                    style={[
+                      styles.filterChipText,
+                      isActive &&
+                        styles.filterChipTextActive,
+                    ]}
+                  >
+                    {item}
+                  </Text>
+                </Pressable>
+              );
+            }}
+          />
+        )}
       </View>
 
       {errorMessage ? (
@@ -711,6 +927,52 @@ const styles = StyleSheet.create({
     paddingHorizontal: SCREEN_PADDING,
     paddingVertical: 12,
     gap: 8,
+  },
+
+  fieldResponderFilters: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingHorizontal: SCREEN_PADDING,
+    paddingVertical: 12,
+    gap: 26,
+  },
+
+  filterGroup: {
+    flex: 1,
+    gap: 7,
+  },
+
+  checkboxRow: {
+    minHeight: 24,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  checkboxBox: {
+    width: 14,
+    height: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: COLORS.red,
+    backgroundColor: COLORS.white,
+    marginRight: 7,
+  },
+
+  checkboxBoxSelected: {
+    borderColor: COLORS.gray,
+    backgroundColor: COLORS.white,
+  },
+
+  checkboxLabel: {
+    color: COLORS.red,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "700",
+  },
+
+  checkboxLabelSelected: {
+    color: COLORS.text,
   },
 
   filterChip: {

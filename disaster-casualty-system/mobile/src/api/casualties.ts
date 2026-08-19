@@ -22,6 +22,15 @@ export type CasualtyRecord = {
   updated_at: string;
   latitude: number | null;
   longitude: number | null;
+  latest_triage_assessment?: {
+    id: string;
+    casualty_incident_id: string;
+    triage_category: string;
+    responder_category: string | null;
+    calculated_category: string | null;
+    triage_stage: string;
+    triaged_at: string;
+  } | null;
 
   casualty: {
     id: string;

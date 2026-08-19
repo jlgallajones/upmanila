@@ -207,6 +207,16 @@ type CreateCasualtyRpcResult = {
   transportRecord: unknown;
 };
 
+type LatestTriageAssessmentSummary = {
+  id: string;
+  casualty_incident_id: string;
+  triage_category: string;
+  responder_category: string | null;
+  calculated_category: string | null;
+  triage_stage: string;
+  triaged_at: string;
+};
+
 const casualtyRecordSelect = `
   id,
   client_record_id,
@@ -281,6 +291,44 @@ const casualtyRecordSelect = `
     assigned_barangay
   )
 `;
+
+async function attachLatestTriageAssessments<
+  T extends { id: string },
+>(records: T[]): Promise<
+  Array<T & { latest_triage_assessment: LatestTriageAssessmentSummary | null }>
+> {
+  if (records.length === 0) {
+    return [];
+  }
+
+  const recordIds = records.map((record) => record.id);
+  const { data, error } = await supabase
+    .from("casualty_triage_assessments")
+    .select(
+      "id, casualty_incident_id, triage_category, responder_category, calculated_category, triage_stage, triaged_at",
+    )
+    .in("casualty_incident_id", recordIds)
+    .order("triaged_at", { ascending: false });
+
+  if (error) {
+    throw new Error(
+      `Unable to retrieve latest triage assessments: ${error.message}`,
+    );
+  }
+
+  const latestByRecordId = new Map<string, LatestTriageAssessmentSummary>();
+
+  for (const assessment of (data ?? []) as LatestTriageAssessmentSummary[]) {
+    if (!latestByRecordId.has(assessment.casualty_incident_id)) {
+      latestByRecordId.set(assessment.casualty_incident_id, assessment);
+    }
+  }
+
+  return records.map((record) => ({
+    ...record,
+    latest_triage_assessment: latestByRecordId.get(record.id) ?? null,
+  }));
+}
 
 function trimmedOrNull(
   value: string | undefined,
@@ -1502,10 +1550,14 @@ export async function getCasualties(
       throw new Error(`Unable to retrieve casualties: ${error.message}`);
     }
 
+    const recordsWithTriage = await attachLatestTriageAssessments(
+      data ?? [],
+    );
+
     response.status(200).json({
       success: true,
-      count: data?.length ?? 0,
-      data: data ?? [],
+      count: recordsWithTriage.length,
+      data: recordsWithTriage,
     });
   } catch (error) {
     next(error);
