@@ -1,6 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
+import { useEffect, useState } from "react";
 import { Platform } from "react-native";
+
+import { getCurrentUser } from "../../auth/session";
 
 const COLORS = {
   maroon: "#7B1113",
@@ -10,6 +13,23 @@ const COLORS = {
 };
 
 export default function TabLayout() {
+  const [isSuperAdmin, setIsSuperAdmin] =
+    useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    void getCurrentUser().then((user) => {
+      if (isMounted) {
+        setIsSuperAdmin(user?.role === "super_admin");
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   return (
     <Tabs
       screenOptions={{
@@ -70,6 +90,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="add-casualty"
         options={{
+          href: isSuperAdmin ? null : undefined,
           title: "Add",
           tabBarIcon: ({ color, focused }) => (
             <Ionicons

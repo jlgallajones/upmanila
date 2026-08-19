@@ -432,6 +432,8 @@ export default function HomeDashboardScreen() {
     canOpenIncidentManagement,
     setCanOpenIncidentManagement,
   ] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] =
+    useState(false);
   const [formattedDate, setFormattedDate] = useState("");
 
   const loadDashboard = useCallback(async () => {
@@ -446,10 +448,13 @@ export default function HomeDashboardScreen() {
         INCIDENT_MANAGEMENT_ROLES.has(
           currentUser?.role ?? "",
         );
+      const hasSuperAdminRole =
+        currentUser?.role === "super_admin";
 
       setCanOpenIncidentManagement(
         hasIncidentManagementAccess,
       );
+      setIsSuperAdmin(hasSuperAdminRole);
 
       if (!token) {
         const queuedCount = await getQueuedCasualtyCount();
@@ -458,6 +463,7 @@ export default function HomeDashboardScreen() {
         setActivities([]);
         setIsGuestMode(true);
         setCanOpenIncidentManagement(false);
+        setIsSuperAdmin(false);
         return;
       }
 
@@ -482,6 +488,7 @@ export default function HomeDashboardScreen() {
         setActivities([]);
         setIsGuestMode(true);
         setCanOpenIncidentManagement(false);
+        setIsSuperAdmin(false);
         setErrorMessage(null);
         return;
       }
@@ -714,6 +721,22 @@ export default function HomeDashboardScreen() {
 
         <View style={styles.summaryGrid}>
           <SummaryCard
+            icon="warning-outline"
+            value={String(summary.activeIncidents)}
+            label="Active Incidents"
+            caption="Current responses"
+            valueColor={COLORS.blue}
+            iconBackground={COLORS.paleBlue}
+            iconColor={COLORS.blue}
+            loading={isLoading}
+            onPress={
+              canOpenIncidentManagement
+                ? () => router.push("/incidents")
+                : undefined
+            }
+          />
+
+          <SummaryCard
             icon="clipboard-outline"
             value={String(summary.encodedToday)}
             label="Encoded Today"
@@ -721,17 +744,6 @@ export default function HomeDashboardScreen() {
             valueColor={COLORS.maroon}
             iconBackground={COLORS.paleRed}
             iconColor={COLORS.red}
-            loading={isLoading}
-          />
-
-          <SummaryCard
-            icon="time-outline"
-            value={String(summary.pendingRecords)}
-            label="Pending Review"
-            caption="Awaiting verification"
-            valueColor={COLORS.orange}
-            iconBackground={COLORS.paleOrange}
-            iconColor={COLORS.orange}
             loading={isLoading}
           />
 
@@ -747,19 +759,14 @@ export default function HomeDashboardScreen() {
           />
 
           <SummaryCard
-            icon="warning-outline"
-            value={String(summary.activeIncidents)}
-            label="Active Incidents"
-            caption="Current responses"
-            valueColor={COLORS.blue}
-            iconBackground={COLORS.paleBlue}
-            iconColor={COLORS.blue}
+            icon="time-outline"
+            value={String(summary.pendingRecords)}
+            label="Pending Review"
+            caption="Awaiting verification"
+            valueColor={COLORS.orange}
+            iconBackground={COLORS.paleOrange}
+            iconColor={COLORS.orange}
             loading={isLoading}
-            onPress={
-              canOpenIncidentManagement
-                ? () => router.push("/incidents")
-                : undefined
-            }
           />
         </View>
 
@@ -772,16 +779,31 @@ export default function HomeDashboardScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.quickActionsRow}
         >
-          <QuickAction
-            icon="add-circle-outline"
-            label="Add Casualty"
-            caption="New record"
-            iconColor={COLORS.maroon}
-            iconBackground="#F5E9EB"
-            onPress={() =>
-              router.push("/add-casualty")
-            }
-          />
+          {!isSuperAdmin ? (
+            <QuickAction
+              icon="add-circle-outline"
+              label="Add Casualty"
+              caption="New record"
+              iconColor={COLORS.maroon}
+              iconBackground="#F5E9EB"
+              onPress={() =>
+                router.push("/add-casualty")
+              }
+            />
+          ) : null}
+
+          {isSuperAdmin ? (
+            <QuickAction
+              icon="person-add-outline"
+              label="Account Management"
+              caption="Admin accounts"
+              iconColor={COLORS.maroon}
+              iconBackground="#F5E9EB"
+              onPress={() =>
+                router.push("/account-management" as never)
+              }
+            />
+          ) : null}
 
           <QuickAction
             icon="document-text-outline"

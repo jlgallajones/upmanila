@@ -24,10 +24,16 @@ Open:
 http://localhost:5173
 ```
 
-The desktop dashboard uses this default API URL:
+The desktop dashboard uses this local API URL on localhost:
 
 ```text
 http://localhost:5000/api
+```
+
+When deployed, it uses the Render API:
+
+```text
+https://dcms-api-ljco.onrender.com/api
 ```
 
 ## Implemented

@@ -7,6 +7,10 @@ type LoginRequest = {
   password: string;
 };
 
+type RefreshSessionRequest = {
+  refreshToken: string;
+};
+
 type RegisterAdminRequest = {
   fullName: string;
   email: string;
@@ -53,6 +57,22 @@ const userSelect = `
 `;
 
 const unitUserSelect = `
+  id,
+  full_name,
+  email,
+  phone_number,
+  role,
+  reporting_context,
+  assigned_barangay,
+  assigned_municipality,
+  is_active,
+  created_by,
+  created_at,
+  updated_at,
+  last_seen_at
+`;
+
+const managedAccountSelect = `
   id,
   full_name,
   email,
@@ -228,6 +248,98 @@ export async function login(
   }
 }
 
+export async function refreshSession(
+  request: Request<Record<string, never>, unknown, RefreshSessionRequest>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const refreshToken = request.body.refreshToken?.trim();
+
+    if (!refreshToken) {
+      response.status(400).json({
+        success: false,
+        message: "refreshToken is required.",
+      });
+      return;
+    }
+
+    const { data: authData, error: authError } =
+      await supabaseAuth.auth.refreshSession({
+        refresh_token: refreshToken,
+      });
+
+    if (authError || !authData.session?.access_token || !authData.user) {
+      response.status(401).json({
+        success: false,
+        message:
+          authError?.message ??
+          "Refresh session failed. Please log in again.",
+      });
+      return;
+    }
+
+    let { data: user, error: userError } = await supabase
+      .from("users")
+      .select(userSelect)
+      .eq("id", authData.user.id)
+      .maybeSingle();
+
+    if (userError) {
+      throw new Error(
+        `Unable to load user profile: ${userError.message}`,
+      );
+    }
+
+    if (!user) {
+      user = await findProfileByEmail(authData.user.email ?? "");
+    }
+
+    if (!user) {
+      response.status(404).json({
+        success: false,
+        message: "User profile not found.",
+      });
+      return;
+    }
+
+    if (!user.is_active) {
+      response.status(403).json({
+        success: false,
+        message: "This account is inactive.",
+      });
+      return;
+    }
+
+    const { error: seenError } = await supabase
+      .from("users")
+      .update({
+        last_seen_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", user.id);
+
+    if (seenError) {
+      console.warn("Unable to update user last_seen_at", {
+        userId: user.id,
+        reason: seenError.message,
+      });
+    }
+
+    response.status(200).json({
+      success: true,
+      data: {
+        user,
+        accessToken: authData.session.access_token,
+        refreshToken:
+          authData.session.refresh_token ?? refreshToken,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function registerAdmin(
   request: Request<
     Record<string, never>,
@@ -332,6 +444,43 @@ export async function registerAdmin(
       success: true,
       message: "Account created successfully.",
       data: user,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getManagedAccounts(
+  request: Request,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const currentUser = (request as Request & {
+      user?: { role?: string; id?: string };
+    }).user;
+
+    if (currentUser?.role !== "super_admin") {
+      response.status(403).json({
+        success: false,
+        message: "Only super admin accounts can view all accounts.",
+      });
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("users")
+      .select(managedAccountSelect)
+      .order("full_name", { ascending: true });
+
+    if (error) {
+      throw new Error(`Unable to retrieve accounts: ${error.message}`);
+    }
+
+    response.status(200).json({
+      success: true,
+      count: data?.length ?? 0,
+      data: data ?? [],
     });
   } catch (error) {
     next(error);

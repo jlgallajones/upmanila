@@ -1,6 +1,12 @@
 import axios from "axios";
 
-import { clearSession, getAccessToken } from "../auth/session";
+import {
+  clearSession,
+  getAccessToken,
+  getRefreshToken,
+  saveCurrentUser,
+  saveSessionTokens,
+} from "../auth/session";
 
 const apiUrl = process.env.EXPO_PUBLIC_API_URL;
 
@@ -17,6 +23,17 @@ export const api = axios.create({
     "Content-Type": "application/json",
   },
 });
+
+type RefreshSessionResponse = {
+  success: boolean;
+  data: {
+    user: Parameters<typeof saveCurrentUser>[0];
+    accessToken: string | null;
+    refreshToken: string | null;
+  };
+};
+
+let refreshSessionPromise: Promise<string | null> | null = null;
 
 export function isAuthenticationTokenError(error: unknown): boolean {
   const message =
@@ -39,18 +56,83 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
+async function refreshAccessToken(): Promise<string | null> {
+  const refreshToken = await getRefreshToken();
+
+  if (!refreshToken) {
+    return null;
+  }
+
+  if (!refreshSessionPromise) {
+    refreshSessionPromise = axios
+      .post<RefreshSessionResponse>(
+        `${API_BASE_URL}/auth/refresh`,
+        {
+          refreshToken,
+        },
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          timeout: 15000,
+        },
+      )
+      .then(async (response) => {
+        const session = response.data.data;
+
+        await Promise.all([
+          saveCurrentUser(session.user),
+          saveSessionTokens(
+            session.accessToken,
+            session.refreshToken,
+          ),
+        ]);
+
+        return session.accessToken;
+      })
+      .finally(() => {
+        refreshSessionPromise = null;
+      });
+  }
+
+  return refreshSessionPromise;
+}
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
+    const originalRequest = error.config;
     const status = error?.response?.status;
     const message = error?.response?.data?.message;
     const normalizedMessage =
       typeof message === "string" ? message.toLowerCase() : "";
-
-    if (
+    const shouldRefresh =
       status === 401 ||
       normalizedMessage.includes("authentication token") ||
-      normalizedMessage.includes("invalid or expired")
+      normalizedMessage.includes("invalid or expired");
+
+    if (
+      shouldRefresh &&
+      originalRequest &&
+      !originalRequest._retry &&
+      !String(originalRequest.url ?? "").includes("/auth/refresh")
+    ) {
+      originalRequest._retry = true;
+
+      const newAccessToken = await refreshAccessToken();
+
+      if (newAccessToken) {
+        originalRequest.headers = {
+          ...(originalRequest.headers ?? {}),
+          Authorization: `Bearer ${newAccessToken}`,
+        };
+
+        return api(originalRequest);
+      }
+    }
+
+    if (
+      shouldRefresh
     ) {
       await clearSession();
     }

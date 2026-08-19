@@ -55,6 +55,25 @@ export async function saveSession(session: CurrentSession): Promise<void> {
   }
 }
 
+export async function saveSessionTokens(
+  accessToken: string | null,
+  refreshToken: string | null,
+): Promise<void> {
+  if (accessToken) {
+    await setSessionItem(accessTokenKey, accessToken);
+  }
+
+  if (refreshToken) {
+    await setSessionItem(refreshTokenKey, refreshToken);
+  }
+}
+
+export async function saveCurrentUser(
+  user: ProfileUser,
+): Promise<void> {
+  await setSessionItem(userKey, JSON.stringify(user));
+}
+
 export async function getCurrentUser(): Promise<ProfileUser | null> {
   const storedUser = await getSessionItem(userKey);
 
@@ -76,6 +95,10 @@ export async function getCurrentUserId(): Promise<string | null> {
 
 export async function getAccessToken(): Promise<string | null> {
   return getSessionItem(accessTokenKey);
+}
+
+export async function getRefreshToken(): Promise<string | null> {
+  return getSessionItem(refreshTokenKey);
 }
 
 export async function clearSession(): Promise<void> {

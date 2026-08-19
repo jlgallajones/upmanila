@@ -1,30 +1,45 @@
-function getDefaultApiBaseUrl() {
-  const fallback = "http://localhost:5000/api";
+const PRODUCTION_API_BASE_URL = "https://dcms-api-ljco.onrender.com/api";
+const LOCAL_API_BASE_URL = "http://localhost:5000/api";
 
+function getDefaultApiBaseUrl() {
   if (typeof window === "undefined") {
-    return fallback;
+    return LOCAL_API_BASE_URL;
   }
 
-  const { protocol, hostname } = window.location;
+  const { hostname } = window.location;
 
   if (!hostname || hostname === "localhost" || hostname === "127.0.0.1") {
-    return fallback;
+    return LOCAL_API_BASE_URL;
   }
 
-  return `${protocol}//${hostname}:5000/api`;
+  return PRODUCTION_API_BASE_URL;
+}
+
+function isInvalidStoredApiBaseUrl(value) {
+  if (!value) return true;
+
+  if (
+    value.includes("localhost") &&
+    !["localhost", "127.0.0.1"].includes(window.location.hostname)
+  ) {
+    return true;
+  }
+
+  if (
+    value.includes(".netlify.app:5000") ||
+    value.includes(".netlify.app/api")
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 function getInitialApiBaseUrl() {
   const stored = localStorage.getItem("dcms.admin.apiBaseUrl");
   const defaultUrl = getDefaultApiBaseUrl();
 
-  if (
-    stored &&
-    !(
-      stored.includes("localhost") &&
-      !["localhost", "127.0.0.1"].includes(window.location.hostname)
-    )
-  ) {
+  if (!isInvalidStoredApiBaseUrl(stored)) {
     return stored;
   }
 
