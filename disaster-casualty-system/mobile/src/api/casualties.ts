@@ -31,6 +31,14 @@ export type CasualtyRecord = {
     triage_stage: string;
     triaged_at: string;
   } | null;
+  latest_transport_record?: {
+    id: string;
+    casualty_incident_id: string;
+    transport_required: string;
+    receiving_facility_id: string | null;
+    notes: string | null;
+    created_at: string;
+  } | null;
 
   casualty: {
     id: string;

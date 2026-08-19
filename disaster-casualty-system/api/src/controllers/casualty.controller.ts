@@ -217,6 +217,15 @@ type LatestTriageAssessmentSummary = {
   triaged_at: string;
 };
 
+type LatestTransportRecordSummary = {
+  id: string;
+  casualty_incident_id: string;
+  transport_required: string;
+  receiving_facility_id: string | null;
+  notes: string | null;
+  created_at: string;
+};
+
 const casualtyRecordSelect = `
   id,
   client_record_id,
@@ -292,41 +301,77 @@ const casualtyRecordSelect = `
   )
 `;
 
-async function attachLatestTriageAssessments<
+async function attachLatestSummaries<
   T extends { id: string },
 >(records: T[]): Promise<
-  Array<T & { latest_triage_assessment: LatestTriageAssessmentSummary | null }>
+  Array<
+    T & {
+      latest_triage_assessment: LatestTriageAssessmentSummary | null;
+      latest_transport_record: LatestTransportRecordSummary | null;
+    }
+  >
 > {
   if (records.length === 0) {
     return [];
   }
 
   const recordIds = records.map((record) => record.id);
-  const { data, error } = await supabase
-    .from("casualty_triage_assessments")
-    .select(
-      "id, casualty_incident_id, triage_category, responder_category, calculated_category, triage_stage, triaged_at",
-    )
-    .in("casualty_incident_id", recordIds)
-    .order("triaged_at", { ascending: false });
+  const [triageResult, transportResult] = await Promise.all([
+    supabase
+      .from("casualty_triage_assessments")
+      .select(
+        "id, casualty_incident_id, triage_category, responder_category, calculated_category, triage_stage, triaged_at",
+      )
+      .in("casualty_incident_id", recordIds)
+      .order("triaged_at", { ascending: false }),
+    supabase
+      .from("casualty_transport_records")
+      .select(
+        "id, casualty_incident_id, transport_required, receiving_facility_id, notes, created_at",
+      )
+      .in("casualty_incident_id", recordIds)
+      .order("created_at", { ascending: false }),
+  ]);
 
-  if (error) {
+  if (triageResult.error) {
     throw new Error(
-      `Unable to retrieve latest triage assessments: ${error.message}`,
+      `Unable to retrieve latest triage assessments: ${triageResult.error.message}`,
+    );
+  }
+
+  if (transportResult.error) {
+    throw new Error(
+      `Unable to retrieve latest transport records: ${transportResult.error.message}`,
     );
   }
 
   const latestByRecordId = new Map<string, LatestTriageAssessmentSummary>();
 
-  for (const assessment of (data ?? []) as LatestTriageAssessmentSummary[]) {
+  for (const assessment of (triageResult.data ?? []) as LatestTriageAssessmentSummary[]) {
     if (!latestByRecordId.has(assessment.casualty_incident_id)) {
       latestByRecordId.set(assessment.casualty_incident_id, assessment);
+    }
+  }
+
+  const latestTransportByRecordId = new Map<
+    string,
+    LatestTransportRecordSummary
+  >();
+
+  for (const transport of (transportResult.data ?? []) as LatestTransportRecordSummary[]) {
+    if (!latestTransportByRecordId.has(transport.casualty_incident_id)) {
+      latestTransportByRecordId.set(
+        transport.casualty_incident_id,
+        transport,
+      );
     }
   }
 
   return records.map((record) => ({
     ...record,
     latest_triage_assessment: latestByRecordId.get(record.id) ?? null,
+    latest_transport_record:
+      latestTransportByRecordId.get(record.id) ?? null,
   }));
 }
 
@@ -1550,14 +1595,14 @@ export async function getCasualties(
       throw new Error(`Unable to retrieve casualties: ${error.message}`);
     }
 
-    const recordsWithTriage = await attachLatestTriageAssessments(
+    const recordsWithSummaries = await attachLatestSummaries(
       data ?? [],
     );
 
     response.status(200).json({
       success: true,
-      count: recordsWithTriage.length,
-      data: recordsWithTriage,
+      count: recordsWithSummaries.length,
+      data: recordsWithSummaries,
     });
   } catch (error) {
     next(error);

@@ -71,6 +71,12 @@ const fieldResponderReviewFilters = [
   "Confirmed",
 ] as const;
 
+const saResponderReviewFilters = [
+  ...fieldResponderReviewFilters,
+  "Released",
+  "Referred",
+] as const;
+
 const fieldResponderTriageFilters = [
   "All",
   "Immediate",
@@ -83,7 +89,7 @@ const SCREEN_PADDING = 16;
 
 type FilterOption = (typeof filters)[number];
 type FieldResponderReviewFilter =
-  (typeof fieldResponderReviewFilters)[number];
+  (typeof saResponderReviewFilters)[number];
 type FieldResponderTriageFilter =
   (typeof fieldResponderTriageFilters)[number];
 
@@ -197,24 +203,77 @@ function isFieldResponderView(
   return role === "field_responder" || assignment === "field_responder";
 }
 
-function getRecordReviewFilter(
+function isSaResponderView(
+  role: string | null,
+  assignment: ResponderAssignment | null,
+): boolean {
+  return role === "sa_responder" || assignment === "sa_responder";
+}
+
+function getRecordReviewFilters(
   record: CasualtyRecord,
-): FieldResponderReviewFilter | null {
+  includeTransportDisposition = false,
+): FieldResponderReviewFilter[] {
+  const filters: FieldResponderReviewFilter[] = [];
+  const transportFilter = includeTransportDisposition
+    ? getRecordTransportDispositionFilter(record)
+    : null;
+
+  if (transportFilter) {
+    filters.push(transportFilter);
+  }
+
   switch (record.verification_status) {
     case "draft":
-      return "Draft";
+      filters.push("Draft");
+      break;
     case "unsynced":
-      return "Unsynced";
+      filters.push("Unsynced");
+      break;
     case "submitted":
     case "under_review":
-      return "Under Review";
+      filters.push("Under Review");
+      break;
     case "rejected":
-      return "Returned";
+      filters.push("Returned");
+      break;
     case "verified":
-      return "Confirmed";
+      filters.push("Confirmed");
+      break;
     default:
-      return null;
+      break;
   }
+
+  return filters;
+}
+
+function getRecordTransportDispositionFilter(
+  record: CasualtyRecord,
+): FieldResponderReviewFilter | null {
+  const transport = record.latest_transport_record;
+
+  if (!transport) {
+    return null;
+  }
+
+  const notes = transport.notes?.toLowerCase() ?? "";
+
+  if (
+    notes.includes("patient for: release") ||
+    transport.transport_required === "no"
+  ) {
+    return "Released";
+  }
+
+  if (
+    notes.includes("patient for: referral") ||
+    notes.includes("patient for: transfer") ||
+    transport.transport_required === "yes"
+  ) {
+    return "Referred";
+  }
+
+  return null;
 }
 
 function getRecordTriageFilter(
@@ -432,6 +491,17 @@ export default function RecordsScreen() {
     currentUserRole,
     currentResponderAssignment,
   );
+  const useSaResponderFilters = isSaResponderView(
+    currentUserRole,
+    currentResponderAssignment,
+  );
+  const useResponderFunctionFilters =
+    useFieldResponderFilters || useSaResponderFilters;
+  const reviewFilterOptions = useSaResponderFilters
+    ? saResponderReviewFilters
+    : fieldResponderReviewFilters;
+  const [filtersExpanded, setFiltersExpanded] =
+    useState(false);
 
   const loadRecords = useCallback(async () => {
     try {
@@ -594,11 +664,12 @@ export default function RecordsScreen() {
       const location = getLocation(record).toLowerCase();
       const status = formatStatus(record.current_status);
 
-      const matchesFilter = useFieldResponderFilters
+      const matchesFilter = useResponderFunctionFilters
         ? (activeReviewFilters.length === 0 ||
-            activeReviewFilters.includes(
-              getRecordReviewFilter(record) as FieldResponderReviewFilter,
-            )) &&
+            getRecordReviewFilters(
+              record,
+              useSaResponderFilters,
+            ).some((filter) => activeReviewFilters.includes(filter))) &&
           (activeTriageFilters.includes("All") ||
             activeTriageFilters.includes(
               getRecordTriageFilter(record) as FieldResponderTriageFilter,
@@ -619,7 +690,8 @@ export default function RecordsScreen() {
     activeTriageFilters,
     records,
     searchQuery,
-    useFieldResponderFilters,
+    useResponderFunctionFilters,
+    useSaResponderFilters,
   ]);
 
   if (isLoading) {
@@ -694,30 +766,65 @@ export default function RecordsScreen() {
       </SafeAreaView>
 
       <View style={styles.filterSection}>
-        {useFieldResponderFilters ? (
-          <View style={styles.fieldResponderFilters}>
-            <View style={styles.filterGroup}>
-              {fieldResponderReviewFilters.map((item) => (
-                <FilterCheckbox
-                  key={item}
-                  label={item}
-                  selected={activeReviewFilters.includes(item)}
-                  onPress={() => toggleReviewFilter(item)}
-                />
-              ))}
-            </View>
+        {useResponderFunctionFilters ? (
+          <>
+            <Pressable
+              onPress={() =>
+                setFiltersExpanded((current) => !current)
+              }
+              style={({ pressed }) => [
+                styles.filterToggle,
+                pressed && styles.pressed,
+              ]}
+            >
+              <View>
+                <Text style={styles.filterToggleTitle}>
+                  Filters
+                </Text>
+                <Text style={styles.filterToggleSubtitle}>
+                  {useSaResponderFilters
+                    ? "Stabilization Area Responder"
+                    : "Field Responder"}
+                </Text>
+              </View>
 
-            <View style={styles.filterGroup}>
-              {fieldResponderTriageFilters.map((item) => (
-                <FilterCheckbox
-                  key={item}
-                  label={item}
-                  selected={activeTriageFilters.includes(item)}
-                  onPress={() => toggleTriageFilter(item)}
-                />
-              ))}
-            </View>
-          </View>
+              <Ionicons
+                name={
+                  filtersExpanded
+                    ? "chevron-up-outline"
+                    : "chevron-down-outline"
+                }
+                size={20}
+                color={COLORS.maroon}
+              />
+            </Pressable>
+
+            {filtersExpanded ? (
+              <View style={styles.fieldResponderFilters}>
+                <View style={styles.filterGroup}>
+                  {reviewFilterOptions.map((item) => (
+                    <FilterCheckbox
+                      key={item}
+                      label={item}
+                      selected={activeReviewFilters.includes(item)}
+                      onPress={() => toggleReviewFilter(item)}
+                    />
+                  ))}
+                </View>
+
+                <View style={styles.filterGroup}>
+                  {fieldResponderTriageFilters.map((item) => (
+                    <FilterCheckbox
+                      key={item}
+                      label={item}
+                      selected={activeTriageFilters.includes(item)}
+                      onPress={() => toggleTriageFilter(item)}
+                    />
+                  ))}
+                </View>
+              </View>
+            ) : null}
+          </>
         ) : (
           <FlatList
             horizontal
@@ -929,11 +1036,34 @@ const styles = StyleSheet.create({
     gap: 8,
   },
 
+  filterToggle: {
+    minHeight: 54,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: SCREEN_PADDING,
+    paddingVertical: 10,
+  },
+
+  filterToggleTitle: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+
+  filterToggleSubtitle: {
+    color: COLORS.secondaryText,
+    fontSize: 10,
+    marginTop: 3,
+    fontWeight: "700",
+  },
+
   fieldResponderFilters: {
     flexDirection: "row",
     alignItems: "flex-start",
     paddingHorizontal: SCREEN_PADDING,
-    paddingVertical: 12,
+    paddingTop: 2,
+    paddingBottom: 12,
     gap: 26,
   },
 
