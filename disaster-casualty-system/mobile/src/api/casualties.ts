@@ -75,6 +75,8 @@ export type CasualtyRecord = {
     full_name: string;
     email: string;
     role: string;
+    assigned_municipality: string | null;
+    assigned_barangay: string | null;
   };
 };
 

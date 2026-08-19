@@ -207,6 +207,38 @@ function fullCasualtyName(casualty) {
   return name || casualty.id_number || "Unknown casualty";
 }
 
+function encoderUnitName(encoder) {
+  const parts = [
+    encoder?.assigned_municipality,
+    encoder?.assigned_barangay,
+  ].filter(Boolean);
+
+  return parts.length > 0 ? parts.join(", ") : "Unassigned unit";
+}
+
+function compareText(a, b) {
+  return String(a || "").localeCompare(String(b || ""), undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
+
+function casualtySortLabel(item) {
+  const name = fullCasualtyName(item?.casualty);
+
+  return name === "Unknown casualty"
+    ? item?.casualty?.id_number || name
+    : name;
+}
+
+function compareVerificationRecords(first, second) {
+  return (
+    compareText(encoderUnitName(first?.encoder), encoderUnitName(second?.encoder)) ||
+    compareText(first?.incident?.incident_name || "Unknown incident", second?.incident?.incident_name || "Unknown incident") ||
+    compareText(casualtySortLabel(first), casualtySortLabel(second))
+  );
+}
+
 function formatLocation(...parts) {
   return parts.filter(Boolean).join(", ") || "Not recorded";
 }
@@ -1189,9 +1221,11 @@ function renderAdminCasualtyRecords(compact = false) {
 }
 
 function renderAdminVerificationReview() {
-  const reviewItems = state.casualties.filter((item) =>
-    ["submitted", "under_review"].includes(item.verification_status),
-  );
+  const reviewItems = state.casualties
+    .filter((item) =>
+      ["submitted", "under_review"].includes(item.verification_status),
+    )
+    .sort(compareVerificationRecords);
 
   return `
     <section class="panel">
@@ -1203,20 +1237,21 @@ function renderAdminVerificationReview() {
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Casualty</th><th>Incident</th><th>Status</th><th>Verification</th><th>Reported</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Unit</th><th>Incident</th><th>Casualty</th><th>Status</th><th>Verification</th><th>Reported</th><th>Actions</th></tr></thead>
           <tbody>
             ${
               reviewItems
                 .map(
                   (item) => `
                     <tr class="clickable-row" data-open-casualty="${escapeHtml(item.id)}">
+                      <td>${escapeHtml(encoderUnitName(item.encoder))}</td>
+                      <td>${escapeHtml(item.incident?.incident_name || "Unknown incident")}</td>
                       <td>
                         <button class="record-link" type="button" data-open-casualty="${escapeHtml(item.id)}">
                           ${escapeHtml(fullCasualtyName(item.casualty))}
                         </button>
                         <br><span class="panel-subtitle">${escapeHtml(item.casualty?.id_number || "No ID number")}</span>
                       </td>
-                      <td>${escapeHtml(item.incident?.incident_name || "Unknown incident")}</td>
                       <td>${escapeHtml(item.current_status)}</td>
                       <td><span class="pill ${verificationPillClass(item.verification_status)}">${escapeHtml(roleLabel(item.verification_status))}</span></td>
                       <td>${formatDate(item.reported_at)}</td>
@@ -1231,7 +1266,7 @@ function renderAdminVerificationReview() {
                     </tr>
                   `,
                 )
-                .join("") || `<tr><td colspan="6"><div class="empty-state">No pending verification items.</div></td></tr>`
+                .join("") || `<tr><td colspan="7"><div class="empty-state">No pending verification items.</div></td></tr>`
             }
           </tbody>
         </table>
@@ -1298,6 +1333,7 @@ function renderCasualtyRecordModal(item) {
               ${detailItem("Incident status", roleLabel(incident.status))}
               ${detailItem("Reported at", formatDate(item.reported_at))}
               ${detailItem("Encoded by", encoder.full_name)}
+              ${detailItem("Encoder unit", encoderUnitName(encoder))}
               ${detailItem("Encoder role", roleLabel(encoder.role))}
             </div>
           </section>

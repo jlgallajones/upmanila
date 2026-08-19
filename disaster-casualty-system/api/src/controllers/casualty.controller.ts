@@ -276,7 +276,9 @@ const casualtyRecordSelect = `
     id,
     full_name,
     email,
-    role
+    role,
+    assigned_municipality,
+    assigned_barangay
   )
 `;
 

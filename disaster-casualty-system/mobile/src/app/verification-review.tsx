@@ -100,6 +100,48 @@ function getFullName(record: CasualtyRecord): string {
     : "Unidentified Casualty";
 }
 
+function getUnitName(record: CasualtyRecord): string {
+  const municipality = record.encoder.assigned_municipality?.trim();
+  const barangay = record.encoder.assigned_barangay?.trim();
+  const parts = [municipality, barangay].filter(
+    (part): part is string => Boolean(part),
+  );
+
+  return parts.length > 0 ? parts.join(", ") : "Unassigned unit";
+}
+
+function compareText(a: string, b: string): number {
+  return a.localeCompare(b, undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
+
+function getCasualtySortLabel(record: CasualtyRecord): string {
+  const fullName = getFullName(record);
+
+  return fullName === "Unidentified Casualty"
+    ? record.casualty.id_number ?? fullName
+    : fullName;
+}
+
+function compareVerificationRecords(
+  first: CasualtyRecord,
+  second: CasualtyRecord,
+): number {
+  return (
+    compareText(getUnitName(first), getUnitName(second)) ||
+    compareText(
+      first.incident.incident_name ?? "Unknown incident",
+      second.incident.incident_name ?? "Unknown incident",
+    ) ||
+    compareText(
+      getCasualtySortLabel(first),
+      getCasualtySortLabel(second),
+    )
+  );
+}
+
 function formatDateTime(value: string | null | undefined): string {
   if (!value) {
     return "Not set";
@@ -239,29 +281,32 @@ export default function VerificationReviewScreen() {
   const filteredRecords = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
 
-    return records.filter((record) => {
-      if (!matchesFilter(record, activeFilter)) {
-        return false;
-      }
+    return records
+      .filter((record) => {
+        if (!matchesFilter(record, activeFilter)) {
+          return false;
+        }
 
-      if (!normalizedQuery) {
-        return true;
-      }
+        if (!normalizedQuery) {
+          return true;
+        }
 
-      const searchable = [
-        getFullName(record),
-        record.casualty.id_number,
-        record.incident.incident_name,
-        record.current_location,
-        record.encoder.full_name,
-        formatStatus(record.verification_status),
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+        const searchable = [
+          getFullName(record),
+          getUnitName(record),
+          record.casualty.id_number,
+          record.incident.incident_name,
+          record.current_location,
+          record.encoder.full_name,
+          formatStatus(record.verification_status),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
 
-      return searchable.includes(normalizedQuery);
-    });
+        return searchable.includes(normalizedQuery);
+      })
+      .sort(compareVerificationRecords);
   }, [activeFilter, records, searchQuery]);
 
   async function handleRefresh() {
@@ -377,10 +422,14 @@ export default function VerificationReviewScreen() {
           </View>
         </View>
 
-      <Text style={styles.detailText}>
-        Encoded by {item.encoder.full_name}
-        {"\n"}Reported {formatDateTime(item.reported_at)}
-      </Text>
+        <Text style={styles.unitText} numberOfLines={1}>
+          Unit: {getUnitName(item)}
+        </Text>
+
+        <Text style={styles.detailText}>
+          Encoded by {item.encoder.full_name}
+          {"\n"}Reported {formatDateTime(item.reported_at)}
+        </Text>
 
       {!canReview ? (
         <View style={styles.statusOnlyNotice}>
@@ -522,7 +571,7 @@ export default function VerificationReviewScreen() {
               value={searchQuery}
               onChangeText={setSearchQuery}
               style={styles.searchInput}
-              placeholder="Search record, incident, or encoder..."
+              placeholder="Search record, unit, incident, or encoder..."
               placeholderTextColor="rgba(255,255,255,0.65)"
               autoCapitalize="none"
               autoCorrect={false}
@@ -847,6 +896,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 5,
   },
+  unitText: {
+    color: COLORS.maroon,
+    fontSize: 11,
+    fontWeight: "900",
+    marginTop: 12,
+  },
   statusBadge: {
     borderRadius: 13,
     paddingHorizontal: 9,
@@ -860,7 +915,7 @@ const styles = StyleSheet.create({
     color: COLORS.secondaryText,
     fontSize: 12,
     lineHeight: 18,
-    marginTop: 12,
+    marginTop: 4,
   },
   statusOnlyNotice: {
     minHeight: 34,

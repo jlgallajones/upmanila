@@ -3,6 +3,8 @@ import { router, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
+  Modal,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -20,6 +22,16 @@ import {
   type RecentActivity,
 } from "../../api/dashboard";
 import { isAuthenticationTokenError } from "../../api/client";
+import {
+  getDeactivationContinuity,
+  getIncidents,
+  getResponderSafetyReport,
+  saveDeactivationContinuity,
+  saveResponderSafetyReport,
+  type DisruptionLevel,
+  type Incident,
+  type ResponderSafetyStatus,
+} from "../../api/incidents";
 import {
   getAccessToken,
   getCurrentUser,
@@ -65,6 +77,23 @@ const INCIDENT_MANAGEMENT_ROLES = new Set([
   "administrator",
   "admin",
 ]);
+
+const RESPONDER_ROLES = new Set([
+  "responder",
+  "field_responder",
+  "sa_responder",
+]);
+
+const DISRUPTION_OPTIONS: Array<{
+  value: DisruptionLevel;
+  label: string;
+}> = [
+  { value: "none", label: "No" },
+  { value: "minimal", label: "Minimal" },
+  { value: "moderate", label: "Moderate" },
+  { value: "total", label: "Total" },
+  { value: "unknown", label: "Unknown" },
+];
 
 type SummaryCardProps = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -198,6 +227,20 @@ function QuickAction({
     </Pressable>
   );
 }
+
+type QuickChoiceOption = {
+  label: string;
+  caption?: string;
+  icon?: keyof typeof Ionicons.glyphMap;
+  color?: string;
+  onSelect: () => void;
+};
+
+type QuickChoiceState = {
+  title: string;
+  subtitle: string;
+  options: QuickChoiceOption[];
+};
 
 type RecentActivityCardProps = {
   item: RecentActivity;
@@ -428,6 +471,8 @@ export default function HomeDashboardScreen() {
   const [queuedCasualtyCount, setQueuedCasualtyCount] =
     useState(0);
   const [isGuestMode, setIsGuestMode] = useState(false);
+  const [currentUserRole, setCurrentUserRole] =
+    useState<string | null>(null);
   const [
     canOpenIncidentManagement,
     setCanOpenIncidentManagement,
@@ -435,6 +480,10 @@ export default function HomeDashboardScreen() {
   const [isSuperAdmin, setIsSuperAdmin] =
     useState(false);
   const [formattedDate, setFormattedDate] = useState("");
+  const [quickChoice, setQuickChoice] =
+    useState<QuickChoiceState | null>(null);
+  const [isSavingQuickAction, setIsSavingQuickAction] =
+    useState(false);
 
   const loadDashboard = useCallback(async () => {
     try {
@@ -451,6 +500,7 @@ export default function HomeDashboardScreen() {
       const hasSuperAdminRole =
         currentUser?.role === "super_admin";
 
+      setCurrentUserRole(currentUser?.role ?? null);
       setCanOpenIncidentManagement(
         hasIncidentManagementAccess,
       );
@@ -462,6 +512,7 @@ export default function HomeDashboardScreen() {
         setSummary(initialSummary);
         setActivities([]);
         setIsGuestMode(true);
+        setCurrentUserRole(null);
         setCanOpenIncidentManagement(false);
         setIsSuperAdmin(false);
         return;
@@ -487,6 +538,7 @@ export default function HomeDashboardScreen() {
         setSummary(initialSummary);
         setActivities([]);
         setIsGuestMode(true);
+        setCurrentUserRole(null);
         setCanOpenIncidentManagement(false);
         setIsSuperAdmin(false);
         setErrorMessage(null);
@@ -538,6 +590,246 @@ export default function HomeDashboardScreen() {
       setIsRefreshing(false);
     }
   }, [loadDashboard]);
+
+  const isResponderAccount = currentUserRole
+    ? RESPONDER_ROLES.has(currentUserRole)
+    : false;
+  const isDocumenterAccount = currentUserRole === "documenter";
+  const hideDataEntryQuickLinks =
+    isResponderAccount || isDocumenterAccount;
+
+  async function resolveActiveIncident(
+    title: string,
+    subtitle: string,
+    onIncidentSelected: (incident: Incident) => void,
+  ) {
+    try {
+      const incidents = (await getIncidents()).filter(
+        (incident) => incident.status === "active",
+      );
+
+      if (incidents.length === 0) {
+        Alert.alert(
+          "No active incident",
+          "Ask an admin to activate an incident first so this quick action can be traced correctly.",
+        );
+        return;
+      }
+
+      if (incidents.length === 1) {
+        onIncidentSelected(incidents[0]);
+        return;
+      }
+
+      setQuickChoice({
+        title,
+        subtitle,
+        options: incidents.map((incident) => ({
+          label: incident.incident_name,
+          caption: [
+            incident.barangay,
+            incident.municipality,
+            incident.province,
+          ]
+            .filter(Boolean)
+            .join(", "),
+          icon: "warning-outline",
+          color: COLORS.maroon,
+          onSelect: () => onIncidentSelected(incident),
+        })),
+      });
+    } catch (error) {
+      console.error("Unable to load active incidents:", error);
+      Alert.alert(
+        "Unable to load incidents",
+        error instanceof Error
+          ? error.message
+          : "Please check your connection and try again.",
+      );
+    }
+  }
+
+  function showResponderSafetyPrompt(incident: Incident) {
+    setQuickChoice({
+      title: "Are you Safe?",
+      subtitle: `${incident.incident_name}\nPPE use time will be recorded as the current time.`,
+      options: [
+        {
+          label: "Yes",
+          caption: "Record responder as safe",
+          icon: "checkmark-circle-outline",
+          color: COLORS.green,
+          onSelect: () => {
+            void saveResponderSafetyQuickAction(incident, "yes");
+          },
+        },
+        {
+          label: "No",
+          caption: "Record responder as not safe",
+          icon: "close-circle-outline",
+          color: COLORS.red,
+          onSelect: () => {
+            void saveResponderSafetyQuickAction(incident, "no");
+          },
+        },
+      ],
+    });
+  }
+
+  async function saveResponderSafetyQuickAction(
+    incident: Incident,
+    safetyStatus: ResponderSafetyStatus,
+  ) {
+    try {
+      setIsSavingQuickAction(true);
+
+      const current = await getResponderSafetyReport(incident.id);
+      await saveResponderSafetyReport(incident.id, {
+        safetyActionsEstablished: safetyStatus,
+        ppeDecisionAt: new Date().toISOString(),
+        responseDeactivatedAt:
+          current.report?.response_deactivated_at ?? null,
+        deployedResponders:
+          current.report?.deployed_responders ?? 0,
+        injuredResponders:
+          current.report?.injured_responders ?? 0,
+        illResponders: current.report?.ill_responders ?? 0,
+        deceasedResponders:
+          current.report?.deceased_responders ?? 0,
+      });
+
+      setQuickChoice(null);
+      Alert.alert(
+        "Responder safety saved",
+        "Your safety response and PPE use time were recorded for this incident.",
+      );
+    } catch (error) {
+      console.error("Unable to save responder safety:", error);
+      Alert.alert(
+        "Unable to save safety response",
+        error instanceof Error
+          ? error.message
+          : "Please try again.",
+      );
+    } finally {
+      setIsSavingQuickAction(false);
+    }
+  }
+
+  function showFacilityDisruptionPrompt(incident: Incident) {
+    setQuickChoice({
+      title: "Healthcare Facility Routine Care Disruption",
+      subtitle: incident.incident_name,
+      options: DISRUPTION_OPTIONS.map((option) => ({
+        label: option.label,
+        caption: "Save disruption level for this incident",
+        icon: "business-outline",
+        color:
+          option.value === "none"
+            ? COLORS.green
+            : option.value === "unknown"
+              ? COLORS.gray
+              : COLORS.orange,
+        onSelect: () => {
+          void saveFacilityDisruptionQuickAction(
+            incident,
+            option.value,
+          );
+        },
+      })),
+    });
+  }
+
+  async function saveFacilityDisruptionQuickAction(
+    incident: Incident,
+    facilityCareDisruption: DisruptionLevel,
+  ) {
+    try {
+      setIsSavingQuickAction(true);
+
+      const current = await getDeactivationContinuity(incident.id);
+      await saveDeactivationContinuity(incident.id, {
+        sceneDemobilizedAt:
+          current.summary.sceneDemobilizedAt ?? null,
+        lastFacilityDeactivatedAt:
+          current.summary.lastFacilityDeactivatedAt ?? null,
+        emsCoverageDisruption:
+          current.summary.emsCoverageDisruption ?? null,
+        facilityCareDisruption,
+        notes: current.summary.notes ?? null,
+        assessedAt: new Date().toISOString(),
+      });
+
+      setQuickChoice(null);
+      Alert.alert(
+        "Disruption saved",
+        "Healthcare facility routine care disruption was recorded for this incident.",
+      );
+    } catch (error) {
+      console.error("Unable to save facility disruption:", error);
+      Alert.alert(
+        "Unable to save disruption",
+        error instanceof Error
+          ? error.message
+          : "Please try again.",
+      );
+    } finally {
+      setIsSavingQuickAction(false);
+    }
+  }
+
+  function showCloseFacilityPrompt(incident: Incident) {
+    setQuickChoice({
+      title: "Close Healthcare Facility Response?",
+      subtitle: `${incident.incident_name}\nClosing time will be recorded as the current time.`,
+      options: [
+        {
+          label: "Close Response",
+          caption: "Set healthcare facility closing time to now",
+          icon: "time-outline",
+          color: COLORS.red,
+          onSelect: () => {
+            void saveFacilityCloseQuickAction(incident);
+          },
+        },
+      ],
+    });
+  }
+
+  async function saveFacilityCloseQuickAction(incident: Incident) {
+    try {
+      setIsSavingQuickAction(true);
+
+      const current = await getDeactivationContinuity(incident.id);
+      await saveDeactivationContinuity(incident.id, {
+        sceneDemobilizedAt:
+          current.summary.sceneDemobilizedAt ?? null,
+        lastFacilityDeactivatedAt: new Date().toISOString(),
+        emsCoverageDisruption:
+          current.summary.emsCoverageDisruption ?? null,
+        facilityCareDisruption:
+          current.summary.facilityCareDisruption ?? null,
+        notes: current.summary.notes ?? null,
+        assessedAt: new Date().toISOString(),
+      });
+
+      setQuickChoice(null);
+      Alert.alert(
+        "Facility response closed",
+        "The healthcare facility disaster response closing time was recorded for this incident.",
+      );
+    } catch (error) {
+      console.error("Unable to close facility response:", error);
+      Alert.alert(
+        "Unable to close response",
+        error instanceof Error
+          ? error.message
+          : "Please try again.",
+      );
+    } finally {
+      setIsSavingQuickAction(false);
+    }
+  }
 
   const activeIncidentCaption =
     summary.activeIncidents === 1
@@ -779,7 +1071,7 @@ export default function HomeDashboardScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.quickActionsRow}
         >
-          {!isSuperAdmin ? (
+          {!isSuperAdmin && !hideDataEntryQuickLinks ? (
             <QuickAction
               icon="add-circle-outline"
               label="Add Casualty"
@@ -789,6 +1081,57 @@ export default function HomeDashboardScreen() {
               onPress={() =>
                 router.push("/add-casualty")
               }
+            />
+          ) : null}
+
+          {isResponderAccount ? (
+            <QuickAction
+              icon="shield-checkmark-outline"
+              label="Are you Safe?"
+              caption="Record PPE time"
+              iconColor={COLORS.green}
+              iconBackground={COLORS.paleGreen}
+              onPress={() => {
+                void resolveActiveIncident(
+                  "Select Incident",
+                  "Choose the incident for this safety response.",
+                  showResponderSafetyPrompt,
+                );
+              }}
+            />
+          ) : null}
+
+          {isDocumenterAccount ? (
+            <QuickAction
+              icon="business-outline"
+              label="Facility Disruption"
+              caption="Routine care"
+              iconColor={COLORS.orange}
+              iconBackground={COLORS.paleOrange}
+              onPress={() => {
+                void resolveActiveIncident(
+                  "Select Incident",
+                  "Choose the incident for this facility care update.",
+                  showFacilityDisruptionPrompt,
+                );
+              }}
+            />
+          ) : null}
+
+          {isDocumenterAccount ? (
+            <QuickAction
+              icon="time-outline"
+              label="Close Facility Response"
+              caption="Set closing time"
+              iconColor={COLORS.red}
+              iconBackground={COLORS.paleRed}
+              onPress={() => {
+                void resolveActiveIncident(
+                  "Select Incident",
+                  "Choose the incident to close facility response for.",
+                  showCloseFacilityPrompt,
+                );
+              }}
             />
           ) : null}
 
@@ -805,14 +1148,16 @@ export default function HomeDashboardScreen() {
             />
           ) : null}
 
-          <QuickAction
-            icon="document-text-outline"
-            label="View Records"
-            caption="All entries"
-            iconColor={COLORS.green}
-            iconBackground={COLORS.paleGreen}
-            onPress={() => router.push("/records")}
-          />
+          {!hideDataEntryQuickLinks ? (
+            <QuickAction
+              icon="document-text-outline"
+              label="View Records"
+              caption="All entries"
+              iconColor={COLORS.green}
+              iconBackground={COLORS.paleGreen}
+              onPress={() => router.push("/records")}
+            />
+          ) : null}
 
           <QuickAction
             icon="sync-outline"
@@ -832,14 +1177,16 @@ export default function HomeDashboardScreen() {
             onPress={() => router.push("/verification-review" as never)}
           />
 
-          <QuickAction
-            icon="person-outline"
-            label="My Profile"
-            caption="Account"
-            iconColor={COLORS.blue}
-            iconBackground={COLORS.paleBlue}
-            onPress={() => router.push("/profile")}
-          />
+          {!hideDataEntryQuickLinks ? (
+            <QuickAction
+              icon="person-outline"
+              label="My Profile"
+              caption="Account"
+              iconColor={COLORS.blue}
+              iconBackground={COLORS.paleBlue}
+              onPress={() => router.push("/profile")}
+            />
+          ) : null}
         </ScrollView>
 
         <View style={styles.sectionHeaderRow}>
@@ -897,6 +1244,110 @@ export default function HomeDashboardScreen() {
 
         <View style={styles.bottomSpacing} />
       </ScrollView>
+
+      <Modal
+        visible={Boolean(quickChoice)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!isSavingQuickAction) {
+            setQuickChoice(null);
+          }
+        }}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => {
+            if (!isSavingQuickAction) {
+              setQuickChoice(null);
+            }
+          }}
+        >
+          <Pressable style={styles.quickChoiceSheet}>
+            <View style={styles.sheetHandle} />
+
+            <View style={styles.quickChoiceHeader}>
+              <View style={styles.quickChoiceTitleGroup}>
+                <Text style={styles.quickChoiceTitle}>
+                  {quickChoice?.title}
+                </Text>
+                <Text style={styles.quickChoiceSubtitle}>
+                  {quickChoice?.subtitle}
+                </Text>
+              </View>
+
+              <Pressable
+                disabled={isSavingQuickAction}
+                onPress={() => setQuickChoice(null)}
+                style={styles.quickChoiceCloseButton}
+              >
+                <Ionicons
+                  name="close"
+                  size={20}
+                  color={COLORS.secondaryText}
+                />
+              </Pressable>
+            </View>
+
+            <ScrollView
+              style={styles.quickChoiceOptionsScroll}
+              contentContainerStyle={styles.quickChoiceOptions}
+              showsVerticalScrollIndicator={false}
+            >
+              {quickChoice?.options.map((option) => (
+                <Pressable
+                  key={`${option.label}-${option.caption ?? ""}`}
+                  disabled={isSavingQuickAction}
+                  onPress={option.onSelect}
+                  style={({ pressed }) => [
+                    styles.quickChoiceOption,
+                    pressed && styles.pressed,
+                    isSavingQuickAction && styles.disabledButton,
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.quickChoiceIcon,
+                      {
+                        backgroundColor: `${option.color ?? COLORS.maroon}18`,
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      name={option.icon ?? "ellipse-outline"}
+                      size={20}
+                      color={option.color ?? COLORS.maroon}
+                    />
+                  </View>
+
+                  <View style={styles.quickChoiceOptionText}>
+                    <Text style={styles.quickChoiceOptionLabel}>
+                      {option.label}
+                    </Text>
+                    {option.caption ? (
+                      <Text style={styles.quickChoiceOptionCaption}>
+                        {option.caption}
+                      </Text>
+                    ) : null}
+                  </View>
+                </Pressable>
+              ))}
+            </ScrollView>
+
+            {isSavingQuickAction ? (
+              <View style={styles.quickSavingRow}>
+                <ActivityIndicator
+                  size="small"
+                  color={COLORS.maroon}
+                />
+                <Text style={styles.quickSavingText}>
+                  Saving quick action...
+                </Text>
+              </View>
+            ) : null}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -1344,9 +1795,133 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
 
+  modalBackdrop: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(15, 22, 38, 0.38)",
+  },
+
+  quickChoiceSheet: {
+    maxHeight: "78%",
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    backgroundColor: COLORS.white,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 20,
+  },
+
+  sheetHandle: {
+    width: 42,
+    height: 4,
+    alignSelf: "center",
+    borderRadius: 99,
+    backgroundColor: "#D8DEE8",
+    marginBottom: 16,
+  },
+
+  quickChoiceHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    marginBottom: 14,
+  },
+
+  quickChoiceTitleGroup: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  quickChoiceTitle: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: "900",
+  },
+
+  quickChoiceSubtitle: {
+    color: COLORS.secondaryText,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 4,
+  },
+
+  quickChoiceCloseButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.paleGray,
+  },
+
+  quickChoiceOptions: {
+    gap: 10,
+  },
+
+  quickChoiceOptionsScroll: {
+    maxHeight: 380,
+  },
+
+  quickChoiceOption: {
+    minHeight: 62,
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    backgroundColor: "#FAFBFD",
+  },
+
+  quickChoiceIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 11,
+  },
+
+  quickChoiceOptionText: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  quickChoiceOptionLabel: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: "900",
+  },
+
+  quickChoiceOptionCaption: {
+    color: COLORS.secondaryText,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 3,
+  },
+
+  quickSavingRow: {
+    minHeight: 40,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 9,
+    marginTop: 12,
+  },
+
+  quickSavingText: {
+    color: COLORS.maroon,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
   pressed: {
     opacity: 0.76,
     transform: [{ scale: 0.98 }],
+  },
+
+  disabledButton: {
+    opacity: 0.55,
   },
 
   bottomSpacing: {
