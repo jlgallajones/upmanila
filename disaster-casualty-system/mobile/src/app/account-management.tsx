@@ -326,9 +326,9 @@ export default function AccountManagementScreen() {
         <View style={styles.card}>
           <View style={styles.cardHeaderRow}>
             <View>
-              <Text style={styles.cardTitle}>Accounts</Text>
+              <Text style={styles.cardTitle}>Users Directory</Text>
               <Text style={styles.cardSubtitle}>
-                Alphabetical list of all managed accounts.
+                Alphabetical directory of all managed user accounts.
               </Text>
             </View>
             <Pressable
