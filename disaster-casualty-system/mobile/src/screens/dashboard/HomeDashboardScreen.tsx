@@ -805,19 +805,6 @@ export default function HomeDashboardScreen() {
             />
           ) : null}
 
-          {isSuperAdmin ? (
-            <QuickAction
-              icon="people-circle-outline"
-              label="Users Directory"
-              caption="All accounts"
-              iconColor={COLORS.green}
-              iconBackground={COLORS.paleGreen}
-              onPress={() =>
-                router.push("/account-management" as never)
-              }
-            />
-          ) : null}
-
           <QuickAction
             icon="document-text-outline"
             label="View Records"
