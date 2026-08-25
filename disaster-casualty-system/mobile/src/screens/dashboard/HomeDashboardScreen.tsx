@@ -1084,6 +1084,17 @@ export default function HomeDashboardScreen() {
             onPress={() => void handleRefresh()}
           />
 
+          {isResponderAccount ? (
+            <QuickAction
+              icon="clipboard-outline"
+              label="Action Logs"
+              caption="My entries"
+              iconColor={COLORS.blue}
+              iconBackground={COLORS.paleBlue}
+              onPress={() => router.push("/action-logs" as never)}
+            />
+          ) : null}
+
           <QuickAction
             icon="shield-checkmark-outline"
             label="Verification Review"

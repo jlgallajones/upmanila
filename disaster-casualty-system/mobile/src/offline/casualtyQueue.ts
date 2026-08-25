@@ -16,7 +16,7 @@ export type QueuedCasualtyPayload = Omit<
   offlineIncidentName?: string;
 };
 
-type QueuedCasualtySubmission = {
+export type QueuedCasualtySubmission = {
   id: string;
   payload: QueuedCasualtyPayload;
   createdAt: string;
@@ -77,6 +77,12 @@ export async function queueCasualtySubmission(
 export async function getQueuedCasualtyCount(): Promise<number> {
   const queue = await readQueue();
   return queue.length;
+}
+
+export async function getQueuedCasualtySubmissions(): Promise<
+  QueuedCasualtySubmission[]
+> {
+  return readQueue();
 }
 
 export async function syncQueuedCasualtySubmissions(): Promise<{
