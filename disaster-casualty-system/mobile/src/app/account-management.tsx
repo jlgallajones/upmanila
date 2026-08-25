@@ -15,10 +15,13 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
+  getUnitUsers,
   getManagedAccounts,
   registerAdminAccount,
+  registerUnitUser,
   type ManagedAccount,
   type RegisterAdminAccountPayload,
+  type RegisterUnitUserPayload,
 } from "../api/accounts";
 import { getCurrentUser } from "../auth/session";
 
@@ -35,8 +38,18 @@ const COLORS = {
 };
 
 type FilterMode = "all" | "unit";
+type AccountRole = RegisterAdminAccountPayload["role"] | RegisterUnitUserPayload["role"];
+type AccountForm = {
+  fullName: string;
+  email: string;
+  password: string;
+  role: AccountRole;
+  phoneNumber?: string;
+  assignedMunicipality?: string;
+  assignedBarangay?: string;
+};
 
-const initialForm: RegisterAdminAccountPayload = {
+const initialForm: AccountForm = {
   fullName: "",
   email: "",
   password: "",
@@ -70,9 +83,10 @@ function isSameUnit(
 
 export default function AccountManagementScreen() {
   const [accounts, setAccounts] = useState<ManagedAccount[]>([]);
+  const [currentRole, setCurrentRole] = useState<string | null>(null);
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
   const [selectedUnit, setSelectedUnit] = useState<string | null>(null);
-  const [form, setForm] = useState<RegisterAdminAccountPayload>(initialForm);
+  const [form, setForm] = useState<AccountForm>(initialForm);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -82,16 +96,37 @@ export default function AccountManagementScreen() {
       setErrorMessage(null);
       setIsLoading(true);
 
-      const [user, data] = await Promise.all([
-        getCurrentUser(),
-        getManagedAccounts(),
-      ]);
+      const user = await getCurrentUser();
 
-      if (user?.role !== "super_admin") {
-        setErrorMessage("Only super admin accounts can manage accounts.");
+      setCurrentRole(user?.role ?? null);
+
+      if (
+        user?.role !== "super_admin" &&
+        user?.role !== "admin" &&
+        user?.role !== "administrator"
+      ) {
+        setErrorMessage("Only admin accounts can manage accounts.");
         setAccounts([]);
         return;
       }
+
+      const data =
+        user.role === "super_admin"
+          ? await getManagedAccounts()
+          : await getUnitUsers();
+
+      setForm((current) => ({
+        ...current,
+        role: user.role === "super_admin" ? "administrator" : "responder",
+        assignedMunicipality:
+          user.role === "super_admin"
+            ? current.assignedMunicipality
+            : current.assignedMunicipality || user.assigned_municipality || "",
+        assignedBarangay:
+          user.role === "super_admin"
+            ? current.assignedBarangay
+            : current.assignedBarangay || user.assigned_barangay || "",
+      }));
 
       setAccounts(
         [...data].sort((a, b) =>
@@ -134,9 +169,29 @@ export default function AccountManagementScreen() {
     );
   }, [accounts, filterMode, selectedUnit]);
 
-  function updateForm<K extends keyof RegisterAdminAccountPayload>(
+  const isSuperAdmin = currentRole === "super_admin";
+  const roleOptions: AccountRole[] = isSuperAdmin
+    ? ["administrator", "super_admin"]
+    : ["responder", "documenter"];
+  const formTitle = isSuperAdmin
+    ? "Create admin account"
+    : "Create responder/documenter account";
+  const formSubtitle = isSuperAdmin
+    ? "Admin accounts are assigned to a unit or location."
+    : "Responder and documenter accounts are assigned under your unit.";
+  const directorySubtitle = isSuperAdmin
+    ? "Alphabetical directory of all managed user accounts."
+    : "Responder and documenter accounts under your admin/unit scope.";
+  const headerSubtitle = isSuperAdmin
+    ? "Super admin account controls"
+    : "Admin unit account controls";
+  const createSuccessMessage = isSuperAdmin
+    ? "The admin account can now log in with the temporary password."
+    : "The responder or documenter account can now log in with the temporary password.";
+
+  function updateForm<K extends keyof AccountForm>(
     key: K,
-    value: RegisterAdminAccountPayload[K],
+    value: AccountForm[K],
   ) {
     setForm((current) => ({
       ...current,
@@ -165,12 +220,28 @@ export default function AccountManagementScreen() {
 
     try {
       setIsCreating(true);
-      await registerAdminAccount(payload);
-      setForm(initialForm);
+      if (isSuperAdmin) {
+        await registerAdminAccount({
+          ...payload,
+          role: payload.role === "super_admin" ? "super_admin" : "administrator",
+        });
+      } else {
+        await registerUnitUser({
+          ...payload,
+          role: payload.role === "documenter" ? "documenter" : "responder",
+        });
+      }
+
+      setForm({
+        ...initialForm,
+        role: isSuperAdmin ? "administrator" : "responder",
+        assignedMunicipality: isSuperAdmin ? "" : form.assignedMunicipality,
+        assignedBarangay: isSuperAdmin ? "" : form.assignedBarangay,
+      });
       await loadAccounts();
       Alert.alert(
         "Account created",
-        "The admin account can now log in with the temporary password.",
+        createSuccessMessage,
       );
     } catch (error) {
       Alert.alert(
@@ -210,9 +281,7 @@ export default function AccountManagementScreen() {
 
           <View>
             <Text style={styles.title}>Account Management</Text>
-            <Text style={styles.subtitle}>
-              Super admin account controls
-            </Text>
+            <Text style={styles.subtitle}>{headerSubtitle}</Text>
           </View>
         </View>
       </SafeAreaView>
@@ -229,10 +298,8 @@ export default function AccountManagementScreen() {
         ) : null}
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Create admin account</Text>
-          <Text style={styles.cardSubtitle}>
-            Admin accounts are assigned to a unit or location.
-          </Text>
+          <Text style={styles.cardTitle}>{formTitle}</Text>
+          <Text style={styles.cardSubtitle}>{formSubtitle}</Text>
 
           <TextInput
             style={styles.input}
@@ -260,7 +327,7 @@ export default function AccountManagementScreen() {
           />
 
           <View style={styles.segmentedRow}>
-            {(["administrator", "super_admin"] as const).map((role) => (
+            {roleOptions.map((role) => (
               <Pressable
                 key={role}
                 onPress={() => updateForm("role", role)}
@@ -275,7 +342,7 @@ export default function AccountManagementScreen() {
                     form.role === role && styles.segmentTextActive,
                   ]}
                 >
-                  {role === "super_admin" ? "Super Admin" : "Administrator"}
+                  {roleLabel(role)}
                 </Text>
               </Pressable>
             ))}
@@ -327,9 +394,7 @@ export default function AccountManagementScreen() {
           <View style={styles.cardHeaderRow}>
             <View>
               <Text style={styles.cardTitle}>Users Directory</Text>
-              <Text style={styles.cardSubtitle}>
-                Alphabetical directory of all managed user accounts.
-              </Text>
+              <Text style={styles.cardSubtitle}>{directorySubtitle}</Text>
             </View>
             <Pressable
               onPress={() => void loadAccounts()}

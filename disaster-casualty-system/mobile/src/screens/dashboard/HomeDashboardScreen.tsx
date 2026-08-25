@@ -1051,11 +1051,15 @@ export default function HomeDashboardScreen() {
             />
           ) : null}
 
-          {isSuperAdmin ? (
+          {isSuperAdmin || isAdminAccount ? (
             <QuickAction
               icon="person-add-outline"
               label="Account Management"
-              caption="Admin accounts"
+              caption={
+                isSuperAdmin
+                  ? "Admin accounts"
+                  : "Unit users"
+              }
               iconColor={COLORS.maroon}
               iconBackground="#F5E9EB"
               onPress={() =>
