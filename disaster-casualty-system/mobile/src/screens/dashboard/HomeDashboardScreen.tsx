@@ -592,6 +592,9 @@ export default function HomeDashboardScreen() {
     ? RESPONDER_ROLES.has(currentUserRole)
     : false;
   const isDocumenterAccount = currentUserRole === "documenter";
+  const isAdminAccount =
+    currentUserRole === "admin" ||
+    currentUserRole === "administrator";
   const hideDataEntryQuickLinks =
     isResponderAccount || isDocumenterAccount;
 
@@ -1089,6 +1092,17 @@ export default function HomeDashboardScreen() {
             iconBackground={COLORS.paleOrange}
             onPress={() => router.push("/verification-review" as never)}
           />
+
+          {isAdminAccount ? (
+            <QuickAction
+              icon="clipboard-outline"
+              label="Action Logs"
+              caption="Admin actions"
+              iconColor={COLORS.blue}
+              iconBackground={COLORS.paleBlue}
+              onPress={() => router.push("/action-logs" as never)}
+            />
+          ) : null}
 
           {!hideDataEntryQuickLinks ? (
             <QuickAction

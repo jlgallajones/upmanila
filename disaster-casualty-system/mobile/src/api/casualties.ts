@@ -190,6 +190,26 @@ export type CasualtyVerificationHistoryItem = {
   } | null;
 };
 
+export type CasualtyVerificationActionLogItem = {
+  id: string;
+  casualty_incident_id: string;
+  old_status: string | null;
+  new_status: string;
+  reviewed_by: string | null;
+  review_notes: string | null;
+  created_at: string;
+  result: string;
+  reviewed_by_user: {
+    id: string;
+    full_name: string;
+    email: string;
+    role: string;
+    assigned_municipality: string | null;
+    assigned_barangay: string | null;
+  } | null;
+  casualty_record: CasualtyRecord | null;
+};
+
 type CasualtyResponse = {
   success: boolean;
   message?: string;
@@ -218,6 +238,12 @@ type CasualtyVerificationHistoryResponse = {
   success: boolean;
   count: number;
   data: CasualtyVerificationHistoryItem[];
+};
+
+type CasualtyVerificationActionLogsResponse = {
+  success: boolean;
+  count: number;
+  data: CasualtyVerificationActionLogItem[];
 };
 
 export type UpdateCasualtyVerificationPayload = {
@@ -405,6 +431,17 @@ export async function getCasualtyVerificationHistory(
   const response =
     await api.get<CasualtyVerificationHistoryResponse>(
       `/casualties/${encodeURIComponent(id)}/verification-history`,
+    );
+
+  return response.data.data;
+}
+
+export async function getCasualtyVerificationActionLogs(): Promise<
+  CasualtyVerificationActionLogItem[]
+> {
+  const response =
+    await api.get<CasualtyVerificationActionLogsResponse>(
+      "/casualties/verification-action-logs",
     );
 
   return response.data.data;

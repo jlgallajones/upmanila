@@ -189,6 +189,25 @@ type UpdateCasualtyVerificationRequest = {
   notes?: string;
 };
 
+type VerificationActionLogRow = {
+  id: string;
+  casualty_incident_id: string;
+  old_status: VerificationStatus | null;
+  new_status: VerificationStatus;
+  reviewed_by: string | null;
+  review_notes: string | null;
+  created_at: string;
+};
+
+type VerificationReviewerProfile = {
+  id: string;
+  full_name: string;
+  email: string;
+  role: string;
+  assigned_municipality: string | null;
+  assigned_barangay: string | null;
+};
+
 type CreateCasualtyRpcResult = {
   casualty: unknown;
   casualtyIncident: {
@@ -1831,6 +1850,111 @@ export async function getCasualtyVerificationHistory(
       success: true,
       count: history.length,
       data: history,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getCasualtyVerificationActionLogs(
+  request: Request,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const user = getAuthenticatedUser(request);
+
+    const {
+      data: reviewerProfile,
+      error: reviewerError,
+    } = await supabase
+      .from("users")
+      .select(
+        "id, full_name, email, role, assigned_municipality, assigned_barangay",
+      )
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (reviewerError) {
+      throw new Error(
+        `Unable to retrieve action log reviewer: ${reviewerError.message}`,
+      );
+    }
+
+    const { data, error } = await supabase
+      .from("casualty_verification_history")
+      .select(
+        "id, casualty_incident_id, old_status, new_status, reviewed_by, review_notes, created_at",
+      )
+      .eq("reviewed_by", user.id)
+      .order("created_at", { ascending: false })
+      .limit(250);
+
+    if (error) {
+      throw new Error(
+        `Unable to retrieve verification action logs: ${error.message}`,
+      );
+    }
+
+    const logs = (data ?? []) as VerificationActionLogRow[];
+    const casualtyIncidentIds = [
+      ...new Set(logs.map((item) => item.casualty_incident_id)),
+    ];
+
+    const casualtyRecordsById = new Map<string, unknown>();
+
+    if (casualtyIncidentIds.length > 0) {
+      const {
+        data: casualtyRecords,
+        error: casualtyRecordsError,
+      } = await supabase
+        .from("casualty_incidents")
+        .select(casualtyRecordSelect)
+        .in("id", casualtyIncidentIds)
+        .is("deleted_at", null);
+
+      if (casualtyRecordsError) {
+        throw new Error(
+          `Unable to retrieve action log casualty records: ${casualtyRecordsError.message}`,
+        );
+      }
+
+      for (const casualtyRecord of casualtyRecords ?? []) {
+        if (
+          isObject(casualtyRecord) &&
+          typeof casualtyRecord.id === "string"
+        ) {
+          casualtyRecordsById.set(casualtyRecord.id, casualtyRecord);
+        }
+      }
+    }
+
+    const reviewer =
+      (reviewerProfile as VerificationReviewerProfile | null) ?? {
+        id: user.id,
+        full_name: user.fullName,
+        email: user.email,
+        role: user.role,
+        assigned_municipality: null,
+        assigned_barangay: null,
+      };
+
+    const actionLogs = logs.map((item) => {
+      const casualtyRecord =
+        casualtyRecordsById.get(item.casualty_incident_id) ?? null;
+
+      return {
+        ...item,
+        result: casualtyRecord ? "Successful" : "Not Successful",
+        reviewed_by_user: item.reviewed_by ? reviewer : null,
+        casualty_record: casualtyRecord,
+      };
+    });
+
+    response.status(200).json({
+      success: true,
+      count: actionLogs.length,
+      data: actionLogs,
     });
   } catch (error) {
     next(error);

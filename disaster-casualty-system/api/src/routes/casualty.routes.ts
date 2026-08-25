@@ -9,6 +9,7 @@ import {
   getCasualtyStatusHistory,
   getCasualtyTriageHistory,
   getCasualtyTransportHistory,
+  getCasualtyVerificationActionLogs,
   getCasualtyVerificationHistory,
   updateCasualty,
   updateCasualtyVerification,
@@ -18,6 +19,16 @@ import { requireAuth, requireRole } from "../middleware/auth.js";
 export const casualtyRouter = Router();
 
 casualtyRouter.get("/", requireAuth, getCasualties);
+casualtyRouter.get(
+  "/verification-action-logs",
+  requireAuth,
+  requireRole([
+    "super_admin",
+    "admin",
+    "administrator",
+  ]),
+  getCasualtyVerificationActionLogs,
+);
 casualtyRouter.get(
   "/:id/status-history",
   requireAuth,
