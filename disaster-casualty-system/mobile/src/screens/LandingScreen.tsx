@@ -243,9 +243,11 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: COLORS.upMaroon,
+    overflow: "hidden",
   },
   safeArea: {
     flex: 1,
+    overflow: "hidden",
   },
   scrollView: {
     flex: 1,

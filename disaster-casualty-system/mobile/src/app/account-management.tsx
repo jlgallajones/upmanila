@@ -279,8 +279,14 @@ export default function AccountManagementScreen() {
             />
           </Pressable>
 
-          <View>
-            <Text style={styles.title}>Account Management</Text>
+          <View style={styles.headerTextGroup}>
+            <Text
+              style={styles.title}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
+              Account Management
+            </Text>
             <Text style={styles.subtitle}>{headerSubtitle}</Text>
           </View>
         </View>
@@ -392,7 +398,7 @@ export default function AccountManagementScreen() {
 
         <View style={styles.card}>
           <View style={styles.cardHeaderRow}>
-            <View>
+            <View style={styles.cardHeaderText}>
               <Text style={styles.cardTitle}>Users Directory</Text>
               <Text style={styles.cardSubtitle}>{directorySubtitle}</Text>
             </View>
@@ -562,6 +568,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.12)",
   },
+  headerTextGroup: {
+    flex: 1,
+    minWidth: 0,
+  },
   title: {
     color: COLORS.white,
     fontSize: 24,
@@ -593,6 +603,10 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "flex-start",
     gap: 12,
+  },
+  cardHeaderText: {
+    flex: 1,
+    minWidth: 0,
   },
   cardTitle: {
     color: COLORS.text,
@@ -657,6 +671,7 @@ const styles = StyleSheet.create({
   iconButton: {
     width: 42,
     height: 42,
+    flexShrink: 0,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",

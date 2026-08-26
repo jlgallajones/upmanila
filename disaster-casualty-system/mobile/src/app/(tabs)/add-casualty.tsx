@@ -18,9 +18,12 @@ import {
   ScrollView,
   StatusBar,
   StyleSheet,
+  type StyleProp,
   Text,
   TextInput,
+  type TextStyle,
   View,
+  type ViewStyle,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -2973,6 +2976,9 @@ type SelectFieldProps = {
   value: string;
   placeholder: string;
   icon?: keyof typeof Ionicons.glyphMap;
+  inputStyle?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
+  iconColor?: string;
   onPress: () => void;
 };
 
@@ -2981,6 +2987,9 @@ function SelectField({
   value,
   placeholder,
   icon = "chevron-down-outline",
+  inputStyle,
+  textStyle,
+  iconColor = COLORS.secondaryText,
   onPress,
 }: SelectFieldProps) {
   return (
@@ -2991,12 +3000,14 @@ function SelectField({
         onPress={onPress}
         style={({ pressed }) => [
           styles.selectInput,
+          inputStyle,
           pressed && styles.pressed,
         ]}
       >
         <Text
           style={[
             styles.selectText,
+            textStyle,
             !value && styles.placeholderText,
           ]}
         >
@@ -3006,7 +3017,7 @@ function SelectField({
         <Ionicons
           name={icon}
           size={18}
-          color={COLORS.secondaryText}
+          color={iconColor}
         />
       </Pressable>
     </View>
@@ -3048,6 +3059,12 @@ function getTriageColorTextStyle(value: string) {
   return value === "yellow" || value === "orange" || value === "white"
     ? styles.finalTriageYellowText
     : styles.finalTriageLightText;
+}
+
+function getTriageAssessmentIconColor(value: string) {
+  return value === "yellow" || value === "orange" || value === "white"
+    ? "#2B2100"
+    : COLORS.white;
 }
 
 type ChoiceOption = {
@@ -8876,6 +8893,20 @@ export default function AddCasualtyScreen() {
   }
 
   function renderTriageStep() {
+    const selectedFinalTriage =
+      isFieldResponderFlow || isSaResponderFlow
+        ? form.triageAssessmentAnswers.finalTriage
+        : "";
+    const triageAssessmentColorStyle = selectedFinalTriage
+      ? getTriageColorButtonStyle(selectedFinalTriage)
+      : null;
+    const triageAssessmentTextStyle = selectedFinalTriage
+      ? getTriageColorTextStyle(selectedFinalTriage)
+      : null;
+    const triageAssessmentIconColor = selectedFinalTriage
+      ? getTriageAssessmentIconColor(selectedFinalTriage)
+      : COLORS.secondaryText;
+
     return (
       <>
         <SelectField
@@ -8908,8 +8939,36 @@ export default function AddCasualtyScreen() {
           value={getTriageAssessmentSummary()}
           placeholder="Open assessment"
           icon="clipboard-outline"
+          inputStyle={
+            triageAssessmentColorStyle
+              ? [
+                  styles.triageAssessmentColoredSelect,
+                  triageAssessmentColorStyle,
+                ]
+              : undefined
+          }
+          textStyle={triageAssessmentTextStyle ?? undefined}
+          iconColor={triageAssessmentIconColor}
           onPress={openTriageAssessment}
         />
+
+        {isFieldResponderFlow ? (
+          <CurrentTimeField
+            label="TRIAGE TIME"
+            value={form.triageTime}
+            placeholder="mm/dd/yyyy hh:mm"
+            buttonLabel="Use current triage time"
+            onChangeText={(value) =>
+              updateField("triageTime", value)
+            }
+            onUseCurrent={() =>
+              updateField(
+                "triageTime",
+                formatDateTimeForInput(new Date()),
+              )
+            }
+          />
+        ) : null}
 
         {!isFieldResponderFlow ? (
           <>
@@ -10599,6 +10658,10 @@ const styles = StyleSheet.create({
   },
   progressLabelActive: {
     color: COLORS.white,
+  },
+
+  triageAssessmentColoredSelect: {
+    borderColor: "rgba(255,255,255,0.72)",
   },
 
   formContent: {
