@@ -160,6 +160,14 @@ function shouldScopeToOwnCasualties(role: string): boolean {
   return casualtyDataEntryRoles.has(role);
 }
 
+function normalizeVerificationStatus(
+  value: unknown,
+): VerificationStatus {
+  return verificationStatuses.includes(value as VerificationStatus)
+    ? (value as VerificationStatus)
+    : "submitted";
+}
+
 async function canAccessCasualtyRecord(
   casualtyIncidentId: string,
   userId: string,
@@ -206,6 +214,13 @@ type VerificationReviewerProfile = {
   role: string;
   assigned_municipality: string | null;
   assigned_barangay: string | null;
+};
+
+type VerificationActionLogItem = VerificationActionLogRow & {
+  action_type: "verification" | "casualty_submission";
+  result: "Successful" | "Not Successful";
+  reviewed_by_user: VerificationReviewerProfile | null;
+  casualty_record: unknown;
 };
 
 type CreateCasualtyRpcResult = {
@@ -1851,6 +1866,8 @@ export async function getCasualtyVerificationActionLogs(
 ): Promise<void> {
   try {
     const user = getAuthenticatedUser(request);
+    const isUnitScopedAdmin =
+      user.role === "admin" || user.role === "administrator";
 
     const {
       data: reviewerProfile,
@@ -1869,54 +1886,6 @@ export async function getCasualtyVerificationActionLogs(
       );
     }
 
-    const { data, error } = await supabase
-      .from("casualty_verification_history")
-      .select(
-        "id, casualty_incident_id, old_status, new_status, reviewed_by, review_notes, created_at",
-      )
-      .eq("reviewed_by", user.id)
-      .order("created_at", { ascending: false })
-      .limit(250);
-
-    if (error) {
-      throw new Error(
-        `Unable to retrieve verification action logs: ${error.message}`,
-      );
-    }
-
-    const logs = (data ?? []) as VerificationActionLogRow[];
-    const casualtyIncidentIds = [
-      ...new Set(logs.map((item) => item.casualty_incident_id)),
-    ];
-
-    const casualtyRecordsById = new Map<string, unknown>();
-
-    if (casualtyIncidentIds.length > 0) {
-      const {
-        data: casualtyRecords,
-        error: casualtyRecordsError,
-      } = await supabase
-        .from("casualty_incidents")
-        .select(casualtyRecordSelect)
-        .in("id", casualtyIncidentIds)
-        .is("deleted_at", null);
-
-      if (casualtyRecordsError) {
-        throw new Error(
-          `Unable to retrieve action log casualty records: ${casualtyRecordsError.message}`,
-        );
-      }
-
-      for (const casualtyRecord of casualtyRecords ?? []) {
-        if (
-          isObject(casualtyRecord) &&
-          typeof casualtyRecord.id === "string"
-        ) {
-          casualtyRecordsById.set(casualtyRecord.id, casualtyRecord);
-        }
-      }
-    }
-
     const reviewer =
       (reviewerProfile as VerificationReviewerProfile | null) ?? {
         id: user.id,
@@ -1927,17 +1896,179 @@ export async function getCasualtyVerificationActionLogs(
         assigned_barangay: null,
       };
 
-    const actionLogs = logs.map((item) => {
+    const casualtyRecordsById = new Map<string, unknown>();
+    const submissionLogs: VerificationActionLogItem[] = [];
+    let scopedCasualtyIncidentIds: string[] | null = null;
+
+    if (isUnitScopedAdmin) {
+      const { data: unitUsers, error: unitUsersError } = await supabase
+        .from("users")
+        .select(
+          "id, full_name, email, role, assigned_municipality, assigned_barangay",
+        )
+        .eq("created_by", user.id)
+        .in("role", ["responder", "documenter"]);
+
+      if (unitUsersError) {
+        throw new Error(
+          `Unable to retrieve admin-created accounts: ${unitUsersError.message}`,
+        );
+      }
+
+      const unitUsersById = new Map(
+        ((unitUsers ?? []) as VerificationReviewerProfile[]).map(
+          (unitUser) => [unitUser.id, unitUser],
+        ),
+      );
+      const unitUserIds = [...unitUsersById.keys()];
+
+      if (unitUserIds.length > 0) {
+        const {
+          data: scopedCasualtyRecords,
+          error: scopedCasualtyRecordsError,
+        } = await supabase
+          .from("casualty_incidents")
+          .select(casualtyRecordSelect)
+          .in("encoded_by", unitUserIds)
+          .is("deleted_at", null)
+          .order("created_at", { ascending: false })
+          .limit(250);
+
+        if (scopedCasualtyRecordsError) {
+          throw new Error(
+            `Unable to retrieve admin-created account casualty records: ${scopedCasualtyRecordsError.message}`,
+          );
+        }
+
+        for (const casualtyRecord of scopedCasualtyRecords ?? []) {
+          if (
+            !isObject(casualtyRecord) ||
+            typeof casualtyRecord.id !== "string"
+          ) {
+            continue;
+          }
+
+          casualtyRecordsById.set(casualtyRecord.id, casualtyRecord);
+
+          const encoder = isObject(casualtyRecord.encoder)
+            ? (casualtyRecord.encoder as unknown as VerificationReviewerProfile)
+            : null;
+          const actor =
+            encoder?.id && unitUsersById.has(encoder.id)
+              ? unitUsersById.get(encoder.id) ?? encoder
+              : encoder;
+          const createdAt =
+            typeof casualtyRecord.created_at === "string"
+              ? casualtyRecord.created_at
+              : new Date().toISOString();
+
+          submissionLogs.push({
+            id: `casualty-submission-${casualtyRecord.id}`,
+            action_type: "casualty_submission",
+            casualty_incident_id: casualtyRecord.id,
+            old_status: null,
+            new_status: normalizeVerificationStatus(
+              casualtyRecord.verification_status,
+            ),
+            reviewed_by: actor?.id ?? null,
+            review_notes: null,
+            created_at: createdAt,
+            result: "Successful",
+            reviewed_by_user: actor,
+            casualty_record: casualtyRecord,
+          });
+        }
+      }
+
+      scopedCasualtyIncidentIds = [
+        ...new Set(
+          submissionLogs.map((item) => item.casualty_incident_id),
+        ),
+      ];
+    }
+
+    let logs: VerificationActionLogRow[] = [];
+
+    if (
+      !isUnitScopedAdmin ||
+      (scopedCasualtyIncidentIds && scopedCasualtyIncidentIds.length > 0)
+    ) {
+      let historyQuery = supabase
+        .from("casualty_verification_history")
+        .select(
+          "id, casualty_incident_id, old_status, new_status, reviewed_by, review_notes, created_at",
+        )
+        .eq("reviewed_by", user.id)
+        .order("created_at", { ascending: false })
+        .limit(250);
+
+      if (scopedCasualtyIncidentIds) {
+        historyQuery = historyQuery.in(
+          "casualty_incident_id",
+          scopedCasualtyIncidentIds,
+        );
+      }
+
+      const { data, error } = await historyQuery;
+
+      if (error) {
+        throw new Error(
+          `Unable to retrieve verification action logs: ${error.message}`,
+        );
+      }
+
+      logs = (data ?? []) as VerificationActionLogRow[];
+    }
+
+    const missingCasualtyIncidentIds = [
+      ...new Set(
+        logs
+          .map((item) => item.casualty_incident_id)
+          .filter((id) => !casualtyRecordsById.has(id)),
+      ),
+    ];
+
+    if (missingCasualtyIncidentIds.length > 0) {
+      const {
+        data: casualtyRecords,
+        error: casualtyRecordsError,
+      } = await supabase
+        .from("casualty_incidents")
+        .select(casualtyRecordSelect)
+        .in("id", missingCasualtyIncidentIds)
+        .is("deleted_at", null);
+
+      if (casualtyRecordsError) {
+        throw new Error(
+          `Unable to retrieve action log casualty records: ${casualtyRecordsError.message}`,
+        );
+      }
+
+      for (const casualtyRecord of casualtyRecords ?? []) {
+        if (isObject(casualtyRecord) && typeof casualtyRecord.id === "string") {
+          casualtyRecordsById.set(casualtyRecord.id, casualtyRecord);
+        }
+      }
+    }
+
+    const verificationLogs = logs.map<VerificationActionLogItem>((item) => {
       const casualtyRecord =
         casualtyRecordsById.get(item.casualty_incident_id) ?? null;
 
       return {
         ...item,
+        action_type: "verification",
         result: casualtyRecord ? "Successful" : "Not Successful",
         reviewed_by_user: item.reviewed_by ? reviewer : null,
         casualty_record: casualtyRecord,
       };
     });
+
+    const actionLogs = [...submissionLogs, ...verificationLogs].sort(
+      (first, second) =>
+        new Date(second.created_at).getTime() -
+        new Date(first.created_at).getTime(),
+    );
 
     response.status(200).json({
       success: true,

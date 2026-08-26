@@ -192,6 +192,7 @@ export type CasualtyVerificationHistoryItem = {
 
 export type CasualtyVerificationActionLogItem = {
   id: string;
+  action_type?: "verification" | "casualty_submission";
   casualty_incident_id: string;
   old_status: string | null;
   new_status: string;

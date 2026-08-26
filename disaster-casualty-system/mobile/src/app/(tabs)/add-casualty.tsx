@@ -3617,6 +3617,11 @@ export default function AddCasualtyScreen() {
     isResponderAccountRole(currentUserRole) &&
     !currentResponderAssignment &&
     !getDefaultResponderAssignment(currentUserRole);
+  const responderFunctionLabel = isFieldResponderFlow
+    ? "Field Responder"
+    : isSaResponderFlow
+      ? "Stabilization Area Responder"
+      : null;
 
   const personPayload = useMemo<CreateCasualtyPayload["person"]>(
     () => ({
@@ -4579,6 +4584,30 @@ export default function AddCasualtyScreen() {
     return false;
   }
 
+  function hasTriageAssessmentAnswer(): boolean {
+    return getAppendixQuestionsForSystem(form.triageSystem).some(
+      (question) => Boolean(form.triageAssessmentAnswers[question.key]),
+    );
+  }
+
+  function validateMinimumTriageAssessmentAnswer(): boolean {
+    const questions = getAppendixQuestionsForSystem(form.triageSystem);
+
+    if (questions.length === 0) {
+      return true;
+    }
+
+    if (hasTriageAssessmentAnswer()) {
+      return true;
+    }
+
+    Alert.alert(
+      "Assessment answer required",
+      "Answer at least one triage assessment item before continuing.",
+    );
+    return false;
+  }
+
   function validatePartialCurrentStep(): boolean {
     switch (stepName) {
       case "Safety":
@@ -4655,6 +4684,7 @@ export default function AddCasualtyScreen() {
 
       case "Triage":
         return (
+          validateMinimumTriageAssessmentAnswer() &&
           validateOptionalDateTime(
             form.triageTime,
             "Invalid triage time",
@@ -5319,25 +5349,7 @@ export default function AddCasualtyScreen() {
           }
         }
 
-        if (
-          getAppendixQuestionsForSystem(form.triageSystem).find(
-            (question) =>
-              !form.triageAssessmentAnswers[question.key],
-          )
-        ) {
-          const unansweredQuestion = getAppendixQuestionsForSystem(
-            form.triageSystem,
-          ).find(
-            (question) =>
-              !form.triageAssessmentAnswers[question.key],
-          );
-
-          Alert.alert(
-            "Assessment answer required",
-            unansweredQuestion
-              ? `Answer "${unansweredQuestion.label}" so the system can calculate the triage category.`
-              : "Complete the assessment so the system can calculate the triage category.",
-          );
+        if (!validateMinimumTriageAssessmentAnswer()) {
           return false;
         }
 
@@ -8786,8 +8798,12 @@ export default function AddCasualtyScreen() {
       (question) => form.triageAssessmentAnswers[question.key],
     ).length;
 
-    return answeredCount === questions.length
-      ? `Complete (${answeredCount}/${questions.length})`
+    if (answeredCount === questions.length) {
+      return `Complete (${answeredCount}/${questions.length})`;
+    }
+
+    return answeredCount > 0
+      ? `Ready (${answeredCount}/${questions.length} answered)`
       : `${answeredCount}/${questions.length} answered`;
   }
 
@@ -10132,6 +10148,26 @@ export default function AddCasualtyScreen() {
         style={styles.keyboardView}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
+        {responderFunctionLabel ? (
+          <View style={styles.responderFunctionStickyHeader}>
+            <View style={styles.responderFunctionIcon}>
+              <Ionicons
+                name="shield-checkmark-outline"
+                size={18}
+                color={COLORS.maroon}
+              />
+            </View>
+            <View style={styles.responderFunctionTextGroup}>
+              <Text style={styles.responderFunctionLabel}>
+                RESPONDER FUNCTION
+              </Text>
+              <Text style={styles.responderFunctionValue}>
+                {responderFunctionLabel}
+              </Text>
+            </View>
+          </View>
+        ) : null}
+
         <ScrollView
           contentContainerStyle={styles.formContent}
           keyboardShouldPersistTaps="handled"
@@ -10569,6 +10605,40 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingTop: 23,
     paddingBottom: 30,
+  },
+  responderFunctionStickyHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 58,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E8D4D6",
+    backgroundColor: COLORS.white,
+    gap: 10,
+  },
+  responderFunctionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFF0F0",
+  },
+  responderFunctionTextGroup: {
+    flex: 1,
+    minWidth: 0,
+  },
+  responderFunctionLabel: {
+    color: COLORS.secondaryText,
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  responderFunctionValue: {
+    color: COLORS.maroon,
+    fontSize: 15,
+    fontWeight: "900",
+    marginTop: 2,
   },
   fieldGroup: {
     marginBottom: 17,

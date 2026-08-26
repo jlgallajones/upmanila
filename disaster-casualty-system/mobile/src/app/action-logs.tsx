@@ -313,6 +313,28 @@ function toAdminDisplayLog(
   log: CasualtyVerificationActionLogItem,
 ): DisplayActionLog {
   const reviewer = log.reviewed_by_user;
+  const idNumber =
+    log.casualty_record?.casualty.id_number?.trim() ||
+    log.casualty_record?.client_record_id ||
+    log.casualty_incident_id;
+
+  if (log.action_type === "casualty_submission") {
+    return {
+      id: log.id,
+      fullName: reviewer?.full_name || "Logged in user",
+      email: reviewer?.email || "No email",
+      role: formatRole(reviewer?.role),
+      unitAssignment: getUnitAssignment(log),
+      actionPerformed: `Added casualty record ${idNumber}`,
+      previousStatus: "-",
+      newStatus: formatResponderNewStatus(log.new_status, false),
+      rejectionReason: null,
+      actionAt: log.created_at,
+      casualtyLoggedAt: getCasualtyLoggedAt(log),
+      location: getLocation(log),
+      result: log.result || "Successful",
+    };
+  }
 
   return {
     id: log.id,
