@@ -3606,9 +3606,7 @@ export default function AddCasualtyScreen() {
       ? FIELD_RESPONDER_STEPS.filter((step) => step !== "Safety")
       : [...FIELD_RESPONDER_STEPS]
     : isSaResponderFlow
-      ? isEditing
-        ? SA_RESPONDER_STEPS.filter((step) => step !== "Safety")
-        : [...SA_RESPONDER_STEPS]
+      ? [...SA_RESPONDER_STEPS]
       : isHealthcareDocumenterFlow
         ? [...HEALTHCARE_DOCUMENTER_STEPS]
         : [...DEFAULT_STEPS];

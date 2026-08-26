@@ -1330,6 +1330,17 @@ export default function IncidentsPage() {
     useState(false);
   const [newIncidentName, setNewIncidentName] = useState("");
   const [newDisasterType, setNewDisasterType] = useState("");
+  const [newIncidentStartedAt, setNewIncidentStartedAt] =
+    useState("");
+  const [newDmmpActivatedAt, setNewDmmpActivatedAt] =
+    useState("");
+  const [newExactLocation, setNewExactLocation] = useState("");
+  const [newEmsAlertedAt, setNewEmsAlertedAt] = useState("");
+  const [newEmsDeployedAt, setNewEmsDeployedAt] = useState("");
+  const [newFirstEmsArrivedAt, setNewFirstEmsArrivedAt] =
+    useState("");
+  const [newLastEmsArrivedAt, setNewLastEmsArrivedAt] =
+    useState("");
   const [hazardTypeSearchQuery, setHazardTypeSearchQuery] =
     useState("");
   const [
@@ -1610,6 +1621,20 @@ export default function IncidentsPage() {
     const incidentName = newIncidentName.trim();
     const disasterType = newDisasterType.trim();
     const location = newLocation.trim();
+    const exactLocation = newExactLocation.trim();
+    const emsDeployedAt = newEmsDeployedAt.trim();
+    const lastEmsArrivedAt = newLastEmsArrivedAt.trim();
+    const dateFields: Array<[string, string]> = [
+      ["Time of start of incident", newIncidentStartedAt],
+      [
+        "Time of disaster management plan activation",
+        newDmmpActivatedAt,
+      ],
+      ["EMS alerted time", newEmsAlertedAt],
+      ["EMS deployed time", newEmsDeployedAt],
+      ["First EMS arrived time", newFirstEmsArrivedAt],
+      ["Last EMS arrived time", newLastEmsArrivedAt],
+    ];
 
     if (!currentUserId) {
       Alert.alert(
@@ -1635,19 +1660,64 @@ export default function IncidentsPage() {
       return;
     }
 
+    for (const [label, value] of dateFields) {
+      if (value.trim() && !getValidDateTimeInput(value)) {
+        Alert.alert(
+          "Check incident time",
+          `${label} must use mm/dd/yyyy hh:mm.`,
+        );
+        return;
+      }
+    }
+
     try {
       setIsCreating(true);
+
+      const descriptionLines = [
+        exactLocation ? `Incident exact location/GPS: ${exactLocation}` : null,
+        emsDeployedAt ? `EMS deployed: ${emsDeployedAt}` : null,
+        lastEmsArrivedAt ? `Last EMS arrived: ${lastEmsArrivedAt}` : null,
+      ].filter((line): line is string => Boolean(line));
 
       const created = await createIncident({
         incidentName,
         disasterType,
+        startedAt:
+          parseDateTimeInput(newIncidentStartedAt) ?? undefined,
+        description:
+          descriptionLines.length > 0
+            ? descriptionLines.join("\n")
+            : undefined,
         municipality: location || undefined,
       });
+
+      const timelinePayload = {
+        disasterOccurredAt: parseDateTimeInput(newIncidentStartedAt),
+        eventNotificationAt: parseDateTimeInput(newEmsAlertedAt),
+        dmmpActivated: newDmmpActivatedAt.trim() ? true : null,
+        dmmpActivatedAt: parseDateTimeInput(newDmmpActivatedAt),
+        firstEmsOnSceneAt: parseDateTimeInput(newFirstEmsArrivedAt),
+      };
+
+      if (
+        Object.values(timelinePayload).some(
+          (value) => value !== null && value !== undefined,
+        )
+      ) {
+        await updateIncidentTimeline(created.id, timelinePayload);
+      }
 
       setIncidents((current) => [created, ...current]);
       setNewIncidentName("");
       setNewDisasterType("");
       setNewLocation("");
+      setNewIncidentStartedAt("");
+      setNewDmmpActivatedAt("");
+      setNewExactLocation("");
+      setNewEmsAlertedAt("");
+      setNewEmsDeployedAt("");
+      setNewFirstEmsArrivedAt("");
+      setNewLastEmsArrivedAt("");
       setIsCreateModalVisible(false);
 
       Alert.alert(
@@ -3743,77 +3813,163 @@ export default function IncidentsPage() {
               </Pressable>
             </View>
 
-            <Text style={styles.fieldLabel}>INCIDENT NAME</Text>
-            <TextInput
-              value={newIncidentName}
-              onChangeText={setNewIncidentName}
-              style={styles.input}
-              placeholder="e.g. Flood in San Isidro"
-              placeholderTextColor={COLORS.mutedText}
-            />
-
-            <Text style={styles.fieldLabel}>HAZARD TYPE</Text>
-            <Pressable
-              onPress={() => {
-                setHazardTypeSearchQuery("");
-                setIsHazardTypeSheetVisible(true);
-              }}
-              style={({ pressed }) => [
-                styles.selectInput,
-                pressed && styles.pressed,
-              ]}
+            <ScrollView
+              style={styles.createScroll}
+              contentContainerStyle={styles.createScrollContent}
+              showsVerticalScrollIndicator={false}
             >
-              <Text
-                style={[
-                  styles.selectText,
-                  !newDisasterType && styles.placeholderText,
+              <View style={styles.sectionHeadingRow}>
+                <View style={styles.sectionBullet} />
+                <Text style={styles.sectionHeading}>Incident</Text>
+              </View>
+
+              <Text style={styles.fieldLabel}>NAME OF INCIDENT</Text>
+              <TextInput
+                value={newIncidentName}
+                onChangeText={setNewIncidentName}
+                style={styles.input}
+                placeholder="e.g. Flood in San Isidro"
+                placeholderTextColor={COLORS.mutedText}
+              />
+
+              <Text style={styles.fieldLabel}>LOCATION</Text>
+              <TextInput
+                value={newLocation}
+                onChangeText={setNewLocation}
+                style={styles.input}
+                placeholder="Municipality, city, or response unit"
+                placeholderTextColor={COLORS.mutedText}
+              />
+
+              {renderCurrentTimeField({
+                label: "TIME OF START OF INCIDENT",
+                value: newIncidentStartedAt,
+                onChangeText: setNewIncidentStartedAt,
+                onUseCurrentTime: () =>
+                  setNewIncidentStartedAt(
+                    formatDateTimeForInput(new Date()),
+                  ),
+                editable: canCreateIncident,
+              })}
+
+              {renderCurrentTimeField({
+                label: "TIME OF DISASTER MANAGEMENT PLAN ACTIVATION",
+                value: newDmmpActivatedAt,
+                onChangeText: setNewDmmpActivatedAt,
+                onUseCurrentTime: () =>
+                  setNewDmmpActivatedAt(
+                    formatDateTimeForInput(new Date()),
+                  ),
+                editable: canCreateIncident,
+              })}
+
+              <Text style={styles.fieldLabel}>
+                INCIDENT EXACT LOCATION: GPS
+              </Text>
+              <TextInput
+                value={newExactLocation}
+                onChangeText={setNewExactLocation}
+                style={styles.input}
+                placeholder="Coordinates or precise location"
+                placeholderTextColor={COLORS.mutedText}
+              />
+
+              <Text style={styles.fieldLabel}>TYPE OF HAZARD</Text>
+              <Pressable
+                onPress={() => {
+                  setHazardTypeSearchQuery("");
+                  setIsHazardTypeSheetVisible(true);
+                }}
+                style={({ pressed }) => [
+                  styles.selectInput,
+                  pressed && styles.pressed,
                 ]}
               >
-                {newDisasterType || "Select type of hazard"}
-              </Text>
-              <Ionicons
-                name="chevron-down-outline"
-                size={18}
-                color={COLORS.secondaryText}
-              />
-            </Pressable>
-
-            <Text style={styles.fieldLabel}>LOCATION</Text>
-            <TextInput
-              value={newLocation}
-              onChangeText={setNewLocation}
-              style={styles.input}
-              placeholder="Municipality or city"
-              placeholderTextColor={COLORS.mutedText}
-            />
-
-            <Pressable
-              disabled={isCreating}
-              onPress={() => {
-                void handleCreateIncident();
-              }}
-              style={({ pressed }) => [
-                styles.createButton,
-                isCreating && styles.disabledButton,
-                pressed && styles.pressed,
-              ]}
-            >
-              <Text style={styles.createButtonText}>
-                {isCreating ? "Creating..." : "Create Incident"}
-              </Text>
-              {isCreating ? (
-                <ActivityIndicator
-                  size="small"
-                  color={COLORS.white}
-                />
-              ) : (
+                <Text
+                  style={[
+                    styles.selectText,
+                    !newDisasterType && styles.placeholderText,
+                  ]}
+                >
+                  {newDisasterType || "Select type of hazard"}
+                </Text>
                 <Ionicons
-                  name="checkmark-circle-outline"
-                  size={19}
-                  color={COLORS.white}
+                  name="chevron-down-outline"
+                  size={18}
+                  color={COLORS.secondaryText}
                 />
-              )}
-            </Pressable>
+              </Pressable>
+
+              {renderCurrentTimeField({
+                label: "EMS ALERTED (TIME)",
+                value: newEmsAlertedAt,
+                onChangeText: setNewEmsAlertedAt,
+                onUseCurrentTime: () =>
+                  setNewEmsAlertedAt(formatDateTimeForInput(new Date())),
+                editable: canCreateIncident,
+              })}
+
+              {renderCurrentTimeField({
+                label: "EMS DEPLOYED (TIME)",
+                value: newEmsDeployedAt,
+                onChangeText: setNewEmsDeployedAt,
+                onUseCurrentTime: () =>
+                  setNewEmsDeployedAt(
+                    formatDateTimeForInput(new Date()),
+                  ),
+                editable: canCreateIncident,
+              })}
+
+              {renderCurrentTimeField({
+                label: "FIRST EMS ARRIVED (TIME)",
+                value: newFirstEmsArrivedAt,
+                onChangeText: setNewFirstEmsArrivedAt,
+                onUseCurrentTime: () =>
+                  setNewFirstEmsArrivedAt(
+                    formatDateTimeForInput(new Date()),
+                  ),
+                editable: canCreateIncident,
+              })}
+
+              {renderCurrentTimeField({
+                label: "LAST EMS ARRIVED (TIME)",
+                value: newLastEmsArrivedAt,
+                onChangeText: setNewLastEmsArrivedAt,
+                onUseCurrentTime: () =>
+                  setNewLastEmsArrivedAt(
+                    formatDateTimeForInput(new Date()),
+                  ),
+                editable: canCreateIncident,
+              })}
+
+              <Pressable
+                disabled={isCreating}
+                onPress={() => {
+                  void handleCreateIncident();
+                }}
+                style={({ pressed }) => [
+                  styles.createButton,
+                  isCreating && styles.disabledButton,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.createButtonText}>
+                  {isCreating ? "Creating..." : "Create Incident"}
+                </Text>
+                {isCreating ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={COLORS.white}
+                  />
+                ) : (
+                  <Ionicons
+                    name="checkmark-circle-outline"
+                    size={19}
+                    color={COLORS.white}
+                  />
+                )}
+              </Pressable>
+            </ScrollView>
           </Pressable>
         </Pressable>
       </Modal>
@@ -6880,12 +7036,40 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(23,33,58,0.38)",
   },
   createSheet: {
+    maxHeight: "88%",
     paddingHorizontal: SCREEN_PADDING,
     paddingTop: 10,
     paddingBottom: 24,
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
     backgroundColor: COLORS.white,
+  },
+  createScroll: {
+    marginTop: 2,
+  },
+  createScrollContent: {
+    paddingBottom: 8,
+  },
+  sectionHeadingRow: {
+    minHeight: 30,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    marginTop: 2,
+  },
+  sectionBullet: {
+    width: 13,
+    height: 13,
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: COLORS.secondaryText,
+    backgroundColor: COLORS.white,
+  },
+  sectionHeading: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: "900",
+    textDecorationLine: "underline",
   },
   choiceSheet: {
     maxHeight: "72%",

@@ -697,8 +697,17 @@ export type UpdateIncidentTimelinePayload = {
   sceneDemobilizedAt?: string | null;
 };
 
-export async function getIncidents(): Promise<Incident[]> {
-  const response = await api.get<IncidentResponse>("/incidents");
+export async function getIncidents(options?: {
+  scope?: "active" | "all";
+}): Promise<Incident[]> {
+  const response = await api.get<IncidentResponse>("/incidents", {
+    params:
+      options?.scope === "all"
+        ? {
+            scope: "all",
+          }
+        : undefined,
+  });
   return response.data.data;
 }
 

@@ -3,6 +3,7 @@ import { router, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Pressable,
   RefreshControl,
@@ -18,6 +19,13 @@ import {
   getCasualties,
   type CasualtyRecord,
 } from "../../api/casualties";
+import {
+  closeIncident,
+  downloadIncidentExport,
+  generateIncidentSitrep,
+  getIncidents,
+  type Incident,
+} from "../../api/incidents";
 import { isAuthenticationTokenError } from "../../api/client";
 import {
   getAccessToken,
@@ -85,9 +93,16 @@ const fieldResponderTriageFilters = [
   "Expectant",
 ] as const;
 
+const incidentFilters = [
+  "All Incidents",
+  "Active Incidents",
+  "Closed Incidents",
+] as const;
+
 const SCREEN_PADDING = 16;
 
 type FilterOption = (typeof filters)[number];
+type IncidentFilterOption = (typeof incidentFilters)[number];
 type FieldResponderReviewFilter =
   (typeof saResponderReviewFilters)[number];
 type FieldResponderTriageFilter =
@@ -136,6 +151,19 @@ function getLocation(record: CasualtyRecord): string {
   return record.current_location?.trim() || "Location unavailable";
 }
 
+function getIncidentLocation(incident: Incident): string {
+  const parts = [
+    incident.barangay,
+    incident.municipality,
+    incident.province,
+  ].filter(
+    (part): part is string =>
+      typeof part === "string" && part.trim().length > 0,
+  );
+
+  return parts.length > 0 ? parts.join(", ") : "Location not set";
+}
+
 function formatTime(dateString: string): string {
   const date = new Date(dateString);
 
@@ -144,6 +172,27 @@ function formatTime(dateString: string): string {
   }
 
   return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(date);
+}
+
+function formatDateTime(value: string | null | undefined): string {
+  if (!value) {
+    return "Not set";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
@@ -208,6 +257,14 @@ function isSaResponderView(
   assignment: ResponderAssignment | null,
 ): boolean {
   return role === "sa_responder" || assignment === "sa_responder";
+}
+
+function isAdminRecordsRole(role: string | null): boolean {
+  return (
+    role === "super_admin" ||
+    role === "admin" ||
+    role === "administrator"
+  );
 }
 
 function getRecordReviewFilters(
@@ -417,6 +474,213 @@ function CasualtyCard({
   );
 }
 
+function IncidentRecordCard({
+  incident,
+  casualtyCount,
+  onCloseIncident,
+  onIncidentInformation,
+  onCasualtySummary,
+  onManageReports,
+  onExportReport,
+  isClosing,
+  isExporting,
+}: {
+  incident: Incident;
+  casualtyCount: number;
+  onCloseIncident: () => void;
+  onIncidentInformation: () => void;
+  onCasualtySummary: () => void;
+  onManageReports: () => void;
+  onExportReport: () => void;
+  isClosing: boolean;
+  isExporting: boolean;
+}) {
+  const isClosed = Boolean(incident.ended_at) || incident.status === "closed";
+  const statusStyle = isClosed
+    ? {
+        backgroundColor: COLORS.paleGray,
+        color: COLORS.gray,
+      }
+    : {
+        backgroundColor: COLORS.paleGreen,
+        color: COLORS.green,
+      };
+
+  return (
+    <View style={styles.incidentRecordCard}>
+      <View style={styles.recordTopRow}>
+        <View style={styles.incidentAvatar}>
+          <Ionicons
+            name="warning-outline"
+            size={20}
+            color={COLORS.maroon}
+          />
+        </View>
+
+        <View style={styles.recordMain}>
+          <Text style={styles.recordName} numberOfLines={2}>
+            {incident.incident_name}
+          </Text>
+          <Text style={styles.recordMeta} numberOfLines={1}>
+            {incident.disaster_type} {"\u00B7"} {incident.incident_code}
+          </Text>
+        </View>
+
+        <View
+          style={[
+            styles.statusBadge,
+            {
+              backgroundColor: statusStyle.backgroundColor,
+            },
+          ]}
+        >
+          <Text
+            style={[
+              styles.statusText,
+              {
+                color: statusStyle.color,
+              },
+            ]}
+          >
+            {isClosed ? "CLOSED" : "ACTIVE"}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.incidentInfoGrid}>
+        <View style={styles.incidentInfoItem}>
+          <Text style={styles.incidentInfoLabel}>Unit / Location</Text>
+          <Text style={styles.incidentInfoValue} numberOfLines={2}>
+            {getIncidentLocation(incident)}
+          </Text>
+        </View>
+
+        <View style={styles.incidentInfoItem}>
+          <Text style={styles.incidentInfoLabel}>Sync Status</Text>
+          <Text style={styles.incidentInfoValue}>Synced</Text>
+        </View>
+
+        <View style={styles.incidentInfoItem}>
+          <Text style={styles.incidentInfoLabel}>Started</Text>
+          <Text style={styles.incidentInfoValue}>
+            {formatDateTime(incident.started_at)}
+          </Text>
+        </View>
+
+        <View style={styles.incidentInfoItem}>
+          <Text style={styles.incidentInfoLabel}>Casualties</Text>
+          <Text style={styles.incidentInfoValue}>{casualtyCount}</Text>
+        </View>
+      </View>
+
+      {isClosed ? (
+        <View style={styles.closedTimeBanner}>
+          <Ionicons
+            name="time-outline"
+            size={15}
+            color={COLORS.red}
+          />
+          <Text style={styles.closedTimeText}>
+            Closed {formatDateTime(incident.ended_at)}
+          </Text>
+        </View>
+      ) : null}
+
+      <View style={styles.incidentActionGrid}>
+        {!isClosed ? (
+          <Pressable
+            disabled={isClosing}
+            onPress={onCloseIncident}
+            style={({ pressed }) => [
+              styles.incidentActionButton,
+              styles.incidentDangerAction,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Ionicons
+              name="close-circle-outline"
+              size={16}
+              color={COLORS.red}
+            />
+            <Text style={styles.incidentDangerActionText}>
+              {isClosing ? "Closing..." : "Close Incident"}
+            </Text>
+          </Pressable>
+        ) : null}
+
+        <Pressable
+          onPress={onIncidentInformation}
+          style={({ pressed }) => [
+            styles.incidentActionButton,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Ionicons
+            name="information-circle-outline"
+            size={16}
+            color={COLORS.maroon}
+          />
+          <Text style={styles.incidentActionText}>
+            Incident Information
+          </Text>
+        </Pressable>
+
+        <Pressable
+          onPress={onCasualtySummary}
+          style={({ pressed }) => [
+            styles.incidentActionButton,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Ionicons
+            name="people-outline"
+            size={16}
+            color={COLORS.maroon}
+          />
+          <Text style={styles.incidentActionText}>
+            Casualty Summary
+          </Text>
+        </Pressable>
+
+        <Pressable
+          onPress={onManageReports}
+          style={({ pressed }) => [
+            styles.incidentActionButton,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Ionicons
+            name="file-tray-full-outline"
+            size={16}
+            color={COLORS.maroon}
+          />
+          <Text style={styles.incidentActionText}>
+            Manage Reports
+          </Text>
+        </Pressable>
+
+        <Pressable
+          disabled={isExporting}
+          onPress={onExportReport}
+          style={({ pressed }) => [
+            styles.incidentActionButton,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Ionicons
+            name="download-outline"
+            size={16}
+            color={COLORS.maroon}
+          />
+          <Text style={styles.incidentActionText}>
+            {isExporting ? "Exporting..." : "Export Report"}
+          </Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 function FilterCheckbox({
   label,
   selected,
@@ -463,9 +727,12 @@ function FilterCheckbox({
 
 export default function RecordsScreen() {
   const [records, setRecords] = useState<CasualtyRecord[]>([]);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] =
     useState<FilterOption>("All");
+  const [activeIncidentFilter, setActiveIncidentFilter] =
+    useState<IncidentFilterOption>("All Incidents");
   const [
     activeReviewFilters,
     setActiveReviewFilters,
@@ -502,6 +769,10 @@ export default function RecordsScreen() {
     : fieldResponderReviewFilters;
   const [filtersExpanded, setFiltersExpanded] =
     useState(false);
+  const [closingIncidentId, setClosingIncidentId] =
+    useState<string | null>(null);
+  const [exportingIncidentId, setExportingIncidentId] =
+    useState<string | null>(null);
 
   const loadRecords = useCallback(async () => {
     try {
@@ -523,7 +794,21 @@ export default function RecordsScreen() {
 
       setIsGuestMode(false);
 
+      if (isAdminRecordsRole(user?.role ?? null)) {
+        const [incidentData, casualtyData] = await Promise.all([
+          getIncidents({
+            scope: "all",
+          }),
+          getCasualties(),
+        ]);
+
+        setIncidents(incidentData);
+        setRecords(casualtyData);
+        return;
+      }
+
       const data = await getCasualties();
+      setIncidents([]);
       setRecords(data);
     } catch (error) {
       console.error("Failed to load casualty records:", error);
@@ -560,6 +845,7 @@ export default function RecordsScreen() {
         if (!token) {
           if (isMounted) {
             setRecords([]);
+            setIncidents([]);
             setErrorMessage(null);
             setIsGuestMode(true);
             setCurrentUserRole(null);
@@ -574,10 +860,19 @@ export default function RecordsScreen() {
           setCurrentResponderAssignment(responderAssignment);
         }
 
-        const data = await getCasualties();
+        const isAdminView = isAdminRecordsRole(user?.role ?? null);
+        const [incidentData, casualtyData] = isAdminView
+          ? await Promise.all([
+              getIncidents({
+                scope: "all",
+              }),
+              getCasualties(),
+            ])
+          : [[], await getCasualties()];
 
         if (isMounted) {
-          setRecords(data);
+          setIncidents(incidentData);
+          setRecords(casualtyData);
           setErrorMessage(null);
         }
       } catch (error) {
@@ -586,6 +881,7 @@ export default function RecordsScreen() {
         if (isMounted) {
           if (isAuthenticationTokenError(error)) {
             setRecords([]);
+            setIncidents([]);
             setErrorMessage(null);
             setIsGuestMode(true);
             return;
@@ -694,6 +990,142 @@ export default function RecordsScreen() {
     useSaResponderFilters,
   ]);
 
+  const isAdminRecordsView = isAdminRecordsRole(currentUserRole);
+
+  const casualtyCountByIncidentId = useMemo(() => {
+    return records.reduce<Record<string, number>>((counts, record) => {
+      const incidentId = record.incident?.id;
+
+      if (incidentId) {
+        counts[incidentId] = (counts[incidentId] ?? 0) + 1;
+      }
+
+      return counts;
+    }, {});
+  }, [records]);
+
+  const filteredIncidents = useMemo(() => {
+    const normalizedSearch = searchQuery.trim().toLowerCase();
+
+    return incidents
+      .filter((incident) => {
+        const isClosed =
+          Boolean(incident.ended_at) || incident.status === "closed";
+        const matchesFilter =
+          activeIncidentFilter === "All Incidents" ||
+          (activeIncidentFilter === "Active Incidents" && !isClosed) ||
+          (activeIncidentFilter === "Closed Incidents" && isClosed);
+        const searchableText = [
+          incident.incident_name,
+          incident.incident_code,
+          incident.disaster_type,
+          getIncidentLocation(incident),
+          incident.status,
+        ]
+          .join(" ")
+          .toLowerCase();
+
+        return (
+          matchesFilter &&
+          (normalizedSearch.length === 0 ||
+            searchableText.includes(normalizedSearch))
+        );
+      })
+      .sort(
+        (first, second) =>
+          new Date(second.started_at).getTime() -
+          new Date(first.started_at).getTime(),
+      );
+  }, [activeIncidentFilter, incidents, searchQuery]);
+
+  function handleIncidentInformation(incident: Incident) {
+    router.push({
+      pathname: "/incidents",
+      params: {
+        incidentId: incident.id,
+        incidentName: incident.incident_name,
+      },
+    } as never);
+  }
+
+  function handleCasualtySummary(incident: Incident) {
+    router.push({
+      pathname: "/verification-review",
+      params: {
+        incidentId: incident.id,
+        incidentName: incident.incident_name,
+      },
+    } as never);
+  }
+
+  function handleManageReports(incident: Incident) {
+    router.push({
+      pathname: "/verification-review",
+      params: {
+        incidentId: incident.id,
+        incidentName: incident.incident_name,
+      },
+    } as never);
+  }
+
+  function handleCloseIncidentRecord(incident: Incident) {
+    Alert.alert(
+      "Close incident",
+      `Close ${incident.incident_name}? The closed time will be recorded by the server.`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Close",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setClosingIncidentId(incident.id);
+              const closed = await closeIncident(incident.id);
+              setIncidents((current) =>
+                current.map((item) =>
+                  item.id === closed.id ? closed : item,
+                ),
+              );
+            } catch (error) {
+              Alert.alert(
+                "Unable to close incident",
+                error instanceof Error
+                  ? error.message
+                  : "Please try again.",
+              );
+            } finally {
+              setClosingIncidentId(null);
+            }
+          },
+        },
+      ],
+    );
+  }
+
+  async function handleExportIncidentReport(incident: Incident) {
+    try {
+      setExportingIncidentId(incident.id);
+      await generateIncidentSitrep(incident.id);
+      const file = await downloadIncidentExport(
+        incident.id,
+        "sitrep-pdf",
+      );
+      Alert.alert("Export ready", `Incident report saved: ${file}`);
+    } catch (error) {
+      Alert.alert(
+        "Unable to export report",
+        error instanceof Error
+          ? error.message
+          : "Please try again.",
+      );
+    } finally {
+      setExportingIncidentId(null);
+    }
+  }
+
   if (isLoading) {
     return (
       <View style={styles.centerState}>
@@ -705,6 +1137,168 @@ export default function RecordsScreen() {
         <Text style={styles.centerStateText}>
           Loading casualty records...
         </Text>
+      </View>
+    );
+  }
+
+  if (isAdminRecordsView) {
+    const activeIncidentCount = incidents.filter(
+      (incident) =>
+        !incident.ended_at && incident.status !== "closed",
+    ).length;
+    const closedIncidentCount = incidents.filter(
+      (incident) =>
+        Boolean(incident.ended_at) || incident.status === "closed",
+    ).length;
+
+    return (
+      <View style={styles.screen}>
+        <StatusBar
+          barStyle="light-content"
+          backgroundColor={COLORS.maroon}
+        />
+
+        <SafeAreaView
+          edges={["top"]}
+          style={styles.headerSafeArea}
+        >
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>
+              Incident Records
+            </Text>
+
+            <Text style={styles.headerSubtitle}>
+              {incidents.length} total {"\u00B7"} {activeIncidentCount} active {"\u00B7"}{" "}
+              {closedIncidentCount} closed
+            </Text>
+
+            <View style={styles.searchBar}>
+              <Ionicons
+                name="search-outline"
+                size={19}
+                color="rgba(255,255,255,0.72)"
+              />
+
+              <TextInput
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                style={styles.searchInput}
+                placeholder="Search incident, unit, or hazard..."
+                placeholderTextColor="rgba(255,255,255,0.65)"
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="search"
+              />
+            </View>
+          </View>
+        </SafeAreaView>
+
+        <View style={styles.filterSection}>
+          <FlatList
+            horizontal
+            data={incidentFilters}
+            keyExtractor={(item) => item}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterList}
+            renderItem={({ item }) => {
+              const isActive = activeIncidentFilter === item;
+
+              return (
+                <Pressable
+                  onPress={() => setActiveIncidentFilter(item)}
+                  style={({ pressed }) => [
+                    styles.filterChip,
+                    isActive && styles.filterChipActive,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.filterChipText,
+                      isActive && styles.filterChipTextActive,
+                    ]}
+                  >
+                    {item}
+                  </Text>
+                </Pressable>
+              );
+            }}
+          />
+        </View>
+
+        {errorMessage ? (
+          <View style={styles.errorBanner}>
+            <Ionicons
+              name="alert-circle-outline"
+              size={20}
+              color={COLORS.red}
+            />
+            <View style={styles.errorContent}>
+              <Text style={styles.errorTitle}>
+                Unable to load incident records
+              </Text>
+              <Text style={styles.errorText}>{errorMessage}</Text>
+            </View>
+            <Pressable
+              onPress={() => {
+                void handleRefresh();
+              }}
+              style={styles.retryButton}
+            >
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        <FlatList
+          data={filteredIncidents}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <IncidentRecordCard
+              incident={item}
+              casualtyCount={
+                casualtyCountByIncidentId[item.id] ?? 0
+              }
+              onCloseIncident={() => handleCloseIncidentRecord(item)}
+              onIncidentInformation={() =>
+                handleIncidentInformation(item)
+              }
+              onCasualtySummary={() => handleCasualtySummary(item)}
+              onManageReports={() => handleManageReports(item)}
+              onExportReport={() => {
+                void handleExportIncidentReport(item);
+              }}
+              isClosing={closingIncidentId === item.id}
+              isExporting={exportingIncidentId === item.id}
+            />
+          )}
+          style={styles.list}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              colors={[COLORS.maroon]}
+              tintColor={COLORS.maroon}
+            />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Ionicons
+                name="file-tray-outline"
+                size={48}
+                color={COLORS.secondaryText}
+              />
+              <Text style={styles.emptyTitle}>
+                No incident records found
+              </Text>
+              <Text style={styles.emptyDescription}>
+                Pull down to refresh or change the selected incident filter.
+              </Text>
+            </View>
+          }
+        />
       </View>
     );
   }
@@ -1198,6 +1792,22 @@ const styles = StyleSheet.create({
     },
   },
 
+  incidentRecordCard: {
+    padding: 15,
+    borderRadius: 17,
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    elevation: 3,
+    shadowColor: "#728099",
+    shadowOpacity: 0.1,
+    shadowRadius: 9,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+  },
+
   recordCardPressed: {
     opacity: 0.78,
     transform: [{ scale: 0.99 }],
@@ -1220,6 +1830,16 @@ const styles = StyleSheet.create({
   avatarText: {
     fontSize: 14,
     fontWeight: "900",
+  },
+
+  incidentAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 11,
+    backgroundColor: COLORS.paleRed,
   },
 
   recordMain: {
@@ -1256,6 +1876,96 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.border,
     marginTop: 12,
     marginBottom: 10,
+  },
+
+  incidentInfoGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 9,
+    marginTop: 13,
+  },
+
+  incidentInfoItem: {
+    width: "48%",
+    minHeight: 62,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: "#F8FAFC",
+    padding: 10,
+  },
+
+  incidentInfoLabel: {
+    color: COLORS.secondaryText,
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+
+  incidentInfoValue: {
+    color: COLORS.text,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "800",
+    marginTop: 5,
+  },
+
+  closedTimeBanner: {
+    minHeight: 36,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    marginTop: 11,
+    borderRadius: 11,
+    paddingHorizontal: 11,
+    backgroundColor: COLORS.paleRed,
+  },
+
+  closedTimeText: {
+    color: COLORS.red,
+    fontSize: 11,
+    fontWeight: "800",
+  },
+
+  incidentActionGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 9,
+    marginTop: 12,
+  },
+
+  incidentActionButton: {
+    flexGrow: 1,
+    flexBasis: "47%",
+    minHeight: 42,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: "#F8FAFC",
+    paddingHorizontal: 10,
+  },
+
+  incidentDangerAction: {
+    borderColor: "#F4C3C5",
+    backgroundColor: COLORS.paleRed,
+  },
+
+  incidentActionText: {
+    color: COLORS.maroon,
+    fontSize: 11,
+    fontWeight: "900",
+    textAlign: "center",
+  },
+
+  incidentDangerActionText: {
+    color: COLORS.red,
+    fontSize: 11,
+    fontWeight: "900",
+    textAlign: "center",
   },
 
   recordBottomRow: {
