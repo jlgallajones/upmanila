@@ -1068,6 +1068,17 @@ export default function HomeDashboardScreen() {
             />
           ) : null}
 
+          {isAdminAccount ? (
+            <QuickAction
+              icon="warning-outline"
+              label="Manage Incidents"
+              caption="Reports"
+              iconColor={COLORS.maroon}
+              iconBackground="#F5E9EB"
+              onPress={() => router.push("/incidents" as never)}
+            />
+          ) : null}
+
           {!hideDataEntryQuickLinks ? (
             <QuickAction
               icon="document-text-outline"

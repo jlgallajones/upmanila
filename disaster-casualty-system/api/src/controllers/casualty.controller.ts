@@ -537,18 +537,6 @@ function validateTransportRecord(
     return false;
   }
 
-  if (
-    transportRecord.transportRequired === "yes" &&
-    !transportRecord.receivingFacilityId
-  ) {
-    response.status(400).json({
-      success: false,
-      message:
-        "Receiving facility is required when transport is required.",
-    });
-    return false;
-  }
-
   const arrivedSceneAt = transportRecord.arrivedSceneAt
     ? new Date(transportRecord.arrivedSceneAt)
     : null;

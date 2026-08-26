@@ -1,5 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
-import { router, useFocusEffect } from "expo-router";
+import {
+  router,
+  useFocusEffect,
+  useLocalSearchParams,
+} from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -216,6 +220,10 @@ function matchesFilter(record: CasualtyRecord, filter: FilterOption) {
 }
 
 export default function VerificationReviewScreen() {
+  const params = useLocalSearchParams<{
+    incidentId?: string;
+    incidentName?: string;
+  }>();
   const [records, setRecords] = useState<CasualtyRecord[]>([]);
   const [currentUserRole, setCurrentUserRole] = useState<
     string | null
@@ -235,6 +243,10 @@ export default function VerificationReviewScreen() {
   const [isSavingReview, setIsSavingReview] = useState(false);
 
   const canReview = canReviewRecords(currentUserRole);
+  const incidentFilterName =
+    typeof params.incidentName === "string"
+      ? params.incidentName
+      : null;
   const visibleFilters = canReview
     ? filters
     : filters.filter((filter) => filter !== "Needs Review");
@@ -280,9 +292,20 @@ export default function VerificationReviewScreen() {
 
   const filteredRecords = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
+    const selectedIncidentId =
+      typeof params.incidentId === "string"
+        ? params.incidentId
+        : null;
 
     return records
       .filter((record) => {
+        if (
+          selectedIncidentId &&
+          record.incident.id !== selectedIncidentId
+        ) {
+          return false;
+        }
+
         if (!matchesFilter(record, activeFilter)) {
           return false;
         }
@@ -307,7 +330,7 @@ export default function VerificationReviewScreen() {
         return searchable.includes(normalizedQuery);
       })
       .sort(compareVerificationRecords);
-  }, [activeFilter, records, searchQuery]);
+  }, [activeFilter, params.incidentId, records, searchQuery]);
 
   async function handleRefresh() {
     try {
@@ -580,6 +603,24 @@ export default function VerificationReviewScreen() {
         </View>
       </SafeAreaView>
 
+      {incidentFilterName ? (
+        <View style={styles.incidentFilterBanner}>
+          <Ionicons
+            name="warning-outline"
+            size={18}
+            color={COLORS.maroon}
+          />
+          <View style={styles.incidentFilterTextGroup}>
+            <Text style={styles.incidentFilterLabel}>
+              Managing reports for
+            </Text>
+            <Text style={styles.incidentFilterName} numberOfLines={1}>
+              {incidentFilterName}
+            </Text>
+          </View>
+        </View>
+      ) : null}
+
       <View style={styles.filterSection}>
         <FlatList
           horizontal
@@ -811,6 +852,34 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: 14,
     paddingLeft: 9,
+  },
+  incidentFilterBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: SCREEN_PADDING,
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E7D4D5",
+    backgroundColor: COLORS.white,
+    gap: 10,
+  },
+  incidentFilterTextGroup: {
+    flex: 1,
+    minWidth: 0,
+  },
+  incidentFilterLabel: {
+    color: COLORS.secondaryText,
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  incidentFilterName: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: "900",
+    marginTop: 2,
   },
   filterSection: {
     paddingVertical: 12,

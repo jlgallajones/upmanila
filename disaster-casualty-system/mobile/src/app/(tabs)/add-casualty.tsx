@@ -4562,7 +4562,371 @@ export default function AddCasualtyScreen() {
     );
   }
 
+  function validateOptionalDateTime(
+    value: string,
+    title: string,
+    label: string,
+  ): boolean {
+    if (!value.trim()) {
+      return true;
+    }
+
+    if (getValidDateTimeInput(value)) {
+      return true;
+    }
+
+    Alert.alert(title, `Enter ${label} using mm/dd/yyyy hh:mm.`);
+    return false;
+  }
+
+  function validatePartialCurrentStep(): boolean {
+    switch (stepName) {
+      case "Safety":
+        return validateOptionalDateTime(
+          form.ppeUseTime,
+          "Invalid PPE time",
+          "Time of PPE Use",
+        );
+
+      case "Intro":
+      case "General Information":
+      case "Incident":
+        if (!form.incidentId && currentUserId) {
+          Alert.alert(
+            "Incident required",
+            "Select the incident before submitting this casualty.",
+          );
+          return false;
+        }
+
+        if (!isInRange(form.latitude, -90, 90)) {
+          Alert.alert(
+            "Invalid latitude",
+            "Latitude must be from -90 to 90.",
+          );
+          return false;
+        }
+
+        if (!isInRange(form.longitude, -180, 180)) {
+          Alert.alert(
+            "Invalid longitude",
+            "Longitude must be from -180 to 180.",
+          );
+          return false;
+        }
+
+        return (
+          validateOptionalDateTime(
+            form.arrivedFacilityTime,
+            "Invalid arrival time",
+            "arrival time",
+          ) &&
+          validateOptionalDateTime(
+            form.disasterPlanActivationTime,
+            "Invalid activation time",
+            "disaster plan activation time",
+          )
+        );
+
+      case "Info":
+      case "Patient Information":
+      case "Personal":
+        if (form.dateOfBirth.trim()) {
+          const dateOfBirth = getValidDateInput(form.dateOfBirth);
+
+          if (!dateOfBirth) {
+            Alert.alert(
+              "Invalid date of birth",
+              "Enter a valid date using mm/dd/yyyy.",
+            );
+            return false;
+          }
+
+          if (dateOfBirth > new Date()) {
+            Alert.alert(
+              "Invalid date of birth",
+              "Date of birth cannot be in the future.",
+            );
+            return false;
+          }
+        }
+
+        return true;
+
+      case "Triage":
+        return (
+          validateOptionalDateTime(
+            form.triageTime,
+            "Invalid triage time",
+            "triage time",
+          ) &&
+          validateOptionalDateTime(
+            form.hospitalAdmissionTime,
+            "Invalid admission time",
+            "admission time",
+          ) &&
+          validateOptionalDateTime(
+            form.hospitalDischargeTime,
+            "Invalid discharge time",
+            "discharge time",
+          )
+        );
+
+      case "Management": {
+        if (
+          form.numberOfOperatingRooms.trim() &&
+          parseOptionalInteger(form.numberOfOperatingRooms) === undefined
+        ) {
+          Alert.alert(
+            "Invalid operating room count",
+            "Enter the number of operating rooms as a whole number.",
+          );
+          return false;
+        }
+
+        const dateFields: Array<[string, string, string]> = [
+          [
+            form.edResuscitationTime,
+            "Invalid resuscitation time",
+            "resuscitation room use time",
+          ],
+          [
+            form.surgicalInterventionStartTime,
+            "Invalid surgery time",
+            "surgical intervention time",
+          ],
+          [
+            form.operatingRoomTime,
+            "Invalid operating room time",
+            "operating room use time",
+          ],
+          [form.xrayTime, "Invalid X-ray time", "X-ray use time"],
+          [
+            form.ultrasoundTime,
+            "Invalid ultrasound time",
+            "ultrasound use time",
+          ],
+          [form.ctTime, "Invalid CT scan time", "CT scan use time"],
+          [
+            form.icuAdmissionTime,
+            "Invalid ICU admission time",
+            "ICU admission time",
+          ],
+          [
+            form.ventilationStartTime,
+            "Invalid ventilation time",
+            "mechanical ventilation use time",
+          ],
+          [
+            form.ventilationEndTime,
+            "Invalid ventilation time",
+            "mechanical ventilation discontinuation time",
+          ],
+        ];
+
+        return dateFields.every(([value, title, label]) =>
+          validateOptionalDateTime(value, title, label),
+        );
+      }
+
+      case "Disposition":
+        return (
+          validateOptionalDateTime(
+            form.icuTransferOutTime,
+            "Invalid ward transfer time",
+            "transfer time",
+          ) &&
+          validateOptionalDateTime(
+            form.hospitalDischargeTime,
+            "Invalid discharge time",
+            "discharge time",
+          )
+        );
+
+      case "Transport": {
+        const arrivedSceneAt = form.arrivedSceneTime.trim()
+          ? getValidDateTimeInput(form.arrivedSceneTime)
+          : null;
+        const departedSceneAt = form.departedSceneTime.trim()
+          ? getValidDateTimeInput(form.departedSceneTime)
+          : null;
+        const arrivedFacilityAt = form.arrivedFacilityTime.trim()
+          ? getValidDateTimeInput(form.arrivedFacilityTime)
+          : null;
+
+        if (form.arrivedSceneTime.trim() && !arrivedSceneAt) {
+          Alert.alert(
+            "Invalid EMS scene arrival time",
+            "Enter EMS scene arrival time using mm/dd/yyyy hh:mm.",
+          );
+          return false;
+        }
+
+        if (form.departedSceneTime.trim() && !departedSceneAt) {
+          Alert.alert(
+            "Invalid departed time",
+            "Enter departed scene time using mm/dd/yyyy hh:mm.",
+          );
+          return false;
+        }
+
+        if (form.arrivedFacilityTime.trim() && !arrivedFacilityAt) {
+          Alert.alert(
+            "Invalid arrival time",
+            "Enter arrived facility time using mm/dd/yyyy hh:mm.",
+          );
+          return false;
+        }
+
+        if (
+          arrivedSceneAt &&
+          departedSceneAt &&
+          departedSceneAt < arrivedSceneAt
+        ) {
+          Alert.alert(
+            "Invalid transport times",
+            "Departed scene time cannot be before EMS scene arrival time.",
+          );
+          return false;
+        }
+
+        if (
+          departedSceneAt &&
+          arrivedFacilityAt &&
+          arrivedFacilityAt < departedSceneAt
+        ) {
+          Alert.alert(
+            "Invalid transport times",
+            "Arrived facility time cannot be before departed scene time.",
+          );
+          return false;
+        }
+
+        return true;
+      }
+
+      case "Treatment":
+      case "Status":
+        return (
+          validateOptionalDateTime(
+            form.stabilizationStartedTime,
+            "Invalid care start time",
+            "stabilization start time",
+          ) &&
+          validateOptionalDateTime(
+            form.stabilizedTime,
+            "Invalid stabilized time",
+            "stabilized time",
+          )
+        );
+
+      case "Hospital Care":
+        return validateHospitalCareDatesOnly();
+
+      case "Address":
+      case "Remarks":
+      default:
+        return true;
+    }
+  }
+
+  function validateHospitalCareDatesOnly(): boolean {
+    const dateFields: Array<[string, string, string]> = [
+      [
+        form.stabilizationStartedTime,
+        "Invalid care start time",
+        "stabilization start time",
+      ],
+      [form.stabilizedTime, "Invalid stabilized time", "stabilized time"],
+      [
+        form.arrivedFacilityTime,
+        "Invalid arrival time",
+        "facility arrival time",
+      ],
+      [
+        form.edResuscitationTime,
+        "Invalid resuscitation time",
+        "ED resuscitation room time",
+      ],
+      [
+        form.edAdmissionTime,
+        "Invalid ED admission time",
+        "ED admission time",
+      ],
+      [
+        form.edTransferOutTime,
+        "Invalid ED transfer out time",
+        "ED transfer out time",
+      ],
+      [
+        form.hospitalAdmissionTime,
+        "Invalid hospital admission time",
+        "hospital admission time",
+      ],
+      [
+        form.hospitalDischargeTime,
+        "Invalid hospital discharge time",
+        "hospital discharge time",
+      ],
+      [
+        form.surgicalInterventionStartTime,
+        "Invalid surgery start time",
+        "surgery start time",
+      ],
+      [
+        form.surgicalInterventionEndTime,
+        "Invalid surgery end time",
+        "surgery end time",
+      ],
+      [
+        form.operatingRoomTime,
+        "Invalid operating room time",
+        "operating room time",
+      ],
+      [form.xrayTime, "Invalid X-ray time", "X-ray time"],
+      [
+        form.ultrasoundTime,
+        "Invalid ultrasound time",
+        "ultrasound time",
+      ],
+      [form.ctTime, "Invalid CT scan time", "CT scan time"],
+      [
+        form.icuAdmissionTime,
+        "Invalid ICU admission time",
+        "ICU admission time",
+      ],
+      [
+        form.icuTransferOutTime,
+        "Invalid ICU transfer out time",
+        "ICU transfer out time",
+      ],
+      [
+        form.ventilationStartTime,
+        "Invalid ventilation start time",
+        "ventilation start time",
+      ],
+      [
+        form.ventilationEndTime,
+        "Invalid ventilation end time",
+        "ventilation end time",
+      ],
+      [form.deathTime, "Invalid death time", "death time"],
+    ];
+
+    return dateFields.every(([value, title, label]) =>
+      validateOptionalDateTime(value, title, label),
+    );
+  }
+
   function validateCurrentStep(): boolean {
+    if (
+      isFieldResponderFlow ||
+      isSaResponderFlow ||
+      isHealthcareDocumenterFlow
+    ) {
+      return validatePartialCurrentStep();
+    }
+
     switch (stepName) {
       case "Safety":
         if (!form.responderSafetyStatus.trim()) {

@@ -938,6 +938,7 @@ function IncidentCard({
   onViewEdResources,
   onViewHospitalResources,
   onViewMorbidityMortality,
+  onManageReports,
   onGenerateSitrep,
   isGeneratingSitrep,
 }: {
@@ -958,6 +959,7 @@ function IncidentCard({
   onViewEdResources: () => void;
   onViewHospitalResources: () => void;
   onViewMorbidityMortality: () => void;
+  onManageReports: () => void;
   onGenerateSitrep: () => void;
   isGeneratingSitrep: boolean;
 }) {
@@ -1029,6 +1031,23 @@ function IncidentCard({
           Started {formatDate(incident.started_at)}
         </Text>
       </View>
+
+      <Pressable
+        onPress={onManageReports}
+        style={({ pressed }) => [
+          styles.manageReportsButton,
+          pressed && styles.pressed,
+        ]}
+      >
+        <Ionicons
+          name="file-tray-full-outline"
+          size={17}
+          color={COLORS.white}
+        />
+        <Text style={styles.manageReportsButtonText}>
+          Manage Reports
+        </Text>
+      </Pressable>
 
       <Pressable
         onPress={onEditTimeline}
@@ -1662,6 +1681,16 @@ export default function IncidentsPage() {
   function handleAddCasualty(incident: Incident) {
     router.push({
       pathname: "/add-casualty",
+      params: {
+        incidentId: incident.id,
+        incidentName: incident.incident_name,
+      },
+    } as never);
+  }
+
+  function handleManageReports(incident: Incident) {
+    router.push({
+      pathname: "/verification-review",
       params: {
         incidentId: incident.id,
         incidentName: incident.incident_name,
@@ -3649,6 +3678,7 @@ export default function IncidentsPage() {
             onViewMorbidityMortality={() => {
               void handleOpenMorbidityMortality(item);
             }}
+            onManageReports={() => handleManageReports(item)}
             onGenerateSitrep={() => {
               void handleGenerateSitrep(item);
             }}
@@ -6709,6 +6739,21 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   addCasualtyButtonText: {
+    color: COLORS.white,
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  manageReportsButton: {
+    minHeight: 40,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 11,
+    marginTop: 10,
+    backgroundColor: COLORS.maroon,
+    gap: 7,
+  },
+  manageReportsButtonText: {
     color: COLORS.white,
     fontSize: 12,
     fontWeight: "900",
