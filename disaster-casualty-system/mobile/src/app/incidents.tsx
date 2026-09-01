@@ -101,12 +101,6 @@ const OPERATION_WRITER_ROLES = [
   "super_admin",
   "admin",
   "administrator",
-  "field_responder",
-  "responder",
-  "sa_responder",
-  "encoder",
-  "documenter",
-  "medical_personnel",
 ] as const;
 
 const COORDINATION_RATING_OPTIONS: Array<{
@@ -922,6 +916,7 @@ function formatMinuteLabel(value: number): string {
 
 function IncidentCard({
   incident,
+  canManageOperations,
   canClose,
   onAddCasualty,
   onClose,
@@ -943,6 +938,7 @@ function IncidentCard({
   isGeneratingSitrep,
 }: {
   incident: Incident;
+  canManageOperations: boolean;
   canClose: boolean;
   onAddCasualty: () => void;
   onClose: () => void;
@@ -1032,263 +1028,152 @@ function IncidentCard({
         </Text>
       </View>
 
-      <Pressable
-        onPress={onManageReports}
-        style={({ pressed }) => [
-          styles.manageReportsButton,
-          pressed && styles.pressed,
-        ]}
-      >
-        <Ionicons
-          name="file-tray-full-outline"
-          size={17}
-          color={COLORS.white}
-        />
-        <Text style={styles.manageReportsButtonText}>
-          Manage Reports
-        </Text>
-      </Pressable>
+      {canManageOperations ? (
+        <>
+          <Pressable
+            onPress={onManageReports}
+            style={({ pressed }) => [
+              styles.manageReportsButton,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Ionicons
+              name="file-tray-full-outline"
+              size={17}
+              color={COLORS.white}
+            />
+            <Text style={styles.manageReportsButtonText}>
+              Manage Reports
+            </Text>
+          </Pressable>
 
-      <Pressable
-        onPress={onEditTimeline}
-        style={({ pressed }) => [
-          styles.timelineButton,
-          pressed && styles.pressed,
-        ]}
-      >
-        <Ionicons
-          name="time-outline"
-          size={17}
-          color={COLORS.maroon}
-        />
-        <Text style={styles.timelineButtonText}>
-          Response Timeline
-        </Text>
-      </Pressable>
+          <Pressable
+            onPress={onEditTimeline}
+            style={({ pressed }) => [
+              styles.timelineButton,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Ionicons
+              name="time-outline"
+              size={17}
+              color={COLORS.maroon}
+            />
+            <Text style={styles.timelineButtonText}>
+              Response Timeline
+            </Text>
+          </Pressable>
 
-      <View style={styles.operationActionRow}>
-        <Pressable
-          onPress={onManageStaff}
-          style={({ pressed }) => [
-            styles.operationActionButton,
-            pressed && styles.pressed,
-          ]}
-        >
-          <Ionicons
-            name="people-outline"
-            size={16}
-            color={COLORS.blue}
-          />
-          <Text style={styles.operationActionText}>DMMP Staff</Text>
-        </Pressable>
+          <View style={styles.operationActionRow}>
+            <Pressable
+              onPress={onManageStaff}
+              style={({ pressed }) => [
+                styles.operationActionButton,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Ionicons
+                name="people-outline"
+                size={16}
+                color={COLORS.blue}
+              />
+              <Text style={styles.operationActionText}>
+                DMMP Staff
+              </Text>
+            </Pressable>
 
-        <Pressable
-          onPress={onEditCoordination}
-          style={({ pressed }) => [
-            styles.operationActionButton,
-            pressed && styles.pressed,
-          ]}
-        >
-          <Ionicons
-            name="clipboard-outline"
-            size={16}
-            color={COLORS.orange}
-          />
-          <Text style={styles.operationActionText}>
-            Coordination
-          </Text>
-        </Pressable>
-      </View>
+            <Pressable
+              onPress={onEditCoordination}
+              style={({ pressed }) => [
+                styles.operationActionButton,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Ionicons
+                name="clipboard-outline"
+                size={16}
+                color={COLORS.orange}
+              />
+              <Text style={styles.operationActionText}>
+                Coordination
+              </Text>
+            </Pressable>
+          </View>
 
-      <Pressable
-        onPress={onEditResponderSafety}
-        style={({ pressed }) => [
-          styles.triageButton,
-          pressed && styles.pressed,
-        ]}
-      >
-        <Ionicons
-          name="shield-checkmark-outline"
-          size={17}
-          color={COLORS.maroon}
-        />
-        <Text style={styles.timelineButtonText}>
-          Responder Safety
-        </Text>
-      </Pressable>
+          {[
+            [
+              "shield-checkmark-outline",
+              "Responder Safety",
+              onEditResponderSafety,
+            ],
+            [
+              "power-outline",
+              "Deactivation & Continuity",
+              onEditDeactivationContinuity,
+            ],
+            ["medkit-outline", "On-site Triage", onViewOnsiteTriage],
+            ["pulse-outline", "Facility Triage", onViewFacilityTriage],
+            ["bandage-outline", "On-site Care", onViewOnsiteCare],
+            ["car-outline", "Scene Clearance", onViewSceneClearance],
+            ["business-outline", "Distribution", onViewDistribution],
+            ["bed-outline", "ED Resources", onViewEdResources],
+            [
+              "storefront-outline",
+              "Hospital Resources",
+              onViewHospitalResources,
+            ],
+            [
+              "heart-outline",
+              "Morbidity & Mortality",
+              onViewMorbidityMortality,
+            ],
+          ].map(([icon, label, onPress]) => (
+            <Pressable
+              key={label as string}
+              onPress={onPress as () => void}
+              style={({ pressed }) => [
+                styles.triageButton,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Ionicons
+                name={icon as keyof typeof Ionicons.glyphMap}
+                size={17}
+                color={COLORS.maroon}
+              />
+              <Text style={styles.timelineButtonText}>
+                {label as string}
+              </Text>
+            </Pressable>
+          ))}
 
-      <Pressable
-        onPress={onEditDeactivationContinuity}
-        style={({ pressed }) => [
-          styles.triageButton,
-          pressed && styles.pressed,
-        ]}
-      >
-        <Ionicons
-          name="power-outline"
-          size={17}
-          color={COLORS.maroon}
-        />
-        <Text style={styles.timelineButtonText}>
-          Deactivation & Continuity
-        </Text>
-      </Pressable>
-
-      <Pressable
-        onPress={onViewOnsiteTriage}
-        style={({ pressed }) => [
-          styles.triageButton,
-          pressed && styles.pressed,
-        ]}
-      >
-        <Ionicons
-          name="medkit-outline"
-          size={17}
-          color={COLORS.maroon}
-        />
-        <Text style={styles.timelineButtonText}>On-site Triage</Text>
-      </Pressable>
-
-      <Pressable
-        onPress={onViewFacilityTriage}
-        style={({ pressed }) => [
-          styles.triageButton,
-          pressed && styles.pressed,
-        ]}
-      >
-        <Ionicons
-          name="pulse-outline"
-          size={17}
-          color={COLORS.maroon}
-        />
-        <Text style={styles.timelineButtonText}>Facility Triage</Text>
-      </Pressable>
-
-      <Pressable
-        onPress={onViewOnsiteCare}
-        style={({ pressed }) => [
-          styles.triageButton,
-          pressed && styles.pressed,
-        ]}
-      >
-        <Ionicons
-          name="bandage-outline"
-          size={17}
-          color={COLORS.maroon}
-        />
-        <Text style={styles.timelineButtonText}>On-site Care</Text>
-      </Pressable>
-
-      <Pressable
-        onPress={onViewSceneClearance}
-        style={({ pressed }) => [
-          styles.triageButton,
-          pressed && styles.pressed,
-        ]}
-      >
-        <Ionicons
-          name="car-outline"
-          size={17}
-          color={COLORS.maroon}
-        />
-        <Text style={styles.timelineButtonText}>
-          Scene Clearance
-        </Text>
-      </Pressable>
-
-      <Pressable
-        onPress={onViewDistribution}
-        style={({ pressed }) => [
-          styles.triageButton,
-          pressed && styles.pressed,
-        ]}
-      >
-        <Ionicons
-          name="business-outline"
-          size={17}
-          color={COLORS.maroon}
-        />
-        <Text style={styles.timelineButtonText}>
-          Distribution
-        </Text>
-      </Pressable>
-
-      <Pressable
-        onPress={onViewEdResources}
-        style={({ pressed }) => [
-          styles.triageButton,
-          pressed && styles.pressed,
-        ]}
-      >
-        <Ionicons
-          name="bed-outline"
-          size={17}
-          color={COLORS.maroon}
-        />
-        <Text style={styles.timelineButtonText}>
-          ED Resources
-        </Text>
-      </Pressable>
-
-      <Pressable
-        onPress={onViewHospitalResources}
-        style={({ pressed }) => [
-          styles.triageButton,
-          pressed && styles.pressed,
-        ]}
-      >
-        <Ionicons
-          name="storefront-outline"
-          size={17}
-          color={COLORS.maroon}
-        />
-        <Text style={styles.timelineButtonText}>
-          Hospital Resources
-        </Text>
-      </Pressable>
-
-      <Pressable
-        onPress={onViewMorbidityMortality}
-        style={({ pressed }) => [
-          styles.triageButton,
-          pressed && styles.pressed,
-        ]}
-      >
-        <Ionicons
-          name="heart-outline"
-          size={17}
-          color={COLORS.maroon}
-        />
-        <Text style={styles.timelineButtonText}>
-          Morbidity & Mortality
-        </Text>
-      </Pressable>
-
-      <Pressable
-        disabled={isGeneratingSitrep}
-        onPress={onGenerateSitrep}
-        style={({ pressed }) => [
-          styles.sitrepButton,
-          isGeneratingSitrep && styles.disabledButton,
-          pressed && styles.pressed,
-        ]}
-      >
-        {isGeneratingSitrep ? (
-          <ActivityIndicator
-            size="small"
-            color={COLORS.green}
-          />
-        ) : (
-          <Ionicons
-            name="document-text-outline"
-            size={17}
-            color={COLORS.green}
-          />
-        )}
-        <Text style={styles.sitrepButtonText}>
-          {isGeneratingSitrep ? "Generating..." : "Generate SitRep"}
-        </Text>
-      </Pressable>
+          <Pressable
+            disabled={isGeneratingSitrep}
+            onPress={onGenerateSitrep}
+            style={({ pressed }) => [
+              styles.sitrepButton,
+              isGeneratingSitrep && styles.disabledButton,
+              pressed && styles.pressed,
+            ]}
+          >
+            {isGeneratingSitrep ? (
+              <ActivityIndicator
+                size="small"
+                color={COLORS.green}
+              />
+            ) : (
+              <Ionicons
+                name="document-text-outline"
+                size={17}
+                color={COLORS.green}
+              />
+            )}
+            <Text style={styles.sitrepButtonText}>
+              {isGeneratingSitrep ? "Generating..." : "Generate SitRep"}
+            </Text>
+          </Pressable>
+        </>
+      ) : null}
 
       {canClose ? (
         <Pressable
@@ -3706,6 +3591,7 @@ export default function IncidentsPage() {
         renderItem={({ item }) => (
           <IncidentCard
             incident={item}
+            canManageOperations={canUpdateOperations}
             canClose={canCreateIncident}
             onAddCasualty={() => handleAddCasualty(item)}
             onClose={() => handleCloseIncident(item)}

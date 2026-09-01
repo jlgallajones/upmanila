@@ -4,6 +4,12 @@ import { supabase } from "../config/supabase.js";
 import { getAuthenticatedUser } from "../middleware/auth.js";
 import { buildTriageAccuracySummary } from "../services/triage/accuracy-summary.js";
 
+const responderIncidentViewerRoles = new Set([
+  "responder",
+  "field_responder",
+  "sa_responder",
+]);
+
 type CreateIncidentRequest = {
   incidentName: string;
   disasterType: string;
@@ -737,6 +743,32 @@ export async function getIncidents(
     const includeAll =
       request.query.scope === "all" &&
       ["super_admin", "administrator", "admin"].includes(user.role);
+    let responderCreatorAdminId: string | null = null;
+
+    if (responderIncidentViewerRoles.has(user.role)) {
+      const { data: profile, error: profileError } = await supabase
+        .from("users")
+        .select("created_by")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profileError) {
+        throw new Error(
+          `Unable to load responder incident scope: ${profileError.message}`,
+        );
+      }
+
+      responderCreatorAdminId = profile?.created_by ?? null;
+
+      if (!responderCreatorAdminId) {
+        response.status(200).json({
+          success: true,
+          count: 0,
+          data: [],
+        });
+        return;
+      }
+    }
 
     let query = supabase
       .from("incidents")
@@ -752,10 +784,15 @@ export async function getIncidents(
         started_at,
         ended_at,
         status,
+        created_by,
         created_at,
         updated_at
       `)
       .order("started_at", { ascending: false });
+
+    if (responderCreatorAdminId) {
+      query = query.eq("created_by", responderCreatorAdminId);
+    }
 
     if (!includeAll) {
       query = query.is("ended_at", null);
@@ -837,10 +874,9 @@ export async function createIncident(
       return;
     }
 
-    const { data: existingIncident, error: existingError } =
-      await supabase
-        .from("incidents")
-        .select(`
+    let existingIncidentQuery = supabase
+      .from("incidents")
+      .select(`
           id,
           incident_code,
           incident_name,
@@ -852,14 +888,24 @@ export async function createIncident(
           started_at,
           ended_at,
           status,
+          created_by,
           created_at,
           updated_at
         `)
-        .ilike("incident_name", normalizedName)
-        .is("ended_at", null)
-        .order("started_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      .ilike("incident_name", normalizedName)
+      .is("ended_at", null)
+      .order("started_at", { ascending: false })
+      .limit(1);
+
+    if (creator.role !== "super_admin") {
+      existingIncidentQuery = existingIncidentQuery.eq(
+        "created_by",
+        user.id,
+      );
+    }
+
+    const { data: existingIncident, error: existingError } =
+      await existingIncidentQuery.maybeSingle();
 
     if (existingError) {
       throw new Error(
@@ -902,6 +948,7 @@ export async function createIncident(
         started_at,
         ended_at,
         status,
+        created_by,
         created_at,
         updated_at
       `)

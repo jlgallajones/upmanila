@@ -244,17 +244,26 @@ type CreateCasualtyRpcResult = {
 type LatestTriageAssessmentSummary = {
   id: string;
   casualty_incident_id: string;
+  triage_system: string;
   triage_category: string;
   responder_category: string | null;
   calculated_category: string | null;
   triage_stage: string;
   triaged_at: string;
+  location: string | null;
+  notes: string | null;
+  assessment_answers: Record<string, unknown> | null;
 };
 
 type LatestTransportRecordSummary = {
   id: string;
   casualty_incident_id: string;
   transport_required: string;
+  transport_mode: string;
+  ems_unit_type: string;
+  arrived_scene_at: string | null;
+  departed_scene_at: string | null;
+  arrived_facility_at: string | null;
   receiving_facility_id: string | null;
   notes: string | null;
   created_at: string;
@@ -354,14 +363,14 @@ async function attachLatestSummaries<
     supabase
       .from("casualty_triage_assessments")
       .select(
-        "id, casualty_incident_id, triage_category, responder_category, calculated_category, triage_stage, triaged_at",
+        "id, casualty_incident_id, triage_system, triage_category, responder_category, calculated_category, triage_stage, triaged_at, location, notes, assessment_answers",
       )
       .in("casualty_incident_id", recordIds)
       .order("triaged_at", { ascending: false }),
     supabase
       .from("casualty_transport_records")
       .select(
-        "id, casualty_incident_id, transport_required, receiving_facility_id, notes, created_at",
+        "id, casualty_incident_id, transport_required, transport_mode, ems_unit_type, arrived_scene_at, departed_scene_at, arrived_facility_at, receiving_facility_id, notes, created_at",
       )
       .in("casualty_incident_id", recordIds)
       .order("created_at", { ascending: false }),
@@ -449,6 +458,29 @@ async function ensureUniqueIdNumber(
   }
 
   return data?.[0]?.id ?? null;
+}
+
+function normalizeCasualtyIdUserCode(value: string): string {
+  return value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function getCasualtyIdSequenceFromNumber(
+  idNumber: string | null | undefined,
+  dateCode: string,
+  userCode: string,
+): number {
+  const match = new RegExp(
+    `^CAS:${dateCode}:${userCode}(\\d{3,})$`,
+    "i",
+  ).exec(idNumber ?? "");
+
+  if (!match) {
+    return 0;
+  }
+
+  const sequence = Number(match[1]);
+
+  return Number.isFinite(sequence) ? sequence : 0;
 }
 
 function validateTriageAssessment(
@@ -1592,6 +1624,22 @@ export async function getCasualties(
       typeof request.query.status === "string"
         ? request.query.status
         : undefined;
+    const fieldResponderLinks =
+      request.query.fieldResponderLinks === "true";
+    const canLoadFieldResponderLinks =
+      fieldResponderLinks &&
+      ["responder", "field_responder", "sa_responder"].includes(
+        user.role,
+      );
+
+    if (fieldResponderLinks && !incidentId) {
+      response.status(400).json({
+        success: false,
+        message:
+          "incidentId is required when loading Field Responder victim codes.",
+      });
+      return;
+    }
 
     let query = supabase
       .from("casualty_incidents")
@@ -1607,7 +1655,10 @@ export async function getCasualties(
       query = query.eq("current_status", status);
     }
 
-    if (shouldScopeToOwnCasualties(user.role)) {
+    if (
+      shouldScopeToOwnCasualties(user.role) &&
+      !canLoadFieldResponderLinks
+    ) {
       query = query.eq("encoded_by", user.id);
     }
 
@@ -1625,6 +1676,77 @@ export async function getCasualties(
       success: true,
       count: recordsWithSummaries.length,
       data: recordsWithSummaries,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getNextCasualtyIdSequence(
+  request: Request,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const rawUserCode =
+      typeof request.query.userCode === "string"
+        ? request.query.userCode
+        : "";
+    const rawDateCode =
+      typeof request.query.dateCode === "string"
+        ? request.query.dateCode
+        : "";
+    const userCode = normalizeCasualtyIdUserCode(rawUserCode);
+    const dateCode = rawDateCode.trim();
+
+    if (!userCode) {
+      response.status(400).json({
+        success: false,
+        message: "User code is required.",
+      });
+      return;
+    }
+
+    if (!/^\d{6}$/.test(dateCode)) {
+      response.status(400).json({
+        success: false,
+        message: "Date code must use MMDDYY format.",
+      });
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("casualties")
+      .select("id_number")
+      .ilike("id_number", `CAS:${dateCode}:${userCode}%`)
+      .is("deleted_at", null);
+
+    if (error) {
+      throw new Error(
+        `Unable to retrieve casualty ID sequence: ${error.message}`,
+      );
+    }
+
+    const highestSequence = (data ?? []).reduce((highest, record) => {
+      return Math.max(
+        highest,
+        getCasualtyIdSequenceFromNumber(
+          record.id_number,
+          dateCode,
+          userCode,
+        ),
+      );
+    }, 0);
+    const nextSequence = highestSequence + 1;
+
+    response.status(200).json({
+      success: true,
+      data: {
+        dateCode,
+        userCode,
+        nextSequence,
+        formattedSequence: String(nextSequence).padStart(3, "0"),
+      },
     });
   } catch (error) {
     next(error);
@@ -2297,6 +2419,14 @@ export async function createCasualtyTriageAssessment(
   try {
     const { id } = request.params;
     const user = getAuthenticatedUser(request);
+    const responderFunction =
+      request.header("x-dcms-responder-function") ??
+      request.header("X-DCMS-Responder-Function");
+    const isStabilizationResponderUpdate =
+      responderFunction === "sa_responder" &&
+      ["responder", "field_responder", "sa_responder"].includes(
+        user.role,
+      );
 
     if (!request.body) {
       response.status(400).json({
@@ -2333,7 +2463,10 @@ export async function createCasualtyTriageAssessment(
     }
 
     if (shouldScopeToOwnCasualties(user.role)) {
-      if (existingRecord.encoded_by !== user.id) {
+      if (
+        existingRecord.encoded_by !== user.id &&
+        !isStabilizationResponderUpdate
+      ) {
         response.status(404).json({
           success: false,
           message: "Casualty record not found.",
@@ -2341,7 +2474,10 @@ export async function createCasualtyTriageAssessment(
         return;
       }
 
-      if (existingRecord.verification_status !== "rejected") {
+      if (
+        !isStabilizationResponderUpdate &&
+        existingRecord.verification_status !== "rejected"
+      ) {
         response.status(403).json({
           success: false,
           message:
@@ -2513,6 +2649,14 @@ export async function createCasualtyTransportRecord(
   try {
     const { id } = request.params;
     const user = getAuthenticatedUser(request);
+    const responderFunction =
+      request.header("x-dcms-responder-function") ??
+      request.header("X-DCMS-Responder-Function");
+    const isStabilizationResponderUpdate =
+      responderFunction === "sa_responder" &&
+      ["responder", "field_responder", "sa_responder"].includes(
+        user.role,
+      );
 
     if (!request.body) {
       response.status(400).json({
@@ -2558,7 +2702,10 @@ export async function createCasualtyTransportRecord(
     }
 
     if (shouldScopeToOwnCasualties(user.role)) {
-      if (existingRecord.encoded_by !== user.id) {
+      if (
+        existingRecord.encoded_by !== user.id &&
+        !isStabilizationResponderUpdate
+      ) {
         response.status(404).json({
           success: false,
           message: "Casualty record not found.",
@@ -2566,7 +2713,10 @@ export async function createCasualtyTransportRecord(
         return;
       }
 
-      if (existingRecord.verification_status !== "rejected") {
+      if (
+        !isStabilizationResponderUpdate &&
+        existingRecord.verification_status !== "rejected"
+      ) {
         response.status(403).json({
           success: false,
           message:
@@ -2605,6 +2755,14 @@ export async function updateCasualty(
       casualtyOutcome,
     } = request.body;
     const user = getAuthenticatedUser(request);
+    const responderFunction =
+      request.header("x-dcms-responder-function") ??
+      request.header("X-DCMS-Responder-Function");
+    const isStabilizationResponderUpdate =
+      responderFunction === "sa_responder" &&
+      ["responder", "field_responder", "sa_responder"].includes(
+        user.role,
+      );
 
     if (
       !person &&
@@ -2666,7 +2824,10 @@ export async function updateCasualty(
     }
 
     if (shouldScopeToOwnCasualties(user.role)) {
-      if (existingRecord.encoded_by !== user.id) {
+      if (
+        existingRecord.encoded_by !== user.id &&
+        !isStabilizationResponderUpdate
+      ) {
         response.status(404).json({
           success: false,
           message: "Casualty record not found.",
@@ -2674,7 +2835,10 @@ export async function updateCasualty(
         return;
       }
 
-      if (existingRecord.verification_status !== "rejected") {
+      if (
+        !isStabilizationResponderUpdate &&
+        existingRecord.verification_status !== "rejected"
+      ) {
         response.status(403).json({
           success: false,
           message:

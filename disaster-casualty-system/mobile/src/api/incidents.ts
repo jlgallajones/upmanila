@@ -16,6 +16,7 @@ export type Incident = {
   started_at: string;
   ended_at: string | null;
   status: "draft" | "active" | "closed" | "archived";
+  created_by?: string | null;
   created_at?: string;
   updated_at?: string;
 };

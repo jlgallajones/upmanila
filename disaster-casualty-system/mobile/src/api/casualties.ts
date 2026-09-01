@@ -25,19 +25,37 @@ export type CasualtyRecord = {
   latest_triage_assessment?: {
     id: string;
     casualty_incident_id: string;
+    triage_system?: string;
     triage_category: string;
     responder_category: string | null;
     calculated_category: string | null;
     triage_stage: string;
     triaged_at: string;
+    location?: string | null;
+    notes?: string | null;
+    assessment_answers?: Record<string, unknown> | null;
   } | null;
   latest_transport_record?: {
     id: string;
     casualty_incident_id: string;
     transport_required: string;
+    transport_mode?: string;
+    ems_unit_type?: string;
+    arrived_scene_at?: string | null;
+    departed_scene_at?: string | null;
+    arrived_facility_at?: string | null;
     receiving_facility_id: string | null;
     notes: string | null;
     created_at: string;
+    receiving_facility?: {
+      id: string;
+      facility_name: string;
+      facility_level: string;
+      address: string | null;
+      barangay: string | null;
+      municipality: string | null;
+      province: string | null;
+    } | null;
   } | null;
 
   casualty: {
@@ -101,6 +119,16 @@ type CasualtyListResponse = {
   success: boolean;
   count: number;
   data: CasualtyRecord[];
+};
+
+type NextCasualtyIdSequenceResponse = {
+  success: boolean;
+  data: {
+    dateCode: string;
+    userCode: string;
+    nextSequence: number;
+    formattedSequence: string;
+  };
 };
 
 export type CasualtyStatusHistoryItem = {
@@ -379,11 +407,42 @@ export type CasualtyOutcomePayload = {
     | null;
 };
 
-export async function getCasualties(): Promise<CasualtyRecord[]> {
+export type GetCasualtiesOptions = {
+  incidentId?: string;
+  fieldResponderLinks?: boolean;
+};
+
+export async function getCasualties(
+  options: GetCasualtiesOptions = {},
+): Promise<CasualtyRecord[]> {
   const response =
-    await api.get<CasualtyListResponse>("/casualties");
+    await api.get<CasualtyListResponse>("/casualties", {
+      params: {
+        incidentId: options.incidentId,
+        fieldResponderLinks: options.fieldResponderLinks
+          ? "true"
+          : undefined,
+      },
+    });
 
   return response.data.data;
+}
+
+export async function getNextCasualtyIdSequence(
+  userCode: string,
+  dateCode: string,
+): Promise<number> {
+  const response = await api.get<NextCasualtyIdSequenceResponse>(
+    "/casualties/next-id-sequence",
+    {
+      params: {
+        userCode,
+        dateCode,
+      },
+    },
+  );
+
+  return response.data.data.nextSequence;
 }
 
 export async function getCasualty(
@@ -574,10 +633,19 @@ export type UpdateCasualtyPayload = {
 export async function updateCasualty(
   id: string,
   payload: UpdateCasualtyPayload,
+  options: { responderFunction?: "sa_responder" } = {},
 ): Promise<CasualtyRecord> {
   const response = await api.put<CasualtyResponse>(
     `/casualties/${encodeURIComponent(id)}`,
     payload,
+    {
+      headers: options.responderFunction
+        ? {
+            "X-DCMS-Responder-Function":
+              options.responderFunction,
+          }
+        : undefined,
+    },
   );
 
   return response.data.data;

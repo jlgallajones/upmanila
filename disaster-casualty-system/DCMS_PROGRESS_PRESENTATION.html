@@ -1,0 +1,988 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DCMS Project Progress and Achievements</title>
+  <style>
+    :root {
+      --maroon: #8f1118;
+      --maroon-dark: #65080e;
+      --maroon-soft: #b74045;
+      --gold: #f3c343;
+      --ink: #0f1d33;
+      --muted: #5f6f89;
+      --line: #d9e1ee;
+      --paper: #ffffff;
+      --bg: #f3f6fa;
+      --green: #147c4c;
+      --blue: #2067b1;
+      --orange: #c45a12;
+      --red: #b51d28;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--bg);
+      font-family: Arial, Helvetica, sans-serif;
+      line-height: 1.5;
+    }
+
+    .deck {
+      width: min(1180px, calc(100% - 32px));
+      margin: 24px auto 48px;
+    }
+
+    .slide {
+      min-height: 680px;
+      margin: 0 0 22px;
+      padding: 44px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: 0 22px 60px rgba(15, 29, 51, 0.09);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .slide.compact {
+      min-height: auto;
+    }
+
+    .hero {
+      color: white;
+      background:
+        radial-gradient(circle at 80% 4%, rgba(255, 255, 255, 0.14), transparent 28%),
+        linear-gradient(135deg, var(--maroon-dark), var(--maroon));
+      border: 0;
+      display: grid;
+      align-content: center;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto -80px -120px auto;
+      width: 340px;
+      height: 340px;
+      border: 42px solid rgba(255, 255, 255, 0.08);
+      border-radius: 50%;
+    }
+
+    .eyebrow {
+      margin: 0 0 12px;
+      color: var(--maroon);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .hero .eyebrow {
+      color: #ffd65a;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin-top: 0;
+    }
+
+    h1 {
+      max-width: 860px;
+      margin-bottom: 20px;
+      font-size: clamp(42px, 7vw, 76px);
+      line-height: 0.98;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin-bottom: 22px;
+      color: var(--ink);
+      font-size: clamp(28px, 4vw, 44px);
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin-bottom: 8px;
+      font-size: 18px;
+      line-height: 1.25;
+    }
+
+    .hero p {
+      max-width: 720px;
+      color: rgba(255, 255, 255, 0.86);
+      font-size: 20px;
+    }
+
+    .meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 36px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 34px;
+      padding: 7px 12px;
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      border-radius: 999px;
+      color: white;
+      background: rgba(255, 255, 255, 0.12);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .grid {
+      display: grid;
+      gap: 16px;
+    }
+
+    .grid.two {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .grid.three {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .grid.four {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .card {
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+    }
+
+    .card.tint {
+      background: #fbfcff;
+    }
+
+    .card.accent {
+      border-left: 5px solid var(--maroon);
+    }
+
+    .card.gold {
+      border-left: 5px solid var(--gold);
+    }
+
+    .card.green {
+      border-left: 5px solid var(--green);
+    }
+
+    .stat {
+      padding: 22px;
+      border-radius: 12px;
+      background: linear-gradient(180deg, #fff, #f7f9fd);
+      border: 1px solid var(--line);
+    }
+
+    .stat strong {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--maroon);
+      font-size: 34px;
+      line-height: 1;
+    }
+
+    .stat span,
+    .muted {
+      color: var(--muted);
+    }
+
+    ul {
+      margin: 10px 0 0;
+      padding-left: 19px;
+    }
+
+    li {
+      margin: 7px 0;
+    }
+
+    .timeline {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 16px;
+    }
+
+    .step {
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-top: 5px solid var(--maroon);
+      border-radius: 10px;
+      background: #fff;
+    }
+
+    .step small {
+      display: block;
+      margin-bottom: 10px;
+      color: var(--maroon);
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .architecture {
+      display: grid;
+      grid-template-columns: 1fr 1.05fr 1fr;
+      gap: 18px;
+      align-items: stretch;
+      margin-top: 18px;
+    }
+
+    .node {
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+    }
+
+    .node h3 {
+      color: var(--maroon);
+    }
+
+    .node.center {
+      color: white;
+      background: linear-gradient(145deg, var(--maroon-dark), var(--maroon));
+      border-color: transparent;
+    }
+
+    .node.center h3,
+    .node.center .muted {
+      color: white;
+    }
+
+    .badge-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 30px;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #f8fafd;
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .badge.red {
+      color: white;
+      background: var(--red);
+      border-color: var(--red);
+    }
+
+    .badge.green {
+      color: white;
+      background: var(--green);
+      border-color: var(--green);
+    }
+
+    .badge.gold {
+      color: #442f00;
+      background: var(--gold);
+      border-color: var(--gold);
+    }
+
+    .matrix {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 14px;
+      font-size: 14px;
+    }
+
+    .matrix th,
+    .matrix td {
+      padding: 11px 12px;
+      border: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .matrix th {
+      color: white;
+      background: var(--maroon);
+    }
+
+    .callout {
+      padding: 18px 20px;
+      border: 1px solid #f0c8cb;
+      border-left: 5px solid var(--maroon);
+      border-radius: 10px;
+      background: #fff7f7;
+    }
+
+    .footer-note {
+      position: absolute;
+      right: 32px;
+      bottom: 22px;
+      color: #8b98ad;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .print-note {
+      margin: 0 0 18px;
+      padding: 14px 18px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: white;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    @media (max-width: 860px) {
+      .deck {
+        width: min(100% - 16px, 1180px);
+        margin-top: 8px;
+      }
+
+      .slide {
+        min-height: auto;
+        padding: 28px 20px;
+        border-radius: 14px;
+      }
+
+      .grid.two,
+      .grid.three,
+      .grid.four,
+      .timeline,
+      .architecture {
+        grid-template-columns: 1fr;
+      }
+
+      .footer-note {
+        position: static;
+        margin-top: 24px;
+      }
+    }
+
+    @media print {
+      body {
+        background: white;
+      }
+
+      .deck {
+        width: 100%;
+        margin: 0;
+      }
+
+      .print-note {
+        display: none;
+      }
+
+      .slide {
+        min-height: 100vh;
+        margin: 0;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+        page-break-after: always;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="deck">
+    <p class="print-note">
+      Presentation file for project status reporting. Open in a browser for slides, or use Print / Save as PDF for sharing.
+    </p>
+
+    <section class="slide hero">
+      <p class="eyebrow">Disaster Casualty Management System</p>
+      <h1>Current Progress and Achievements</h1>
+      <p>
+        A full-stack emergency response platform with an installable mobile PWA, role-based casualty workflows,
+        triage algorithm support, admin verification, incident management, and deployment-ready cloud architecture.
+      </p>
+      <div class="meta-row">
+        <span class="pill">Mobile PWA</span>
+        <span class="pill">Admin Web Dashboard</span>
+        <span class="pill">Express API</span>
+        <span class="pill">Supabase Database</span>
+        <span class="pill">Render + Netlify Deployment</span>
+      </div>
+      <div class="footer-note">Prepared August 26, 2026</div>
+    </section>
+
+    <section class="slide">
+      <p class="eyebrow">Executive Summary</p>
+      <h2>What Has Been Built</h2>
+      <div class="grid four">
+        <div class="stat">
+          <strong>3</strong>
+          <span>Major application surfaces: mobile PWA, admin website, backend API.</span>
+        </div>
+        <div class="stat">
+          <strong>5</strong>
+          <span>Primary operating roles supported across responder, documenter, admin, and super admin flows.</span>
+        </div>
+        <div class="stat">
+          <strong>3</strong>
+          <span>Triage stages supported: primary, secondary, and tertiary.</span>
+        </div>
+        <div class="stat">
+          <strong>Cloud</strong>
+          <span>API on Render, frontend apps on Netlify, database/auth on Supabase.</span>
+        </div>
+      </div>
+      <div class="grid two" style="margin-top: 20px;">
+        <div class="card accent">
+          <h3>Operational Goal</h3>
+          <p class="muted">
+            Reduce repetitive encoding during disaster response by separating official incident setup from casualty
+            logging, then allowing responders and documenters to work from the correct incident context.
+          </p>
+        </div>
+        <div class="card green">
+          <h3>Clinical Data Goal</h3>
+          <p class="muted">
+            Keep responder-entered triage separate from system-calculated triage so overtriage and undertriage can be
+            measured without biasing users during data entry.
+          </p>
+        </div>
+      </div>
+      <div class="footer-note">01 / Overview</div>
+    </section>
+
+    <section class="slide">
+      <p class="eyebrow">System Architecture</p>
+      <h2>Major Components and Connections</h2>
+      <div class="architecture">
+        <div class="node">
+          <h3>Mobile PWA</h3>
+          <p class="muted">Expo React Native app exported for web and installed through mobile browsers.</p>
+          <ul>
+            <li>Responder casualty entry</li>
+            <li>Healthcare facility documentation</li>
+            <li>Role-based quick actions</li>
+            <li>Offline local storage support</li>
+            <li>PWA manifest and service worker</li>
+          </ul>
+        </div>
+        <div class="node center">
+          <h3>Backend API</h3>
+          <p class="muted">Node.js and Express API hosted on Render.</p>
+          <ul>
+            <li>Authentication and account management</li>
+            <li>Incident and casualty endpoints</li>
+            <li>Triage calculation logic</li>
+            <li>Verification workflows</li>
+            <li>Action logs and SitRep support</li>
+          </ul>
+        </div>
+        <div class="node">
+          <h3>Admin Website</h3>
+          <p class="muted">Desktop web dashboard for administrators and super administrators.</p>
+          <ul>
+            <li>Official incident setup</li>
+            <li>Account management</li>
+            <li>Verification review</li>
+            <li>Incident management panels</li>
+            <li>Unit-scoped administrative views</li>
+          </ul>
+        </div>
+      </div>
+      <div class="grid two" style="margin-top: 18px;">
+        <div class="card gold">
+          <h3>Database and Auth</h3>
+          <p class="muted">
+            Supabase provides PostgreSQL storage and authentication. Main data areas include users, incidents,
+            casualties, triage assessments, transport, treatment, hospital care, verification, and action logs.
+          </p>
+        </div>
+        <div class="card gold">
+          <h3>Deployment Model</h3>
+          <p class="muted">
+            Render serves the API. Netlify serves the mobile PWA and the desktop admin website. Local testing uses
+            Vite/Expo builds, static serving, and ngrok when external device access is needed.
+          </p>
+        </div>
+      </div>
+      <div class="footer-note">02 / Architecture</div>
+    </section>
+
+    <section class="slide">
+      <p class="eyebrow">Mobile Application</p>
+      <h2>Mobile PWA Progress</h2>
+      <div class="grid three">
+        <div class="card accent">
+          <h3>PWA Conversion</h3>
+          <ul>
+            <li>Web export support added.</li>
+            <li>Installable through Safari and Chrome.</li>
+            <li>Manifest, service worker, metadata, and icons configured.</li>
+            <li>Production build outputs to <strong>mobile/dist</strong>.</li>
+          </ul>
+        </div>
+        <div class="card accent">
+          <h3>Landing Page</h3>
+          <ul>
+            <li>UP, UPM DRRMH, DOST, and DOST PCHRD logos added.</li>
+            <li>Logo backgrounds cleaned where needed.</li>
+            <li>Visual identity aligned with the mobile app maroon theme.</li>
+            <li>Shield pulse animation restored.</li>
+          </ul>
+        </div>
+        <div class="card accent">
+          <h3>Mobile UI Fixes</h3>
+          <ul>
+            <li>iPhone installed-app header spacing improved.</li>
+            <li>Quick actions made horizontally scrollable.</li>
+            <li>Current-time button layouts made consistent.</li>
+            <li>Form sections adjusted to reduce overlap.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="callout" style="margin-top: 22px;">
+        The mobile app now behaves as a browser-installable app while keeping the original React Native workflow.
+        This supports testing on phones without requiring App Store or Play Store distribution.
+      </div>
+      <div class="footer-note">03 / Mobile PWA</div>
+    </section>
+
+    <section class="slide">
+      <p class="eyebrow">Role-Based Workflows</p>
+      <h2>Add Casualty by User Role</h2>
+      <table class="matrix">
+        <thead>
+          <tr>
+            <th>Role / Function</th>
+            <th>Current Behavior</th>
+            <th>Purpose</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Field Responder</strong></td>
+            <td>Shows safety prompt, PPE time, primary triage fields, triage assessment, triage time, and limited status/notes.</td>
+            <td>Fast first-contact casualty tagging at the scene.</td>
+          </tr>
+          <tr>
+            <td><strong>Stabilization Area Responder</strong></td>
+            <td>Uses the expanded casualty workflow with safety prompt, intro, victim info, address, secondary triage, care/treatment, transport, and notes.</td>
+            <td>More complete documentation once the casualty reaches stabilization care.</td>
+          </tr>
+          <tr>
+            <td><strong>Healthcare Facility Documenter</strong></td>
+            <td>Uses hospital-focused fields for receiving facility details, patient information, tertiary triage, management, resources, disposition, and facility disruption.</td>
+            <td>Captures ED and hospital care information after patient arrival.</td>
+          </tr>
+          <tr>
+            <td><strong>Admin / Super Admin</strong></td>
+            <td>Receives admin-focused quick actions, incident records, verification review, account management, incident management, and action logs.</td>
+            <td>Coordinates incident data quality, official records, and user administration.</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="grid two" style="margin-top: 18px;">
+        <div class="card green">
+          <h3>Responder Function Selection</h3>
+          <p class="muted">
+            Responder accounts can choose whether they are Field Responders or Stabilization Area Responders from the
+            profile flow. The selected function controls the Add Casualty fields.
+          </p>
+        </div>
+        <div class="card green">
+          <h3>Conditional Form Behavior</h3>
+          <p class="muted">
+            Healthcare and treatment fields are conditionally active using parent-child relationships, so dependent
+            fields appear only when their parent answer makes them relevant.
+          </p>
+        </div>
+      </div>
+      <div class="footer-note">04 / Role Workflows</div>
+    </section>
+
+    <section class="slide">
+      <p class="eyebrow">Triage</p>
+      <h2>Triage Systems and Accuracy Logic</h2>
+      <div class="grid three">
+        <div class="card accent">
+          <h3>Primary Triage</h3>
+          <div class="badge-list">
+            <span class="badge green">START</span>
+            <span class="badge green">STIEVE</span>
+            <span class="badge green">mSTART</span>
+            <span class="badge green">JumpSTART</span>
+            <span class="badge green">SIEVE</span>
+            <span class="badge green">Care Flight</span>
+            <span class="badge green">SALT</span>
+            <span class="badge green">PTT</span>
+            <span class="badge green">MITT</span>
+            <span class="badge green">Homebush</span>
+            <span class="badge green">MPTT</span>
+            <span class="badge gold">STM pending algorithm validation</span>
+          </div>
+        </div>
+        <div class="card accent">
+          <h3>Secondary Triage</h3>
+          <div class="badge-list">
+            <span class="badge green">SAVE</span>
+            <span class="badge green">SORT</span>
+            <span class="badge green">META</span>
+            <span class="badge gold">SwiFT pending algorithm validation</span>
+            <span class="badge green">SMART</span>
+            <span class="badge green">Urgent / Non-urgent</span>
+            <span class="badge green">Other</span>
+          </div>
+        </div>
+        <div class="card accent">
+          <h3>Tertiary Triage</h3>
+          <div class="badge-list">
+            <span class="badge green">NATO</span>
+            <span class="badge green">MASS</span>
+            <span class="badge green">ESI</span>
+            <span class="badge green">METTS</span>
+            <span class="badge green">Other</span>
+          </div>
+        </div>
+      </div>
+      <div class="grid two" style="margin-top: 20px;">
+        <div class="card tint">
+          <h3>Implemented Logic</h3>
+          <ul>
+            <li>User-entered final triage is stored separately from system-calculated triage.</li>
+            <li>Triage category field was removed from normal manual entry.</li>
+            <li>Assessment popup appears after selecting a triage system.</li>
+            <li>Final triage choices use color-coded, even layouts.</li>
+            <li>One answered assessment item can allow forward progress where rapid entry is needed.</li>
+          </ul>
+        </div>
+        <div class="card tint">
+          <h3>Accuracy Protection</h3>
+          <ul>
+            <li>Overtriage and undertriage summaries are hidden from normal users during entry.</li>
+            <li>Expectant is treated consistently with black/T4 for supported comparisons.</li>
+            <li>Unknown is excluded from accuracy calculations.</li>
+            <li>ESI and METTS are excluded from T1-T4 accuracy formulas until a separate reporting rule is approved.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-note">05 / Triage</div>
+    </section>
+
+    <section class="slide">
+      <p class="eyebrow">Incident Operations</p>
+      <h2>Incident, Records, and Verification Progress</h2>
+      <div class="timeline">
+        <div class="step">
+          <small>01</small>
+          <h3>Disaster-First Flow</h3>
+          <p class="muted">Users can select or work under an incident first so disaster details do not need to be repeatedly encoded for every casualty.</p>
+        </div>
+        <div class="step">
+          <small>02</small>
+          <h3>Incident Records</h3>
+          <p class="muted">Admin mobile records now focus on incident records, active/closed filters, incident cards, casualty summaries, and PDF report access.</p>
+        </div>
+        <div class="step">
+          <small>03</small>
+          <h3>Verification Review</h3>
+          <p class="muted">Verification review was separated into its own queue. Admins can open casualty records in popup review windows.</p>
+        </div>
+        <div class="step">
+          <small>04</small>
+          <h3>Action Logs</h3>
+          <p class="muted">Admin and responder actions are listed as compact log cards that open into detailed views.</p>
+        </div>
+      </div>
+      <div class="grid two" style="margin-top: 20px;">
+        <div class="card accent">
+          <h3>Responder Records</h3>
+          <p class="muted">
+            Field and Stabilization Area responders have collapsible filters for record status and triage category.
+            Stabilization responders also include released and referred filters.
+          </p>
+        </div>
+        <div class="card accent">
+          <h3>Admin Scope</h3>
+          <p class="muted">
+            Admin-side action logs and verification access are being scoped to the accounts created by the logged-in
+            admin until formal unit assignments are fully established.
+          </p>
+        </div>
+      </div>
+      <div class="footer-note">06 / Operations</div>
+    </section>
+
+    <section class="slide">
+      <p class="eyebrow">Desktop Website</p>
+      <h2>Admin Dashboard Achievements</h2>
+      <div class="grid two">
+        <div class="card accent">
+          <h3>Super Admin Portal</h3>
+          <ul>
+            <li>Separate super admin landing page.</li>
+            <li>Summary of entries across incidents.</li>
+            <li>Account registration with super admin and administrator roles.</li>
+            <li>Incident history and activity/action logs.</li>
+            <li>Account directory and account management.</li>
+          </ul>
+        </div>
+        <div class="card accent">
+          <h3>Admin Portal</h3>
+          <ul>
+            <li>Official incident creation synced to mobile incident selection.</li>
+            <li>Evacuation center and healthcare facility creation.</li>
+            <li>Responder/documenter account creation within admin scope.</li>
+            <li>Verification review, casualty records, and action logs.</li>
+            <li>Incident Management section with popup editing by section.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="grid two" style="margin-top: 18px;">
+        <div class="card green">
+          <h3>Account Management</h3>
+          <p class="muted">
+            Admins can manage responder and documenter accounts. Super admins manage all accounts and can create admin
+            accounts. Account editing is handled through popup windows.
+          </p>
+        </div>
+        <div class="card green">
+          <h3>Incident Management</h3>
+          <p class="muted">
+            Incidents can be expanded to reveal section buttons. Selecting a section opens a floating window for viewing
+            or editing response timeline, on-site care, facility care, continuity, and close-incident data.
+          </p>
+        </div>
+      </div>
+      <div class="footer-note">07 / Admin Website</div>
+    </section>
+
+    <section class="slide">
+      <p class="eyebrow">Backend and Data</p>
+      <h2>API, Database, and Integration Work</h2>
+      <div class="grid three">
+        <div class="card accent">
+          <h3>Backend API</h3>
+          <ul>
+            <li>Node.js, Express, TypeScript.</li>
+            <li>Supabase client integration.</li>
+            <li>CORS configured for local, LAN, Netlify, and ngrok testing.</li>
+            <li>Authentication, incidents, casualties, triage, dashboard, and admin routes.</li>
+          </ul>
+        </div>
+        <div class="card accent">
+          <h3>Supabase</h3>
+          <ul>
+            <li>Auth users and public user profiles.</li>
+            <li>Role enum cleanup guidance provided.</li>
+            <li>Responder/documenter/admin/super_admin role model aligned.</li>
+            <li>Account activation behavior planned for login restriction.</li>
+          </ul>
+        </div>
+        <div class="card accent">
+          <h3>Reporting Data</h3>
+          <ul>
+            <li>Casualty records and incident summaries.</li>
+            <li>Verification history and status tracking.</li>
+            <li>Action logs with actor, role, status change, date/time, location, and result.</li>
+            <li>SitRep generation and export flow reviewed.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="callout" style="margin-top: 22px;">
+        The project now has a clearer separation of responsibilities: mobile users capture operational data, admins
+        manage official reference records and verification, and the backend centralizes calculation and persistence.
+      </div>
+      <div class="footer-note">08 / Backend</div>
+    </section>
+
+    <section class="slide">
+      <p class="eyebrow">Deployment</p>
+      <h2>Current Deployment Readiness</h2>
+      <div class="grid two">
+        <div class="card accent">
+          <h3>API Hosting</h3>
+          <ul>
+            <li>Render deployment flow confirmed.</li>
+            <li>Production API served through HTTPS.</li>
+            <li>Health/API base route checked after correcting the URL typo.</li>
+            <li>Frontend API configuration uses the deployed Render API with the <strong>/api</strong> path.</li>
+          </ul>
+        </div>
+        <div class="card accent">
+          <h3>Frontend Hosting</h3>
+          <ul>
+            <li>Mobile PWA can be deployed to Netlify from <strong>mobile/dist</strong>.</li>
+            <li>Desktop admin dashboard can be deployed as a separate Netlify project.</li>
+            <li>Frontend redeploy is needed when frontend code or public environment variables change.</li>
+            <li>Backend-only changes require Render redeploy but not Netlify redeploy.</li>
+          </ul>
+        </div>
+      </div>
+      <table class="matrix">
+        <thead>
+          <tr>
+            <th>Layer</th>
+            <th>Platform</th>
+            <th>Primary Build / Run Output</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Backend API</td>
+            <td>Render</td>
+            <td>Runs Node server from compiled API build.</td>
+          </tr>
+          <tr>
+            <td>Mobile PWA</td>
+            <td>Netlify</td>
+            <td>Deploys static files from <strong>mobile/dist</strong>.</td>
+          </tr>
+          <tr>
+            <td>Admin Website</td>
+            <td>Netlify</td>
+            <td>Deploys the static desktop dashboard from the website folder.</td>
+          </tr>
+          <tr>
+            <td>Database/Auth</td>
+            <td>Supabase</td>
+            <td>Stores auth identities, app profiles, incidents, casualties, verification, and logs.</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="footer-note">09 / Deployment</div>
+    </section>
+
+    <section class="slide">
+      <p class="eyebrow">Issues Resolved</p>
+      <h2>Key Fixes Completed During Development</h2>
+      <div class="grid two">
+        <div class="card tint">
+          <h3>Setup and Runtime</h3>
+          <ul>
+            <li>Windows PowerShell npm execution policy issue handled using <strong>npm.cmd</strong>.</li>
+            <li>Wrong API URLs, mixed-content browser errors, and ngrok tunnel confusion diagnosed.</li>
+            <li>Login failure messaging added so failed authentication gives useful feedback.</li>
+            <li>Logout and persistent session behavior reviewed and improved.</li>
+          </ul>
+        </div>
+        <div class="card tint">
+          <h3>User Interface</h3>
+          <ul>
+            <li>Hydration/minified React issue related to generated values was addressed.</li>
+            <li>Installed iPhone PWA header layout was improved.</li>
+            <li>Modal spacing and current-time controls were made more consistent.</li>
+            <li>Dashboard quick action overflow was fixed with horizontal scrolling.</li>
+          </ul>
+        </div>
+        <div class="card tint">
+          <h3>Data Entry</h3>
+          <ul>
+            <li>Triage category manual field removed from Add Casualty.</li>
+            <li>Triage stage and system order corrected.</li>
+            <li>Quick create incident, evacuation center, and healthcare facility controls made collapsible.</li>
+            <li>Required-field behavior relaxed for responder and documenter casualty entry.</li>
+          </ul>
+        </div>
+        <div class="card tint">
+          <h3>Governance</h3>
+          <ul>
+            <li>Verification review moved out of normal record details.</li>
+            <li>Responder/documenter visibility restricted to their own entries.</li>
+            <li>Admin approval and rejection control separated from responder/documenter status viewing.</li>
+            <li>Admin action logs added for verification decisions and casualty activity.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-note">10 / Fixes</div>
+    </section>
+
+    <section class="slide">
+      <p class="eyebrow">Current Gaps</p>
+      <h2>Recommended Next Improvements</h2>
+      <div class="grid two">
+        <div class="card gold">
+          <h3>Clinical and Utstein Validation</h3>
+          <ul>
+            <li>Complete row-by-row traceability against the full Utstein template matrix.</li>
+            <li>Clinically validate all supported triage algorithms.</li>
+            <li>Finalize STM and SwiFT calculation rules with the project team.</li>
+            <li>Confirm final reporting treatment of tertiary systems that do not map cleanly to T1 to T4.</li>
+          </ul>
+        </div>
+        <div class="card gold">
+          <h3>Security and Scope</h3>
+          <ul>
+            <li>Strengthen backend enforcement for role-based and unit-based permissions.</li>
+            <li>Finalize unit assignment data model for admins and responders.</li>
+            <li>Ensure inactive accounts are blocked at login by backend policy.</li>
+            <li>Review Supabase row-level security policies before live operational use.</li>
+          </ul>
+        </div>
+        <div class="card gold">
+          <h3>Offline and Reliability</h3>
+          <ul>
+            <li>Expand offline sync beyond casualty creation if required.</li>
+            <li>Add conflict handling for records edited while offline.</li>
+            <li>Add visible sync queue status and retry history.</li>
+            <li>Improve PWA cache update messaging for deployed users.</li>
+          </ul>
+        </div>
+        <div class="card gold">
+          <h3>Testing and Reporting</h3>
+          <ul>
+            <li>Add automated end-to-end tests for mobile and admin workflows.</li>
+            <li>Add regression tests for role filtering, verification, account management, and triage calculations.</li>
+            <li>Finish PDF export validation for SitRep, casualty summaries, and patient care reports.</li>
+            <li>Verify responsiveness across common Android and iPhone screen sizes.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-note">11 / Next Work</div>
+    </section>
+
+    <section class="slide compact">
+      <p class="eyebrow">Presentation Talking Points</p>
+      <h2>Suggested Closing Message</h2>
+      <div class="callout">
+        The current system has moved from a basic casualty encoding app into a full incident response platform.
+        It now supports installable mobile use, official incident setup, role-based responder and documenter forms,
+        system-assisted triage, verification review, account management, action logs, and cloud deployment.
+        The remaining work is mainly validation, permission hardening, and completion of the full Utstein reporting
+        traceability matrix.
+      </div>
+      <div class="grid three" style="margin-top: 22px;">
+        <div class="card green">
+          <h3>Ready to Demonstrate</h3>
+          <p class="muted">Mobile PWA, admin dashboard, login, incident selection, Add Casualty, records, verification, and account management.</p>
+        </div>
+        <div class="card gold">
+          <h3>Ready for Review</h3>
+          <p class="muted">Triage mappings, role-specific workflows, admin verification rules, and SitRep/report requirements.</p>
+        </div>
+        <div class="card accent">
+          <h3>Next Milestone</h3>
+          <p class="muted">Clinical validation, automated tests, stricter backend permissions, and final production deployment settings.</p>
+        </div>
+      </div>
+      <div class="footer-note">12 / Close</div>
+    </section>
+  </main>
+</body>
+</html>

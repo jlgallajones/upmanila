@@ -36,6 +36,7 @@ import {
 import {
   getQueuedCasualtyCount,
   syncQueuedCasualtySubmissions,
+  type QueueSyncResult,
 } from "../../offline/casualtyQueue";
 
 const COLORS = {
@@ -482,7 +483,9 @@ export default function HomeDashboardScreen() {
   const [isSavingQuickAction, setIsSavingQuickAction] =
     useState(false);
 
-  const loadDashboard = useCallback(async () => {
+  const loadDashboard = useCallback(async (): Promise<
+    QueueSyncResult | null
+  > => {
     try {
       setErrorMessage(null);
 
@@ -512,7 +515,7 @@ export default function HomeDashboardScreen() {
         setCurrentUserRole(null);
         setCanOpenIncidentManagement(false);
         setIsSuperAdmin(false);
-        return;
+        return null;
       }
 
       setIsGuestMode(false);
@@ -528,6 +531,7 @@ export default function HomeDashboardScreen() {
 
       setSummary(summaryData);
       setActivities(activityData);
+      return syncResult;
     } catch (error) {
       if (isAuthenticationTokenError(error)) {
         const queuedCount = await getQueuedCasualtyCount();
@@ -539,7 +543,7 @@ export default function HomeDashboardScreen() {
         setCanOpenIncidentManagement(false);
         setIsSuperAdmin(false);
         setErrorMessage(null);
-        return;
+        return null;
       }
 
       console.error(
@@ -555,6 +559,7 @@ export default function HomeDashboardScreen() {
 
       const queuedCount = await getQueuedCasualtyCount();
       setQueuedCasualtyCount(queuedCount);
+      return null;
     } finally {
       setIsLoading(false);
     }
@@ -582,7 +587,41 @@ export default function HomeDashboardScreen() {
   const handleRefresh = useCallback(async () => {
     try {
       setIsRefreshing(true);
-      await loadDashboard();
+      const syncResult = await loadDashboard();
+
+      if (!syncResult) {
+        return;
+      }
+
+      if (syncResult.synced > 0 && syncResult.remaining === 0) {
+        Alert.alert(
+          "Sync complete",
+          `${syncResult.synced} queued casualty record${
+            syncResult.synced === 1 ? "" : "s"
+          } uploaded successfully.`,
+        );
+        return;
+      }
+
+      if (syncResult.remaining > 0) {
+        const firstIssue = syncResult.issues[0]?.reason;
+        Alert.alert(
+          "Sync not completed",
+          firstIssue
+            ? `${syncResult.remaining} casualty record${
+                syncResult.remaining === 1 ? "" : "s"
+              } still waiting to sync. Reason: ${firstIssue}`
+            : `${syncResult.remaining} casualty record${
+                syncResult.remaining === 1 ? "" : "s"
+              } still waiting to sync.`,
+        );
+        return;
+      }
+
+      Alert.alert(
+        "No queued records",
+        "There are no offline casualty records waiting to sync.",
+      );
     } finally {
       setIsRefreshing(false);
     }
@@ -591,6 +630,8 @@ export default function HomeDashboardScreen() {
   const isResponderAccount = currentUserRole
     ? RESPONDER_ROLES.has(currentUserRole)
     : false;
+  const canOpenActiveIncidents =
+    canOpenIncidentManagement || isResponderAccount;
   const isDocumenterAccount = currentUserRole === "documenter";
   const isAdminAccount =
     currentUserRole === "admin" ||
@@ -833,20 +874,20 @@ export default function HomeDashboardScreen() {
 
           <Pressable
             onPress={() => router.push("/incidents")}
-            disabled={!canOpenIncidentManagement}
+            disabled={!canOpenActiveIncidents}
             style={({ pressed }) => [
               styles.incidentBanner,
               pressed &&
-                canOpenIncidentManagement &&
+                canOpenActiveIncidents &&
                 styles.pressed,
             ]}
             accessibilityRole={
-              canOpenIncidentManagement
+              canOpenActiveIncidents
                 ? "button"
                 : undefined
             }
             accessibilityLabel={
-              canOpenIncidentManagement
+              canOpenActiveIncidents
                 ? "Open active incidents"
                 : undefined
             }
@@ -955,7 +996,7 @@ export default function HomeDashboardScreen() {
             iconColor={COLORS.blue}
             loading={isLoading}
             onPress={
-              canOpenIncidentManagement
+              canOpenActiveIncidents
                 ? () => router.push("/incidents")
                 : undefined
             }

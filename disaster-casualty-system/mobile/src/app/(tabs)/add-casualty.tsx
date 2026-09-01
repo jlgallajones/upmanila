@@ -29,9 +29,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
   createCasualty,
+  getCasualties,
   getCasualty,
   getCasualtyTriageHistory,
   getCasualtyTransportHistory,
+  getNextCasualtyIdSequence,
   updateCasualty,
   type CasualtyTransportHistoryItem,
   type CasualtyTriageHistoryItem,
@@ -67,6 +69,7 @@ import {
 } from "../../auth/responderAssignment";
 import {
   isNetworkSubmissionError,
+  getQueuedCasualtySubmissions,
   queueCasualtySubmission,
   type QueuedCasualtyPayload,
 } from "../../offline/casualtyQueue";
@@ -154,6 +157,15 @@ const PATIENT_FOR_OPTIONS = [
   "Release",
   "Referral or Transfer to Health Facility",
 ] as const;
+
+const RELEASE_CONDITION_OPTIONS = ["Alive", "Dead"] as const;
+
+const RELEASE_MEDICAL_CONTACT_OPTIONS = [
+  "With medical contact",
+  "Without medical contact",
+] as const;
+
+const EMS_VEHICLE_TYPE_OPTIONS = ["BLS", "ALS"] as const;
 
 const PRECAUTION_OPTIONS = [
   "Standard",
@@ -1282,7 +1294,15 @@ type ChoiceSheetName =
   | "newborn"
   | "pregnant"
   | "fillPatientCareReport"
+  | "fieldResponderVictimCode"
+  | "patientIdentified"
   | "patientFor"
+  | "conditionBeforeRelease"
+  | "releaseMedicalContact"
+  | "conditionBeforeTransfer"
+  | "transferMedicalContact"
+  | "usedEmsVehicle"
+  | "emsVehicleType"
   | "transferPrecaution"
   | "releaseLiabilityAccepted"
   | "dispositionUponHospitalArrival"
@@ -1346,6 +1366,8 @@ type FormState = {
   cprType: string;
 
   victimCode: string;
+  userCode: string;
+  patientIdentified: string;
   idNumber: string;
   age: string;
   firstName: string;
@@ -1383,7 +1405,12 @@ type FormState = {
 
   transportRequired: string;
   patientFor: string;
+  conditionBeforeRelease: string;
+  releaseMedicalContact: string;
   conditionBeforeTransfer: string;
+  transferMedicalContact: string;
+  usedEmsVehicle: string;
+  emsVehicleType: string;
   transferPrecaution: string;
   receivingFacilityText: string;
   vehicleMakeModelPlate: string;
@@ -1484,6 +1511,8 @@ const initialForm: FormState = {
   cprType: "",
 
   victimCode: "",
+  userCode: "",
+  patientIdentified: "",
   idNumber: "",
   age: "",
   firstName: "",
@@ -1521,7 +1550,12 @@ const initialForm: FormState = {
 
   transportRequired: "",
   patientFor: "",
+  conditionBeforeRelease: "",
+  releaseMedicalContact: "",
   conditionBeforeTransfer: "",
+  transferMedicalContact: "",
+  usedEmsVehicle: "",
+  emsVehicleType: "",
   transferPrecaution: "",
   receivingFacilityText: "",
   vehicleMakeModelPlate: "",
@@ -1621,6 +1655,11 @@ type DeathStage = NonNullable<CasualtyOutcome["deathStage"]>;
 type FinalDisposition =
   NonNullable<CasualtyOutcome["finalDisposition"]>;
 
+type SubmissionFeedback = {
+  title: string;
+  message: string;
+};
+
 function valueOrEmpty(value: string | number | null | undefined): string {
   if (value === null || value === undefined) {
     return "";
@@ -1638,6 +1677,72 @@ function titleCase(value: string | null | undefined): string {
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function generateUserCodeFromName(
+  fullName: string | null | undefined,
+): string {
+  const normalizedName = fullName?.trim();
+
+  if (!normalizedName) {
+    return "";
+  }
+
+  return normalizedName
+    .split(/\s+/)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("");
+}
+
+function calculateAgeFromDateOfBirth(value: string): string {
+  const dateOfBirth = getValidDateInput(value);
+
+  if (!dateOfBirth) {
+    return "";
+  }
+
+  const today = new Date();
+  let age = today.getFullYear() - dateOfBirth.getFullYear();
+  const birthdayHasPassed =
+    today.getMonth() > dateOfBirth.getMonth() ||
+    (
+      today.getMonth() === dateOfBirth.getMonth() &&
+      today.getDate() >= dateOfBirth.getDate()
+    );
+
+  if (!birthdayHasPassed) {
+    age -= 1;
+  }
+
+  return age >= 0 ? String(age) : "";
+}
+
+function extractVictimCodeFromTriageNotes(
+  notes: string | null | undefined,
+): string {
+  const match = /Victim code:\s*([^\r\n]+)/i.exec(notes ?? "");
+
+  return match?.[1]?.trim() ?? "";
+}
+
+function formatLinkedCasualtyLabel(
+  record: CasualtyRecord,
+  victimCode: string,
+): string {
+  const fullName = [
+    record.casualty.first_name,
+    record.casualty.middle_name,
+    record.casualty.last_name,
+  ]
+    .filter(
+      (part): part is string =>
+        typeof part === "string" && part.trim().length > 0,
+    )
+    .join(" ");
+  const context =
+    fullName || record.casualty.id_number || record.client_record_id;
+
+  return context ? `${victimCode} - ${context}` : victimCode;
 }
 
 function formatEvacuationCenterLabel(
@@ -1817,6 +1922,802 @@ function triageFinalAnswerToCategory(
   }
 
   return triageColorToCategory(value);
+}
+
+function readAssessmentString(
+  answers: Record<string, unknown>,
+  key: string,
+): string | null {
+  const value = answers[key];
+
+  return typeof value === "string" ? value : null;
+}
+
+function readAssessmentBoolean(
+  answers: Record<string, unknown>,
+  key: string,
+): boolean | null {
+  const value = answers[key];
+
+  return typeof value === "boolean" ? value : null;
+}
+
+function readAssessmentNumber(
+  answers: Record<string, unknown>,
+  key: string,
+): number | null {
+  const value = answers[key];
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
+function scoreSortValue(
+  value: string | null,
+  scores: Record<string, number>,
+): number | null {
+  return value ? scores[value] ?? null : null;
+}
+
+function calculateStartLikeTriage(
+  answers: Record<string, unknown>,
+): TriageCategory {
+  if (readAssessmentBoolean(answers, "canWalk") === true) {
+    return "minimal";
+  }
+
+  if (
+    readAssessmentBoolean(answers, "spontaneousBreathing") === false ||
+    readAssessmentString(answers, "respirations") === "absent"
+  ) {
+    return readAssessmentBoolean(
+      answers,
+      "breathingAfterAirwayManagement",
+    ) === true
+      ? "immediate"
+      : "expectant";
+  }
+
+  const respirations = readAssessmentString(answers, "respirations");
+
+  if (!respirations) {
+    return "unknown";
+  }
+
+  if (respirations === "more_than_30") {
+    return "immediate";
+  }
+
+  if (
+    readAssessmentString(answers, "capillaryRefill") ===
+      "more_than_2_seconds" ||
+    readAssessmentString(answers, "radialPulse") === "absent" ||
+    readAssessmentBoolean(answers, "followsSimpleCommands") === false
+  ) {
+    return "immediate";
+  }
+
+  return readAssessmentBoolean(answers, "followsSimpleCommands") === true
+    ? "delayed"
+    : "unknown";
+}
+
+function calculateStieveTriage(
+  answers: Record<string, unknown>,
+): TriageCategory {
+  if (
+    readAssessmentBoolean(answers, "catastrophicHemorrhage") === true ||
+    readAssessmentBoolean(answers, "suckingChestWound") === true
+  ) {
+    return "immediate";
+  }
+
+  if (
+    readAssessmentBoolean(answers, "canWalkOrNoVisibleInjuries") ===
+      true &&
+    readAssessmentBoolean(answers, "specialPopulation") !== true
+  ) {
+    return "minimal";
+  }
+
+  if (readAssessmentString(answers, "respirations") === "absent") {
+    return readAssessmentBoolean(
+      answers,
+      "breathingAfterAirwayManagement",
+    ) === true
+      ? "immediate"
+      : "expectant";
+  }
+
+  if (
+    readAssessmentString(answers, "respirations") === "less_than_10" ||
+    readAssessmentString(answers, "respirations") === "more_than_30"
+  ) {
+    return "immediate";
+  }
+
+  if (
+    readAssessmentString(answers, "pulse") === "absent" ||
+    readAssessmentString(answers, "pulse") === "weak" ||
+    readAssessmentString(answers, "capillaryRefill") ===
+      "more_than_2_seconds" ||
+    readAssessmentBoolean(answers, "followsSimpleCommands") === false
+  ) {
+    return "immediate";
+  }
+
+  return readAssessmentString(answers, "respirations")
+    ? "delayed"
+    : "unknown";
+}
+
+function calculateMstartTriage(
+  answers: Record<string, unknown>,
+): TriageCategory {
+  if (readAssessmentBoolean(answers, "canWalk") === true) {
+    return "minimal";
+  }
+
+  if (
+    readAssessmentBoolean(answers, "spontaneousBreathing") === false ||
+    readAssessmentString(answers, "respirations") === "absent"
+  ) {
+    return readAssessmentBoolean(
+      answers,
+      "breathingAfterAirwayManagement",
+    ) === true
+      ? "immediate"
+      : "expectant";
+  }
+
+  if (readAssessmentString(answers, "respirations") === "more_than_30") {
+    return "immediate";
+  }
+
+  if (
+    readAssessmentString(answers, "radialPulse") === "absent" ||
+    readAssessmentBoolean(answers, "followsSimpleCommands") === false
+  ) {
+    return "immediate";
+  }
+
+  return readAssessmentString(answers, "respirations")
+    ? "delayed"
+    : "unknown";
+}
+
+function calculateJumpstartTriage(
+  answers: Record<string, unknown>,
+): TriageCategory {
+  if (readAssessmentBoolean(answers, "canWalk") === true) {
+    return "minimal";
+  }
+
+  if (
+    readAssessmentBoolean(answers, "spontaneousBreathing") === false ||
+    readAssessmentString(answers, "respirations") === "absent"
+  ) {
+    if (
+      readAssessmentBoolean(
+        answers,
+        "breathingAfterAirwayManagement",
+      ) === true
+    ) {
+      return "immediate";
+    }
+
+    if (
+      readAssessmentBoolean(
+        answers,
+        "palpablePulseAfterAirwayManagement",
+      ) === false
+    ) {
+      return "expectant";
+    }
+
+    return readAssessmentBoolean(
+      answers,
+      "breathingAfterRescueBreaths",
+    ) === true
+      ? "immediate"
+      : "expectant";
+  }
+
+  const respirations = readAssessmentString(answers, "respirations");
+
+  if (
+    respirations === "less_than_15" ||
+    respirations === "more_than_45" ||
+    readAssessmentString(answers, "radialPulse") === "absent" ||
+    readAssessmentString(answers, "mentalStatus") === "painful" ||
+    readAssessmentString(answers, "mentalStatus") === "unresponsive"
+  ) {
+    return "immediate";
+  }
+
+  return respirations ? "delayed" : "unknown";
+}
+
+function calculateSieveTriage(
+  answers: Record<string, unknown>,
+): TriageCategory {
+  if (readAssessmentBoolean(answers, "canWalk") === true) {
+    return readAssessmentString(answers, "injury") === "present"
+      ? "delayed"
+      : "minimal";
+  }
+
+  const respirations = readAssessmentString(answers, "respirations");
+
+  if (respirations === "absent") {
+    return readAssessmentBoolean(
+      answers,
+      "breathingAfterAirwayManagement",
+    ) === true
+      ? "immediate"
+      : "expectant";
+  }
+
+  if (
+    respirations === "less_than_10" ||
+    respirations === "less_than_or_equal_to_10" ||
+    respirations === "more_than_29" ||
+    respirations === "more_than_or_equal_to_30"
+  ) {
+    return "immediate";
+  }
+
+  if (
+    readAssessmentString(answers, "heartRate") === "more_than_120" ||
+    readAssessmentString(answers, "capillaryRefill") ===
+      "more_than_2_seconds"
+  ) {
+    return "immediate";
+  }
+
+  return respirations ? "delayed" : "unknown";
+}
+
+function calculateSortTriage(
+  answers: Record<string, unknown>,
+): TriageCategory {
+  const gcsScore = scoreSortValue(readAssessmentString(answers, "gcs"), {
+    "13_to_15": 4,
+    "9_to_12": 3,
+    "6_to_8": 2,
+    "4_to_5": 1,
+    "3": 0,
+  });
+  const respiratoryRateScore = scoreSortValue(
+    readAssessmentString(answers, "respiratoryRate"),
+    {
+      "10_to_29": 4,
+      "more_than_29": 3,
+      "more_than_or_equal_to_30": 3,
+      "6_to_9": 2,
+      "1_to_5": 1,
+      "0": 0,
+    },
+  );
+  const systolicBpScore = scoreSortValue(
+    readAssessmentString(answers, "systolicBp"),
+    {
+      "more_than_80": 4,
+      "more_than_89": 4,
+      "more_than_or_equal_to_90": 4,
+      "76_to_80": 3,
+      "76_to_89": 3,
+      "50_to_75": 2,
+      "1_to_49": 1,
+      "0": 0,
+    },
+  );
+
+  if (
+    gcsScore === null ||
+    respiratoryRateScore === null ||
+    systolicBpScore === null
+  ) {
+    return "unknown";
+  }
+
+  const totalScore = gcsScore + respiratoryRateScore + systolicBpScore;
+
+  if (totalScore === 0) {
+    return "expectant";
+  }
+
+  if (totalScore <= 10) {
+    return "immediate";
+  }
+
+  if (totalScore === 11) {
+    return "delayed";
+  }
+
+  return "minimal";
+}
+
+function calculateSaveTriage(
+  answers: Record<string, unknown>,
+): TriageCategory {
+  switch (readAssessmentString(answers, "saveCategory")) {
+    case "immediate_intervention_to_live":
+      return "immediate";
+    case "brief_delay_tolerated":
+      return "delayed";
+    case "no_life_or_limb_intervention_needed":
+      return "minimal";
+    case "dead_unsalvageable":
+      return "expectant";
+    default:
+      return "unknown";
+  }
+}
+
+function calculateMetaTriage(
+  answers: Record<string, unknown>,
+): TriageCategory {
+  if (
+    readAssessmentBoolean(answers, "airwayRisk") === true ||
+    readAssessmentBoolean(answers, "breathingRisk") === true ||
+    readAssessmentBoolean(answers, "circulationRisk") === true
+  ) {
+    return "immediate";
+  }
+
+  if (
+    readAssessmentBoolean(answers, "disabilityRisk") === true ||
+    readAssessmentBoolean(answers, "exposureRisk") === true
+  ) {
+    return "delayed";
+  }
+
+  const answeredKeys = [
+    "airwayRisk",
+    "breathingRisk",
+    "circulationRisk",
+    "disabilityRisk",
+    "exposureRisk",
+  ];
+  const allAnswered = answeredKeys.every(
+    (key) => readAssessmentBoolean(answers, key) !== null,
+  );
+
+  return allAnswered ? "minimal" : "unknown";
+}
+
+function calculateCareFlightTriage(
+  answers: Record<string, unknown>,
+): TriageCategory {
+  if (readAssessmentBoolean(answers, "canWalk") === true) {
+    return "minimal";
+  }
+
+  if (
+    readAssessmentBoolean(answers, "breathingWithOpenAirway") === false
+  ) {
+    return "expectant";
+  }
+
+  if (
+    readAssessmentBoolean(answers, "canObeyCommands") === false ||
+    readAssessmentString(answers, "palpableRadialPulse") === "absent"
+  ) {
+    return "immediate";
+  }
+
+  return readAssessmentBoolean(answers, "canObeyCommands") === true
+    ? "delayed"
+    : "unknown";
+}
+
+function calculateSaltTriage(
+  answers: Record<string, unknown>,
+): TriageCategory {
+  if (
+    readAssessmentBoolean(answers, "canWalk") === true ||
+    readAssessmentBoolean(answers, "canWave") === true
+  ) {
+    return "minimal";
+  }
+
+  if (
+    readAssessmentBoolean(answers, "breathing") === false ||
+    readAssessmentString(answers, "respirations") === "absent"
+  ) {
+    return readAssessmentBoolean(
+      answers,
+      "breathingAfterAirwayManagement",
+    ) === true
+      ? "immediate"
+      : "expectant";
+  }
+
+  const stable =
+    readAssessmentBoolean(answers, "breathing") === true &&
+    readAssessmentBoolean(
+      answers,
+      "obeysCommandsOrPurposefulMovement",
+    ) === true &&
+    readAssessmentBoolean(answers, "hasPeripheralPulse") === true &&
+    readAssessmentBoolean(answers, "respiratoryDistress") === false &&
+    readAssessmentBoolean(answers, "majorHemorrhageControlled") === true;
+
+  if (
+    !stable &&
+    readAssessmentBoolean(answers, "likelyToSurviveGivenResources") ===
+      false
+  ) {
+    return "expectant";
+  }
+
+  if (!stable) {
+    return readAssessmentBoolean(
+      answers,
+      "likelyToSurviveGivenResources",
+    ) === true
+      ? "immediate"
+      : "unknown";
+  }
+
+  if (readAssessmentBoolean(answers, "minorInjuriesOnly") === true) {
+    return "minimal";
+  }
+
+  if (readAssessmentBoolean(answers, "minorInjuriesOnly") === false) {
+    return "delayed";
+  }
+
+  return "unknown";
+}
+
+function getPttNormalRanges(
+  height: string | null,
+): {
+  minRespiratoryRate: number;
+  maxRespiratoryRate: number;
+  minPulseRate: number;
+  maxPulseRate: number;
+} | null {
+  switch (height) {
+    case "40_to_80_cm":
+      return {
+        minRespiratoryRate: 20,
+        maxRespiratoryRate: 50,
+        minPulseRate: 90,
+        maxPulseRate: 180,
+      };
+    case "80_to_100_cm":
+      return {
+        minRespiratoryRate: 15,
+        maxRespiratoryRate: 40,
+        minPulseRate: 80,
+        maxPulseRate: 160,
+      };
+    case "100_to_140_cm":
+      return {
+        minRespiratoryRate: 10,
+        maxRespiratoryRate: 30,
+        minPulseRate: 70,
+        maxPulseRate: 140,
+      };
+    default:
+      return null;
+  }
+}
+
+function calculatePttTriage(
+  answers: Record<string, unknown>,
+): TriageCategory {
+  if (
+    readAssessmentBoolean(answers, "spontaneousBreathing") === false &&
+    readAssessmentBoolean(answers, "breathingAfterAirwayManagement") !==
+      true
+  ) {
+    return "expectant";
+  }
+
+  if (
+    readAssessmentBoolean(
+      answers,
+      "breathingAfterAirwayManagement",
+    ) === true
+  ) {
+    return "immediate";
+  }
+
+  if (
+    readAssessmentBoolean(answers, "alertAndMovingAllLimbs") === false
+  ) {
+    return "immediate";
+  }
+
+  const ranges = getPttNormalRanges(
+    readAssessmentString(answers, "height"),
+  );
+  const respiratoryRate = readAssessmentNumber(
+    answers,
+    "pttRespiratoryRate",
+  );
+  const pulseRate = readAssessmentNumber(answers, "pttPulseRate");
+
+  if (!ranges || respiratoryRate === null || pulseRate === null) {
+    return "unknown";
+  }
+
+  if (
+    respiratoryRate < ranges.minRespiratoryRate ||
+    respiratoryRate > ranges.maxRespiratoryRate ||
+    pulseRate < ranges.minPulseRate ||
+    pulseRate > ranges.maxPulseRate ||
+    readAssessmentString(answers, "capillaryRefill") ===
+      "more_than_2_seconds"
+  ) {
+    return "immediate";
+  }
+
+  return readAssessmentBoolean(answers, "alertAndMovingAllLimbs") === true
+    ? "minimal"
+    : "delayed";
+}
+
+function calculateMittTriage(
+  answers: Record<string, unknown>,
+): TriageCategory {
+  if (
+    readAssessmentBoolean(answers, "catastrophicHemorrhage") === true
+  ) {
+    return "immediate";
+  }
+
+  if (readAssessmentBoolean(answers, "canWalk") === true) {
+    return "minimal";
+  }
+
+  if (
+    readAssessmentBoolean(answers, "spontaneousBreathing") === false ||
+    readAssessmentString(answers, "respirations") === "absent"
+  ) {
+    return "expectant";
+  }
+
+  if (
+    readAssessmentBoolean(answers, "respondsToVoice") === false ||
+    readAssessmentString(answers, "respirations") === "less_than_12" ||
+    readAssessmentString(answers, "respirations") === "more_than_23" ||
+    readAssessmentString(answers, "heartRate") === "absent" ||
+    readAssessmentString(answers, "heartRate") === "more_than_100"
+  ) {
+    return "immediate";
+  }
+
+  return readAssessmentString(answers, "respirations")
+    ? "delayed"
+    : "unknown";
+}
+
+function calculateMassTriage(
+  answers: Record<string, unknown>,
+): TriageCategory {
+  if (
+    readAssessmentBoolean(
+      answers,
+      "lifeSavingInterventionPerformed",
+    ) === true
+  ) {
+    return "immediate";
+  }
+
+  if (readAssessmentBoolean(answers, "breathing") === false) {
+    return "expectant";
+  }
+
+  const stable =
+    readAssessmentBoolean(answers, "breathing") === true &&
+    readAssessmentBoolean(answers, "obeysCommands") === true &&
+    readAssessmentBoolean(answers, "breathingNormally") === true &&
+    readAssessmentBoolean(answers, "purposefulMovements") === true &&
+    readAssessmentBoolean(answers, "majorBleedingControlled") === true &&
+    readAssessmentString(answers, "radialPulse") === "present";
+
+  if (!stable) {
+    return readAssessmentBoolean(
+      answers,
+      "likelyToSurviveGivenResources",
+    ) === false
+      ? "expectant"
+      : readAssessmentBoolean(
+            answers,
+            "likelyToSurviveGivenResources",
+          ) === true
+        ? "immediate"
+        : "unknown";
+  }
+
+  if (readAssessmentBoolean(answers, "minorInjuriesOnly") === true) {
+    return "minimal";
+  }
+
+  if (readAssessmentBoolean(answers, "minorInjuriesOnly") === false) {
+    return "delayed";
+  }
+
+  return "unknown";
+}
+
+function calculateUrgentNonUrgentTriage(
+  answers: Record<string, unknown>,
+): TriageCategory {
+  const urgent = readAssessmentBoolean(answers, "urgent");
+
+  if (urgent === true) {
+    return "immediate";
+  }
+
+  if (urgent === false) {
+    return "minimal";
+  }
+
+  return "unknown";
+}
+
+function calculateSmartTriage(
+  answers: Record<string, unknown>,
+): TriageCategory {
+  if (readAssessmentBoolean(answers, "walking") === true) {
+    return "minimal";
+  }
+
+  const breathing = readAssessmentBoolean(answers, "breathing");
+
+  if (breathing === false) {
+    return "expectant";
+  }
+
+  if (
+    readAssessmentBoolean(
+      answers,
+      "obeysCommandsOrPurposefulMovement",
+    ) === false ||
+    readAssessmentBoolean(answers, "hasPeripheralPulse") === false
+  ) {
+    return "immediate";
+  }
+
+  return breathing === true ? "delayed" : "unknown";
+}
+
+function calculateMobileTriageCategory(
+  triageSystem: string,
+  assessmentAnswers: Record<string, unknown> | undefined,
+): TriageCategory {
+  if (!assessmentAnswers) {
+    return "unknown";
+  }
+
+  const { finalTriage: _ignoredFinalTriage, ...algorithmAnswers } =
+    assessmentAnswers;
+
+  switch (normalizeTriageSystem(triageSystem)) {
+    case "start":
+      return calculateStartLikeTriage(algorithmAnswers);
+    case "stieve":
+      return calculateStieveTriage(algorithmAnswers);
+    case "mstart":
+      return calculateMstartTriage(algorithmAnswers);
+    case "jumpstart":
+      return calculateJumpstartTriage(algorithmAnswers);
+    case "nato":
+      return calculateNatoTriage(algorithmAnswers);
+    case "sieve":
+    case "sieve_sort":
+      return calculateSieveTriage(algorithmAnswers);
+    case "care_flight":
+      return calculateCareFlightTriage(algorithmAnswers);
+    case "salt":
+      return calculateSaltTriage(algorithmAnswers);
+    case "ptt":
+      return calculatePttTriage(algorithmAnswers);
+    case "mitt":
+    case "mptt":
+      return calculateMittTriage(algorithmAnswers);
+    case "homebush":
+      return calculateStartLikeTriage(algorithmAnswers);
+    case "sort":
+    case "rts":
+      return calculateSortTriage(algorithmAnswers);
+    case "save":
+      return calculateSaveTriage(algorithmAnswers);
+    case "meta":
+      return calculateMetaTriage(algorithmAnswers);
+    case "mass":
+      return calculateMassTriage(algorithmAnswers);
+    case "urgent_non_urgent":
+      return calculateUrgentNonUrgentTriage(algorithmAnswers);
+    case "smart":
+      return calculateSmartTriage(algorithmAnswers);
+    case "esi":
+    case "metts":
+    case "ed_triage":
+    case "stm":
+    case "swift":
+    case "other":
+      return "unknown";
+    default:
+      return "unknown";
+  }
+}
+
+function calculateNatoTriage(
+  answers: Record<string, unknown>,
+): TriageCategory {
+  if (
+    readAssessmentBoolean(answers, "canWalk") === true ||
+    readAssessmentBoolean(answers, "minorSelfCare") === true
+  ) {
+    return "minimal";
+  }
+
+  if (
+    readAssessmentBoolean(
+      answers,
+      "lifeSavingSurgeryHighSurvival",
+    ) === true
+  ) {
+    return "immediate";
+  }
+
+  if (
+    readAssessmentBoolean(answers, "delayedSurgeryPermitted") === true
+  ) {
+    return "delayed";
+  }
+
+  if (
+    readAssessmentBoolean(
+      answers,
+      "lowSurvivalComplexTreatment",
+    ) === true
+  ) {
+    return "expectant";
+  }
+
+  return "unknown";
+}
+
+function triageCategoryToFinalAnswer(
+  category: TriageCategory,
+): string {
+  switch (category) {
+    case "immediate":
+      return "red";
+    case "delayed":
+      return "yellow";
+    case "minimal":
+      return "green";
+    case "expectant":
+      return "black";
+    default:
+      return "";
+  }
+}
+
+function getCalculatedFinalTriageAnswer(
+  triageSystem: string,
+  assessmentAnswers: Record<string, unknown> | undefined,
+): string {
+  return triageCategoryToFinalAnswer(
+    calculateMobileTriageCategory(triageSystem, assessmentAnswers),
+  );
 }
 
 function formatTriageSystem(value: string | null | undefined): string {
@@ -2368,7 +3269,17 @@ function coerceAppendixAnswer(
 function buildTriageAssessmentAnswers(
   form: FormState,
 ): Record<string, unknown> | undefined {
-  const questions = getAppendixQuestionsForSystem(form.triageSystem);
+  return buildTriageAssessmentAnswersFromRaw(
+    form.triageSystem,
+    form.triageAssessmentAnswers,
+  );
+}
+
+function buildTriageAssessmentAnswersFromRaw(
+  triageSystem: string,
+  rawAnswers: Record<string, string>,
+): Record<string, unknown> | undefined {
+  const questions = getAppendixQuestionsForSystem(triageSystem);
 
   if (questions.length === 0) {
     return undefined;
@@ -2376,7 +3287,11 @@ function buildTriageAssessmentAnswers(
 
   const answers = questions.reduce<Record<string, unknown>>(
     (currentAnswers, question) => {
-      const answer = form.triageAssessmentAnswers[question.key];
+      if (question.key === "finalTriage") {
+        return currentAnswers;
+      }
+
+      const answer = rawAnswers[question.key];
 
       if (answer) {
         currentAnswers[question.key] = coerceAppendixAnswer(
@@ -2390,16 +3305,67 @@ function buildTriageAssessmentAnswers(
     {},
   );
 
-  return Object.keys(answers).length > 0 ? answers : undefined;
+  if (Object.keys(answers).length === 0) {
+    return undefined;
+  }
+
+  const calculatedFinalTriage = getCalculatedFinalTriageAnswer(
+    triageSystem,
+    answers,
+  );
+
+  if (calculatedFinalTriage) {
+    answers.finalTriage = calculatedFinalTriage;
+  }
+
+  return answers;
+}
+
+function syncCalculatedFinalTriageAnswer(
+  triageSystem: string,
+  rawAnswers: Record<string, string>,
+): Record<string, string> {
+  const nextAnswers = { ...rawAnswers };
+  delete nextAnswers.finalTriage;
+
+  const calculatedAnswers = buildTriageAssessmentAnswersFromRaw(
+    triageSystem,
+    nextAnswers,
+  );
+  const calculatedFinalTriage =
+    typeof calculatedAnswers?.finalTriage === "string"
+      ? calculatedAnswers.finalTriage
+      : "";
+
+  if (calculatedFinalTriage) {
+    nextAnswers.finalTriage = calculatedFinalTriage;
+  }
+
+  return nextAnswers;
 }
 
 function getTransportFormSignature(form: FormState): string {
-  if (!form.transportRequired.trim()) {
+  if (!form.transportRequired.trim() && !form.patientFor.trim()) {
     return "";
   }
 
   return JSON.stringify({
     required: normalizeTransportRequired(form.transportRequired),
+    patientFor: form.patientFor.trim(),
+    conditionBeforeRelease: form.conditionBeforeRelease.trim(),
+    releaseMedicalContact: form.releaseMedicalContact.trim(),
+    conditionBeforeTransfer: form.conditionBeforeTransfer.trim(),
+    transferMedicalContact: form.transferMedicalContact.trim(),
+    transferPrecaution: form.transferPrecaution.trim(),
+    receivingFacilityText: form.receivingFacilityText.trim(),
+    usedEmsVehicle: form.usedEmsVehicle.trim(),
+    emsVehicleType: form.emsVehicleType.trim(),
+    vehicleMakeModelPlate: form.vehicleMakeModelPlate.trim(),
+    patientReceivedByPhysician:
+      form.patientReceivedByPhysician.trim(),
+    patientReceivedByNurse: form.patientReceivedByNurse.trim(),
+    releaseLiabilityAccepted:
+      form.releaseLiabilityAccepted.trim(),
     mode: normalizeTransportMode(form.transportMode),
     emsUnitType: normalizeEmsUnitType(form.emsUnitType),
     arrivedScene: parseDateTimeInput(form.arrivedSceneTime) ?? "",
@@ -2523,21 +3489,67 @@ function isInRange(
   return parsed === undefined || (parsed >= min && parsed <= max);
 }
 
-function generateCasualtyIdNumber(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  const hour = String(now.getHours()).padStart(2, "0");
-  const minute = String(now.getMinutes()).padStart(2, "0");
-  const second = String(now.getSeconds()).padStart(2, "0");
-  const millisecond = String(now.getMilliseconds()).padStart(3, "0");
-  const suffix = Math.random()
-    .toString(36)
-    .slice(2, 8)
-    .toUpperCase();
+function formatCasualtyIdDate(date = new Date()): string {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const year = String(date.getFullYear()).slice(-2);
 
-  return `CAS-${year}${month}${day}-${hour}${minute}${second}${millisecond}-${suffix}`;
+  return `${month}${day}${year}`;
+}
+
+function normalizeCasualtyUserCode(userCode: string): string {
+  return userCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, "") || "USR";
+}
+
+function formatCasualtySequence(sequence: number): string {
+  return String(Math.max(1, sequence)).padStart(3, "0");
+}
+
+function generateCasualtyIdNumber(
+  userCode: string,
+  sequence: number,
+  date = new Date(),
+): string {
+  return `CAS:${formatCasualtyIdDate(date)}:${normalizeCasualtyUserCode(
+    userCode,
+  )}${formatCasualtySequence(sequence)}`;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function getCasualtyIdSequence(
+  idNumber: string | null | undefined,
+  dateCode = formatCasualtyIdDate(),
+  userCode = "",
+): number {
+  const normalizedUserCode = normalizeCasualtyUserCode(userCode);
+  const match = new RegExp(
+    `^CAS:${escapeRegExp(dateCode)}:${escapeRegExp(
+      normalizedUserCode,
+    )}(\\d{3,})$`,
+    "i",
+  ).exec(idNumber ?? "");
+
+  if (!match) {
+    return 0;
+  }
+
+  const sequence = Number(match[1]);
+
+  return Number.isFinite(sequence) ? sequence : 0;
+}
+
+function isGeneratedCasualtyIdNumber(
+  idNumber: string | null | undefined,
+): boolean {
+  return (
+    !idNumber ||
+    /^CAS:\d{6}:[A-Z0-9]+?\d{3,}$/i.test(idNumber) ||
+    /^CAS-\d{8}-/i.test(idNumber) ||
+    /^CAS-SYNC-/i.test(idNumber)
+  );
 }
 
 function buildUnitCode(
@@ -2599,6 +3611,13 @@ function mapRecordToForm(
     cprType: "",
 
     victimCode: "",
+    userCode: "",
+    patientIdentified:
+      record.casualty.identification_status === "unidentified"
+        ? "No"
+        : record.casualty.first_name || record.casualty.last_name
+          ? "Yes"
+          : "",
     idNumber: valueOrEmpty(record.casualty.id_number),
     age: valueOrEmpty(record.casualty.estimated_age),
     firstName: valueOrEmpty(record.casualty.first_name),
@@ -2660,7 +3679,12 @@ function mapRecordToForm(
         : latestTransport?.transport_required === "no"
           ? "Release"
           : "",
+    conditionBeforeRelease: "",
+    releaseMedicalContact: "",
     conditionBeforeTransfer: "",
+    transferMedicalContact: "",
+    usedEmsVehicle: "",
+    emsVehicleType: "",
     transferPrecaution: "",
     receivingFacilityText: "",
     vehicleMakeModelPlate: "",
@@ -2823,6 +3847,7 @@ function appendSectionNote(
 function buildSaResponderRemarks(form: FormState): string {
   return appendSectionNote(buildResponderSafetyRemarks(form), "SA Responder Details", [
     ["Victim code", form.victimCode],
+    ["Patient identified", form.patientIdentified],
     ["Witness present", form.witnessPresent],
     ["Witness other", form.witnessOther],
     ["Witness response", form.witnessResponse],
@@ -2837,6 +3862,13 @@ function buildResponderSafetyRemarks(form: FormState): string {
   return appendSectionNote(form.remarks, "Responder Safety", [
     ["Are you safe", form.responderSafetyStatus],
     ["Time of PPE Use", form.ppeUseTime],
+  ]);
+}
+
+function buildFieldResponderTriageNotes(form: FormState): string {
+  return appendSectionNote(form.triageNotes, "Field Responder Codes", [
+    ["Victim code", form.victimCode],
+    ["User code", form.userCode],
   ]);
 }
 
@@ -2856,9 +3888,14 @@ function buildSaResponderTransportNotes(form: FormState): string {
 
   return appendSectionNote(form.transportNotes, "SA Transport / Release", [
     ["Patient for", form.patientFor],
-    ["Condition before release/transfer", form.conditionBeforeTransfer],
+    ["Condition before release", form.conditionBeforeRelease],
+    ["Medical contact if dead", form.releaseMedicalContact],
+    ["Condition before transfer", form.conditionBeforeTransfer],
+    ["Medical contact if dead before transfer", form.transferMedicalContact],
     ["Precaution", form.transferPrecaution],
     ["Receiving facility", form.receivingFacilityText],
+    ["Used EMS vehicle", form.usedEmsVehicle],
+    ["Type of EMS vehicle", form.emsVehicleType],
     ["Vehicle make/model/plate", form.vehicleMakeModelPlate],
     ["Patient received by physician", form.patientReceivedByPhysician],
     ["Patient received by nurse", form.patientReceivedByNurse],
@@ -3516,6 +4553,21 @@ export default function AddCasualtyScreen() {
     useState(false);
   const [incidentError, setIncidentError] =
     useState<string | null>(null);
+  const [fieldResponderRecords, setFieldResponderRecords] = useState<
+    CasualtyRecord[]
+  >([]);
+  const [
+    selectedFieldResponderRecordId,
+    setSelectedFieldResponderRecordId,
+  ] = useState<string | null>(null);
+  const [
+    isLoadingFieldResponderRecords,
+    setIsLoadingFieldResponderRecords,
+  ] = useState(false);
+  const [
+    fieldResponderRecordsError,
+    setFieldResponderRecordsError,
+  ] = useState<string | null>(null);
   const [newIncidentName, setNewIncidentName] = useState("");
   const [newIncidentType, setNewIncidentType] = useState("");
   const [isCreatingIncident, setIsCreatingIncident] =
@@ -3569,6 +4621,8 @@ export default function AddCasualtyScreen() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(
     null,
   );
+  const [currentUserFullName, setCurrentUserFullName] =
+    useState<string | null>(null);
   const [currentUserRole, setCurrentUserRole] = useState<
     UserRole | null
   >(null);
@@ -3584,12 +4638,16 @@ export default function AddCasualtyScreen() {
     currentResponderAssignment,
     setCurrentResponderAssignment,
   ] = useState<ResponderAssignment | null>(null);
+  const [nextCasualtySequence, setNextCasualtySequence] =
+    useState(1);
   const [isLoadingUserContext, setIsLoadingUserContext] =
     useState(true);
   const [selectedPhoto, setSelectedPhoto] =
     useState<SelectedPhoto | null>(null);
   const [isCapturingLocation, setIsCapturingLocation] =
     useState(false);
+  const [submissionFeedback, setSubmissionFeedback] =
+    useState<SubmissionFeedback | null>(null);
 
   const isFieldResponderFlow = isFieldResponderCaptureFlow(
     currentUserRole,
@@ -3637,12 +4695,49 @@ export default function AddCasualtyScreen() {
     : isSaResponderFlow
       ? "Stabilization Area Responder"
       : null;
+  const generatedUserCode = generateUserCodeFromName(currentUserFullName);
+  const fieldResponderVictimCodeOptions = useMemo(() => {
+    const seenCodes = new Set<string>();
+
+    return fieldResponderRecords
+      .map((record) => {
+        const victimCode =
+          extractVictimCodeFromTriageNotes(
+            record.latest_triage_assessment?.notes,
+          ) || extractVictimCodeFromTriageNotes(record.remarks);
+
+        if (!victimCode || seenCodes.has(victimCode.toLowerCase())) {
+          return null;
+        }
+
+        seenCodes.add(victimCode.toLowerCase());
+
+        return {
+          record,
+          victimCode,
+          label: formatLinkedCasualtyLabel(record, victimCode),
+        };
+      })
+      .filter(
+        (
+          option,
+        ): option is {
+          record: CasualtyRecord;
+          victimCode: string;
+          label: string;
+        } => option !== null,
+      );
+  }, [fieldResponderRecords]);
 
   const personPayload = useMemo<CreateCasualtyPayload["person"]>(
     () => ({
       idNumber: form.idNumber,
       identificationStatus:
-        form.firstName.trim() || form.lastName.trim()
+        form.patientIdentified === "No"
+          ? "unidentified"
+          : form.patientIdentified === "Yes" ||
+              form.firstName.trim() ||
+              form.lastName.trim()
           ? "identified"
           : "unidentified",
       firstName: form.firstName,
@@ -3709,24 +4804,29 @@ export default function AddCasualtyScreen() {
       return undefined;
     }
 
+    const assessmentAnswers = buildTriageAssessmentAnswers(form);
+
     return {
       triageSystem: normalizeTriageSystem(form.triageSystem),
-      triageCategory: triageFinalAnswerToCategory(
+      triageCategory: calculateMobileTriageCategory(
         form.triageSystem,
-        form.triageAssessmentAnswers.finalTriage,
+        assessmentAnswers,
       ),
       triageStage: normalizeTriageStage(form.triageStage),
       triagedAt: parseDateTimeInput(form.triageTime),
       location: form.triageLocation || form.currentLocation,
       notes: isHealthcareDocumenterFlow
         ? buildHealthcareDocumenterTriageNotes(form)
-        : form.triageNotes,
-      assessmentAnswers: buildTriageAssessmentAnswers(form),
+        : isFieldResponderFlow
+          ? buildFieldResponderTriageNotes(form)
+          : form.triageNotes,
+      assessmentAnswers,
     };
   }, [
     form,
     initialTriageSignature,
     isEditing,
+    isFieldResponderFlow,
     isHealthcareDocumenterFlow,
   ]);
 
@@ -3752,8 +4852,14 @@ export default function AddCasualtyScreen() {
             ? "no"
             : "unknown"
         : normalizeTransportRequired(form.transportRequired),
-      transportMode: normalizeTransportMode(form.transportMode),
-      emsUnitType: normalizeEmsUnitType(form.emsUnitType),
+      transportMode:
+        isSaResponderFlow && form.usedEmsVehicle === "Yes"
+          ? "ems"
+          : normalizeTransportMode(form.transportMode),
+      emsUnitType:
+        isSaResponderFlow && form.usedEmsVehicle === "Yes"
+          ? normalizeEmsUnitType(form.emsVehicleType)
+          : normalizeEmsUnitType(form.emsUnitType),
       arrivedSceneAt: isSaResponderFlow
         ? undefined
         : parseDateTimeInput(form.arrivedSceneTime),
@@ -3945,6 +5051,44 @@ export default function AddCasualtyScreen() {
   const casualtyOutcomePayload = useMemo<
     CreateCasualtyPayload["casualtyOutcome"]
   >(() => {
+    if (
+      isSaResponderFlow &&
+      form.patientFor === "Referral or Transfer to Health Facility" &&
+      form.conditionBeforeTransfer
+    ) {
+      const diedBeforeTransfer = form.conditionBeforeTransfer === "Dead";
+
+      return {
+        died: diedBeforeTransfer,
+        deathStage: diedBeforeTransfer ? "prehospital" : null,
+        medicalContactBeforeDeath: diedBeforeTransfer
+          ? form.transferMedicalContact
+            ? form.transferMedicalContact === "With medical contact"
+            : null
+          : null,
+        finalDisposition: diedBeforeTransfer ? "deceased" : "transferred",
+      };
+    }
+
+    if (
+      isSaResponderFlow &&
+      form.patientFor === "Release" &&
+      form.conditionBeforeRelease
+    ) {
+      const diedOnRelease = form.conditionBeforeRelease === "Dead";
+
+      return {
+        died: diedOnRelease,
+        deathStage: diedOnRelease ? "prehospital" : null,
+        medicalContactBeforeDeath: diedOnRelease
+          ? form.releaseMedicalContact
+            ? form.releaseMedicalContact === "With medical contact"
+            : null
+          : null,
+        finalDisposition: diedOnRelease ? "deceased" : "alive",
+      };
+    }
+
     const died = normalizeYesNoUnknown(form.died);
 
     if (died !== true) {
@@ -3987,7 +5131,7 @@ export default function AddCasualtyScreen() {
       medicalContactBeforeDeath,
       finalDisposition,
     };
-  }, [form]);
+  }, [form, isSaResponderFlow]);
 
   const updatePayload = useMemo<UpdateCasualtyPayload>(
     () => ({
@@ -4023,6 +5167,7 @@ export default function AddCasualtyScreen() {
 
       if (isMounted) {
         setCurrentUserId(user?.id ?? null);
+        setCurrentUserFullName(user?.full_name ?? null);
         setCurrentUserRole(user?.role ?? null);
         setCurrentReportingContext(user?.reporting_context ?? null);
         setCurrentAssignedMunicipality(
@@ -4087,14 +5232,66 @@ export default function AddCasualtyScreen() {
   }, [isEditing, isHealthcareDocumenterFlow]);
 
   useEffect(() => {
+    if (isEditing || isSaResponderFlow) {
+      return;
+    }
+
+    let isMounted = true;
+
+    async function loadNextCasualtySequence() {
+      const dateCode = formatCasualtyIdDate();
+      const userCode = normalizeCasualtyUserCode(generatedUserCode);
+      const queuedRecords = await getQueuedCasualtySubmissions();
+      let highestSequence = queuedRecords.reduce((highest, item) => {
+        return Math.max(
+          highest,
+          getCasualtyIdSequence(
+            item.payload.person.idNumber,
+            dateCode,
+            userCode,
+          ),
+        );
+      }, 0);
+
+      if (currentUserId) {
+        try {
+          const serverNextSequence = await getNextCasualtyIdSequence(
+            userCode,
+            dateCode,
+          );
+          highestSequence = Math.max(
+            highestSequence,
+            serverNextSequence - 1,
+          );
+        } catch (error) {
+          console.warn("Unable to count synced casualty IDs:", error);
+        }
+      }
+
+      if (isMounted) {
+        setNextCasualtySequence(highestSequence + 1);
+      }
+    }
+
+    void loadNextCasualtySequence();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUserId, generatedUserCode, isEditing, isSaResponderFlow]);
+
+  useEffect(() => {
     if (isEditing) {
       return;
     }
 
     setForm((current) => ({
       ...current,
+      userCode:
+        current.userCode || generatedUserCode,
       idNumber:
         current.idNumber &&
+        !isGeneratedCasualtyIdNumber(current.idNumber) &&
         !(isSaResponderFlow && current.idNumber.startsWith("CAS-UNIT-"))
           ? current.idNumber
           : isSaResponderFlow
@@ -4102,15 +5299,20 @@ export default function AddCasualtyScreen() {
                 currentAssignedMunicipality,
                 currentAssignedBarangay,
               )
-            : generateCasualtyIdNumber(),
+            : generateCasualtyIdNumber(
+                generatedUserCode,
+                nextCasualtySequence,
+              ),
       triageTime:
         current.triageTime || formatDateTimeForInput(new Date()),
     }));
   }, [
     currentAssignedBarangay,
     currentAssignedMunicipality,
+    generatedUserCode,
     isEditing,
     isSaResponderFlow,
+    nextCasualtySequence,
   ]);
 
   useEffect(() => {
@@ -4180,6 +5382,25 @@ export default function AddCasualtyScreen() {
       incidentName: matchedIncident.incident_name,
     }));
   }, [form.incidentName, incidents, isEditing, presetIncidentId]);
+
+  useEffect(() => {
+    if (
+      isEditing ||
+      !isFieldResponderFlow ||
+      form.incidentId ||
+      incidents.length !== 1
+    ) {
+      return;
+    }
+
+    const [onlyIncident] = incidents;
+
+    setForm((current) => ({
+      ...current,
+      incidentId: onlyIncident.id,
+      incidentName: onlyIncident.incident_name,
+    }));
+  }, [form.incidentId, incidents, isEditing, isFieldResponderFlow]);
 
   useEffect(() => {
     let isMounted = true;
@@ -4273,6 +5494,60 @@ export default function AddCasualtyScreen() {
       isMounted = false;
     };
   }, [form.incidentId]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadFieldResponderRecordOptions() {
+      if (
+        isEditing ||
+        !isSaResponderFlow ||
+        !currentUserId ||
+        !form.incidentId
+      ) {
+        if (isMounted) {
+          setFieldResponderRecords([]);
+          setFieldResponderRecordsError(null);
+          setIsLoadingFieldResponderRecords(false);
+        }
+        return;
+      }
+
+      try {
+        setIsLoadingFieldResponderRecords(true);
+        setFieldResponderRecordsError(null);
+
+        const data = await getCasualties({
+          incidentId: form.incidentId,
+          fieldResponderLinks: true,
+        });
+
+        if (isMounted) {
+          setFieldResponderRecords(data);
+        }
+      } catch (error) {
+        console.error("Failed to load Field Responder records:", error);
+
+        if (isMounted) {
+          setFieldResponderRecordsError(
+            error instanceof Error
+              ? error.message
+              : "Unable to load Field Responder victim codes.",
+          );
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingFieldResponderRecords(false);
+        }
+      }
+    }
+
+    void loadFieldResponderRecordOptions();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUserId, form.incidentId, isEditing, isSaResponderFlow]);
 
   useEffect(() => {
     let isMounted = true;
@@ -4420,6 +5695,95 @@ export default function AddCasualtyScreen() {
         };
       }
 
+      if (key === "dateOfBirth") {
+        const calculatedAge = calculateAgeFromDateOfBirth(String(value));
+
+        return {
+          ...current,
+          [key]: value,
+          age: calculatedAge || current.age,
+        };
+      }
+
+      if (key === "patientFor") {
+        const nextPatientFor = String(value);
+
+        return {
+          ...current,
+          [key]: value,
+          conditionBeforeRelease:
+            nextPatientFor === "Release"
+              ? current.conditionBeforeRelease
+              : "",
+          releaseMedicalContact:
+            nextPatientFor === "Release" ? current.releaseMedicalContact : "",
+          releaseLiabilityAccepted:
+            nextPatientFor === "Release"
+              ? current.releaseLiabilityAccepted
+              : "",
+          conditionBeforeTransfer:
+            nextPatientFor === "Referral or Transfer to Health Facility"
+              ? current.conditionBeforeTransfer
+              : "",
+          transferMedicalContact:
+            nextPatientFor === "Referral or Transfer to Health Facility"
+              ? current.transferMedicalContact
+              : "",
+          transferPrecaution:
+            nextPatientFor === "Referral or Transfer to Health Facility"
+              ? current.transferPrecaution
+              : "",
+          receivingFacilityText:
+            nextPatientFor === "Referral or Transfer to Health Facility"
+              ? current.receivingFacilityText
+              : "",
+          usedEmsVehicle:
+            nextPatientFor === "Referral or Transfer to Health Facility"
+              ? current.usedEmsVehicle
+              : "",
+          emsVehicleType:
+            nextPatientFor === "Referral or Transfer to Health Facility"
+              ? current.emsVehicleType
+              : "",
+          vehicleMakeModelPlate:
+            nextPatientFor === "Referral or Transfer to Health Facility"
+              ? current.vehicleMakeModelPlate
+              : "",
+          patientReceivedByPhysician:
+            nextPatientFor === "Referral or Transfer to Health Facility"
+              ? current.patientReceivedByPhysician
+              : "",
+          patientReceivedByNurse:
+            nextPatientFor === "Referral or Transfer to Health Facility"
+              ? current.patientReceivedByNurse
+              : "",
+        };
+      }
+
+      if (key === "conditionBeforeRelease" && value !== "Dead") {
+        return {
+          ...current,
+          [key]: value,
+          releaseMedicalContact: "",
+        };
+      }
+
+      if (key === "conditionBeforeTransfer" && value !== "Dead") {
+        return {
+          ...current,
+          [key]: value,
+          transferMedicalContact: "",
+        };
+      }
+
+      if (key === "usedEmsVehicle" && value !== "Yes") {
+        return {
+          ...current,
+          [key]: value,
+          emsVehicleType: "",
+        };
+      }
+
       if (key === "admittedAfterEd" && value !== "Yes") {
         return {
           ...current,
@@ -4539,18 +5903,172 @@ export default function AddCasualtyScreen() {
     key: string,
     value: string,
   ) {
-    setForm((current) => ({
-      ...current,
-      triageAssessmentAnswers: {
-        ...current.triageAssessmentAnswers,
-        [key]: value,
-      },
-    }));
+    if (key === "finalTriage") {
+      return;
+    }
+
+    setForm((current) => {
+      const nextAnswers = { ...current.triageAssessmentAnswers };
+
+      if (value) {
+        nextAnswers[key] = value;
+      } else {
+        delete nextAnswers[key];
+      }
+
+      return {
+        ...current,
+        triageAssessmentAnswers: syncCalculatedFinalTriageAnswer(
+          current.triageSystem,
+          nextAnswers,
+        ),
+      };
+    });
+  }
+
+  function getDefaultTriageStageForCurrentFlow(): TriageStageOption {
+    if (isHealthcareDocumenterFlow) {
+      return "Tertiary Triage";
+    }
+
+    if (isSaResponderFlow) {
+      return "Secondary Triage";
+    }
+
+    return "Primary Triage";
+  }
+
+  function getDefaultTriageSystemForCurrentFlow(): string {
+    const defaultStage = getDefaultTriageStageForCurrentFlow();
+    return getTriageSystemOptionsForStage(defaultStage)[0] ?? "START";
+  }
+
+  function buildFreshCreateForm(
+    current: FormState,
+    sequence = nextCasualtySequence,
+  ): FormState {
+    return {
+      ...initialForm,
+      idNumber: isSaResponderFlow
+        ? generateCasualtyUnitIdNumber(
+            currentAssignedMunicipality,
+            currentAssignedBarangay,
+          )
+        : generateCasualtyIdNumber(generatedUserCode, sequence),
+      userCode: generatedUserCode,
+      incidentId: (current.incidentId || presetIncidentId) ?? "",
+      incidentName: (current.incidentName || presetIncidentName) ?? "",
+      triageStage: getDefaultTriageStageForCurrentFlow(),
+      triageSystem: getDefaultTriageSystemForCurrentFlow(),
+      triageTime: formatDateTimeForInput(new Date()),
+      transportRequired: "Unknown",
+      transportMode: "Unknown",
+      emsUnitType: "Unknown",
+      treatmentStrategy: "Unknown",
+      transferredOutOfHospital: "Unknown",
+      soughtEdCare: "Unknown",
+      admittedAfterEd: isHealthcareDocumenterFlow ? "" : "Unknown",
+      dischargedAfterEd: isHealthcareDocumenterFlow ? "" : "Unknown",
+      xrayRequired: isHealthcareDocumenterFlow ? "" : "Unknown",
+      ultrasoundRequired: isHealthcareDocumenterFlow ? "" : "Unknown",
+      ctRequired: isHealthcareDocumenterFlow ? "" : "Unknown",
+      mechanicalVentilationRequired: isHealthcareDocumenterFlow
+        ? ""
+        : "Unknown",
+      alternativeIcuUsed: isHealthcareDocumenterFlow ? "" : "Unknown",
+      died: "Unknown",
+      reachedHospital: "Unknown",
+      medicalContactBeforeDeath: "Unknown",
+      finalDisposition: "Unknown",
+    };
+  }
+
+  function resetForNextCasualty() {
+    const nextSequence = nextCasualtySequence + 1;
+    setNextCasualtySequence(nextSequence);
+    setCurrentStep(0);
+    setSelectedPhoto(null);
+    setSelectedFieldResponderRecordId(null);
+    setActiveChoiceSheet(null);
+    setChoiceSearchQuery("");
+    setIsTriageAssessmentVisible(false);
+    setIsDatePickerVisible(false);
+    setForm((current) => buildFreshCreateForm(current, nextSequence));
+  }
+
+  function closeSubmissionFeedback() {
+    setSubmissionFeedback(null);
+    resetForNextCasualty();
   }
 
   function openChoiceSheet(sheetName: ChoiceSheetName) {
     setChoiceSearchQuery("");
     setActiveChoiceSheet(sheetName);
+  }
+
+  function applyFieldResponderRecord(
+    record: CasualtyRecord,
+    victimCode: string,
+  ) {
+    const mappedForm = mapRecordToForm(record);
+    const secondarySystems =
+      getTriageSystemOptionsForStage("Secondary Triage");
+    const currentTriageSystemIsSecondary = secondarySystems.includes(
+      form.triageSystem as TriageSystemOption,
+    );
+
+    setSelectedFieldResponderRecordId(record.id);
+    setForm((current) => ({
+      ...current,
+      victimCode,
+      patientIdentified:
+        current.patientIdentified || mappedForm.patientIdentified,
+      idNumber: mappedForm.idNumber,
+      age: mappedForm.age,
+      firstName: mappedForm.firstName,
+      middleName: mappedForm.middleName,
+      lastName: mappedForm.lastName,
+      sex: mappedForm.sex,
+      dateOfBirth: mappedForm.dateOfBirth,
+      contactNumber: mappedForm.contactNumber,
+      houseStreet: mappedForm.houseStreet,
+      barangay: mappedForm.barangay,
+      municipality: mappedForm.municipality,
+      province: mappedForm.province,
+      region: mappedForm.region,
+      incidentId: mappedForm.incidentId,
+      incidentName: mappedForm.incidentName,
+      currentLocation:
+        current.currentLocation || mappedForm.currentLocation,
+      evacuationCenterId: mappedForm.evacuationCenterId,
+      evacuationCenter: mappedForm.evacuationCenter,
+      latitude: current.latitude || mappedForm.latitude,
+      longitude: current.longitude || mappedForm.longitude,
+      casualtyStatus:
+        current.casualtyStatus || mappedForm.casualtyStatus,
+      severity: current.severity || mappedForm.severity,
+      healthcareFacilityId:
+        current.healthcareFacilityId || mappedForm.healthcareFacilityId,
+      healthcareFacility:
+        current.healthcareFacility || mappedForm.healthcareFacility,
+      hospitalName: current.hospitalName || mappedForm.hospitalName,
+      visibleInjury:
+        current.visibleInjury || mappedForm.visibleInjury,
+      medicalCondition:
+        current.medicalCondition || mappedForm.medicalCondition,
+      assistanceNeeded:
+        current.assistanceNeeded || mappedForm.assistanceNeeded,
+      assistanceProvided:
+        current.assistanceProvided || mappedForm.assistanceProvided,
+      remarks: mappedForm.remarks,
+      triageStage: "Secondary Triage",
+      triageSystem: currentTriageSystemIsSecondary
+        ? current.triageSystem
+        : secondarySystems[0] ?? "",
+      triageAssessmentAnswers: currentTriageSystemIsSecondary
+        ? current.triageAssessmentAnswers
+        : {},
+    }));
   }
 
   function openTriageAssessment() {
@@ -4576,6 +6094,7 @@ export default function AddCasualtyScreen() {
   function isActiveChoiceSheetSearchable(): boolean {
     return (
       activeChoiceSheet === "incident" ||
+      activeChoiceSheet === "fieldResponderVictimCode" ||
       activeChoiceSheet === "evacuationCenter" ||
       activeChoiceSheet === "healthcareFacility" ||
       activeChoiceSheet === "disasterType"
@@ -4601,7 +6120,9 @@ export default function AddCasualtyScreen() {
 
   function hasTriageAssessmentAnswer(): boolean {
     return getAppendixQuestionsForSystem(form.triageSystem).some(
-      (question) => Boolean(form.triageAssessmentAnswers[question.key]),
+      (question) =>
+        question.key !== "finalTriage" &&
+        Boolean(form.triageAssessmentAnswers[question.key]),
     );
   }
 
@@ -4626,6 +6147,15 @@ export default function AddCasualtyScreen() {
   function validatePartialCurrentStep(): boolean {
     switch (stepName) {
       case "Safety":
+        if (isFieldResponderFlow && !form.incidentId && currentUserId) {
+          Alert.alert(
+            "Incident required",
+            "Select the active incident before submitting this casualty.",
+          );
+          openChoiceSheet("incident");
+          return false;
+        }
+
         return validateOptionalDateTime(
           form.ppeUseTime,
           "Invalid PPE time",
@@ -4675,6 +6205,15 @@ export default function AddCasualtyScreen() {
       case "Info":
       case "Patient Information":
       case "Personal":
+        if (isSaResponderFlow && !selectedFieldResponderRecordId) {
+          Alert.alert(
+            "Victim code required",
+            "Select an existing Field Responder victim code before continuing.",
+          );
+          openChoiceSheet("fieldResponderVictimCode");
+          return false;
+        }
+
         if (form.dateOfBirth.trim()) {
           const dateOfBirth = getValidDateInput(form.dateOfBirth);
 
@@ -4789,6 +6328,42 @@ export default function AddCasualtyScreen() {
         );
 
       case "Transport": {
+        if (
+          isSaResponderFlow &&
+          form.conditionBeforeTransfer === "Dead" &&
+          !form.transferMedicalContact.trim()
+        ) {
+          Alert.alert(
+            "Medical contact required",
+            "Select whether the dead patient had medical contact.",
+          );
+          return false;
+        }
+
+        if (
+          isSaResponderFlow &&
+          form.conditionBeforeRelease === "Dead" &&
+          !form.releaseMedicalContact.trim()
+        ) {
+          Alert.alert(
+            "Medical contact required",
+            "Select whether the dead patient had medical contact.",
+          );
+          return false;
+        }
+
+        if (
+          isSaResponderFlow &&
+          form.usedEmsVehicle === "Yes" &&
+          !form.emsVehicleType.trim()
+        ) {
+          Alert.alert(
+            "EMS vehicle type required",
+            "Select BLS or ALS for the EMS vehicle.",
+          );
+          return false;
+        }
+
         const arrivedSceneAt = form.arrivedSceneTime.trim()
           ? getValidDateTimeInput(form.arrivedSceneTime)
           : null;
@@ -5652,7 +7227,18 @@ export default function AddCasualtyScreen() {
             if (!form.conditionBeforeTransfer.trim()) {
               Alert.alert(
                 "Condition required",
-                "Enter the condition of patient before release or transfer.",
+                "Select whether the patient was alive or dead before transfer.",
+              );
+              return false;
+            }
+
+            if (
+              form.conditionBeforeTransfer === "Dead" &&
+              !form.transferMedicalContact.trim()
+            ) {
+              Alert.alert(
+                "Medical contact required",
+                "Select whether the dead patient had medical contact.",
               );
               return false;
             }
@@ -5672,17 +7258,46 @@ export default function AddCasualtyScreen() {
               );
               return false;
             }
+
+            if (
+              form.usedEmsVehicle === "Yes" &&
+              !form.emsVehicleType.trim()
+            ) {
+              Alert.alert(
+                "EMS vehicle type required",
+                "Select BLS or ALS for the EMS vehicle.",
+              );
+              return false;
+            }
           }
 
-          if (
-            form.patientFor === "Release" &&
-            form.releaseLiabilityAccepted !== "Yes"
-          ) {
+          if (form.patientFor === "Release") {
+            if (!form.conditionBeforeRelease.trim()) {
+              Alert.alert(
+                "Condition before release required",
+                "Select whether the patient was alive or dead before release.",
+              );
+              return false;
+            }
+
+            if (
+              form.conditionBeforeRelease === "Dead" &&
+              !form.releaseMedicalContact.trim()
+            ) {
+              Alert.alert(
+                "Medical contact required",
+                "Select whether the dead patient had medical contact.",
+              );
+              return false;
+            }
+
+            if (form.releaseLiabilityAccepted !== "Yes") {
             Alert.alert(
               "Release of liability required",
               "Confirm release of liability before submitting a released patient.",
             );
             return false;
+            }
           }
 
           return true;
@@ -6734,8 +8349,24 @@ export default function AddCasualtyScreen() {
         return "Pregnant?";
       case "fillPatientCareReport":
         return "Patient Care Report";
+      case "fieldResponderVictimCode":
+        return "Select Victim Code";
+      case "patientIdentified":
+        return "Patient Identified?";
       case "patientFor":
         return "Patient For";
+      case "conditionBeforeRelease":
+        return "Condition Before Release";
+      case "releaseMedicalContact":
+        return "Medical Contact";
+      case "conditionBeforeTransfer":
+        return "Condition Before Transfer";
+      case "transferMedicalContact":
+        return "Medical Contact";
+      case "usedEmsVehicle":
+        return "Used EMS Vehicle?";
+      case "emsVehicleType":
+        return "Type of EMS Vehicle";
       case "transferPrecaution":
         return "Transfer Precaution";
       case "releaseLiabilityAccepted":
@@ -6867,11 +8498,69 @@ export default function AddCasualtyScreen() {
           onSelect: () => updateField("fillPatientCareReport", option),
         }));
 
+      case "fieldResponderVictimCode":
+        return fieldResponderVictimCodeOptions.map((option) => ({
+          key: option.record.id,
+          label: option.label,
+          selected: selectedFieldResponderRecordId === option.record.id,
+          onSelect: () =>
+            applyFieldResponderRecord(option.record, option.victimCode),
+        }));
+
+      case "patientIdentified":
+        return YES_NO_OPTIONS_TEXT.map((option) => ({
+          label: option,
+          selected: form.patientIdentified === option,
+          onSelect: () => updateField("patientIdentified", option),
+        }));
+
       case "patientFor":
         return PATIENT_FOR_OPTIONS.map((option) => ({
           label: option,
           selected: form.patientFor === option,
           onSelect: () => updateField("patientFor", option),
+        }));
+
+      case "conditionBeforeRelease":
+        return RELEASE_CONDITION_OPTIONS.map((option) => ({
+          label: option,
+          selected: form.conditionBeforeRelease === option,
+          onSelect: () => updateField("conditionBeforeRelease", option),
+        }));
+
+      case "releaseMedicalContact":
+        return RELEASE_MEDICAL_CONTACT_OPTIONS.map((option) => ({
+          label: option,
+          selected: form.releaseMedicalContact === option,
+          onSelect: () => updateField("releaseMedicalContact", option),
+        }));
+
+      case "conditionBeforeTransfer":
+        return RELEASE_CONDITION_OPTIONS.map((option) => ({
+          label: option,
+          selected: form.conditionBeforeTransfer === option,
+          onSelect: () => updateField("conditionBeforeTransfer", option),
+        }));
+
+      case "transferMedicalContact":
+        return RELEASE_MEDICAL_CONTACT_OPTIONS.map((option) => ({
+          label: option,
+          selected: form.transferMedicalContact === option,
+          onSelect: () => updateField("transferMedicalContact", option),
+        }));
+
+      case "usedEmsVehicle":
+        return YES_NO_OPTIONS_TEXT.map((option) => ({
+          label: option,
+          selected: form.usedEmsVehicle === option,
+          onSelect: () => updateField("usedEmsVehicle", option),
+        }));
+
+      case "emsVehicleType":
+        return EMS_VEHICLE_TYPE_OPTIONS.map((option) => ({
+          label: option,
+          selected: form.emsVehicleType === option,
+          onSelect: () => updateField("emsVehicleType", option),
         }));
 
       case "transferPrecaution":
@@ -6975,8 +8664,11 @@ export default function AddCasualtyScreen() {
           label: incident.incident_name,
           selected: form.incidentId === incident.id,
           onSelect: () => {
+            setSelectedFieldResponderRecordId(null);
             updateField("incidentId", incident.id);
             updateField("incidentName", incident.incident_name);
+            updateField("victimCode", "");
+            updateField("patientIdentified", "");
             updateField("evacuationCenterId", "");
             updateField("evacuationCenter", "");
           },
@@ -7311,6 +9003,67 @@ export default function AddCasualtyScreen() {
   }
 
   async function handleSubmit() {
+    if (!isEditing && isSaResponderFlow) {
+      if (!selectedFieldResponderRecordId) {
+        Alert.alert(
+          "Victim code required",
+          "Select an existing Field Responder victim code before submitting.",
+        );
+        const infoStepIndex = activeSteps.indexOf("Info");
+        setCurrentStep(infoStepIndex >= 0 ? infoStepIndex : 0);
+        openChoiceSheet("fieldResponderVictimCode");
+        return;
+      }
+
+      try {
+        setIsSubmitting(true);
+
+        await updateCasualty(
+          selectedFieldResponderRecordId,
+          updatePayload,
+          { responderFunction: "sa_responder" },
+        );
+
+        const photoUploadError = await uploadSelectedPhoto(
+          selectedFieldResponderRecordId,
+        );
+
+        setSubmissionFeedback({
+          title: "Casualty updated",
+          message: photoUploadError
+            ? `The casualty record was updated, but the photo upload failed: ${photoUploadError}`
+            : "The selected casualty record has been updated successfully.",
+        });
+      } catch (error) {
+        console.error("Failed to update linked casualty:", error);
+
+        if (isAuthenticationTokenError(error)) {
+          Alert.alert(
+            "Session expired",
+            "Please log in again from Profile, then try saving the casualty update again.",
+            [
+              {
+                text: "OK",
+                onPress: () => router.replace("/profile"),
+              },
+            ],
+          );
+          return;
+        }
+
+        Alert.alert(
+          "Unable to update casualty",
+          error instanceof Error
+            ? error.message
+            : "Please review the record and try again.",
+        );
+      } finally {
+        setIsSubmitting(false);
+      }
+
+      return;
+    }
+
     if (!isEditing || !casualtyId) {
       const clientRecordId = generateUuid();
       const queuedPayload: QueuedCasualtyPayload = {
@@ -7332,16 +9085,11 @@ export default function AddCasualtyScreen() {
 
           await queueCasualtySubmission(queuedPayload);
 
-          Alert.alert(
-            "Saved on this device",
-            "The casualty record was saved locally. Log in from Profile later to sync records to DCMS.",
-            [
-              {
-                text: "OK",
-                onPress: () => router.replace("/home"),
-              },
-            ],
-          );
+          setSubmissionFeedback({
+            title: "Saved on this device",
+            message:
+              "The casualty record was saved locally. Log in from Profile later to sync records to DCMS.",
+          });
         } catch (error) {
           Alert.alert(
             "Unable to save offline",
@@ -7361,9 +9109,13 @@ export default function AddCasualtyScreen() {
           "Select a disaster incident",
           "Choose or create a disaster incident before submitting this casualty.",
         );
-        setCurrentStep(
-          Math.max(activeSteps.indexOf("Incident"), 0),
-        );
+        const incidentStepIndex = activeSteps.indexOf("Incident");
+        setCurrentStep(incidentStepIndex >= 0 ? incidentStepIndex : 0);
+
+        if (incidentStepIndex < 0) {
+          openChoiceSheet("incident");
+        }
+
         return;
       }
 
@@ -7390,31 +9142,23 @@ export default function AddCasualtyScreen() {
         const photoUploadError =
           await uploadSelectedPhoto(createdRecordId);
 
-        Alert.alert(
-          "Casualty submitted",
-          photoUploadError
+        setSubmissionFeedback({
+          title: "Casualty submitted",
+          message: photoUploadError
             ? `The casualty record was saved, but the photo upload failed: ${photoUploadError}`
             : "The casualty record has been saved successfully.",
-          [
-            {
-              text: "OK",
-              onPress: () =>
-                router.replace(
-                  `/casualty/${encodeURIComponent(createdRecordId)}` as never,
-                ),
-            },
-          ],
-        );
+        });
       } catch (error) {
         console.error("Failed to submit casualty:", error);
 
         if (isNetworkSubmissionError(error)) {
           await queueCasualtySubmission(queuedPayload);
 
-          Alert.alert(
-            "Saved offline",
-            "The casualty record was saved on this device and will sync when the connection is available.",
-          );
+          setSubmissionFeedback({
+            title: "Saved offline",
+            message:
+              "The casualty record was saved on this device and will sync when the connection is available.",
+          });
           return;
         }
 
@@ -7521,6 +9265,36 @@ export default function AddCasualtyScreen() {
   function renderResponderSafetyStep() {
     return (
       <>
+        {isFieldResponderFlow ? (
+          <>
+            <SectionLabel title="Incident" />
+
+            <SelectField
+              label="INCIDENT NAME"
+              value={form.incidentName || form.incidentId}
+              placeholder={
+                isLoadingIncidents
+                  ? "Loading active incidents..."
+                  : "Select active incident"
+              }
+              onPress={() => openChoiceSheet("incident")}
+            />
+
+            {incidentError ? (
+              <View style={styles.inlineWarning}>
+                <Ionicons
+                  name="alert-circle-outline"
+                  size={18}
+                  color={COLORS.maroon}
+                />
+                <Text style={styles.inlineWarningText}>
+                  {incidentError}
+                </Text>
+              </View>
+            ) : null}
+          </>
+        ) : null}
+
         <SectionLabel title="Responder safety" />
 
         <View style={styles.safetyPromptCard}>
@@ -8118,14 +9892,55 @@ export default function AddCasualtyScreen() {
   function renderSaInfoStep() {
     return (
       <>
-        <FormField
+        <SelectField
           label="VICTIM CODE"
           value={form.victimCode}
-          placeholder="e.g. A1, A2, B1"
-          onChangeText={(value) =>
-            updateField("victimCode", value)
+          placeholder={
+            !form.incidentId
+              ? "Select incident first"
+              : isLoadingFieldResponderRecords
+                ? "Loading Field Responder records..."
+                : "Select Field Responder victim code"
           }
+          onPress={() => openChoiceSheet("fieldResponderVictimCode")}
         />
+
+        {fieldResponderRecordsError ? (
+          <View style={styles.inlineWarning}>
+            <Ionicons
+              name="alert-circle-outline"
+              size={18}
+              color={COLORS.maroon}
+            />
+            <Text style={styles.inlineWarningText}>
+              {fieldResponderRecordsError}
+            </Text>
+          </View>
+        ) : null}
+
+        {form.incidentId &&
+        !isLoadingFieldResponderRecords &&
+        fieldResponderVictimCodeOptions.length === 0 ? (
+          <View style={styles.inlineWarning}>
+            <Ionicons
+              name="information-circle-outline"
+              size={18}
+              color={COLORS.maroon}
+            />
+            <Text style={styles.inlineWarningText}>
+              No Field Responder victim codes are available for this incident yet.
+            </Text>
+          </View>
+        ) : null}
+
+        {form.victimCode ? (
+          <SelectField
+            label="PATIENT IDENTIFIED?"
+            value={form.patientIdentified}
+            placeholder="Yes or No"
+            onPress={() => openChoiceSheet("patientIdentified")}
+          />
+        ) : null}
 
         <View style={styles.twoColumnRow}>
           <View style={styles.halfColumn}>
@@ -8720,9 +10535,15 @@ export default function AddCasualtyScreen() {
   }
 
   function renderAppendixQuestion(question: AppendixQuestion) {
-    const selectedValue =
-      form.triageAssessmentAnswers[question.key] ?? "";
     const isFinalTriageQuestion = question.key === "finalTriage";
+    const selectedValue = isFinalTriageQuestion
+      ? getCalculatedFinalTriageAnswer(
+          form.triageSystem,
+          buildTriageAssessmentAnswers(form),
+        )
+      : form.triageAssessmentAnswers[question.key] ?? "";
+    const finalTriageIsCalculated =
+      isFinalTriageQuestion && selectedValue.length > 0;
 
     if (question.inputType === "numeric") {
       return (
@@ -8754,6 +10575,13 @@ export default function AddCasualtyScreen() {
         <Text style={styles.appendixQuestionLabel}>
           {question.label}
         </Text>
+        {isFinalTriageQuestion ? (
+          <Text style={styles.appendixQuestionHint}>
+            {finalTriageIsCalculated
+              ? "Automatically selected from the assessment formula."
+              : "Answer assessment items to calculate the final triage."}
+          </Text>
+        ) : null}
         <View style={styles.appendixOptionGrid}>
           {(question.options ?? []).map((option) => {
             const selected = selectedValue === option.value;
@@ -8761,6 +10589,7 @@ export default function AddCasualtyScreen() {
             return (
               <Pressable
                 key={option.value}
+                disabled={isFinalTriageQuestion}
                 onPress={() =>
                   updateTriageAssessmentAnswer(
                     question.key,
@@ -8775,9 +10604,12 @@ export default function AddCasualtyScreen() {
                   isFinalTriageQuestion &&
                     getTriageColorButtonStyle(option.value),
                   isFinalTriageQuestion &&
+                    !selected &&
+                    styles.finalTriageOptionInactive,
+                  isFinalTriageQuestion &&
                     selected &&
                     styles.finalTriageOptionSelected,
-                  pressed && styles.pressed,
+                  pressed && !isFinalTriageQuestion && styles.pressed,
                 ]}
               >
                 <Text
@@ -8809,17 +10641,32 @@ export default function AddCasualtyScreen() {
       return "";
     }
 
-    const answeredCount = questions.filter(
+    const manualQuestions = questions.filter(
+      (question) => question.key !== "finalTriage",
+    );
+    const answeredCount = manualQuestions.filter(
       (question) => form.triageAssessmentAnswers[question.key],
     ).length;
+    const calculatedFinalTriage = getCalculatedFinalTriageAnswer(
+      form.triageSystem,
+      buildTriageAssessmentAnswers(form),
+    );
+    const resultSuffix = calculatedFinalTriage
+      ? ` - ${titleCase(
+          triageFinalAnswerToCategory(
+            form.triageSystem,
+            calculatedFinalTriage,
+          ),
+        )}`
+      : "";
 
-    if (answeredCount === questions.length) {
-      return `Complete (${answeredCount}/${questions.length})`;
+    if (answeredCount === manualQuestions.length) {
+      return `Complete (${answeredCount}/${manualQuestions.length})${resultSuffix}`;
     }
 
     return answeredCount > 0
-      ? `Ready (${answeredCount}/${questions.length} answered)`
-      : `${answeredCount}/${questions.length} answered`;
+      ? `Ready (${answeredCount}/${manualQuestions.length} answered)${resultSuffix}`
+      : `${answeredCount}/${manualQuestions.length} answered`;
   }
 
   function renderTriageAssessmentSheet() {
@@ -8891,10 +10738,10 @@ export default function AddCasualtyScreen() {
   }
 
   function renderTriageStep() {
-    const selectedFinalTriage =
-      isFieldResponderFlow || isSaResponderFlow
-        ? form.triageAssessmentAnswers.finalTriage
-        : "";
+    const selectedFinalTriage = getCalculatedFinalTriageAnswer(
+      form.triageSystem,
+      buildTriageAssessmentAnswers(form),
+    );
     const triageAssessmentColorStyle = selectedFinalTriage
       ? getTriageColorButtonStyle(selectedFinalTriage)
       : null;
@@ -8907,6 +10754,27 @@ export default function AddCasualtyScreen() {
 
     return (
       <>
+        {isFieldResponderFlow ? (
+          <>
+            <FormField
+              label="VICTIM CODE"
+              value={form.victimCode}
+              placeholder="Enter victim code"
+              onChangeText={(value) =>
+                updateField("victimCode", value)
+              }
+            />
+
+            <FormField
+              label="USER CODE"
+              value={form.userCode}
+              placeholder="Auto-generated from logged-in user"
+              editable={false}
+              onChangeText={() => undefined}
+            />
+          </>
+        ) : null}
+
         <SelectField
           label="TRIAGE STAGE"
           value={form.triageStage}
@@ -9094,15 +10962,27 @@ export default function AddCasualtyScreen() {
 
           {isTransfer ? (
             <>
-              <FormField
-                label="CONDITION BEFORE RELEASE / TRANSFER"
+              <SelectField
+                label="CONDITION BEFORE TRANSFER"
                 value={form.conditionBeforeTransfer}
-                placeholder="Condition of patient before release/transfer"
-                multiline
-                onChangeText={(value) =>
-                  updateField("conditionBeforeTransfer", value)
+                placeholder="Alive or Dead"
+                onPress={() =>
+                  openChoiceSheet("conditionBeforeTransfer")
                 }
               />
+
+              {form.conditionBeforeTransfer === "Dead" ? (
+                <View style={styles.conditionalChildGroup}>
+                  <SelectField
+                    label="MEDICAL CONTACT"
+                    value={form.transferMedicalContact}
+                    placeholder="With or without medical contact"
+                    onPress={() =>
+                      openChoiceSheet("transferMedicalContact")
+                    }
+                  />
+                </View>
+              ) : null}
 
               <SelectField
                 label="PRECAUTION"
@@ -9119,6 +10999,24 @@ export default function AddCasualtyScreen() {
                   updateField("receivingFacilityText", value)
                 }
               />
+
+              <SelectField
+                label="USED EMS VEHICLE?"
+                value={form.usedEmsVehicle}
+                placeholder="Yes or No"
+                onPress={() => openChoiceSheet("usedEmsVehicle")}
+              />
+
+              {form.usedEmsVehicle === "Yes" ? (
+                <View style={styles.conditionalChildGroup}>
+                  <SelectField
+                    label="TYPE OF EMS VEHICLE"
+                    value={form.emsVehicleType}
+                    placeholder="BLS or ALS"
+                    onPress={() => openChoiceSheet("emsVehicleType")}
+                  />
+                </View>
+              ) : null}
 
               <FormField
                 label="VEHICLE MAKE, MODEL, AND PLATE NUMBER"
@@ -9185,6 +11083,28 @@ export default function AddCasualtyScreen() {
 
           {isRelease ? (
             <>
+              <SelectField
+                label="CONDITION BEFORE RELEASE"
+                value={form.conditionBeforeRelease}
+                placeholder="Alive or Dead"
+                onPress={() =>
+                  openChoiceSheet("conditionBeforeRelease")
+                }
+              />
+
+              {form.conditionBeforeRelease === "Dead" ? (
+                <View style={styles.conditionalChildGroup}>
+                  <SelectField
+                    label="MEDICAL CONTACT"
+                    value={form.releaseMedicalContact}
+                    placeholder="With or without medical contact"
+                    onPress={() =>
+                      openChoiceSheet("releaseMedicalContact")
+                    }
+                  />
+                </View>
+              ) : null}
+
               <View style={styles.releaseTextCard}>
                 <Text style={styles.releaseTextTitle}>
                   Release of Liability
@@ -10307,6 +12227,42 @@ export default function AddCasualtyScreen() {
         onSelect={(value) => updateField("dateOfBirth", value)}
         onClose={() => setIsDatePickerVisible(false)}
       />
+
+      <Modal
+        visible={submissionFeedback !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={closeSubmissionFeedback}
+      >
+        <View style={styles.feedbackBackdrop}>
+          <View style={styles.feedbackCard}>
+            <View style={styles.feedbackIcon}>
+              <Ionicons
+                name="checkmark-circle-outline"
+                size={30}
+                color={COLORS.white}
+              />
+            </View>
+
+            <Text style={styles.feedbackTitle}>
+              {submissionFeedback?.title}
+            </Text>
+            <Text style={styles.feedbackMessage}>
+              {submissionFeedback?.message}
+            </Text>
+
+            <Pressable
+              onPress={closeSubmissionFeedback}
+              style={({ pressed }) => [
+                styles.feedbackButton,
+                pressed && styles.primaryButtonPressed,
+              ]}
+            >
+              <Text style={styles.feedbackButtonText}>OK</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -10410,6 +12366,60 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: COLORS.fieldBackground,
+  },
+  feedbackBackdrop: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    backgroundColor: "rgba(23,33,58,0.42)",
+  },
+  feedbackCard: {
+    width: "100%",
+    maxWidth: 360,
+    alignItems: "center",
+    paddingHorizontal: 22,
+    paddingTop: 26,
+    paddingBottom: 20,
+    borderRadius: 18,
+    backgroundColor: COLORS.white,
+  },
+  feedbackIcon: {
+    width: 56,
+    height: 56,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 18,
+    backgroundColor: COLORS.green,
+    marginBottom: 14,
+  },
+  feedbackTitle: {
+    color: COLORS.text,
+    fontSize: 20,
+    fontWeight: "900",
+    textAlign: "center",
+  },
+  feedbackMessage: {
+    color: COLORS.secondaryText,
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: "center",
+    marginTop: 8,
+  },
+  feedbackButton: {
+    width: "100%",
+    minHeight: 46,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+    backgroundColor: COLORS.maroon,
+    marginTop: 20,
+  },
+  feedbackButtonText: {
+    color: COLORS.white,
+    fontSize: 13,
+    fontWeight: "900",
+    letterSpacing: 0.3,
   },
   sheetSearchBar: {
     minHeight: 46,
@@ -10899,6 +12909,12 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     marginBottom: 7,
   },
+  appendixQuestionHint: {
+    color: COLORS.secondaryText,
+    fontSize: 11,
+    fontWeight: "600",
+    marginBottom: 8,
+  },
   appendixOptionGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -10922,6 +12938,9 @@ const styles = StyleSheet.create({
     flexGrow: 0,
     minWidth: "48%",
     borderColor: "rgba(255,255,255,0.72)",
+  },
+  finalTriageOptionInactive: {
+    opacity: 0.4,
   },
   appendixOptionSelected: {
     borderColor: COLORS.maroon,

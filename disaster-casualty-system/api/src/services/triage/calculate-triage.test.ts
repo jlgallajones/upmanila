@@ -4,6 +4,14 @@ import { calculateTriageCategory } from "./calculate-triage.js";
 
 const cases = [
   {
+    name: "START incomplete non-walking assessment remains unknown",
+    system: "start",
+    answers: {
+      canWalk: false,
+    },
+    expected: "unknown",
+  },
+  {
     name: "STIEVE catastrophic hemorrhage is immediate",
     system: "stieve",
     answers: {

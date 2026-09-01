@@ -22,8 +22,51 @@ export type QueuedCasualtySubmission = {
   createdAt: string;
 };
 
+export type QueueSyncIssue = {
+  queueId: string;
+  reason: string;
+};
+
+export type QueueSyncResult = {
+  synced: number;
+  remaining: number;
+  skipped: number;
+  failed: number;
+  issues: QueueSyncIssue[];
+};
+
 function createQueueId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function formatCasualtyIdDate(date = new Date()): string {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const year = String(date.getFullYear()).slice(-2);
+
+  return `${month}${day}${year}`;
+}
+
+function createRetryIdNumber(
+  originalIdNumber: string | undefined,
+  increment: number,
+): string {
+  const match = /^CAS:(\d{6}):([A-Z0-9]+?)(\d{3,})$/i.exec(
+    originalIdNumber ?? "",
+  );
+
+  if (match) {
+    const [, dateCode, userCode, sequenceText] = match;
+    const nextSequence = Number(sequenceText) + increment;
+
+    return `CAS:${dateCode}:${userCode.toUpperCase()}${String(
+      nextSequence,
+    ).padStart(3, "0")}`;
+  }
+
+  const fallbackSequence = String(increment).padStart(3, "0");
+
+  return `CAS:${formatCasualtyIdDate()}:USR${fallbackSequence}`;
 }
 
 async function readQueue(): Promise<QueuedCasualtySubmission[]> {
@@ -59,6 +102,27 @@ export function isNetworkSubmissionError(error: unknown): boolean {
   );
 }
 
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error
+    ? error.message
+    : "Unknown sync error.";
+}
+
+function isAlreadySynchronizedError(error: unknown): boolean {
+  return getErrorMessage(error)
+    .toLowerCase()
+    .includes("already been synchronized");
+}
+
+function isDuplicateIdNumberError(error: unknown): boolean {
+  const message = getErrorMessage(error).toLowerCase();
+
+  return (
+    message.includes("id number") &&
+    message.includes("already exists")
+  );
+}
+
 export async function queueCasualtySubmission(
   payload: QueuedCasualtyPayload,
 ): Promise<void> {
@@ -88,6 +152,9 @@ export async function getQueuedCasualtySubmissions(): Promise<
 export async function syncQueuedCasualtySubmissions(): Promise<{
   synced: number;
   remaining: number;
+  skipped: number;
+  failed: number;
+  issues: QueueSyncIssue[];
 }> {
   const queue = await readQueue();
   const token = await getAccessToken();
@@ -96,14 +163,30 @@ export async function syncQueuedCasualtySubmissions(): Promise<{
     return {
       synced: 0,
       remaining: queue.length,
+      skipped: queue.length,
+      failed: 0,
+      issues: !token && queue.length > 0
+        ? queue.map((item) => ({
+            queueId: item.id,
+            reason: "Login is required before queued records can sync.",
+          }))
+        : [],
     };
   }
 
   const remaining: QueuedCasualtySubmission[] = [];
+  const issues: QueueSyncIssue[] = [];
   let synced = 0;
+  let skipped = 0;
+  let failed = 0;
 
   for (const item of queue) {
     if (!item.payload.incidentId) {
+      skipped += 1;
+      issues.push({
+        queueId: item.id,
+        reason: "Queued casualty has no selected incident.",
+      });
       remaining.push(item);
       continue;
     }
@@ -114,7 +197,58 @@ export async function syncQueuedCasualtySubmissions(): Promise<{
         incidentId: item.payload.incidentId,
       });
       synced += 1;
-    } catch {
+    } catch (error) {
+      if (isAlreadySynchronizedError(error)) {
+        synced += 1;
+        continue;
+      }
+
+      if (isDuplicateIdNumberError(error)) {
+        let retryError: unknown = error;
+
+        for (let retryCount = 1; retryCount <= 25; retryCount += 1) {
+          try {
+            await createCasualty({
+              ...item.payload,
+              incidentId: item.payload.incidentId,
+              person: {
+                ...item.payload.person,
+                idNumber: createRetryIdNumber(
+                  item.payload.person.idNumber,
+                  retryCount,
+                ),
+              },
+            });
+            synced += 1;
+            retryError = null;
+            break;
+          } catch (nextError) {
+            retryError = nextError;
+
+            if (!isDuplicateIdNumberError(nextError)) {
+              break;
+            }
+          }
+        }
+
+        if (retryError === null) {
+          continue;
+        }
+
+        failed += 1;
+        issues.push({
+          queueId: item.id,
+          reason: getErrorMessage(retryError),
+        });
+        remaining.push(item);
+        continue;
+      }
+
+      failed += 1;
+      issues.push({
+        queueId: item.id,
+        reason: getErrorMessage(error),
+      });
       remaining.push(item);
     }
   }
@@ -124,5 +258,8 @@ export async function syncQueuedCasualtySubmissions(): Promise<{
   return {
     synced,
     remaining: remaining.length,
+    skipped,
+    failed,
+    issues,
   };
 }

@@ -5,15 +5,60 @@ import type {
 } from "express";
 
 import { supabase } from "../config/supabase.js";
+import { getAuthenticatedUser } from "../middleware/auth.js";
+
+const responderIncidentViewerRoles = new Set([
+  "responder",
+  "field_responder",
+  "sa_responder",
+]);
 
 export async function getDashboardSummary(
-  _request: Request,
+  request: Request,
   response: Response,
   next: NextFunction,
 ): Promise<void> {
   try {
+    const user = getAuthenticatedUser(request);
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
+    let responderCreatorAdminId: string | null = null;
+
+    if (responderIncidentViewerRoles.has(user.role)) {
+      const { data: profile, error: profileError } = await supabase
+        .from("users")
+        .select("created_by")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profileError) {
+        throw new Error(
+          `Unable to load responder incident scope: ${profileError.message}`,
+        );
+      }
+
+      responderCreatorAdminId = profile?.created_by ?? null;
+    }
+
+    let activeIncidentsQuery = supabase
+      .from("incidents")
+      .select("id", {
+        count: "exact",
+        head: true,
+      })
+      .eq("status", "active");
+
+    if (responderIncidentViewerRoles.has(user.role)) {
+      activeIncidentsQuery = responderCreatorAdminId
+        ? activeIncidentsQuery.eq(
+            "created_by",
+            responderCreatorAdminId,
+          )
+        : activeIncidentsQuery.eq(
+            "id",
+            "00000000-0000-0000-0000-000000000000",
+          );
+    }
 
     const [
       encodedTodayResult,
@@ -52,13 +97,7 @@ export async function getDashboardSummary(
         ])
         .is("deleted_at", null),
 
-      supabase
-        .from("incidents")
-        .select("id", {
-          count: "exact",
-          head: true,
-        })
-        .eq("status", "active"),
+      activeIncidentsQuery,
     ]);
 
     const firstError =

@@ -6,6 +6,7 @@ import {
   createCasualty,
   getCasualties,
   getCasualtyById,
+  getNextCasualtyIdSequence,
   getCasualtyStatusHistory,
   getCasualtyTriageHistory,
   getCasualtyTransportHistory,
@@ -19,6 +20,11 @@ import { requireAuth, requireRole } from "../middleware/auth.js";
 export const casualtyRouter = Router();
 
 casualtyRouter.get("/", requireAuth, getCasualties);
+casualtyRouter.get(
+  "/next-id-sequence",
+  requireAuth,
+  getNextCasualtyIdSequence,
+);
 casualtyRouter.get(
   "/verification-action-logs",
   requireAuth,

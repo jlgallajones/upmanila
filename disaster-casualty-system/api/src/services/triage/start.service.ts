@@ -24,9 +24,7 @@ export function calculateStartTriage(
 
   // Non-walking patients must have respiration data.
   if (!answers.respirations) {
-    throw new Error(
-      "Respiration status is required when the patient cannot walk.",
-    );
+    return "unknown";
   }
 
   // Respiratory rate greater than 30.
@@ -36,9 +34,7 @@ export function calculateStartTriage(
 
   // Respirations are 30 or below, so circulation is assessed.
   if (!answers.capillaryRefill) {
-    throw new Error(
-      "Capillary refill is required when respirations are 30 or below.",
-    );
+    return "unknown";
   }
 
   if (answers.capillaryRefill === "more_than_2_seconds") {
@@ -51,9 +47,7 @@ export function calculateStartTriage(
 
   // Circulation is acceptable, so mental status is assessed.
   if (answers.followsSimpleCommands === undefined) {
-    throw new Error(
-      "Mental status is required when capillary refill is 2 seconds or less.",
-    );
+    return "unknown";
   }
 
   if (!answers.followsSimpleCommands) {
