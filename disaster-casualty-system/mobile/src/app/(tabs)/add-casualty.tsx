@@ -275,6 +275,11 @@ const PRIMARY_TRIAGE_SYSTEM_OPTIONS = [
   "STM",
 ] as const;
 
+const FIELD_RESPONDER_TRIAGE_SYSTEM_OPTIONS = [
+  "STIEVE",
+  "START",
+] as const;
+
 const SECONDARY_TRIAGE_SYSTEM_OPTIONS = [
   "SAVE",
   "SORT",
@@ -283,6 +288,8 @@ const SECONDARY_TRIAGE_SYSTEM_OPTIONS = [
   "SMART",
   "Other",
 ] as const;
+
+const SA_RESPONDER_TRIAGE_SYSTEM_OPTIONS = ["SORT"] as const;
 
 const TERTIARY_TRIAGE_SYSTEM_OPTIONS = [
   "ESI",
@@ -1359,6 +1366,7 @@ const MONTH_NAMES = [
 type FormState = {
   responderSafetyStatus: string;
   ppeUseTime: string;
+  victimCodeMarked: string;
 
   witnessPresent: string;
   witnessOther: string;
@@ -1504,6 +1512,7 @@ type HealthcareFacilityLabelSource = Pick<
 const initialForm: FormState = {
   responderSafetyStatus: "",
   ppeUseTime: "",
+  victimCodeMarked: "",
 
   witnessPresent: "",
   witnessOther: "",
@@ -1658,6 +1667,8 @@ type FinalDisposition =
 type SubmissionFeedback = {
   title: string;
   message: string;
+  onCloseRoute?: string;
+  resetOnClose?: boolean;
 };
 
 function valueOrEmpty(value: string | number | null | undefined): string {
@@ -1677,6 +1688,17 @@ function titleCase(value: string | null | undefined): string {
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function parseMultiSelectValue(value: string): string[] {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function formatMultiSelectValue(values: string[]): string {
+  return values.join(", ");
 }
 
 function generateUserCodeFromName(
@@ -3624,6 +3646,7 @@ function mapRecordToForm(
   return {
     responderSafetyStatus: "",
     ppeUseTime: "",
+    victimCodeMarked: "",
 
     witnessPresent: "",
     witnessOther: "",
@@ -4129,6 +4152,7 @@ type ChoiceOption = {
   label: string;
   selected: boolean;
   onSelect: () => void;
+  keepOpen?: boolean;
 };
 
 type ChoiceSheetProps = {
@@ -4229,7 +4253,9 @@ function ChoiceSheet({
                 key={option.key ?? option.label}
                 onPress={() => {
                   option.onSelect();
-                  onClose();
+                  if (!option.keepOpen) {
+                    onClose();
+                  }
                 }}
                 style={({ pressed }) => [
                   styles.choiceOption,
@@ -4716,6 +4742,23 @@ export default function AddCasualtyScreen() {
       ? "Stabilization Area Responder"
       : null;
   const generatedUserCode = generateUserCodeFromName(currentUserFullName);
+
+  function getAllowedTriageSystemOptions(
+    triageStage: string,
+  ): TriageSystemOption[] {
+    const normalizedStage = normalizeTriageStage(triageStage);
+
+    if (isFieldResponderFlow && normalizedStage === "on_site") {
+      return [...FIELD_RESPONDER_TRIAGE_SYSTEM_OPTIONS];
+    }
+
+    if (isSaResponderFlow && normalizedStage === "reassessment") {
+      return [...SA_RESPONDER_TRIAGE_SYSTEM_OPTIONS];
+    }
+
+    return getTriageSystemOptionsForStage(triageStage);
+  }
+
   const fieldResponderVictimCodeOptions = useMemo(() => {
     const seenCodes = new Set<string>();
 
@@ -5353,7 +5396,7 @@ export default function AddCasualtyScreen() {
       )
         ? current.triageStage
         : allowedStages[0] ?? "Primary Triage";
-      const allowedSystems = getTriageSystemOptionsForStage(triageStage);
+      const allowedSystems = getAllowedTriageSystemOptions(triageStage);
       const currentSystemIsAllowed = allowedSystems.includes(
         current.triageSystem as TriageSystemOption,
       );
@@ -5694,7 +5737,7 @@ export default function AddCasualtyScreen() {
 
       if (key === "triageStage") {
         const nextStage = String(value);
-        const allowedSystems = getTriageSystemOptionsForStage(nextStage);
+        const allowedSystems = getAllowedTriageSystemOptions(nextStage);
         const currentSystemIsAllowed = allowedSystems.includes(
           current.triageSystem as TriageSystemOption,
         );
@@ -5722,6 +5765,22 @@ export default function AddCasualtyScreen() {
           ...current,
           [key]: value,
           age: calculatedAge || current.age,
+        };
+      }
+
+      if (key === "patientIdentified" && value === "No") {
+        return {
+          ...current,
+          [key]: value,
+          firstName: "",
+          middleName: "",
+          lastName: "",
+          sex: "",
+          dateOfBirth: "",
+          newborn: "",
+          pregnant: "",
+          religion: "",
+          contactNumber: "",
         };
       }
 
@@ -5960,7 +6019,7 @@ export default function AddCasualtyScreen() {
 
   function getDefaultTriageSystemForCurrentFlow(): string {
     const defaultStage = getDefaultTriageStageForCurrentFlow();
-    return getTriageSystemOptionsForStage(defaultStage)[0] ?? "START";
+    return getAllowedTriageSystemOptions(defaultStage)[0] ?? "START";
   }
 
   function buildFreshCreateForm(
@@ -6017,8 +6076,18 @@ export default function AddCasualtyScreen() {
   }
 
   function closeSubmissionFeedback() {
+    const feedback = submissionFeedback;
+
     setSubmissionFeedback(null);
-    resetForNextCasualty();
+
+    if (feedback?.onCloseRoute) {
+      router.replace(feedback.onCloseRoute as never);
+      return;
+    }
+
+    if (feedback?.resetOnClose !== false) {
+      resetForNextCasualty();
+    }
   }
 
   function openChoiceSheet(sheetName: ChoiceSheetName) {
@@ -6032,7 +6101,7 @@ export default function AddCasualtyScreen() {
   ) {
     const mappedForm = mapRecordToForm(record);
     const secondarySystems =
-      getTriageSystemOptionsForStage("Secondary Triage");
+      getAllowedTriageSystemOptions("Secondary Triage");
     const currentTriageSystemIsSecondary = secondarySystems.includes(
       form.triageSystem as TriageSystemOption,
     );
@@ -6645,7 +6714,7 @@ export default function AddCasualtyScreen() {
         }
 
         if (
-          form.witnessPresent === "Others" &&
+          parseMultiSelectValue(form.witnessPresent).includes("Others") &&
           !form.witnessOther.trim()
         ) {
           Alert.alert(
@@ -6674,6 +6743,10 @@ export default function AddCasualtyScreen() {
         return true;
 
       case "Info":
+        if (isSaResponderFlow && form.patientIdentified === "No") {
+          return true;
+        }
+
         if (!form.firstName.trim() && !form.lastName.trim()) {
           Alert.alert(
             "Name required",
@@ -8501,11 +8574,30 @@ export default function AddCasualtyScreen() {
         }));
 
       case "witnessPresent":
-        return WITNESS_PRESENT_OPTIONS.map((option) => ({
-          label: option,
-          selected: form.witnessPresent === option,
-          onSelect: () => updateField("witnessPresent", option),
-        }));
+        return WITNESS_PRESENT_OPTIONS.map((option) => {
+          const selectedWitnesses = parseMultiSelectValue(
+            form.witnessPresent,
+          );
+          const selected = selectedWitnesses.includes(option);
+
+          return {
+            label: option,
+            selected,
+            keepOpen: true,
+            onSelect: () => {
+              const nextWitnesses = selected
+                ? selectedWitnesses.filter(
+                    (witness) => witness !== option,
+                  )
+                : [...selectedWitnesses, option];
+
+              updateField(
+                "witnessPresent",
+                formatMultiSelectValue(nextWitnesses),
+              );
+            },
+          };
+        });
 
       case "witnessResponse":
         return WITNESS_RESPONSE_OPTIONS.map((option) => ({
@@ -8817,7 +8909,7 @@ export default function AddCasualtyScreen() {
         }));
 
       case "triageSystem":
-        return getTriageSystemOptionsForStage(form.triageStage).map((option) => ({
+        return getAllowedTriageSystemOptions(form.triageStage).map((option) => ({
           label: option,
           selected:
             form.triageSystem.toLowerCase() ===
@@ -9047,6 +9139,20 @@ export default function AddCasualtyScreen() {
   }
 
   async function handleSubmit() {
+    if (
+      !isEditing &&
+      isFieldResponderFlow &&
+      form.victimCodeMarked !== "Yes"
+    ) {
+      Alert.alert(
+        "Victim code marking required",
+        "Confirm that you marked the victim with the victim code and your user code before submitting.",
+      );
+      const statusStepIndex = activeSteps.indexOf("Status");
+      setCurrentStep(statusStepIndex >= 0 ? statusStepIndex : 0);
+      return;
+    }
+
     if (!isEditing && isSaResponderFlow) {
       const targetFieldResponderRecordId =
         resolveSelectedFieldResponderRecordId();
@@ -9244,23 +9350,23 @@ export default function AddCasualtyScreen() {
 
       const response = await updateCasualty(casualtyId, updatePayload);
       const photoUploadError = await uploadSelectedPhoto(casualtyId);
+      const responseMessage =
+        response.message ||
+        "The casualty record has been saved successfully.";
+      const returnedForReview = responseMessage
+        .toLowerCase()
+        .includes("returned for admin review");
 
-      Alert.alert(
-        "Casualty updated",
-        photoUploadError
+      setSubmissionFeedback({
+        title: returnedForReview
+          ? "Returned for admin review"
+          : "Casualty updated",
+        message: photoUploadError
           ? `The casualty record was saved, but the photo upload failed: ${photoUploadError}`
-          : response.message ||
-            "The casualty record has been saved successfully.",
-        [
-          {
-            text: "OK",
-            onPress: () =>
-              router.replace(
-                `/casualty/${encodeURIComponent(casualtyId)}` as never,
-              ),
-          },
-        ],
-      );
+          : responseMessage,
+        onCloseRoute: `/casualty/${encodeURIComponent(casualtyId)}`,
+        resetOnClose: false,
+      });
     } catch (error) {
       console.error("Failed to update casualty:", error);
 
@@ -9908,7 +10014,7 @@ export default function AddCasualtyScreen() {
           onPress={() => openChoiceSheet("witnessPresent")}
         />
 
-        {form.witnessPresent === "Others" ? (
+        {parseMultiSelectValue(form.witnessPresent).includes("Others") ? (
           <FormField
             label="OTHER WITNESS"
             value={form.witnessOther}
@@ -9939,6 +10045,9 @@ export default function AddCasualtyScreen() {
   }
 
   function renderSaInfoStep() {
+    const showPersonalDetails =
+      form.patientIdentified !== "No";
+
     return (
       <>
         <SelectField
@@ -10017,92 +10126,107 @@ export default function AddCasualtyScreen() {
           </View>
         </View>
 
-        <FormField
-          label="FIRST NAME"
-          value={form.firstName}
-          placeholder="First name"
-          onChangeText={(value) =>
-            updateField("firstName", value)
-          }
-        />
-
-        <FormField
-          label="MIDDLE NAME"
-          value={form.middleName}
-          placeholder="Middle name"
-          onChangeText={(value) =>
-            updateField("middleName", value)
-          }
-        />
-
-        <FormField
-          label="LAST NAME"
-          value={form.lastName}
-          placeholder="Last name"
-          onChangeText={(value) =>
-            updateField("lastName", value)
-          }
-        />
-
-        <View style={styles.twoColumnRow}>
-          <View style={styles.halfColumn}>
-            <SelectField
-              label="SEX"
-              value={form.sex}
-              placeholder="Select sex"
-              onPress={() => openChoiceSheet("sex")}
+        {showPersonalDetails ? (
+          <>
+            <FormField
+              label="FIRST NAME"
+              value={form.firstName}
+              placeholder="First name"
+              onChangeText={(value) =>
+                updateField("firstName", value)
+              }
             />
-          </View>
 
-          <View style={styles.halfColumn}>
-            <SelectField
-              label="DATE OF BIRTH"
-              value={form.dateOfBirth}
-              placeholder="mm/dd/yyyy"
-              icon="calendar-outline"
-              onPress={() => setIsDatePickerVisible(true)}
+            <FormField
+              label="MIDDLE NAME"
+              value={form.middleName}
+              placeholder="Middle name"
+              onChangeText={(value) =>
+                updateField("middleName", value)
+              }
             />
-          </View>
-        </View>
 
-        <View style={styles.twoColumnRow}>
-          <View style={styles.halfColumn}>
-            <SelectField
-              label="NEWBORN?"
-              value={form.newborn}
-              placeholder="Yes or No"
-              onPress={() => openChoiceSheet("newborn")}
+            <FormField
+              label="LAST NAME"
+              value={form.lastName}
+              placeholder="Last name"
+              onChangeText={(value) =>
+                updateField("lastName", value)
+              }
             />
-          </View>
 
-          <View style={styles.halfColumn}>
-            <SelectField
-              label="PREGNANT?"
-              value={form.pregnant}
-              placeholder="Yes or No"
-              onPress={() => openChoiceSheet("pregnant")}
+            <View style={styles.twoColumnRow}>
+              <View style={styles.halfColumn}>
+                <SelectField
+                  label="SEX"
+                  value={form.sex}
+                  placeholder="Select sex"
+                  onPress={() => openChoiceSheet("sex")}
+                />
+              </View>
+
+              <View style={styles.halfColumn}>
+                <SelectField
+                  label="DATE OF BIRTH"
+                  value={form.dateOfBirth}
+                  placeholder="mm/dd/yyyy"
+                  icon="calendar-outline"
+                  onPress={() => setIsDatePickerVisible(true)}
+                />
+              </View>
+            </View>
+
+            <View style={styles.twoColumnRow}>
+              <View style={styles.halfColumn}>
+                <SelectField
+                  label="NEWBORN?"
+                  value={form.newborn}
+                  placeholder="Yes or No"
+                  onPress={() => openChoiceSheet("newborn")}
+                />
+              </View>
+
+              <View style={styles.halfColumn}>
+                <SelectField
+                  label="PREGNANT?"
+                  value={form.pregnant}
+                  placeholder="Yes or No"
+                  onPress={() => openChoiceSheet("pregnant")}
+                />
+              </View>
+            </View>
+
+            <FormField
+              label="RELIGION"
+              value={form.religion}
+              placeholder="Religion"
+              onChangeText={(value) =>
+                updateField("religion", value)
+              }
             />
+
+            <FormField
+              label="CONTACT NUMBER"
+              value={form.contactNumber}
+              placeholder="Contact number"
+              keyboardType="phone-pad"
+              onChangeText={(value) =>
+                updateField("contactNumber", value)
+              }
+            />
+          </>
+        ) : (
+          <View style={styles.inlineWarning}>
+            <Ionicons
+              name="person-outline"
+              size={18}
+              color={COLORS.maroon}
+            />
+            <Text style={styles.inlineWarningText}>
+              Personal details are hidden because this patient is marked unidentified.
+            </Text>
           </View>
-        </View>
-
-        <FormField
-          label="RELIGION"
-          value={form.religion}
-          placeholder="Religion"
-          onChangeText={(value) =>
-            updateField("religion", value)
-          }
-        />
-
-        <FormField
-          label="CONTACT NUMBER"
-          value={form.contactNumber}
-          placeholder="Contact number"
-          keyboardType="phone-pad"
-          onChangeText={(value) =>
-            updateField("contactNumber", value)
-          }
-        />
+        )}
       </>
     );
   }
@@ -10642,7 +10766,7 @@ export default function AddCasualtyScreen() {
                 onPress={() =>
                   updateTriageAssessmentAnswer(
                     question.key,
-                    option.value,
+                    selected ? "" : option.value,
                   )
                 }
                 style={({ pressed }) => [
@@ -11397,15 +11521,53 @@ export default function AddCasualtyScreen() {
   function renderStatusStep() {
     if (isFieldResponderFlow) {
       return (
-        <FormField
-          label="NOTES"
-          value={form.remarks}
-          placeholder="Add status notes"
-          multiline
-          onChangeText={(value) =>
-            updateField("remarks", value)
-          }
-        />
+        <>
+          <FormField
+            label="NOTES"
+            value={form.remarks}
+            placeholder="Add status notes"
+            multiline
+            onChangeText={(value) =>
+              updateField("remarks", value)
+            }
+          />
+
+          <Pressable
+            onPress={() =>
+              updateField(
+                "victimCodeMarked",
+                form.victimCodeMarked === "Yes" ? "" : "Yes",
+              )
+            }
+            style={({ pressed }) => [
+              styles.confirmationCheckbox,
+              form.victimCodeMarked === "Yes" &&
+                styles.confirmationCheckboxSelected,
+              pressed && styles.pressed,
+            ]}
+            accessibilityRole="checkbox"
+            accessibilityState={{
+              checked: form.victimCodeMarked === "Yes",
+            }}
+          >
+            <Ionicons
+              name={
+                form.victimCodeMarked === "Yes"
+                  ? "checkbox"
+                  : "square-outline"
+              }
+              size={22}
+              color={
+                form.victimCodeMarked === "Yes"
+                  ? COLORS.maroon
+                  : COLORS.secondaryText
+              }
+            />
+            <Text style={styles.confirmationCheckboxText}>
+              Did you mark your victims with their victim code including your own user code?
+            </Text>
+          </Pressable>
+        </>
       );
     }
 
@@ -13116,6 +13278,30 @@ const styles = StyleSheet.create({
     color: COLORS.secondaryText,
     fontSize: 11,
     lineHeight: 16,
+  },
+  confirmationCheckbox: {
+    minHeight: 54,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.fieldBorder,
+    backgroundColor: COLORS.fieldBackground,
+    marginBottom: 17,
+    gap: 10,
+  },
+  confirmationCheckboxSelected: {
+    borderColor: "#D5A0A3",
+    backgroundColor: "#FFF5F5",
+  },
+  confirmationCheckboxText: {
+    flex: 1,
+    color: COLORS.text,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "800",
   },
 
   quickCreateCard: {

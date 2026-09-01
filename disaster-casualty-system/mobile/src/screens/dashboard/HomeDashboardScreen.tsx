@@ -31,6 +31,10 @@ import {
   type Incident,
 } from "../../api/incidents";
 import {
+  getHealthcareFacilities,
+  type HealthcareFacility,
+} from "../../api/healthcare-facilities";
+import {
   getAccessToken,
   getCurrentUser,
 } from "../../auth/session";
@@ -711,10 +715,96 @@ export default function HomeDashboardScreen() {
     }
   }
 
-  function showFacilityDisruptionPrompt(incident: Incident) {
+  function formatFacilityLabel(facility: HealthcareFacility): string {
+    const details = [
+      facility.facility_level,
+      facility.municipality,
+      facility.province,
+    ]
+      .filter(Boolean)
+      .join(" - ");
+
+    return details
+      ? `${facility.facility_name} - ${details}`
+      : facility.facility_name;
+  }
+
+  function appendFacilityActionNote(
+    currentNotes: string | null,
+    action: string,
+    incident: Incident,
+    facility: HealthcareFacility,
+  ): string {
+    const note = [
+      `[${action}]`,
+      `Incident: ${incident.incident_name}`,
+      `Healthcare facility: ${facility.facility_name}`,
+      `Recorded at: ${new Date().toISOString()}`,
+    ].join("\n");
+
+    return [currentNotes?.trim(), note].filter(Boolean).join("\n\n");
+  }
+
+  async function resolveHealthcareFacility(
+    incident: Incident,
+    title: string,
+    subtitle: string,
+    onFacilitySelected: (
+      incident: Incident,
+      facility: HealthcareFacility,
+    ) => void,
+  ) {
+    try {
+      const facilities = (await getHealthcareFacilities()).filter(
+        (facility) => facility.is_active,
+      );
+
+      if (facilities.length === 0) {
+        Alert.alert(
+          "No healthcare facilities",
+          "Ask an admin to add an official healthcare facility first.",
+        );
+        return;
+      }
+
+      setQuickChoice({
+        title,
+        subtitle,
+        options: facilities.map((facility) => ({
+          label: facility.facility_name,
+          caption: formatFacilityLabel(facility),
+          icon: "business-outline",
+          color: COLORS.maroon,
+          onSelect: () => onFacilitySelected(incident, facility),
+        })),
+      });
+    } catch (error) {
+      console.error("Unable to load healthcare facilities:", error);
+      Alert.alert(
+        "Unable to load facilities",
+        error instanceof Error
+          ? error.message
+          : "Please check your connection and try again.",
+      );
+    }
+  }
+
+  function showFacilityDisruptionFacilityPrompt(incident: Incident) {
+    void resolveHealthcareFacility(
+      incident,
+      "Select Healthcare Facility",
+      "Choose the official hospital for this facility care update.",
+      showFacilityDisruptionPrompt,
+    );
+  }
+
+  function showFacilityDisruptionPrompt(
+    incident: Incident,
+    facility: HealthcareFacility,
+  ) {
     setQuickChoice({
       title: "Healthcare Facility Routine Care Disruption",
-      subtitle: incident.incident_name,
+      subtitle: `${incident.incident_name}\n${facility.facility_name}`,
       options: DISRUPTION_OPTIONS.map((option) => ({
         label: option.label,
         caption: "Save disruption level for this incident",
@@ -728,6 +818,7 @@ export default function HomeDashboardScreen() {
         onSelect: () => {
           void saveFacilityDisruptionQuickAction(
             incident,
+            facility,
             option.value,
           );
         },
@@ -737,6 +828,7 @@ export default function HomeDashboardScreen() {
 
   async function saveFacilityDisruptionQuickAction(
     incident: Incident,
+    facility: HealthcareFacility,
     facilityCareDisruption: DisruptionLevel,
   ) {
     try {
@@ -751,14 +843,19 @@ export default function HomeDashboardScreen() {
         emsCoverageDisruption:
           current.summary.emsCoverageDisruption ?? null,
         facilityCareDisruption,
-        notes: current.summary.notes ?? null,
+        notes: appendFacilityActionNote(
+          current.summary.notes ?? null,
+          "Healthcare Facility Routine Care Disruption",
+          incident,
+          facility,
+        ),
         assessedAt: new Date().toISOString(),
       });
 
       setQuickChoice(null);
       Alert.alert(
         "Disruption saved",
-        "Healthcare facility routine care disruption was recorded for this incident.",
+        `Healthcare facility routine care disruption was recorded for ${facility.facility_name}.`,
       );
     } catch (error) {
       console.error("Unable to save facility disruption:", error);
@@ -773,10 +870,22 @@ export default function HomeDashboardScreen() {
     }
   }
 
-  function showCloseFacilityPrompt(incident: Incident) {
+  function showCloseFacilityFacilityPrompt(incident: Incident) {
+    void resolveHealthcareFacility(
+      incident,
+      "Select Healthcare Facility",
+      "Choose the official hospital to close facility response for.",
+      showCloseFacilityPrompt,
+    );
+  }
+
+  function showCloseFacilityPrompt(
+    incident: Incident,
+    facility: HealthcareFacility,
+  ) {
     setQuickChoice({
       title: "Close Healthcare Facility Response?",
-      subtitle: `${incident.incident_name}\nClosing time will be recorded as the current time.`,
+      subtitle: `${incident.incident_name}\n${facility.facility_name}\nClosing time will be recorded as the current time.`,
       options: [
         {
           label: "Close Response",
@@ -784,14 +893,17 @@ export default function HomeDashboardScreen() {
           icon: "time-outline",
           color: COLORS.red,
           onSelect: () => {
-            void saveFacilityCloseQuickAction(incident);
+            void saveFacilityCloseQuickAction(incident, facility);
           },
         },
       ],
     });
   }
 
-  async function saveFacilityCloseQuickAction(incident: Incident) {
+  async function saveFacilityCloseQuickAction(
+    incident: Incident,
+    facility: HealthcareFacility,
+  ) {
     try {
       setIsSavingQuickAction(true);
 
@@ -804,14 +916,19 @@ export default function HomeDashboardScreen() {
           current.summary.emsCoverageDisruption ?? null,
         facilityCareDisruption:
           current.summary.facilityCareDisruption ?? null,
-        notes: current.summary.notes ?? null,
+        notes: appendFacilityActionNote(
+          current.summary.notes ?? null,
+          "Close Healthcare Facility Response",
+          incident,
+          facility,
+        ),
         assessedAt: new Date().toISOString(),
       });
 
       setQuickChoice(null);
       Alert.alert(
         "Facility response closed",
-        "The healthcare facility disaster response closing time was recorded for this incident.",
+        `The healthcare facility disaster response closing time was recorded for ${facility.facility_name}.`,
       );
     } catch (error) {
       console.error("Unable to close facility response:", error);
@@ -1092,7 +1209,7 @@ export default function HomeDashboardScreen() {
                 void resolveActiveIncident(
                   "Select Incident",
                   "Choose the incident for this facility care update.",
-                  showFacilityDisruptionPrompt,
+                  showFacilityDisruptionFacilityPrompt,
                 );
               }}
             />
@@ -1109,7 +1226,7 @@ export default function HomeDashboardScreen() {
                 void resolveActiveIncident(
                   "Select Incident",
                   "Choose the incident to close facility response for.",
-                  showCloseFacilityPrompt,
+                  showCloseFacilityFacilityPrompt,
                 );
               }}
             />
