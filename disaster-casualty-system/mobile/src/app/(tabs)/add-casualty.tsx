@@ -6067,8 +6067,32 @@ export default function AddCasualtyScreen() {
         : secondarySystems[0] ?? "",
       triageAssessmentAnswers: currentTriageSystemIsSecondary
         ? current.triageAssessmentAnswers
-        : {},
+      : {},
     }));
+  }
+
+  function resolveSelectedFieldResponderRecordId(): string | null {
+    if (
+      selectedFieldResponderRecordId &&
+      fieldResponderRecords.some(
+        (record) => record.id === selectedFieldResponderRecordId,
+      )
+    ) {
+      return selectedFieldResponderRecordId;
+    }
+
+    const selectedVictimCode = form.victimCode.trim().toLowerCase();
+
+    if (!selectedVictimCode) {
+      return null;
+    }
+
+    const matchingOption = fieldResponderVictimCodeOptions.find(
+      (option) =>
+        option.victimCode.trim().toLowerCase() === selectedVictimCode,
+    );
+
+    return matchingOption?.record.id ?? null;
   }
 
   function openTriageAssessment() {
@@ -9004,7 +9028,10 @@ export default function AddCasualtyScreen() {
 
   async function handleSubmit() {
     if (!isEditing && isSaResponderFlow) {
-      if (!selectedFieldResponderRecordId) {
+      const targetFieldResponderRecordId =
+        resolveSelectedFieldResponderRecordId();
+
+      if (!targetFieldResponderRecordId) {
         Alert.alert(
           "Victim code required",
           "Select an existing Field Responder victim code before submitting.",
@@ -9019,13 +9046,13 @@ export default function AddCasualtyScreen() {
         setIsSubmitting(true);
 
         await updateCasualty(
-          selectedFieldResponderRecordId,
+          targetFieldResponderRecordId,
           updatePayload,
           { responderFunction: "sa_responder" },
         );
 
         const photoUploadError = await uploadSelectedPhoto(
-          selectedFieldResponderRecordId,
+          targetFieldResponderRecordId,
         );
 
         setSubmissionFeedback({
