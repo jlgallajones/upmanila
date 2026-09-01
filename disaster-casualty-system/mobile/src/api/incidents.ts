@@ -505,9 +505,20 @@ export type CoordinationAssessmentPayload = {
   assessedAt?: string | null;
 };
 
+export type SitrepResponderFunctionFilter =
+  | "field_responder"
+  | "sa_responder"
+  | "both";
+
 export type IncidentSitrepPayload = {
   incident: Incident;
   generatedAt: string;
+  responderFunctionFilter?: SitrepResponderFunctionFilter;
+  responderFunctionSummary?: {
+    fieldResponderRecords: number;
+    stabilizationAreaResponderRecords: number;
+    unspecifiedResponderRecords: number;
+  };
   generatedBy: {
     id: string;
     fullName: string;
@@ -998,9 +1009,13 @@ export async function saveHospitalResources(
 
 export async function generateIncidentSitrep(
   id: string,
+  responderFunctionFilter: SitrepResponderFunctionFilter = "both",
 ): Promise<IncidentSitrep> {
   const response = await api.post<IncidentSitrepResponse>(
     `/incidents/${encodeURIComponent(id)}/sitreps`,
+    {
+      responderFunctionFilter,
+    },
   );
 
   return response.data.data;
@@ -1027,17 +1042,28 @@ function sanitizeFileName(value: string): string {
 export async function downloadIncidentExport(
   incidentId: string,
   kind: IncidentExportKind,
+  responderFunctionFilter?: SitrepResponderFunctionFilter,
 ): Promise<string> {
   const token = await getAccessToken();
   const encodedIncidentId = encodeURIComponent(incidentId);
-  const endpoint = `${API_BASE_URL.replace(/\/$/, "")}/incidents/${encodedIncidentId}/export/${exportPaths[kind]}`;
+  const scopeQuery =
+    responderFunctionFilter && kind !== "casualties-csv"
+      ? `?responderFunctionFilter=${encodeURIComponent(
+          responderFunctionFilter,
+        )}`
+      : "";
+  const endpoint = `${API_BASE_URL.replace(/\/$/, "")}/incidents/${encodedIncidentId}/export/${exportPaths[kind]}${scopeQuery}`;
   const fileName = sanitizeFileName(
-    `dcms-${incidentId}-${kind}.${exportExtensions[kind]}`,
+    `dcms-${incidentId}-${kind}${
+      responderFunctionFilter && kind !== "casualties-csv"
+        ? `-${responderFunctionFilter}`
+        : ""
+    }.${exportExtensions[kind]}`,
   );
 
   if (Platform.OS === "web") {
     const response = await api.get<Blob>(
-      `/incidents/${encodedIncidentId}/export/${exportPaths[kind]}`,
+      `/incidents/${encodedIncidentId}/export/${exportPaths[kind]}${scopeQuery}`,
       {
         responseType: "blob",
       },

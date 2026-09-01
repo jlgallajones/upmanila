@@ -9065,7 +9065,7 @@ export default function AddCasualtyScreen() {
       try {
         setIsSubmitting(true);
 
-        await updateCasualty(
+        const response = await updateCasualty(
           targetFieldResponderRecordId,
           updatePayload,
           { responderFunction: "sa_responder" },
@@ -9079,7 +9079,8 @@ export default function AddCasualtyScreen() {
           title: "Casualty updated",
           message: photoUploadError
             ? `The casualty record was updated, but the photo upload failed: ${photoUploadError}`
-            : "The selected casualty record has been updated successfully.",
+            : response.message ||
+              "The selected casualty record has been updated successfully.",
         });
       } catch (error) {
         console.error("Failed to update linked casualty:", error);
@@ -9241,14 +9242,15 @@ export default function AddCasualtyScreen() {
     try {
       setIsSubmitting(true);
 
-      await updateCasualty(casualtyId, updatePayload);
+      const response = await updateCasualty(casualtyId, updatePayload);
       const photoUploadError = await uploadSelectedPhoto(casualtyId);
 
       Alert.alert(
         "Casualty updated",
         photoUploadError
           ? `The casualty record was saved, but the photo upload failed: ${photoUploadError}`
-          : "The casualty record has been saved successfully.",
+          : response.message ||
+            "The casualty record has been saved successfully.",
         [
           {
             text: "OK",

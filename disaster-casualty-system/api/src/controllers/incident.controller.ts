@@ -42,10 +42,21 @@ type UpdateIncidentTimelineRequest = {
 };
 
 type CountMap = Record<string, number>;
+type ResponderFunctionFilter =
+  | "field_responder"
+  | "sa_responder"
+  | "both";
+type ResponderFunctionKind = Exclude<ResponderFunctionFilter, "both">;
 
 type IncidentSitrepPayload = {
   incident: unknown;
   generatedAt: string;
+  responderFunctionFilter: ResponderFunctionFilter;
+  responderFunctionSummary: {
+    fieldResponderRecords: number;
+    stabilizationAreaResponderRecords: number;
+    unspecifiedResponderRecords: number;
+  };
   generatedBy: {
     id: string;
     fullName: string;
@@ -113,6 +124,7 @@ type IncidentRow = {
 
 type CasualtyIncidentRow = {
   id: string;
+  encoded_by?: string | null;
   current_status: string | null;
   severity: string | null;
   verification_status: string | null;
@@ -133,6 +145,11 @@ type CasualtyIncidentRow = {
     municipality: string | null;
     province: string | null;
   } | null;
+  encoder?: {
+    id: string;
+    role: string | null;
+    reporting_context?: string | null;
+  } | null;
 };
 
 type TriageAssessmentRow = {
@@ -143,6 +160,7 @@ type TriageAssessmentRow = {
   calculated_category: string | null;
   triage_stage: string | null;
   triaged_at: string | null;
+  triaged_by?: string | null;
 };
 
 type TransportRecordRow = {
@@ -154,6 +172,7 @@ type TransportRecordRow = {
   departed_scene_at: string | null;
   arrived_facility_at: string | null;
   receiving_facility_id: string | null;
+  recorded_by?: string | null;
 };
 
 type TreatmentRecordRow = {
@@ -270,6 +289,36 @@ const incidentStatuses = new Set([
   "archived",
 ]);
 
+const responderFunctionFilters = new Set<ResponderFunctionFilter>([
+  "field_responder",
+  "sa_responder",
+  "both",
+]);
+
+const primaryTriageSystems = new Set([
+  "stieve",
+  "start",
+  "mstart",
+  "jumpstart",
+  "sieve",
+  "care_flight",
+  "salt",
+  "ptt",
+  "mitt",
+  "homebush",
+  "mptt",
+  "stm",
+]);
+
+const secondaryTriageSystems = new Set([
+  "save",
+  "sort",
+  "meta",
+  "swift",
+  "smart",
+  "urgent_non_urgent",
+]);
+
 const incidentTimelineSelect = `
   id,
   incident_id,
@@ -384,6 +433,204 @@ function countBy<T>(
   }
 
   return counts;
+}
+
+function parseResponderFunctionFilter(
+  value: unknown,
+): ResponderFunctionFilter {
+  return typeof value === "string" &&
+    responderFunctionFilters.has(value as ResponderFunctionFilter)
+    ? (value as ResponderFunctionFilter)
+    : "both";
+}
+
+function formatResponderFunctionFilter(
+  value: ResponderFunctionFilter,
+): string {
+  switch (value) {
+    case "field_responder":
+      return "Field Responder only";
+    case "sa_responder":
+      return "Stabilization Area Responder only";
+    case "both":
+    default:
+      return "Field Responder and Stabilization Area Responder";
+  }
+}
+
+function normalizeResponderFunctionFromRole(
+  role: string | null | undefined,
+): ResponderFunctionKind | null {
+  if (role === "field_responder") {
+    return "field_responder";
+  }
+
+  if (role === "sa_responder") {
+    return "sa_responder";
+  }
+
+  return null;
+}
+
+function inferResponderFunctionFromTriage(
+  row: TriageAssessmentRow,
+  userFunctionsById: Map<string, ResponderFunctionKind | null>,
+): ResponderFunctionKind | null {
+  const actorFunction = row.triaged_by
+    ? userFunctionsById.get(row.triaged_by)
+    : null;
+
+  if (actorFunction) {
+    return actorFunction;
+  }
+
+  const system = row.triage_system ?? "";
+
+  if (
+    secondaryTriageSystems.has(system) ||
+    row.triage_stage === "reassessment"
+  ) {
+    return "sa_responder";
+  }
+
+  if (primaryTriageSystems.has(system) || row.triage_stage === "on_site") {
+    return "field_responder";
+  }
+
+  return null;
+}
+
+function inferResponderFunctionFromTransport(
+  row: TransportRecordRow,
+  userFunctionsById: Map<string, ResponderFunctionKind | null>,
+): ResponderFunctionKind | null {
+  return row.recorded_by
+    ? userFunctionsById.get(row.recorded_by) ?? null
+    : null;
+}
+
+function groupRowsByCasualtyId<
+  T extends { casualty_incident_id: string },
+>(rows: T[]): Map<string, T[]> {
+  const grouped = new Map<string, T[]>();
+
+  for (const row of rows) {
+    grouped.set(row.casualty_incident_id, [
+      ...(grouped.get(row.casualty_incident_id) ?? []),
+      row,
+    ]);
+  }
+
+  return grouped;
+}
+
+function filterRowsByResponderFunction<T>(
+  rows: T[],
+  filter: ResponderFunctionFilter,
+  infer: (row: T) => ResponderFunctionKind | null,
+): T[] {
+  if (filter === "both") {
+    return rows;
+  }
+
+  return rows.filter((row) => infer(row) === filter);
+}
+
+function buildResponderFunctionSummary(
+  casualties: CasualtyIncidentRow[],
+  triageRowsByCasualty: Map<string, TriageAssessmentRow[]>,
+  transportRowsByCasualty: Map<string, TransportRecordRow[]>,
+  userFunctionsById: Map<string, ResponderFunctionKind | null>,
+): IncidentSitrepPayload["responderFunctionSummary"] {
+  let fieldResponderRecords = 0;
+  let stabilizationAreaResponderRecords = 0;
+  let unspecifiedResponderRecords = 0;
+
+  for (const casualty of casualties) {
+    const functions = new Set<ResponderFunctionKind>();
+    const encodedByFunction = casualty.encoded_by
+      ? userFunctionsById.get(casualty.encoded_by)
+      : null;
+
+    if (encodedByFunction) {
+      functions.add(encodedByFunction);
+    }
+
+    for (const triage of triageRowsByCasualty.get(casualty.id) ?? []) {
+      const triageFunction = inferResponderFunctionFromTriage(
+        triage,
+        userFunctionsById,
+      );
+
+      if (triageFunction) {
+        functions.add(triageFunction);
+      }
+    }
+
+    for (const transport of transportRowsByCasualty.get(casualty.id) ?? []) {
+      const transportFunction = inferResponderFunctionFromTransport(
+        transport,
+        userFunctionsById,
+      );
+
+      if (transportFunction) {
+        functions.add(transportFunction);
+      }
+    }
+
+    if (functions.has("field_responder")) {
+      fieldResponderRecords += 1;
+    }
+
+    if (functions.has("sa_responder")) {
+      stabilizationAreaResponderRecords += 1;
+    }
+
+    if (functions.size === 0) {
+      unspecifiedResponderRecords += 1;
+    }
+  }
+
+  return {
+    fieldResponderRecords,
+    stabilizationAreaResponderRecords,
+    unspecifiedResponderRecords,
+  };
+}
+
+function filterCasualtiesByResponderFunction(
+  casualties: CasualtyIncidentRow[],
+  filter: ResponderFunctionFilter,
+  triageRowsByCasualty: Map<string, TriageAssessmentRow[]>,
+  transportRowsByCasualty: Map<string, TransportRecordRow[]>,
+  userFunctionsById: Map<string, ResponderFunctionKind | null>,
+): CasualtyIncidentRow[] {
+  if (filter === "both") {
+    return casualties;
+  }
+
+  return casualties.filter((casualty) => {
+    const encodedByFunction = casualty.encoded_by
+      ? userFunctionsById.get(casualty.encoded_by)
+      : null;
+
+    if (encodedByFunction === filter) {
+      return true;
+    }
+
+    return (
+      (triageRowsByCasualty.get(casualty.id) ?? []).some(
+        (row) =>
+          inferResponderFunctionFromTriage(row, userFunctionsById) ===
+          filter,
+      ) ||
+      (transportRowsByCasualty.get(casualty.id) ?? []).some(
+        (row) =>
+          inferResponderFunctionFromTransport(row, userFunctionsById) ===
+          filter,
+      )
+    );
+  });
 }
 
 function calculatePercentage(numerator: number, denominator: number): number {
@@ -657,6 +904,221 @@ function buildSimplePdf(title: string, lines: string[]): Buffer {
   return Buffer.from(parts.join(""), "utf8");
 }
 
+type PdfChart = {
+  title: string;
+  counts: CountMap;
+};
+
+function getChartEntries(counts: CountMap): Array<[string, number]> {
+  return Object.entries(counts)
+    .filter(([, count]) => count > 0)
+    .sort(
+      ([firstLabel, firstCount], [secondLabel, secondCount]) =>
+        secondCount - firstCount || firstLabel.localeCompare(secondLabel),
+    )
+    .slice(0, 8);
+}
+
+function buildSitrepCharts(payload: IncidentSitrepPayload): PdfChart[] {
+  return [
+    {
+      title: "Responder Function Records",
+      counts: {
+        "Field Responder":
+          payload.responderFunctionSummary?.fieldResponderRecords ?? 0,
+        "Stabilization Area Responder":
+          payload.responderFunctionSummary
+            ?.stabilizationAreaResponderRecords ?? 0,
+        "Unspecified Responder":
+          payload.responderFunctionSummary?.unspecifiedResponderRecords ?? 0,
+      },
+    },
+    {
+      title: "Casualties by Status",
+      counts: payload.casualtySummary.byStatus,
+    },
+    {
+      title: "Casualties by Severity",
+      counts: payload.casualtySummary.bySeverity,
+    },
+    {
+      title: "Verification Status",
+      counts: payload.casualtySummary.byVerification,
+    },
+    {
+      title: "Latest Triage Category",
+      counts: payload.triageSummary.latestByCategory,
+    },
+    {
+      title: "Transport Mode",
+      counts: payload.transportSummary.modes,
+    },
+    {
+      title: "EMS Unit Type",
+      counts: payload.transportSummary.emsUnits,
+    },
+  ];
+}
+
+function buildPdfWithCharts(
+  title: string,
+  lines: string[],
+  charts: PdfChart[],
+): Buffer {
+  const pageWidth = 612;
+  const pageHeight = 792;
+  const marginX = 50;
+  const bottomMargin = 48;
+  const pages: string[][] = [[]];
+  let currentPage = pages[0]!;
+  let cursorY = 790;
+
+  const addPage = () => {
+    currentPage = [];
+    pages.push(currentPage);
+    cursorY = 790;
+  };
+
+  const ensureSpace = (height: number) => {
+    if (cursorY - height < bottomMargin) {
+      addPage();
+    }
+  };
+
+  const addText = (
+    text: string,
+    x = marginX,
+    size = 10,
+    font = "F1",
+    leading = 14,
+  ) => {
+    ensureSpace(leading);
+    currentPage.push(
+      `BT /${font} ${size} Tf ${x} ${cursorY} Td (${escapePdfText(
+        text,
+      )}) Tj ET`,
+    );
+    cursorY -= leading;
+  };
+
+  addText(title, marginX, 15, "F2", 22);
+  addText("", marginX);
+
+  for (const line of lines) {
+    for (const wrappedLine of wrapText(line, 88)) {
+      addText(wrappedLine);
+    }
+  }
+
+  addText("", marginX);
+  addText("Charts", marginX, 13, "F2", 20);
+
+  for (const chart of charts) {
+    const entries = getChartEntries(chart.counts);
+    const chartHeight = entries.length > 0
+      ? 34 + entries.length * 27
+      : 50;
+
+    ensureSpace(chartHeight);
+    addText(chart.title, marginX, 12, "F2", 18);
+
+    if (entries.length === 0) {
+      addText("No data recorded.", marginX + 10);
+      continue;
+    }
+
+    const maxCount = Math.max(...entries.map(([, count]) => count), 1);
+    const barX = 210;
+    const maxBarWidth = pageWidth - barX - marginX - 38;
+
+    for (const [label, count] of entries) {
+      const barWidth = Math.max(2, (count / maxCount) * maxBarWidth);
+      ensureSpace(24);
+      currentPage.push(
+        `BT /F1 9 Tf ${marginX} ${cursorY} Td (${escapePdfText(
+          label,
+        )}) Tj ET`,
+      );
+      currentPage.push(
+        "0.62 0.07 0.09 rg",
+        `${barX} ${cursorY - 3} ${barWidth.toFixed(2)} 11 re f`,
+        "0 g",
+      );
+      currentPage.push(
+        `BT /F2 9 Tf ${(barX + barWidth + 8).toFixed(2)} ${
+          cursorY
+        } Td (${count}) Tj ET`,
+      );
+      cursorY -= 24;
+    }
+
+    cursorY -= 8;
+  }
+
+  const objects: string[] = [];
+  const addObject = (content: string): number => {
+    objects.push(content);
+    return objects.length;
+  };
+
+  const catalogId = addObject("<< /Type /Catalog /Pages 2 0 R >>");
+  const pagesId = addObject("");
+  const fontId = addObject(
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+  );
+  const boldFontId = addObject(
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>",
+  );
+  const pageIds: number[] = [];
+
+  for (const pageCommands of pages) {
+    const content = pageCommands.join("\n");
+    const contentId = addObject(
+      `<< /Length ${Buffer.byteLength(content, "utf8")} >>\nstream\n${content}\nendstream`,
+    );
+    const pageId = addObject(
+      `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${fontId} 0 R /F2 ${boldFontId} 0 R >> >> /Contents ${contentId} 0 R >>`,
+    );
+
+    pageIds.push(pageId);
+  }
+
+  objects[pagesId - 1] =
+    `<< /Type /Pages /Kids [${pageIds
+      .map((id) => `${id} 0 R`)
+      .join(" ")}] /Count ${pageIds.length} >>`;
+
+  const parts = ["%PDF-1.4\n"];
+  const offsets: number[] = [];
+
+  objects.forEach((object, index) => {
+    offsets.push(Buffer.byteLength(parts.join(""), "utf8"));
+    parts.push(`${index + 1} 0 obj\n${object}\nendobj\n`);
+  });
+
+  const xrefOffset = Buffer.byteLength(parts.join(""), "utf8");
+  parts.push(`xref\n0 ${objects.length + 1}\n`);
+  parts.push("0000000000 65535 f \n");
+
+  for (const offset of offsets) {
+    parts.push(`${String(offset).padStart(10, "0")} 00000 n \n`);
+  }
+
+  parts.push(
+    `trailer\n<< /Size ${objects.length + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`,
+  );
+
+  return Buffer.from(parts.join(""), "utf8");
+}
+
+function buildSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
+  return buildPdfWithCharts(
+    `Situation Report - ${sitrep.report_number}`,
+    buildSitrepLines(sitrep),
+    buildSitrepCharts(sitrep.generated_payload),
+  );
+}
+
 function sendPdf(
   response: Response,
   filename: string,
@@ -696,10 +1158,24 @@ function buildSitrepLines(sitrep: SitrepResponseRecord): string[] {
     `Status: ${sitrep.status}`,
     `Generated At: ${sitrep.generated_at}`,
     `Generated By: ${payload.generatedBy.fullName} (${payload.generatedBy.role})`,
+    `Responder Function Scope: ${formatResponderFunctionFilter(
+      payload.responderFunctionFilter ?? "both",
+    )}`,
     `Period: ${payload.period.start ?? "Unavailable"} to ${payload.period.end}`,
     "",
     "Summary",
     sitrep.summary,
+    "",
+    "Responder Function Coverage",
+    `Field Responder Records: ${
+      payload.responderFunctionSummary?.fieldResponderRecords ?? 0
+    }`,
+    `Stabilization Area Responder Records: ${
+      payload.responderFunctionSummary?.stabilizationAreaResponderRecords ?? 0
+    }`,
+    `Unspecified Responder Records: ${
+      payload.responderFunctionSummary?.unspecifiedResponderRecords ?? 0
+    }`,
     "",
     "Casualties",
     `Total: ${payload.casualtySummary.total}`,
@@ -3510,6 +3986,9 @@ export async function generateIncidentSitrep(
     const { id } = request.params;
     const user = getAuthenticatedUser(request);
     const generatedAt = new Date().toISOString();
+    const responderFunctionFilter = parseResponderFunctionFilter(
+      request.body?.responderFunctionFilter,
+    );
 
     const { data: incidentData, error: incidentError } =
       await supabase
@@ -3560,6 +4039,7 @@ export async function generateIncidentSitrep(
         .from("casualty_incidents")
         .select(`
           id,
+          encoded_by,
           current_status,
           severity,
           verification_status,
@@ -3579,6 +4059,11 @@ export async function generateIncidentSitrep(
             facility_name,
             municipality,
             province
+          ),
+          encoder:users!casualty_incidents_encoded_by_fkey (
+            id,
+            role,
+            reporting_context
           )
         `)
         .eq("incident_id", id)
@@ -3611,7 +4096,7 @@ export async function generateIncidentSitrep(
         ? await supabase
             .from("casualty_triage_assessments")
             .select(
-              "casualty_incident_id, triage_system, triage_category, triage_stage, triaged_at",
+              "casualty_incident_id, triage_system, triage_category, triage_stage, triaged_at, triaged_by",
             )
             .in("casualty_incident_id", casualtyIncidentIds)
             .order("triaged_at", { ascending: false })
@@ -3628,7 +4113,7 @@ export async function generateIncidentSitrep(
         ? await supabase
             .from("casualty_transport_records")
             .select(
-              "casualty_incident_id, transport_required, transport_mode, ems_unit_type, departed_scene_at, arrived_facility_at, receiving_facility_id",
+              "casualty_incident_id, transport_required, transport_mode, ems_unit_type, departed_scene_at, arrived_facility_at, receiving_facility_id, recorded_by",
             )
             .in("casualty_incident_id", casualtyIncidentIds)
             .order("created_at", { ascending: false })
@@ -3644,10 +4129,89 @@ export async function generateIncidentSitrep(
       (triageResult.data ?? []) as TriageAssessmentRow[];
     const transportRows =
       (transportResult.data ?? []) as TransportRecordRow[];
+    const participantUserIds = [
+      ...new Set(
+        [
+          ...casualties.map((item) => item.encoded_by),
+          ...triageRows.map((item) => item.triaged_by),
+          ...transportRows.map((item) => item.recorded_by),
+        ].filter(
+          (value): value is string =>
+            typeof value === "string" && value.trim().length > 0,
+        ),
+      ),
+    ];
+    const userFunctionsById = new Map<
+      string,
+      ResponderFunctionKind | null
+    >();
+
+    if (participantUserIds.length > 0) {
+      const { data: users, error: usersError } = await supabase
+        .from("users")
+        .select("id, role")
+        .in("id", participantUserIds);
+
+      if (usersError) {
+        throw new Error(
+          `Unable to collect responder function data: ${usersError.message}`,
+        );
+      }
+
+      for (const participant of users ?? []) {
+        userFunctionsById.set(
+          participant.id,
+          normalizeResponderFunctionFromRole(participant.role),
+        );
+      }
+    }
+
+    for (const casualty of casualties) {
+      if (casualty.encoded_by && !userFunctionsById.has(casualty.encoded_by)) {
+        userFunctionsById.set(
+          casualty.encoded_by,
+          normalizeResponderFunctionFromRole(casualty.encoder?.role),
+        );
+      }
+    }
+
+    const triageRowsByCasualty = groupRowsByCasualtyId(triageRows);
+    const transportRowsByCasualty =
+      groupRowsByCasualtyId(transportRows);
+    const filteredCasualties = filterCasualtiesByResponderFunction(
+      casualties,
+      responderFunctionFilter,
+      triageRowsByCasualty,
+      transportRowsByCasualty,
+      userFunctionsById,
+    );
+    const filteredCasualtyIds = new Set(
+      filteredCasualties.map((item) => item.id),
+    );
+    const filteredTriageRows = filterRowsByResponderFunction(
+      triageRows.filter((item) =>
+        filteredCasualtyIds.has(item.casualty_incident_id),
+      ),
+      responderFunctionFilter,
+      (row) => inferResponderFunctionFromTriage(row, userFunctionsById),
+    );
+    const filteredTransportRows = filterRowsByResponderFunction(
+      transportRows.filter((item) =>
+        filteredCasualtyIds.has(item.casualty_incident_id),
+      ),
+      responderFunctionFilter,
+      (row) => inferResponderFunctionFromTransport(row, userFunctionsById),
+    );
+    const responderFunctionSummary = buildResponderFunctionSummary(
+      filteredCasualties,
+      triageRowsByCasualty,
+      transportRowsByCasualty,
+      userFunctionsById,
+    );
 
     const receivingFacilityIds = Array.from(
       new Set(
-        transportRows
+        filteredTransportRows
           .map((item) => item.receiving_facility_id)
           .filter((value): value is string => Boolean(value)),
       ),
@@ -3678,7 +4242,7 @@ export async function generateIncidentSitrep(
       TriageAssessmentRow
     >();
 
-    for (const triage of triageRows) {
+    for (const triage of filteredTriageRows) {
       if (!latestTriageByCasualty.has(triage.casualty_incident_id)) {
         latestTriageByCasualty.set(
           triage.casualty_incident_id,
@@ -3692,7 +4256,7 @@ export async function generateIncidentSitrep(
       TransportRecordRow
     >();
 
-    for (const transport of transportRows) {
+    for (const transport of filteredTransportRows) {
       if (
         !latestTransportByCasualty.has(
           transport.casualty_incident_id,
@@ -3713,30 +4277,30 @@ export async function generateIncidentSitrep(
     );
 
     const casualtySummary = {
-      total: casualties.length,
-      byStatus: countBy(casualties, (item) => item.current_status),
-      bySeverity: countBy(casualties, (item) => item.severity),
+      total: filteredCasualties.length,
+      byStatus: countBy(filteredCasualties, (item) => item.current_status),
+      bySeverity: countBy(filteredCasualties, (item) => item.severity),
       byVerification: countBy(
-        casualties,
+        filteredCasualties,
         (item) => item.verification_status,
       ),
-      identified: casualties.filter(
+      identified: filteredCasualties.filter(
         (item) =>
           item.casualty?.identification_status === "identified",
       ).length,
-      partiallyIdentified: casualties.filter(
+      partiallyIdentified: filteredCasualties.filter(
         (item) =>
           item.casualty?.identification_status ===
           "partially_identified",
       ).length,
-      unidentified: casualties.filter(
+      unidentified: filteredCasualties.filter(
         (item) =>
           item.casualty?.identification_status === "unidentified",
       ).length,
     };
 
     const triageSummary = {
-      totalAssessments: triageRows.length,
+      totalAssessments: filteredTriageRows.length,
       latestByCategory: countBy(
         latestTriageRows,
         (item) => item.triage_category,
@@ -3748,7 +4312,7 @@ export async function generateIncidentSitrep(
     };
 
     const transportSummary = {
-      totalRecords: transportRows.length,
+      totalRecords: filteredTransportRows.length,
       required: countBy(
         latestTransportRows,
         (item) => item.transport_required,
@@ -3782,7 +4346,7 @@ export async function generateIncidentSitrep(
       );
     }
 
-    const evacuationCenters = countBy(casualties, (item) =>
+    const evacuationCenters = countBy(filteredCasualties, (item) =>
       formatEvacuationCenterLabel(item.evacuation_center),
     );
 
@@ -3799,12 +4363,18 @@ export async function generateIncidentSitrep(
       casualtySummary.bySeverity.critical ?? 0,
       casualtySummary.byStatus.deceased ?? 0,
       transportSummary.required.yes ?? 0,
+    ).concat(
+      `; responder function scope: ${formatResponderFunctionFilter(
+        responderFunctionFilter,
+      )}`,
     );
 
-    const periodStart = getPeriodStart(incident, casualties);
+    const periodStart = getPeriodStart(incident, filteredCasualties);
     const payload: IncidentSitrepPayload = {
       incident,
       generatedAt,
+      responderFunctionFilter,
+      responderFunctionSummary,
       generatedBy: {
         id: user.id,
         fullName: user.fullName,
@@ -3983,26 +4553,35 @@ export async function exportIncidentCasualtiesCsv(
 
 async function getLatestSitrep(
   incidentId: string,
+  responderFunctionFilter: ResponderFunctionFilter = "both",
 ): Promise<SitrepResponseRecord | null> {
   const { data, error } = await supabase
     .from("sitreps")
     .select(sitrepSelect)
     .eq("incident_id", incidentId)
     .order("generated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(50);
 
   if (error) {
     throw new Error(`Unable to retrieve latest SitRep: ${error.message}`);
   }
 
-  return data
-    ? ({
-        ...data,
+  const records = (data ?? []).map(
+    (item) =>
+      ({
+        ...item,
         generated_payload:
-          data.generated_payload as IncidentSitrepPayload,
-      } as SitrepResponseRecord)
-    : null;
+          item.generated_payload as IncidentSitrepPayload,
+      }) as SitrepResponseRecord,
+  );
+
+  return (
+    records.find(
+      (item) =>
+        (item.generated_payload.responderFunctionFilter ?? "both") ===
+        responderFunctionFilter,
+    ) ?? null
+  );
 }
 
 export async function exportLatestSitrepCsv(
@@ -4011,12 +4590,19 @@ export async function exportLatestSitrepCsv(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const sitrep = await getLatestSitrep(request.params.id);
+    const responderFunctionFilter = parseResponderFunctionFilter(
+      request.query.responderFunctionFilter,
+    );
+    const sitrep = await getLatestSitrep(
+      request.params.id,
+      responderFunctionFilter,
+    );
 
     if (!sitrep) {
       response.status(404).json({
         success: false,
-        message: "Generate a SitRep before exporting.",
+        message:
+          "Generate a SitRep for the selected responder function scope before exporting.",
       });
       return;
     }
@@ -4027,7 +4613,31 @@ export async function exportLatestSitrepCsv(
       [
         ["report", "report_number", sitrep.report_number],
         ["report", "generated_at", sitrep.generated_at],
+        [
+          "report",
+          "responder_function_scope",
+          formatResponderFunctionFilter(
+            payload.responderFunctionFilter ?? "both",
+          ),
+        ],
         ["report", "summary", sitrep.summary],
+        [
+          "responder_function",
+          "field_responder_records",
+          payload.responderFunctionSummary?.fieldResponderRecords ?? 0,
+        ],
+        [
+          "responder_function",
+          "stabilization_area_responder_records",
+          payload.responderFunctionSummary
+            ?.stabilizationAreaResponderRecords ?? 0,
+        ],
+        [
+          "responder_function",
+          "unspecified_responder_records",
+          payload.responderFunctionSummary?.unspecifiedResponderRecords ??
+            0,
+        ],
         ["casualties", "total", payload.casualtySummary.total],
         ["casualties", "identified", payload.casualtySummary.identified],
         [
@@ -4076,20 +4686,24 @@ export async function exportLatestSitrepPdf(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const sitrep = await getLatestSitrep(request.params.id);
+    const responderFunctionFilter = parseResponderFunctionFilter(
+      request.query.responderFunctionFilter,
+    );
+    const sitrep = await getLatestSitrep(
+      request.params.id,
+      responderFunctionFilter,
+    );
 
     if (!sitrep) {
       response.status(404).json({
         success: false,
-        message: "Generate a SitRep before exporting.",
+        message:
+          "Generate a SitRep for the selected responder function scope before exporting.",
       });
       return;
     }
 
-    const pdf = buildSimplePdf(
-      `Situation Report - ${sitrep.report_number}`,
-      buildSitrepLines(sitrep),
-    );
+    const pdf = buildSitrepPdf(sitrep);
 
     sendPdf(response, `${sitrep.report_number}.pdf`, pdf);
   } catch (error) {

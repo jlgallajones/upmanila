@@ -61,6 +61,7 @@ import {
   type ResponderSafetyResult,
   type ResponderSafetyStatus,
   type SceneClearanceSummary,
+  type SitrepResponderFunctionFilter,
   type SurvivorDistributionFacilityMetric,
   type SurvivorDistributionSummary,
   type IncidentResponseTimeline,
@@ -89,6 +90,15 @@ const COLORS = {
 };
 
 const SCREEN_PADDING = 16;
+
+const SITREP_RESPONDER_FUNCTION_OPTIONS: Array<{
+  label: string;
+  value: SitrepResponderFunctionFilter;
+}> = [
+  { label: "Both", value: "both" },
+  { label: "FR only", value: "field_responder" },
+  { label: "SAR only", value: "sa_responder" },
+];
 
 const REFERENCE_MANAGER_ROLES = [
   "super_admin",
@@ -936,6 +946,8 @@ function IncidentCard({
   onManageReports,
   onGenerateSitrep,
   isGeneratingSitrep,
+  sitrepResponderFunctionFilter,
+  onChangeSitrepResponderFunctionFilter,
 }: {
   incident: Incident;
   canManageOperations: boolean;
@@ -958,6 +970,10 @@ function IncidentCard({
   onManageReports: () => void;
   onGenerateSitrep: () => void;
   isGeneratingSitrep: boolean;
+  sitrepResponderFunctionFilter: SitrepResponderFunctionFilter;
+  onChangeSitrepResponderFunctionFilter: (
+    value: SitrepResponderFunctionFilter,
+  ) => void;
 }) {
   return (
     <View style={styles.incidentCard}>
@@ -1146,6 +1162,37 @@ function IncidentCard({
               </Text>
             </Pressable>
           ))}
+
+          <Text style={styles.fieldLabel}>SITREP SCOPE</Text>
+          <View style={styles.timelineOptionRow}>
+            {SITREP_RESPONDER_FUNCTION_OPTIONS.map((option) => {
+              const selected =
+                sitrepResponderFunctionFilter === option.value;
+
+              return (
+                <Pressable
+                  key={option.value}
+                  onPress={() =>
+                    onChangeSitrepResponderFunctionFilter(option.value)
+                  }
+                  style={({ pressed }) => [
+                    styles.timelineOptionChip,
+                    selected && styles.timelineOptionChipActive,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.timelineOptionText,
+                      selected && styles.timelineOptionTextActive,
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
 
           <Pressable
             disabled={isGeneratingSitrep}
@@ -1416,6 +1463,8 @@ export default function IncidentsPage() {
   const [sitrep, setSitrep] = useState<IncidentSitrep | null>(null);
   const [isSitrepModalVisible, setIsSitrepModalVisible] =
     useState(false);
+  const [sitrepResponderFunctionFilter, setSitrepResponderFunctionFilter] =
+    useState<SitrepResponderFunctionFilter>("both");
   const [generatingSitrepIncidentId, setGeneratingSitrepIncidentId] =
     useState<string | null>(null);
   const [exportingKind, setExportingKind] = useState<string | null>(
@@ -1728,7 +1777,10 @@ export default function IncidentsPage() {
     try {
       setGeneratingSitrepIncidentId(incident.id);
 
-      const generated = await generateIncidentSitrep(incident.id);
+      const generated = await generateIncidentSitrep(
+        incident.id,
+        sitrepResponderFunctionFilter,
+      );
 
       setSitrep(generated);
       setIsSitrepModalVisible(true);
@@ -1764,6 +1816,7 @@ export default function IncidentsPage() {
       const uri = await downloadIncidentExport(
         sitrep.incident_id,
         kind,
+        sitrep.generated_payload.responderFunctionFilter,
       );
 
       Alert.alert("Export saved", uri);
@@ -3198,6 +3251,74 @@ export default function IncidentsPage() {
     );
   }
 
+  function renderSitrepBarChart(
+    title: string,
+    counts: Record<string, number>,
+  ) {
+    const entries = Object.entries(counts)
+      .filter(([, count]) => count > 0)
+      .sort(
+        ([firstLabel, firstCount], [secondLabel, secondCount]) =>
+          secondCount - firstCount ||
+          firstLabel.localeCompare(secondLabel),
+      )
+      .slice(0, 6);
+    const maxCount = Math.max(
+      1,
+      ...entries.map(([, count]) => count),
+    );
+
+    return (
+      <View style={styles.sitrepChartSection}>
+        <Text style={styles.fieldLabel}>{title}</Text>
+
+        {entries.length === 0 ? (
+          <Text style={styles.sitrepSectionText}>
+            No data recorded.
+          </Text>
+        ) : (
+          entries.map(([label, count]) => (
+            <View key={label} style={styles.sitrepChartRow}>
+              <Text
+                style={styles.sitrepChartLabel}
+                numberOfLines={1}
+              >
+                {formatCountLabel(label)}
+              </Text>
+              <View style={styles.sitrepChartTrack}>
+                <View
+                  style={[
+                    styles.sitrepChartBar,
+                    {
+                      width: `${Math.max(
+                        8,
+                        (count / maxCount) * 100,
+                      )}%`,
+                    },
+                  ]}
+                />
+              </View>
+              <Text style={styles.sitrepChartValue}>{count}</Text>
+            </View>
+          ))
+        )}
+      </View>
+    );
+  }
+
+  function renderSitrepFunctionChart(sitrepData: IncidentSitrep) {
+    const summary =
+      sitrepData.generated_payload.responderFunctionSummary;
+
+    return renderSitrepBarChart("RESPONDER FUNCTION", {
+      "Field Responder": summary?.fieldResponderRecords ?? 0,
+      "Stabilization Area Responder":
+        summary?.stabilizationAreaResponderRecords ?? 0,
+      "Unspecified Responder":
+        summary?.unspecifiedResponderRecords ?? 0,
+    });
+  }
+
   function renderAmbulanceIntervalSection(
     title: string,
     rows: Array<{
@@ -3640,6 +3761,12 @@ export default function IncidentsPage() {
             }}
             isGeneratingSitrep={
               generatingSitrepIncidentId === item.id
+            }
+            sitrepResponderFunctionFilter={
+              sitrepResponderFunctionFilter
+            }
+            onChangeSitrepResponderFunctionFilter={
+              setSitrepResponderFunctionFilter
             }
           />
         )}
@@ -6392,6 +6519,14 @@ export default function IncidentsPage() {
                   </Text>
                   <Text style={styles.sitrepMetaText}>
                     Generated {formatDateTime(sitrep.generated_at)}
+                    {"\n"}Scope:{" "}
+                    {sitrep.generated_payload
+                      .responderFunctionFilter === "field_responder"
+                      ? "Field Responder only"
+                      : sitrep.generated_payload
+                            .responderFunctionFilter === "sa_responder"
+                        ? "SAR only"
+                        : "Field Responder and SAR"}
                   </Text>
                 </View>
 
@@ -6528,6 +6663,25 @@ export default function IncidentsPage() {
                     </Text>
                   </Pressable>
                 </View>
+
+                {renderSitrepFunctionChart(sitrep)}
+                {renderSitrepBarChart(
+                  "CASUALTY STATUS",
+                  sitrep.generated_payload.casualtySummary.byStatus,
+                )}
+                {renderSitrepBarChart(
+                  "SEVERITY",
+                  sitrep.generated_payload.casualtySummary.bySeverity,
+                )}
+                {renderSitrepBarChart(
+                  "LATEST TRIAGE",
+                  sitrep.generated_payload.triageSummary
+                    .latestByCategory,
+                )}
+                {renderSitrepBarChart(
+                  "TRANSPORT MODES",
+                  sitrep.generated_payload.transportSummary.modes,
+                )}
 
                 <Text style={styles.fieldLabel}>CASUALTY STATUS</Text>
                 <Text style={styles.sitrepSectionText}>
@@ -7392,6 +7546,46 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "900",
     textAlign: "center",
+  },
+  sitrepChartSection: {
+    gap: 9,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 14,
+    padding: 12,
+    backgroundColor: COLORS.white,
+  },
+  sitrepChartRow: {
+    minHeight: 30,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  sitrepChartLabel: {
+    width: 92,
+    color: COLORS.secondaryText,
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  sitrepChartTrack: {
+    flex: 1,
+    height: 12,
+    overflow: "hidden",
+    borderRadius: 999,
+    backgroundColor: COLORS.fieldBackground,
+  },
+  sitrepChartBar: {
+    height: "100%",
+    borderRadius: 999,
+    backgroundColor: COLORS.maroon,
+  },
+  sitrepChartValue: {
+    width: 28,
+    color: COLORS.text,
+    fontSize: 11,
+    fontWeight: "900",
+    textAlign: "right",
   },
   triageAccuracyList: {
     borderWidth: 1,

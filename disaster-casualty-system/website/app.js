@@ -59,6 +59,7 @@ const state = {
   incidentManagementDetails: {},
   loadingIncidentManagementId: null,
   casualties: [],
+  healthcareFacilities: [],
   unitUsers: [],
   dashboard: null,
   recentActivity: [],
@@ -435,6 +436,25 @@ function numberOrUndefined(value) {
   return Number.isFinite(number) ? number : undefined;
 }
 
+function sanitizeFileName(value) {
+  return String(value || "download")
+    .replace(/[^a-z0-9._-]+/gi, "-")
+    .replace(/^-|-$/g, "");
+}
+
+async function downloadApiFile(path, fileName) {
+  const blob = await apiRequest(path);
+  const downloadUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = downloadUrl;
+  link.download = sanitizeFileName(fileName);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(downloadUrl);
+}
+
 function setMessage(id, message, type = "") {
   const element = document.getElementById(id);
   if (!element) return;
@@ -446,12 +466,21 @@ function setMessage(id, message, type = "") {
 async function loadSharedData() {
   if (!state.accessToken) return;
 
-  const [dashboard, incidents, allIncidents, casualties, unitUsers, recent] =
+  const [
+    dashboard,
+    incidents,
+    allIncidents,
+    casualties,
+    healthcareFacilities,
+    unitUsers,
+    recent,
+  ] =
     await Promise.allSettled([
       apiRequest("/dashboard/summary"),
       apiRequest("/incidents"),
       apiRequest("/incidents?scope=all"),
       apiRequest("/casualties"),
+      apiRequest("/healthcare-facilities"),
       apiRequest("/auth/unit-users"),
       apiRequest("/dashboard/recent-activity?limit=12"),
     ]);
@@ -463,6 +492,7 @@ async function loadSharedData() {
   let loadedIncidents = state.incidents;
   let loadedAllIncidents = state.allIncidents;
   let loadedCasualties = state.casualties;
+  let loadedHealthcareFacilities = state.healthcareFacilities;
   let loadedUnitUsers = state.unitUsers;
   let loadedRecentActivity = state.recentActivity;
 
@@ -478,6 +508,10 @@ async function loadSharedData() {
 
   if (casualties.status === "fulfilled") {
     loadedCasualties = casualties.value.data || [];
+  }
+
+  if (healthcareFacilities.status === "fulfilled") {
+    loadedHealthcareFacilities = healthcareFacilities.value.data || [];
   }
 
   if (unitUsers.status === "fulfilled") {
@@ -512,6 +546,7 @@ async function loadSharedData() {
     ? loadedAllIncidents
     : loadedIncidents;
   state.casualties = loadedCasualties;
+  state.healthcareFacilities = loadedHealthcareFacilities;
   state.unitUsers = loadedUnitUsers;
   state.recentActivity = loadedRecentActivity;
 
@@ -2430,13 +2465,31 @@ function renderSitrepAndCloseSection(incident) {
           <p class="panel-subtitle">Generate the latest situation report or close an active incident.</p>
         </div>
       </div>
+      <label class="field">
+        <span>Responder function scope</span>
+        <select id="sitrepResponderFunctionFilter">
+          <option value="both">Field Responder and SAR</option>
+          <option value="field_responder">Field Responder only</option>
+          <option value="sa_responder">Stabilization Area Responder only</option>
+        </select>
+      </label>
       <div class="button-row">
-        <button class="secondary-button" type="button" data-generate-sitrep="${escapeHtml(incident.id)}">Generate SitRep</button>
+        <button class="secondary-button" type="button" data-generate-sitrep="${escapeHtml(incident.id)}">Generate & Download PDF</button>
+        <button class="ghost-button" type="button" data-download-sitrep="pdf" data-incident-id="${escapeHtml(incident.id)}">Download Latest PDF</button>
+        <button class="ghost-button" type="button" data-download-sitrep="csv" data-incident-id="${escapeHtml(incident.id)}">Download Latest CSV</button>
         <button class="danger-button" type="button" data-close-incident="${escapeHtml(incident.id)}" ${incident.status !== "active" ? "disabled" : ""}>Close Incident</button>
       </div>
       <div id="incidentActionMessage" class="status-message" hidden></div>
     </section>
   `;
+}
+
+function getSelectedSitrepResponderFunctionFilter() {
+  const value = qs("#sitrepResponderFunctionFilter")?.value;
+
+  return ["field_responder", "sa_responder", "both"].includes(value)
+    ? value
+    : "both";
 }
 
 function bindIncidentManagementActions() {
@@ -2540,14 +2593,49 @@ function bindIncidentManagementActions() {
       if (!incidentId) return;
 
       try {
+        const responderFunctionFilter =
+          getSelectedSitrepResponderFunctionFilter();
         setMessage("incidentActionMessage", "Generating SitRep...");
         const response = await apiRequest(`/incidents/${encodeURIComponent(incidentId)}/sitreps`, {
           method: "POST",
-          body: JSON.stringify({}),
+          body: JSON.stringify({ responderFunctionFilter }),
         });
+        const reportNumber = response.data?.report_number || "latest-sitrep";
+        const encodedScope = encodeURIComponent(responderFunctionFilter);
+        await downloadApiFile(
+          `/incidents/${encodeURIComponent(incidentId)}/export/sitrep.pdf?responderFunctionFilter=${encodedScope}`,
+          `${reportNumber}-${responderFunctionFilter}.pdf`,
+        );
         setMessage(
           "incidentActionMessage",
-          `SitRep generated: ${response.data?.report_number || "latest report"}.`,
+          `SitRep generated and downloaded: ${reportNumber}.pdf.`,
+          "success",
+        );
+      } catch (error) {
+        setMessage("incidentActionMessage", error.message, "error");
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-download-sitrep]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const incidentId = button.dataset.incidentId;
+      const format = button.dataset.downloadSitrep;
+
+      if (!incidentId || !["pdf", "csv"].includes(format)) return;
+
+      try {
+        const responderFunctionFilter =
+          getSelectedSitrepResponderFunctionFilter();
+        const encodedScope = encodeURIComponent(responderFunctionFilter);
+        setMessage("incidentActionMessage", `Preparing SitRep ${format.toUpperCase()}...`);
+        await downloadApiFile(
+          `/incidents/${encodeURIComponent(incidentId)}/export/sitrep.${format}?responderFunctionFilter=${encodedScope}`,
+          `dcms-${incidentId}-sitrep-${responderFunctionFilter}.${format}`,
+        );
+        setMessage(
+          "incidentActionMessage",
+          `SitRep ${format.toUpperCase()} downloaded.`,
           "success",
         );
       } catch (error) {
@@ -2946,6 +3034,64 @@ function renderFacilityCreator() {
         <div id="facilityMessage" class="status-message" hidden></div>
       </form>
     </section>
+    ${renderHealthcareFacilitiesTable()}
+  `;
+}
+
+function renderHealthcareFacilitiesTable() {
+  const rows = state.healthcareFacilities
+    .slice()
+    .sort((first, second) =>
+      compareText(first.facility_name, second.facility_name),
+    )
+    .map((facility) => {
+      const location = formatLocation(
+        facility.address,
+        facility.barangay,
+        facility.municipality,
+        facility.province,
+      );
+
+      return `
+        <tr>
+          <td><strong>${escapeHtml(facility.facility_name)}</strong></td>
+          <td>${escapeHtml(roleLabel(facility.facility_level))}</td>
+          <td>${escapeHtml(location)}</td>
+          <td>${escapeHtml(facility.contact_person || "Not recorded")}</td>
+          <td>${escapeHtml(facility.contact_number || "Not recorded")}</td>
+          <td><span class="pill ${facility.is_active ? "green" : "red"}">${facility.is_active ? "Active" : "Inactive"}</span></td>
+          <td>${formatDate(facility.created_at)}</td>
+        </tr>
+      `;
+    });
+
+  return `
+    <section class="panel" style="margin-top:18px">
+      <div class="panel-header">
+        <div>
+          <h2>Added healthcare facilities</h2>
+          <p class="panel-subtitle">Facilities available to healthcare facility documenters and responder workflows.</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Facility</th>
+              <th>Level</th>
+              <th>Location</th>
+              <th>Contact person</th>
+              <th>Contact number</th>
+              <th>Status</th>
+              <th>Date added</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.join("") || `<tr><td colspan="7"><div class="empty-state">No healthcare facilities added yet.</div></td></tr>`}
+          </tbody>
+        </table>
+      </div>
+    </section>
   `;
 }
 
@@ -2973,6 +3119,9 @@ function bindCreateFacilityForm() {
       });
 
       form.reset();
+      await loadSharedData();
+      renderCurrentView();
+      bindView();
       setMessage("facilityMessage", "Healthcare facility created.", "success");
     } catch (error) {
       setMessage("facilityMessage", error.message, "error");

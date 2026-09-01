@@ -634,7 +634,7 @@ export async function updateCasualty(
   id: string,
   payload: UpdateCasualtyPayload,
   options: { responderFunction?: "sa_responder" } = {},
-): Promise<CasualtyRecord> {
+): Promise<CasualtyResponse> {
   const response = await api.put<CasualtyResponse>(
     `/casualties/${encodeURIComponent(id)}`,
     payload,
@@ -648,5 +648,5 @@ export async function updateCasualty(
     },
   );
 
-  return response.data.data;
+  return response.data;
 }

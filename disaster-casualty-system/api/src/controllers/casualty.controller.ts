@@ -3204,6 +3204,45 @@ export async function updateCasualty(
       );
     }
 
+    const shouldReturnRejectedRecordForReview =
+      shouldScopeToOwnCasualties(user.role) &&
+      existingRecord.verification_status === "rejected";
+
+    if (shouldReturnRejectedRecordForReview) {
+      const { error: verificationUpdateError } = await supabase
+        .from("casualty_incidents")
+        .update({
+          verification_status: "submitted",
+          verified_by: null,
+          verified_at: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id);
+
+      if (verificationUpdateError) {
+        throw new Error(
+          `Unable to return casualty for review: ${verificationUpdateError.message}`,
+        );
+      }
+
+      const { error: verificationHistoryError } = await supabase
+        .from("casualty_verification_history")
+        .insert({
+          casualty_incident_id: id,
+          old_status: existingRecord.verification_status,
+          new_status: "submitted",
+          reviewed_by: user.id,
+          review_notes:
+            "Responder saved corrections and returned the record for admin review.",
+        });
+
+      if (verificationHistoryError) {
+        throw new Error(
+          `Unable to record resubmission history: ${verificationHistoryError.message}`,
+        );
+      }
+    }
+
     const { data: updatedRecord, error: updatedError } =
       await supabase
         .from("casualty_incidents")
@@ -3221,7 +3260,9 @@ export async function updateCasualty(
 
     response.status(200).json({
       success: true,
-      message: "Casualty record updated successfully.",
+      message: shouldReturnRejectedRecordForReview
+        ? "Casualty record updated and returned for admin review."
+        : "Casualty record updated successfully.",
       data: updatedRecord,
     });
   } catch (error) {
