@@ -165,6 +165,88 @@ function shouldScopeToOwnCasualties(role: string): boolean {
   return casualtyDataEntryRoles.has(role);
 }
 
+function getRelationRecord(
+  value: unknown,
+): Record<string, unknown> | null {
+  if (Array.isArray(value)) {
+    return isObject(value[0]) ? value[0] : null;
+  }
+
+  return isObject(value) ? value : null;
+}
+
+function getTextField(
+  record: Record<string, unknown> | null,
+  key: string,
+): string | null {
+  const value = record?.[key];
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function buildCasualtyNotificationLabel(
+  casualty: Record<string, unknown> | null,
+): string {
+  const idNumber = getTextField(casualty, "id_number");
+
+  if (idNumber) {
+    return idNumber;
+  }
+
+  const fullName = [
+    getTextField(casualty, "first_name"),
+    getTextField(casualty, "middle_name"),
+    getTextField(casualty, "last_name"),
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return fullName || "this casualty record";
+}
+
+async function createCasualtyRejectionNotification({
+  casualtyIncidentId,
+  recipientUserId,
+  casualtyLabel,
+  incidentName,
+  reviewNotes,
+}: {
+  casualtyIncidentId: string;
+  recipientUserId: string;
+  casualtyLabel: string;
+  incidentName: string | null;
+  reviewNotes: string | null;
+}): Promise<void> {
+  const reason = reviewNotes?.trim();
+  const messageParts = [
+    `Your casualty record ${casualtyLabel} was rejected and returned for correction.`,
+    incidentName ? `Incident: ${incidentName}.` : null,
+    reason ? `Reason: ${reason}` : null,
+  ].filter(Boolean);
+
+  const { error } = await supabase
+    .from("notifications")
+    .insert({
+      user_id: recipientUserId,
+      title: "Casualty record rejected",
+      message: messageParts.join(" "),
+      notification_type: "verification",
+      related_entity_type: "casualty",
+      related_entity_id: casualtyIncidentId,
+    });
+
+  if (error) {
+    throw new Error(
+      `Unable to create rejection notification: ${error.message}`,
+    );
+  }
+}
+
 async function getCasualtyScopeEncoderIds(user: {
   id: string;
   role: string;
@@ -2277,7 +2359,22 @@ export async function updateCasualtyVerification(
     const { data: existingRecord, error: existingError } =
       await supabase
         .from("casualty_incidents")
-        .select("id, verification_status")
+        .select(
+          `
+          id,
+          encoded_by,
+          verification_status,
+          casualty:casualties (
+            id_number,
+            first_name,
+            middle_name,
+            last_name
+          ),
+          incident:incidents (
+            incident_name
+          )
+        `,
+        )
         .eq("id", id)
         .is("deleted_at", null)
         .maybeSingle();
@@ -2343,6 +2440,23 @@ export async function updateCasualtyVerification(
       throw new Error(
         `Unable to record verification history: ${historyError.message}`,
       );
+    }
+
+    if (
+      status === "rejected" &&
+      existingRecord.encoded_by &&
+      existingRecord.encoded_by !== user.id
+    ) {
+      const casualty = getRelationRecord(existingRecord.casualty);
+      const incident = getRelationRecord(existingRecord.incident);
+
+      await createCasualtyRejectionNotification({
+        casualtyIncidentId: id,
+        recipientUserId: existingRecord.encoded_by,
+        casualtyLabel: buildCasualtyNotificationLabel(casualty),
+        incidentName: getTextField(incident, "incident_name"),
+        reviewNotes: notes ?? null,
+      });
     }
 
     const { data: updatedRecord, error: updatedError } =

@@ -22,6 +22,7 @@ import {
   type RecentActivity,
 } from "../../api/dashboard";
 import { isAuthenticationTokenError } from "../../api/client";
+import { getNotifications } from "../../api/notifications";
 import {
   getDeactivationContinuity,
   getIncidents,
@@ -468,6 +469,10 @@ export default function HomeDashboardScreen() {
     useState<string | null>(null);
   const [queuedCasualtyCount, setQueuedCasualtyCount] =
     useState(0);
+  const [
+    unreadNotificationCount,
+    setUnreadNotificationCount,
+  ] = useState(0);
   const [isGuestMode, setIsGuestMode] = useState(false);
   const [currentUserRole, setCurrentUserRole] =
     useState<string | null>(null);
@@ -511,6 +516,7 @@ export default function HomeDashboardScreen() {
         setQueuedCasualtyCount(queuedCount);
         setSummary(initialSummary);
         setActivities([]);
+        setUnreadNotificationCount(0);
         setIsGuestMode(true);
         setCurrentUserRole(null);
         setCanOpenIncidentManagement(false);
@@ -531,6 +537,20 @@ export default function HomeDashboardScreen() {
 
       setSummary(summaryData);
       setActivities(activityData);
+
+      try {
+        const notificationData = await getNotifications();
+        setUnreadNotificationCount(
+          notificationData.unreadCount,
+        );
+      } catch (notificationError) {
+        console.error(
+          "Failed to load notification count:",
+          notificationError,
+        );
+        setUnreadNotificationCount(0);
+      }
+
       return syncResult;
     } catch (error) {
       if (isAuthenticationTokenError(error)) {
@@ -538,6 +558,7 @@ export default function HomeDashboardScreen() {
         setQueuedCasualtyCount(queuedCount);
         setSummary(initialSummary);
         setActivities([]);
+        setUnreadNotificationCount(0);
         setIsGuestMode(true);
         setCurrentUserRole(null);
         setCanOpenIncidentManagement(false);
@@ -868,7 +889,9 @@ export default function HomeDashboardScreen() {
                 color={COLORS.white}
               />
 
-              <View style={styles.notificationDot} />
+              {unreadNotificationCount > 0 ? (
+                <View style={styles.notificationDot} />
+              ) : null}
             </Pressable>
           </View>
 
