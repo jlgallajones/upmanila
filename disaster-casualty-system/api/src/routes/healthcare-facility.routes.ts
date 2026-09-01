@@ -12,7 +12,7 @@ healthcareFacilityRouter.get("/", requireAuth, getHealthcareFacilities);
 healthcareFacilityRouter.post(
   "/",
   requireAuth,
-  requireRole(["super_admin", "administrator", "encoder"]),
+  requireRole(["super_admin", "admin", "administrator", "encoder"]),
   createHealthcareFacility,
 );
 

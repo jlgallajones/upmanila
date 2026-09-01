@@ -696,34 +696,9 @@ export async function getUnitUsers(
     let unitUsers = data ?? [];
 
     if (currentUser.role !== "super_admin") {
-      const { data: creator, error: creatorError } = await supabase
-        .from("users")
-        .select("id, assigned_municipality, assigned_barangay")
-        .eq("id", currentUser.id)
-        .single();
-
-      if (creatorError || !creator) {
-        response.status(404).json({
-          success: false,
-          message: "Creator account not found.",
-        });
-        return;
-      }
-
-      unitUsers = unitUsers.filter((user) => {
-        if (user.created_by === currentUser.id) {
-          return true;
-        }
-
-        if (user.created_by) {
-          return false;
-        }
-
-        return (
-          user.assigned_municipality === creator.assigned_municipality &&
-          user.assigned_barangay === creator.assigned_barangay
-        );
-      });
+      unitUsers = unitUsers.filter(
+        (user) => user.created_by === currentUser.id,
+      );
     }
 
     response.status(200).json({

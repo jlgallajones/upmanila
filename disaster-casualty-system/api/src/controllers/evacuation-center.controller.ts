@@ -42,16 +42,90 @@ const evacuationCenterSelect = `
   updated_at
 `;
 
+async function getVisibleIncidentIdsForReferenceData(user: {
+  id: string;
+  role: string;
+}): Promise<string[] | null> {
+  if (user.role === "super_admin") {
+    return null;
+  }
+
+  let creatorId: string | null = user.id;
+
+  if (["responder", "field_responder", "sa_responder", "documenter"].includes(user.role)) {
+    const { data: profile, error: profileError } = await supabase
+      .from("users")
+      .select("created_by")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (profileError) {
+      throw new Error(
+        `Unable to load reference data scope: ${profileError.message}`,
+      );
+    }
+
+    creatorId = profile?.created_by ?? null;
+  }
+
+  if (!creatorId) {
+    return [];
+  }
+
+  const { data: incidents, error } = await supabase
+    .from("incidents")
+    .select("id")
+    .eq("created_by", creatorId);
+
+  if (error) {
+    throw new Error(
+      `Unable to load reference incident scope: ${error.message}`,
+    );
+  }
+
+  return (incidents ?? [])
+    .map((incident) => incident.id)
+    .filter(
+      (id): id is string =>
+        typeof id === "string" && id.trim().length > 0,
+    );
+}
+
 export async function getEvacuationCenters(
   request: Request,
   response: Response,
   next: NextFunction,
 ): Promise<void> {
   try {
+    const user = getAuthenticatedUser(request);
     const incidentId =
       typeof request.query.incidentId === "string"
         ? request.query.incidentId
         : undefined;
+    const visibleIncidentIds =
+      await getVisibleIncidentIdsForReferenceData(user);
+
+    if (visibleIncidentIds && visibleIncidentIds.length === 0) {
+      response.status(200).json({
+        success: true,
+        count: 0,
+        data: [],
+      });
+      return;
+    }
+
+    if (
+      incidentId &&
+      visibleIncidentIds &&
+      !visibleIncidentIds.includes(incidentId)
+    ) {
+      response.status(200).json({
+        success: true,
+        count: 0,
+        data: [],
+      });
+      return;
+    }
 
     let query = supabase
       .from("evacuation_centers")
@@ -61,6 +135,8 @@ export async function getEvacuationCenters(
 
     if (incidentId) {
       query = query.eq("incident_id", incidentId);
+    } else if (visibleIncidentIds) {
+      query = query.in("incident_id", visibleIncidentIds);
     }
 
     const { data, error } = await query;
@@ -152,7 +228,7 @@ export async function createEvacuationCenter(
 
     const { data: incident, error: incidentError } = await supabase
       .from("incidents")
-      .select("id")
+      .select("id, created_by")
       .eq("id", incidentId)
       .single();
 
@@ -160,6 +236,15 @@ export async function createEvacuationCenter(
       response.status(404).json({
         success: false,
         message: "Incident not found.",
+      });
+      return;
+    }
+
+    if (user.role !== "super_admin" && incident.created_by !== user.id) {
+      response.status(403).json({
+        success: false,
+        message:
+          "You can only create evacuation centers for incidents created by your account.",
       });
       return;
     }

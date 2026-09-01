@@ -156,8 +156,47 @@ const casualtyDataEntryRoles = new Set([
   "bystander",
 ]);
 
+const casualtyAdminScopeRoles = new Set([
+  "admin",
+  "administrator",
+]);
+
 function shouldScopeToOwnCasualties(role: string): boolean {
   return casualtyDataEntryRoles.has(role);
+}
+
+async function getCasualtyScopeEncoderIds(user: {
+  id: string;
+  role: string;
+}): Promise<string[] | null> {
+  if (user.role === "super_admin") {
+    return null;
+  }
+
+  if (!casualtyAdminScopeRoles.has(user.role)) {
+    return [user.id];
+  }
+
+  const { data, error } = await supabase
+    .from("users")
+    .select("id")
+    .eq("created_by", user.id);
+
+  if (error) {
+    throw new Error(
+      `Unable to retrieve admin-created accounts: ${error.message}`,
+    );
+  }
+
+  return [
+    user.id,
+    ...((data ?? [])
+      .map((account) => account.id)
+      .filter(
+        (id): id is string =>
+          typeof id === "string" && id.trim().length > 0,
+      )),
+  ];
 }
 
 function normalizeVerificationStatus(
@@ -173,7 +212,12 @@ async function canAccessCasualtyRecord(
   userId: string,
   userRole: string,
 ): Promise<boolean> {
-  if (!shouldScopeToOwnCasualties(userRole)) {
+  const scopedEncoderIds = await getCasualtyScopeEncoderIds({
+    id: userId,
+    role: userRole,
+  });
+
+  if (!scopedEncoderIds) {
     return true;
   }
 
@@ -181,7 +225,7 @@ async function canAccessCasualtyRecord(
     .from("casualty_incidents")
     .select("id")
     .eq("id", casualtyIncidentId)
-    .eq("encoded_by", userId)
+    .in("encoded_by", scopedEncoderIds)
     .is("deleted_at", null)
     .maybeSingle();
 
@@ -1631,6 +1675,7 @@ export async function getCasualties(
       ["responder", "field_responder", "sa_responder"].includes(
         user.role,
       );
+    const scopedEncoderIds = await getCasualtyScopeEncoderIds(user);
 
     if (fieldResponderLinks && !incidentId) {
       response.status(400).json({
@@ -1655,11 +1700,8 @@ export async function getCasualties(
       query = query.eq("current_status", status);
     }
 
-    if (
-      shouldScopeToOwnCasualties(user.role) &&
-      !canLoadFieldResponderLinks
-    ) {
-      query = query.eq("encoded_by", user.id);
+    if (scopedEncoderIds && !canLoadFieldResponderLinks) {
+      query = query.in("encoded_by", scopedEncoderIds);
     }
 
     const { data, error } = await query;
@@ -2042,7 +2084,7 @@ export async function getCasualtyVerificationActionLogs(
           (unitUser) => [unitUser.id, unitUser],
         ),
       );
-      const unitUserIds = [...unitUsersById.keys()];
+      const unitUserIds = [user.id, ...unitUsersById.keys()];
 
       if (unitUserIds.length > 0) {
         const {
@@ -2247,6 +2289,20 @@ export async function updateCasualtyVerification(
     }
 
     if (!existingRecord) {
+      response.status(404).json({
+        success: false,
+        message: "Casualty record not found.",
+      });
+      return;
+    }
+
+    const hasAccess = await canAccessCasualtyRecord(
+      id,
+      user.id,
+      user.role,
+    );
+
+    if (!hasAccess) {
       response.status(404).json({
         success: false,
         message: "Casualty record not found.",

@@ -30,6 +30,14 @@ const facilityManagerRoles = new Set([
   "encoder",
 ]);
 
+const facilityViewerRolesScopedToCreatorAdmin = new Set([
+  "responder",
+  "field_responder",
+  "sa_responder",
+  "documenter",
+  "medical_personnel",
+]);
+
 const facilityLevels = new Set([
   "primary",
   "secondary",
@@ -51,9 +59,41 @@ const healthcareFacilitySelect = `
   latitude,
   longitude,
   is_active,
+  created_by,
   created_at,
   updated_at
 `;
+
+async function getFacilityOwnerScopeForUser(user: {
+  id: string;
+  role: string;
+}): Promise<string | null | undefined> {
+  if (user.role === "super_admin") {
+    return undefined;
+  }
+
+  if (facilityManagerRoles.has(user.role)) {
+    return user.id;
+  }
+
+  if (!facilityViewerRolesScopedToCreatorAdmin.has(user.role)) {
+    return user.id;
+  }
+
+  const { data: profile, error } = await supabase
+    .from("users")
+    .select("created_by")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(
+      `Unable to load healthcare facility scope: ${error.message}`,
+    );
+  }
+
+  return profile?.created_by ?? null;
+}
 
 export async function getHealthcareFacilities(
   request: Request,
@@ -61,16 +101,31 @@ export async function getHealthcareFacilities(
   next: NextFunction,
 ): Promise<void> {
   try {
+    const user = getAuthenticatedUser(request);
     const search =
       typeof request.query.search === "string"
         ? request.query.search.trim()
         : "";
+    const facilityOwnerScope = await getFacilityOwnerScopeForUser(user);
+
+    if (facilityOwnerScope === null) {
+      response.status(200).json({
+        success: true,
+        count: 0,
+        data: [],
+      });
+      return;
+    }
 
     let query = supabase
       .from("healthcare_facilities")
       .select(healthcareFacilitySelect)
       .eq("is_active", true)
       .order("facility_name", { ascending: true });
+
+    if (facilityOwnerScope !== undefined) {
+      query = query.eq("created_by", facilityOwnerScope);
+    }
 
     if (search) {
       query = query.or(
@@ -201,6 +256,10 @@ export async function createHealthcareFacility(
       .ilike("facility_name", normalizedName)
       .eq("is_active", true)
       .limit(1);
+
+    if (creator.role !== "super_admin") {
+      existingQuery = existingQuery.eq("created_by", user.id);
+    }
 
     const normalizedMunicipality = municipality?.trim();
     const normalizedProvince = province?.trim();

@@ -65,14 +65,46 @@ const state = {
 };
 
 const hazardTypes = [
-  "Typhoon",
-  "Flooding",
-  "Fire",
+  "Volcanic Eruption",
   "Earthquake",
+  "Tsunami",
   "Landslide",
-  "Explosion",
-  "Mass Gathering",
+  "Lahar / Volcanic Mudflow",
+  "Sink Hole",
+  "Geologic - Other",
+  "Infectious Diseases",
+  "Infestation",
+  "Poisoning",
+  "Biological - Other",
+  "Typhoon",
+  "Storm Surge",
+  "LPA / ALPA",
+  "Tropical Depression",
+  "Monsoon Rain",
+  "Flooding",
+  "Flash Flood",
+  "Lightning",
+  "Drought",
+  "Meteorological / Hydrological - Other",
+  "Bombing",
   "Armed Conflict",
+  "War",
+  "Mass Gathering",
+  "Ambush Incident",
+  "Terrorist Activities",
+  "Hostage Taking",
+  "Coup d'etat",
+  "Repatriation",
+  "Civil Unrest",
+  "Mass Shooting",
+  "Societal - Other",
+  "Fire",
+  "Explosion",
+  "Maritime Accident",
+  "Air Accident",
+  "Land Transportation Accident",
+  "Trash Slide",
+  "Technological - Other",
   "Other",
 ];
 
@@ -142,6 +174,80 @@ function isAdminRole() {
   return ["super_admin", "admin", "administrator", "encoder"].includes(
     state.user?.role,
   );
+}
+
+function isUnitScopedAdmin() {
+  return ["admin", "administrator"].includes(state.user?.role);
+}
+
+function filterUnitUsersForCurrentAdmin(users) {
+  if (!isUnitScopedAdmin()) return users;
+
+  return users.filter((user) => user.created_by === state.user?.id);
+}
+
+function getCurrentAdminEncoderIds(unitUsers) {
+  const ids = new Set();
+
+  if (state.user?.id) {
+    ids.add(state.user.id);
+  }
+
+  for (const user of unitUsers) {
+    if (user?.id) {
+      ids.add(user.id);
+    }
+  }
+
+  return ids;
+}
+
+function filterIncidentsForCurrentAdmin(incidents) {
+  if (!isUnitScopedAdmin()) return incidents;
+
+  return incidents.filter((incident) => incident?.created_by === state.user?.id);
+}
+
+function filterCasualtiesForCurrentAdmin(casualties, encoderIds) {
+  if (!isUnitScopedAdmin()) return casualties;
+
+  return casualties.filter((record) => encoderIds.has(record?.encoder?.id));
+}
+
+function filterRecentActivityForCurrentAdmin(activity, encoderIds, casualtyIds) {
+  if (!isUnitScopedAdmin()) return activity;
+
+  return activity.filter(
+    (item) =>
+      encoderIds.has(item?.encoder?.id) ||
+      casualtyIds.has(item?.id),
+  );
+}
+
+function recomputeAdminDashboardSummary() {
+  if (!isUnitScopedAdmin()) return;
+
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+
+  state.dashboard = {
+    ...(state.dashboard || {}),
+    activeIncidents: state.incidents.filter(
+      (incident) => incident.status === "active",
+    ).length,
+    encodedToday: state.casualties.filter((record) => {
+      const createdAt = new Date(record.created_at || record.reported_at);
+      return !Number.isNaN(createdAt.getTime()) && createdAt >= startOfToday;
+    }).length,
+    verifiedRecords: state.casualties.filter(
+      (record) => record.verification_status === "verified",
+    ).length,
+    pendingRecords: state.casualties.filter((record) =>
+      ["draft", "submitted", "under_review"].includes(
+        record.verification_status,
+      ),
+    ).length,
+  };
 }
 
 async function apiRequest(path, options = {}) {
@@ -354,27 +460,62 @@ async function loadSharedData() {
     state.dashboard = dashboard.value.data;
   }
 
+  let loadedIncidents = state.incidents;
+  let loadedAllIncidents = state.allIncidents;
+  let loadedCasualties = state.casualties;
+  let loadedUnitUsers = state.unitUsers;
+  let loadedRecentActivity = state.recentActivity;
+
   if (incidents.status === "fulfilled") {
-    state.incidents = incidents.value.data || [];
+    loadedIncidents = incidents.value.data || [];
   }
 
   if (allIncidents.status === "fulfilled") {
-    state.allIncidents = allIncidents.value.data || [];
+    loadedAllIncidents = allIncidents.value.data || [];
   } else {
-    state.allIncidents = state.incidents;
+    loadedAllIncidents = loadedIncidents;
   }
 
   if (casualties.status === "fulfilled") {
-    state.casualties = casualties.value.data || [];
+    loadedCasualties = casualties.value.data || [];
   }
 
   if (unitUsers.status === "fulfilled") {
-    state.unitUsers = unitUsers.value.data || [];
+    loadedUnitUsers = unitUsers.value.data || [];
   }
 
   if (recent.status === "fulfilled") {
-    state.recentActivity = recent.value.data || [];
+    loadedRecentActivity = recent.value.data || [];
   }
+
+  loadedUnitUsers = filterUnitUsersForCurrentAdmin(loadedUnitUsers);
+
+  const adminEncoderIds = getCurrentAdminEncoderIds(loadedUnitUsers);
+  loadedIncidents = filterIncidentsForCurrentAdmin(loadedIncidents);
+  loadedAllIncidents = filterIncidentsForCurrentAdmin(loadedAllIncidents);
+  loadedCasualties = filterCasualtiesForCurrentAdmin(
+    loadedCasualties,
+    adminEncoderIds,
+  );
+
+  const visibleCasualtyIds = new Set(
+    loadedCasualties.map((record) => record.id).filter(Boolean),
+  );
+  loadedRecentActivity = filterRecentActivityForCurrentAdmin(
+    loadedRecentActivity,
+    adminEncoderIds,
+    visibleCasualtyIds,
+  );
+
+  state.incidents = loadedIncidents;
+  state.allIncidents = loadedAllIncidents.length
+    ? loadedAllIncidents
+    : loadedIncidents;
+  state.casualties = loadedCasualties;
+  state.unitUsers = loadedUnitUsers;
+  state.recentActivity = loadedRecentActivity;
+
+  recomputeAdminDashboardSummary();
 }
 
 function render() {
@@ -1581,6 +1722,7 @@ const incidentManagementSections = [
   ["hospital-resources", "Hospital Resources", true],
   ["morbidity-mortality", "Morbidity & Mortality", false],
   ["sitrep-close", "SitRep & Close Incident", false],
+  ["edit-incident", "Edit Incident", true],
 ];
 
 async function loadIncidentManagementDetails(incidentId) {
@@ -1785,6 +1927,8 @@ function renderIncidentSectionEditContent(incident, details, sectionId) {
         details.hospitalResourceSummary?.data,
         true,
       );
+    case "edit-incident":
+      return renderIncidentEditForm(incident);
     default:
       return renderIncidentSectionViewContent(incident, details, sectionId);
   }
@@ -1864,9 +2008,100 @@ function renderIncidentSectionViewContent(incident, details, sectionId) {
       return renderSummaryFacts(details.morbidityMortality?.data);
     case "sitrep-close":
       return renderSitrepAndCloseSection(incident);
+    case "edit-incident":
+      return renderIncidentEditView(incident);
     default:
       return `<div class="empty-state">Section unavailable.</div>`;
   }
+}
+
+function renderIncidentEditView(incident) {
+  return renderKeyValueSection([
+    ["Incident code", incident.incident_code],
+    ["Incident name", incident.incident_name],
+    ["Type of hazard", incident.disaster_type],
+    ["Incident exact location", incident.description || "Not recorded"],
+    ["Barangay", incident.barangay || "Not recorded"],
+    ["Municipality / City", incident.municipality || "Not recorded"],
+    ["Province", incident.province || "Not recorded"],
+    ["Status", roleLabel(incident.status)],
+    ["Incident onsite", formatDate(incident.started_at)],
+    ["Closed / ended at", formatDate(incident.ended_at)],
+  ]);
+}
+
+function renderIncidentEditForm(incident) {
+  const hazardOptions = hazardTypes.includes(incident.disaster_type)
+    ? hazardTypes
+    : [incident.disaster_type, ...hazardTypes].filter(Boolean);
+
+  return `
+    <form id="incidentSectionEditForm" class="incident-section-card" data-incident-section-form="edit-incident">
+      <div class="section-card-header">
+        <div>
+          <h3>Edit Incident</h3>
+          <p class="panel-subtitle">Update the official incident fields synced to the mobile app.</p>
+        </div>
+      </div>
+      <div class="form-grid two">
+        <label class="field">
+          <span>Incident name</span>
+          <input name="incidentName" required value="${escapeHtml(incident.incident_name)}" />
+        </label>
+        <label class="field">
+          <span>Type of hazard</span>
+          <select name="disasterType" required>
+            ${hazardOptions
+              .map(
+                (item) =>
+                  `<option ${item === incident.disaster_type ? "selected" : ""}>${escapeHtml(item)}</option>`,
+              )
+              .join("")}
+          </select>
+        </label>
+      </div>
+      <label class="field">
+        <span>Incident exact location</span>
+        <input name="description" value="${escapeHtml(incident.description || "")}" placeholder="Street, landmark, building, purok, or coordinates" />
+      </label>
+      <div class="form-grid three">
+        <label class="field">
+          <span>Barangay</span>
+          <input name="barangay" value="${escapeHtml(incident.barangay || "")}" />
+        </label>
+        <label class="field">
+          <span>Municipality / City</span>
+          <input name="municipality" value="${escapeHtml(incident.municipality || "")}" />
+        </label>
+        <label class="field">
+          <span>Province</span>
+          <input name="province" value="${escapeHtml(incident.province || "")}" />
+        </label>
+      </div>
+      <div class="form-grid three">
+        <label class="field">
+          <span>Incident onsite</span>
+          <input name="startedAt" type="datetime-local" value="${toLocalDateTimeInput(incident.started_at)}" />
+        </label>
+        <label class="field">
+          <span>Closed / ended at</span>
+          <input name="endedAt" type="datetime-local" value="${toLocalDateTimeInput(incident.ended_at)}" />
+        </label>
+        <label class="field">
+          <span>Status</span>
+          <select name="status">
+            ${["draft", "active", "closed", "archived"]
+              .map(
+                (status) =>
+                  `<option value="${status}" ${status === incident.status ? "selected" : ""}>${escapeHtml(roleLabel(status))}</option>`,
+              )
+              .join("")}
+          </select>
+        </label>
+      </div>
+      <div id="editIncidentMessage" class="status-message" hidden></div>
+    </form>
+  `;
 }
 
 function renderKeyValueSection(rows) {
@@ -2354,6 +2589,7 @@ async function handleIncidentSectionSubmit(form) {
   if (!incidentId || !section) return;
 
   const sectionHandlers = {
+    "edit-incident": saveIncidentDetailsSection,
     timeline: saveIncidentTimelineSection,
     "dmmp-staff": saveDmmpStaffSection,
     coordination: saveCoordinationSection,
@@ -2369,6 +2605,7 @@ async function handleIncidentSectionSubmit(form) {
     await handler(incidentId, form);
   } catch (error) {
     const messageId = {
+      "edit-incident": "editIncidentMessage",
       timeline: "timelineMessage",
       "dmmp-staff": "dmmpStaffMessage",
       coordination: "coordinationMessage",
@@ -2379,6 +2616,28 @@ async function handleIncidentSectionSubmit(form) {
 
     setMessage(messageId, error.message, "error");
   }
+}
+
+async function saveIncidentDetailsSection(incidentId, form) {
+  setMessage("editIncidentMessage", "Saving incident...");
+
+  const updated = await apiRequest(`/incidents/${encodeURIComponent(incidentId)}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      incidentName: formValue(form, "incidentName"),
+      disasterType: formValue(form, "disasterType"),
+      description: formValue(form, "description"),
+      barangay: formValue(form, "barangay"),
+      municipality: formValue(form, "municipality"),
+      province: formValue(form, "province"),
+      startedAt: toIsoFromLocal(formValue(form, "startedAt")),
+      endedAt: toNullableIsoFromLocal(formValue(form, "endedAt")),
+      status: formValue(form, "status"),
+    }),
+  });
+
+  await loadSharedData();
+  await reloadExpandedIncident("Incident details saved.");
 }
 
 async function reloadExpandedIncident(successMessage) {

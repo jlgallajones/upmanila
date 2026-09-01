@@ -13,6 +13,7 @@ export type HealthcareFacility = {
   latitude: number | null;
   longitude: number | null;
   is_active: boolean;
+  created_by?: string | null;
   created_at: string;
   updated_at: string;
 };

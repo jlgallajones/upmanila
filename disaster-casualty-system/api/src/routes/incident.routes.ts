@@ -17,6 +17,7 @@ import {
   getIncidentOnsiteTriageSummary,
   getIncidentSceneClearanceSummary,
   getIncidentSurvivorDistributionSummary,
+  updateIncident,
   updateIncidentTimeline,
 } from "../controllers/incident.controller.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
@@ -114,6 +115,12 @@ incidentRouter.post(
   requireAuth,
   requireRole(["super_admin", "admin", "administrator", "encoder"]),
   createIncident,
+);
+incidentRouter.put(
+  "/:id",
+  requireAuth,
+  requireRole(["super_admin", "admin", "administrator", "encoder"]),
+  updateIncident,
 );
 incidentRouter.patch(
   "/:id/close",

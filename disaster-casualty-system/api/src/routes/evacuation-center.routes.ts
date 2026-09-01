@@ -12,6 +12,6 @@ evacuationCenterRouter.get("/", requireAuth, getEvacuationCenters);
 evacuationCenterRouter.post(
   "/",
   requireAuth,
-  requireRole(["super_admin", "administrator", "encoder"]),
+  requireRole(["super_admin", "admin", "administrator", "encoder"]),
   createEvacuationCenter,
 );

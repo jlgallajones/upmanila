@@ -20,6 +20,11 @@ type CreateIncidentRequest = {
   startedAt?: string;
 };
 
+type UpdateIncidentRequest = Partial<CreateIncidentRequest> & {
+  endedAt?: string | null;
+  status?: "draft" | "active" | "closed" | "archived";
+};
+
 type UpdateIncidentTimelineRequest = {
   disasterOccurredAt?: string | null;
   eventNotificationAt?: string | null;
@@ -256,6 +261,13 @@ const incidentManagerRoles = new Set([
   "admin",
   "administrator",
   "encoder",
+]);
+
+const incidentStatuses = new Set([
+  "draft",
+  "active",
+  "closed",
+  "archived",
 ]);
 
 const incidentTimelineSelect = `
@@ -743,6 +755,8 @@ export async function getIncidents(
     const includeAll =
       request.query.scope === "all" &&
       ["super_admin", "administrator", "admin"].includes(user.role);
+    const isUnitScopedIncidentManager =
+      user.role === "admin" || user.role === "administrator";
     let responderCreatorAdminId: string | null = null;
 
     if (responderIncidentViewerRoles.has(user.role)) {
@@ -792,6 +806,10 @@ export async function getIncidents(
 
     if (responderCreatorAdminId) {
       query = query.eq("created_by", responderCreatorAdminId);
+    }
+
+    if (isUnitScopedIncidentManager) {
+      query = query.eq("created_by", user.id);
     }
 
     if (!includeAll) {
@@ -972,6 +990,171 @@ export async function createIncident(
   }
 }
 
+export async function updateIncident(
+  request: Request<{ id: string }, unknown, UpdateIncidentRequest>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { id } = request.params;
+    const user = getAuthenticatedUser(request);
+    const {
+      incidentName,
+      disasterType,
+      description,
+      province,
+      municipality,
+      barangay,
+      startedAt,
+      endedAt,
+      status,
+    } = request.body;
+
+    const { data: incident, error: incidentError } = await supabase
+      .from("incidents")
+      .select("id, created_by")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (incidentError) {
+      throw new Error(
+        `Unable to retrieve incident: ${incidentError.message}`,
+      );
+    }
+
+    if (!incident) {
+      response.status(404).json({
+        success: false,
+        message: "Incident not found.",
+      });
+      return;
+    }
+
+    if (user.role !== "super_admin" && incident.created_by !== user.id) {
+      response.status(403).json({
+        success: false,
+        message: "You can only edit incidents created by your account.",
+      });
+      return;
+    }
+
+    if (!incidentManagerRoles.has(user.role)) {
+      response.status(403).json({
+        success: false,
+        message:
+          "Your account is not allowed to edit disaster incidents.",
+      });
+      return;
+    }
+
+    const updates: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (incidentName !== undefined) {
+      const normalizedName = incidentName.trim();
+
+      if (!normalizedName) {
+        response.status(400).json({
+          success: false,
+          message: "incidentName is required.",
+        });
+        return;
+      }
+
+      updates.incident_name = normalizedName;
+    }
+
+    if (disasterType !== undefined) {
+      const normalizedType = disasterType.trim();
+
+      if (!normalizedType) {
+        response.status(400).json({
+          success: false,
+          message: "disasterType is required.",
+        });
+        return;
+      }
+
+      updates.disaster_type = normalizedType;
+    }
+
+    if (description !== undefined) {
+      updates.description = description.trim() || null;
+    }
+
+    if (province !== undefined) {
+      updates.province = province.trim() || null;
+    }
+
+    if (municipality !== undefined) {
+      updates.municipality = municipality.trim() || null;
+    }
+
+    if (barangay !== undefined) {
+      updates.barangay = barangay.trim() || null;
+    }
+
+    if (startedAt !== undefined) {
+      updates.started_at = startedAt || null;
+    }
+
+    if (endedAt !== undefined) {
+      updates.ended_at = endedAt || null;
+    }
+
+    if (status !== undefined) {
+      if (!incidentStatuses.has(status)) {
+        response.status(400).json({
+          success: false,
+          message: "Invalid incident status.",
+        });
+        return;
+      }
+
+      updates.status = status;
+    }
+
+    const { data: updatedIncident, error: updateError } = await supabase
+      .from("incidents")
+      .update(updates)
+      .eq("id", id)
+      .select(`
+        id,
+        incident_code,
+        incident_name,
+        disaster_type,
+        description,
+        province,
+        municipality,
+        barangay,
+        started_at,
+        ended_at,
+        status,
+        created_by,
+        created_at,
+        updated_at
+      `)
+      .single();
+
+    if (updateError || !updatedIncident) {
+      throw new Error(
+        `Unable to update incident: ${
+          updateError?.message ?? "Unknown database error"
+        }`,
+      );
+    }
+
+    response.status(200).json({
+      success: true,
+      message: "Incident updated successfully.",
+      data: updatedIncident,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function closeIncident(
   request: Request<{ id: string }>,
   response: Response,
@@ -981,7 +1164,7 @@ export async function closeIncident(
     const { id } = request.params;
     const user = getAuthenticatedUser(request);
 
-    const { data: incident, error } = await supabase
+    let query = supabase
       .from("incidents")
       .update({
         status: "closed",
@@ -1002,10 +1185,16 @@ export async function closeIncident(
         started_at,
         ended_at,
         status,
+        created_by,
         created_at,
         updated_at
-      `)
-      .maybeSingle();
+      `);
+
+    if (user.role !== "super_admin") {
+      query = query.eq("created_by", user.id);
+    }
+
+    const { data: incident, error } = await query.maybeSingle();
 
     if (error) {
       throw new Error(`Unable to close incident: ${error.message}`);

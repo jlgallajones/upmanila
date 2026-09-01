@@ -2013,6 +2013,17 @@ function calculateStartLikeTriage(
 function calculateStieveTriage(
   answers: Record<string, unknown>,
 ): TriageCategory {
+  if (readAssessmentBoolean(answers, "specialPopulation") === true) {
+    return "immediate";
+  }
+
+  if (
+    readAssessmentBoolean(answers, "canWalkOrNoVisibleInjuries") ===
+      true
+  ) {
+    return "minimal";
+  }
+
   if (
     readAssessmentBoolean(answers, "catastrophicHemorrhage") === true ||
     readAssessmentBoolean(answers, "suckingChestWound") === true
@@ -2020,21 +2031,17 @@ function calculateStieveTriage(
     return "immediate";
   }
 
-  if (
-    readAssessmentBoolean(answers, "canWalkOrNoVisibleInjuries") ===
-      true &&
-    readAssessmentBoolean(answers, "specialPopulation") !== true
-  ) {
-    return "minimal";
-  }
-
   if (readAssessmentString(answers, "respirations") === "absent") {
-    return readAssessmentBoolean(
+    const breathingAfterAirway = readAssessmentBoolean(
       answers,
       "breathingAfterAirwayManagement",
-    ) === true
-      ? "immediate"
-      : "expectant";
+    );
+
+    if (breathingAfterAirway === true) {
+      return "immediate";
+    }
+
+    return breathingAfterAirway === false ? "expectant" : "unknown";
   }
 
   if (
@@ -2042,6 +2049,10 @@ function calculateStieveTriage(
     readAssessmentString(answers, "respirations") === "more_than_30"
   ) {
     return "immediate";
+  }
+
+  if (readAssessmentString(answers, "respirations") !== "10_to_29") {
+    return "unknown";
   }
 
   if (
@@ -2054,7 +2065,16 @@ function calculateStieveTriage(
     return "immediate";
   }
 
-  return readAssessmentString(answers, "respirations")
+  const hasAdequatePerfusion =
+    readAssessmentString(answers, "pulse") === "strong" ||
+    readAssessmentString(answers, "capillaryRefill") ===
+      "less_than_or_equal_to_2_seconds";
+
+  if (!hasAdequatePerfusion) {
+    return "unknown";
+  }
+
+  return readAssessmentBoolean(answers, "followsSimpleCommands") === true
     ? "delayed"
     : "unknown";
 }

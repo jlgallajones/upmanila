@@ -13,6 +13,49 @@ const responderIncidentViewerRoles = new Set([
   "sa_responder",
 ]);
 
+const adminSummaryRoles = new Set([
+  "admin",
+  "administrator",
+]);
+
+const globalSummaryRoles = new Set([
+  "super_admin",
+]);
+
+async function getCasualtySummaryEncoderIds(user: {
+  id: string;
+  role: string;
+}): Promise<string[] | null> {
+  if (globalSummaryRoles.has(user.role)) {
+    return null;
+  }
+
+  if (!adminSummaryRoles.has(user.role)) {
+    return [user.id];
+  }
+
+  const { data, error } = await supabase
+    .from("users")
+    .select("id")
+    .eq("created_by", user.id);
+
+  if (error) {
+    throw new Error(
+      `Unable to load admin-created accounts: ${error.message}`,
+    );
+  }
+
+  return [
+    user.id,
+    ...((data ?? [])
+      .map((account) => account.id)
+      .filter(
+        (id): id is string =>
+          typeof id === "string" && id.trim().length > 0,
+      )),
+  ];
+}
+
 export async function getDashboardSummary(
   request: Request,
   response: Response,
@@ -22,6 +65,8 @@ export async function getDashboardSummary(
     const user = getAuthenticatedUser(request);
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
+    const casualtySummaryEncoderIds =
+      await getCasualtySummaryEncoderIds(user);
     let responderCreatorAdminId: string | null = null;
 
     if (responderIncidentViewerRoles.has(user.role)) {
@@ -48,6 +93,13 @@ export async function getDashboardSummary(
       })
       .eq("status", "active");
 
+    if (adminSummaryRoles.has(user.role)) {
+      activeIncidentsQuery = activeIncidentsQuery.eq(
+        "created_by",
+        user.id,
+      );
+    }
+
     if (responderIncidentViewerRoles.has(user.role)) {
       activeIncidentsQuery = responderCreatorAdminId
         ? activeIncidentsQuery.eq(
@@ -60,43 +112,61 @@ export async function getDashboardSummary(
           );
     }
 
+    let encodedTodayQuery = supabase
+      .from("casualty_incidents")
+      .select("id", {
+        count: "exact",
+        head: true,
+      })
+      .gte("created_at", startOfToday.toISOString())
+      .is("deleted_at", null);
+
+    let verifiedRecordsQuery = supabase
+      .from("casualty_incidents")
+      .select("id", {
+        count: "exact",
+        head: true,
+      })
+      .eq("verification_status", "verified")
+      .is("deleted_at", null);
+
+    let pendingRecordsQuery = supabase
+      .from("casualty_incidents")
+      .select("id", {
+        count: "exact",
+        head: true,
+      })
+      .in("verification_status", [
+        "draft",
+        "submitted",
+        "under_review",
+      ])
+      .is("deleted_at", null);
+
+    if (casualtySummaryEncoderIds) {
+      encodedTodayQuery = encodedTodayQuery.in(
+        "encoded_by",
+        casualtySummaryEncoderIds,
+      );
+      verifiedRecordsQuery = verifiedRecordsQuery.in(
+        "encoded_by",
+        casualtySummaryEncoderIds,
+      );
+      pendingRecordsQuery = pendingRecordsQuery.in(
+        "encoded_by",
+        casualtySummaryEncoderIds,
+      );
+    }
+
     const [
       encodedTodayResult,
       verifiedResult,
       pendingResult,
       activeIncidentsResult,
     ] = await Promise.all([
-      supabase
-        .from("casualty_incidents")
-        .select("id", {
-          count: "exact",
-          head: true,
-        })
-        .gte("created_at", startOfToday.toISOString())
-        .is("deleted_at", null),
-
-      supabase
-        .from("casualty_incidents")
-        .select("id", {
-          count: "exact",
-          head: true,
-        })
-        .eq("verification_status", "verified")
-        .is("deleted_at", null),
-
-      supabase
-        .from("casualty_incidents")
-        .select("id", {
-          count: "exact",
-          head: true,
-        })
-        .in("verification_status", [
-          "draft",
-          "submitted",
-          "under_review",
-        ])
-        .is("deleted_at", null),
-
+      encodedTodayQuery,
+      verifiedRecordsQuery,
+      pendingRecordsQuery,
       activeIncidentsQuery,
     ]);
 
@@ -130,6 +200,9 @@ export async function getRecentActivity(
   next: NextFunction,
 ): Promise<void> {
   try {
+    const user = getAuthenticatedUser(request);
+    const casualtySummaryEncoderIds =
+      await getCasualtySummaryEncoderIds(user);
     const requestedLimit = Number(request.query.limit);
     const limit =
       Number.isInteger(requestedLimit) &&
@@ -138,7 +211,7 @@ export async function getRecentActivity(
         ? requestedLimit
         : 5;
 
-    const { data, error } = await supabase
+    let query = supabase
       .from("casualty_incidents")
       .select(`
         id,
@@ -155,6 +228,14 @@ export async function getRecentActivity(
         incident:incidents (
           id,
           incident_name
+        ),
+        encoder:users!casualty_incidents_encoded_by_fkey (
+          id,
+          full_name,
+          email,
+          role,
+          assigned_municipality,
+          assigned_barangay
         )
       `)
       .is("deleted_at", null)
@@ -162,6 +243,12 @@ export async function getRecentActivity(
         ascending: false,
       })
       .limit(limit);
+
+    if (casualtySummaryEncoderIds) {
+      query = query.in("encoded_by", casualtySummaryEncoderIds);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       throw new Error(error.message);

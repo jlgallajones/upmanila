@@ -22,6 +22,98 @@ const cases = [
     expected: "immediate",
   },
   {
+    name: "STIEVE special population is immediate",
+    system: "stieve",
+    answers: {
+      specialPopulation: true,
+    },
+    expected: "immediate",
+  },
+  {
+    name: "STIEVE walking wounded or no visible injuries is minimal",
+    system: "stieve",
+    answers: {
+      specialPopulation: false,
+      canWalkOrNoVisibleInjuries: true,
+    },
+    expected: "minimal",
+  },
+  {
+    name: "STIEVE absent respiration waits for airway management",
+    system: "stieve",
+    answers: {
+      specialPopulation: false,
+      canWalkOrNoVisibleInjuries: false,
+      catastrophicHemorrhage: false,
+      suckingChestWound: false,
+      respirations: "absent",
+    },
+    expected: "unknown",
+  },
+  {
+    name: "STIEVE absent respiration after airway with breathing is immediate",
+    system: "stieve",
+    answers: {
+      respirations: "absent",
+      breathingAfterAirwayManagement: true,
+    },
+    expected: "immediate",
+  },
+  {
+    name: "STIEVE absent respiration after airway without breathing is expectant",
+    system: "stieve",
+    answers: {
+      respirations: "absent",
+      breathingAfterAirwayManagement: false,
+    },
+    expected: "expectant",
+  },
+  {
+    name: "STIEVE severe respiration is immediate",
+    system: "stieve",
+    answers: {
+      respirations: "more_than_30",
+    },
+    expected: "immediate",
+  },
+  {
+    name: "STIEVE adequate respiration alone remains unknown",
+    system: "stieve",
+    answers: {
+      respirations: "10_to_29",
+    },
+    expected: "unknown",
+  },
+  {
+    name: "STIEVE weak pulse is immediate",
+    system: "stieve",
+    answers: {
+      respirations: "10_to_29",
+      pulse: "weak",
+    },
+    expected: "immediate",
+  },
+  {
+    name: "STIEVE adequate perfusion and follows command is delayed",
+    system: "stieve",
+    answers: {
+      respirations: "10_to_29",
+      pulse: "strong",
+      followsSimpleCommands: true,
+    },
+    expected: "delayed",
+  },
+  {
+    name: "STIEVE cannot follow command is immediate",
+    system: "stieve",
+    answers: {
+      respirations: "10_to_29",
+      pulse: "strong",
+      followsSimpleCommands: false,
+    },
+    expected: "immediate",
+  },
+  {
     name: "mSTART walking patient is minimal",
     system: "mstart",
     answers: {
