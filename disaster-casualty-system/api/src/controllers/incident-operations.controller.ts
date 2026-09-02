@@ -1259,7 +1259,7 @@ export async function getResponderSafetyResponse(
 
     const authenticatedUser = getAuthenticatedUser(request);
     const { data, error } = await supabase
-      .from("responder_safety_responses")
+      .from("responder_safety_reports")
       .select("*")
       .eq("incident_id", incidentId)
       .eq("responder_id", authenticatedUser.id)
@@ -2265,7 +2265,7 @@ export async function saveResponderSafetyResponse(
     };
 
     const { data, error } = await supabase
-      .from("responder_safety_responses")
+      .from("responder_safety_reports")
       .upsert(values, {
         onConflict: "incident_id,responder_id",
       })
