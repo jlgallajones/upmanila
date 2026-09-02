@@ -2,6 +2,11 @@ import type { NextFunction, Request, Response } from "express";
 
 import { supabase } from "../config/supabase.js";
 import { getAuthenticatedUser } from "../middleware/auth.js";
+import {
+  addTimelineElapsedMetrics,
+  buildCumulativeIntervalRows,
+  dedupeEarliestEventRows,
+} from "../services/analytics/incident-analytics.js";
 import { buildTriageAccuracySummary } from "../services/triage/accuracy-summary.js";
 
 const responderIncidentViewerRoles = new Set([
@@ -240,6 +245,11 @@ type ResponderSafetyReportRow = {
   injured_responders: number | null;
   ill_responders: number | null;
   deceased_responders: number | null;
+};
+
+type ResponderSafetyResponseRow = {
+  safety_status: string | null;
+  ppe_used_at: string | null;
 };
 
 type HospitalResourceSnapshotRow = {
@@ -4018,6 +4028,7 @@ export async function getIncidentAnalyticsSummary(
       timelineResult,
       casualtiesResult,
       responderSafetyResult,
+      responderSafetyResponsesResult,
     ] = await Promise.all([
       supabase
         .from("incident_response_timelines")
@@ -4038,12 +4049,21 @@ export async function getIncidentAnalyticsSummary(
         )
         .eq("incident_id", id)
         .maybeSingle(),
+      supabase
+        .from("responder_safety_responses")
+        .select("safety_status, ppe_used_at")
+        .eq("incident_id", id),
     ]);
 
+    const responderSafetyResponsesError =
+      responderSafetyResponsesResult.error?.code === "42P01"
+        ? null
+        : responderSafetyResponsesResult.error;
     const firstError =
       timelineResult.error ??
       casualtiesResult.error ??
-      responderSafetyResult.error;
+      responderSafetyResult.error ??
+      responderSafetyResponsesError;
 
     if (firstError) {
       throw new Error(
@@ -4123,6 +4143,11 @@ export async function getIncidentAnalyticsSummary(
     const responderSafety =
       (responderSafetyResult.data as ResponderSafetyReportRow | null) ??
       null;
+    const responderSafetyResponses =
+      responderSafetyResponsesResult.error
+        ? []
+        : ((responderSafetyResponsesResult.data ??
+            []) as ResponderSafetyResponseRow[]);
     const intervalMinutes = [1, 5, 10, 15, 30, 60];
     const totalVictims = casualtyIncidentIds.length;
     const verifiedRecords = casualtyIncidentRows.filter(
@@ -4133,11 +4158,9 @@ export async function getIncidentAnalyticsSummary(
         item.verification_status ?? "",
       ),
     ).length;
+    const dmmpActivatedAt = timeline?.dmmp_activated_at ?? null;
     const responseInitiatedAt =
-      timeline?.dmmp_activated_at ?? incident.started_at ?? null;
-    const responseInitiatedDate = responseInitiatedAt
-      ? new Date(responseInitiatedAt)
-      : null;
+      dmmpActivatedAt ?? incident.started_at ?? null;
     const sortedDates = (values: Array<string | null | undefined>) =>
       values
         .map((value) => (value ? new Date(value) : null))
@@ -4187,61 +4210,46 @@ export async function getIncidentAnalyticsSummary(
           categoryForCasualty(row.casualty_incident_id) === category &&
           Boolean(row.occurred_at),
       );
+    const categoryTotal = (category: string) =>
+      casualtyIncidentIds.filter(
+        (casualtyIncidentId) =>
+          categoryForCasualty(casualtyIncidentId) === category,
+      ).length;
     const buildIntervalRows = (
       rows: Array<{
         casualty_incident_id: string;
         occurred_at: string | null;
       }>,
+      denominator = totalVictims,
     ) =>
-      intervalMinutes.map((minutes) => {
-        const cutoff =
-          responseInitiatedDate &&
-          !Number.isNaN(responseInitiatedDate.getTime())
-            ? new Date(
-                responseInitiatedDate.getTime() + minutes * 60 * 1000,
-              )
-            : null;
-        const count =
-          cutoff === null
-            ? 0
-            : rows.filter((row) => {
-                if (!row.occurred_at) {
-                  return false;
-                }
-
-                const occurredAt = new Date(row.occurred_at);
-
-                return (
-                  !Number.isNaN(occurredAt.getTime()) &&
-                  occurredAt <= cutoff
-                );
-              }).length;
-
-        return {
-          minutes,
-          label: minutes === 60 ? "1 hour" : `${minutes} minutes`,
-          cutoffAt: cutoff?.toISOString() ?? null,
-          count,
-          total: totalVictims,
-          percentage: calculatePercentage(count, totalVictims),
-        };
+      buildCumulativeIntervalRows({
+        rows,
+        activationAt: dmmpActivatedAt,
+        intervalMinutes,
+        denominator,
       });
-    const primaryEvents = primaryTriageRows.map((row) => ({
-      casualty_incident_id: row.casualty_incident_id,
-      occurred_at: row.triaged_at,
-    }));
-    const stabilizedEvents = treatmentRows.map((row) => ({
-      casualty_incident_id: row.casualty_incident_id,
-      occurred_at: row.stabilized_at,
-    }));
-    const departedAndArrivedEvents = transportRows.map((row) => ({
-      casualty_incident_id: row.casualty_incident_id,
-      occurred_at:
-        row.departed_scene_at && row.arrived_facility_at
-          ? row.arrived_facility_at
-          : null,
-    }));
-    const arrivalEvents = [
+    const primaryEvents = dedupeEarliestEventRows(
+      primaryTriageRows.map((row) => ({
+        casualty_incident_id: row.casualty_incident_id,
+        occurred_at: row.triaged_at,
+      })),
+    );
+    const stabilizedEvents = dedupeEarliestEventRows(
+      treatmentRows.map((row) => ({
+        casualty_incident_id: row.casualty_incident_id,
+        occurred_at: row.stabilized_at,
+      })),
+    );
+    const departedAndArrivedEvents = dedupeEarliestEventRows(
+      transportRows.map((row) => ({
+        casualty_incident_id: row.casualty_incident_id,
+        occurred_at:
+          row.departed_scene_at && row.arrived_facility_at
+            ? row.arrived_facility_at
+            : null,
+      })),
+    );
+    const arrivalEvents = dedupeEarliestEventRows([
       ...transportRows.map((row) => ({
         casualty_incident_id: row.casualty_incident_id,
         occurred_at: row.arrived_facility_at,
@@ -4250,7 +4258,7 @@ export async function getIncidentAnalyticsSummary(
         casualty_incident_id: row.casualty_incident_id,
         occurred_at: row.arrived_at,
       })),
-    ];
+    ]);
     const arrivalMinutesByCategory = (
       ["immediate", "delayed", "minimal", "expectant"] as const
     ).reduce<Record<string, number | null>>((values, category) => {
@@ -4293,16 +4301,26 @@ export async function getIncidentAnalyticsSummary(
       };
       return values;
     }, {});
+    const safeResponderResponses = responderSafetyResponses.filter(
+      (row) => row.safety_status === "yes",
+    ).length;
+    const unsafeResponderResponses = responderSafetyResponses.filter(
+      (row) => row.safety_status === "no",
+    ).length;
     const deployedResponders =
-      responderSafety?.deployed_responders ?? 0;
+      responderSafetyResponses.length > 0
+        ? responderSafetyResponses.length
+        : responderSafety?.deployed_responders ?? 0;
     const unsafeResponders =
-      (responderSafety?.injured_responders ?? 0) +
-      (responderSafety?.ill_responders ?? 0) +
-      (responderSafety?.deceased_responders ?? 0);
-    const safeResponders = Math.max(
-      0,
-      deployedResponders - unsafeResponders,
-    );
+      responderSafetyResponses.length > 0
+        ? unsafeResponderResponses
+        : (responderSafety?.injured_responders ?? 0) +
+          (responderSafety?.ill_responders ?? 0) +
+          (responderSafety?.deceased_responders ?? 0);
+    const safeResponders =
+      responderSafetyResponses.length > 0
+        ? safeResponderResponses
+        : Math.max(0, deployedResponders - unsafeResponders);
     const edCareByCategory = (
       ["immediate", "delayed", "minimal", "expectant"] as const
     ).reduce<Record<string, { count: number; total: number; percentage: number }>>(
@@ -4326,6 +4344,126 @@ export async function getIncidentAnalyticsSummary(
       },
       {},
     );
+    const immediatePrimaryTriageByActivation = buildIntervalRows(
+      categoryRows(primaryEvents, "immediate"),
+      categoryTotal("immediate"),
+    );
+    const delayedPrimaryTriageByActivation = buildIntervalRows(
+      categoryRows(primaryEvents, "delayed"),
+      categoryTotal("delayed"),
+    );
+    const immediateStabilizedByActivation = buildIntervalRows(
+      categoryRows(stabilizedEvents, "immediate"),
+      categoryTotal("immediate"),
+    );
+    const delayedStabilizedByActivation = buildIntervalRows(
+      categoryRows(stabilizedEvents, "delayed"),
+      categoryTotal("delayed"),
+    );
+    const immediateDepartedAndArrivedByActivation = buildIntervalRows(
+      categoryRows(departedAndArrivedEvents, "immediate"),
+      categoryTotal("immediate"),
+    );
+    const delayedDepartedAndArrivedByActivation = buildIntervalRows(
+      categoryRows(departedAndArrivedEvents, "delayed"),
+      categoryTotal("delayed"),
+    );
+    const facilityArrivalByActivation = buildIntervalRows(
+      arrivalEvents,
+      totalVictims,
+    );
+    const rawTimelineVisuals = [
+      {
+        key: "incidentOnset",
+        label: "Incident onset",
+        at: incident.started_at,
+      },
+      {
+        key: "dmmpActivation",
+        label: "Activation of DMMP",
+        at: timeline?.dmmp_activated_at ?? null,
+      },
+      {
+        key: "medicalCoordinatorNotification",
+        label:
+          "Notification of first appropriate staff person to assume medical management coordination role",
+        at: timeline?.medical_coordinator_notified_at ?? null,
+      },
+      {
+        key: "triageInitiated",
+        label: "Triage initiated",
+        at: timeline?.triage_ordered_at ?? null,
+      },
+      {
+        key: "firstPrimaryTriage",
+        label: "First victim triaged using primary triage",
+        at: firstDate(primaryTriageRows.map((row) => row.triaged_at)),
+      },
+      {
+        key: "firstSecondaryTriage",
+        label: "First victim triaged using secondary triage",
+        at: firstDate(secondaryTriageRows.map((row) => row.triaged_at)),
+      },
+      {
+        key: "lastPrimaryTriage",
+        label: "Last victim triaged using primary triage",
+        at: lastDate(primaryTriageRows.map((row) => row.triaged_at)),
+      },
+      {
+        key: "lastSecondaryTriage",
+        label: "Last victim triaged using secondary triage",
+        at: lastDate(secondaryTriageRows.map((row) => row.triaged_at)),
+      },
+      {
+        key: "firstEmsVehicle",
+        label: "First EMS vehicle arrived",
+        at:
+          timeline?.first_ems_on_scene_at ??
+          firstDate(transportRows.map((row) => row.arrived_scene_at)),
+      },
+      {
+        key: "firstDepartedScene",
+        label: "First victim departed from the scene",
+        at: firstDate(transportRows.map((row) => row.departed_scene_at)),
+      },
+      {
+        key: "lastDepartedScene",
+        label: "Last victim departed from the scene",
+        at: lastDate(transportRows.map((row) => row.departed_scene_at)),
+      },
+      {
+        key: "firstFacilityTriage",
+        label: "First victim triaged at a healthcare facility",
+        at: firstDate(facilityTriageRows.map((row) => row.triaged_at)),
+      },
+      {
+        key: "lastFacilityTriage",
+        label: "Last victim triaged at a healthcare facility",
+        at: lastDate(facilityTriageRows.map((row) => row.triaged_at)),
+      },
+      {
+        key: "ppeDecision",
+        label: "PPE use decision",
+        at:
+          firstDate(responderSafetyResponses.map((row) => row.ppe_used_at)) ??
+          responderSafety?.ppe_decision_at ??
+          null,
+      },
+      {
+        key: "respondersDemobilized",
+        label: "Responders demobilized",
+        at: timeline?.scene_demobilized_at ?? null,
+      },
+      {
+        key: "lastFacilityDeactivation",
+        label: "Last healthcare facility deactivated its disaster response",
+        at: timeline?.last_facility_deactivated_at ?? null,
+      },
+    ];
+    const timelineVisuals = addTimelineElapsedMetrics(
+      rawTimelineVisuals,
+      dmmpActivatedAt,
+    );
 
     response.status(200).json({
       success: true,
@@ -4337,106 +4475,7 @@ export async function getIncidentAnalyticsSummary(
         verifiedRecords,
         pendingReview,
         responseInitiatedAt,
-        timelineVisuals: [
-          {
-            key: "incidentOnset",
-            label: "Incident onset",
-            at: incident.started_at,
-          },
-          {
-            key: "dmmpActivation",
-            label: "Activation of DMMP",
-            at: timeline?.dmmp_activated_at ?? null,
-          },
-          {
-            key: "medicalCoordinatorNotification",
-            label:
-              "Notification of first appropriate staff person to assume medical management coordination role",
-            at: timeline?.medical_coordinator_notified_at ?? null,
-          },
-          {
-            key: "triageInitiated",
-            label: "Triage initiated",
-            at: timeline?.triage_ordered_at ?? null,
-          },
-          {
-            key: "firstPrimaryTriage",
-            label: "First victim triaged using primary triage",
-            at: firstDate(primaryTriageRows.map((row) => row.triaged_at)),
-          },
-          {
-            key: "firstSecondaryTriage",
-            label: "First victim triaged using secondary triage",
-            at: firstDate(
-              secondaryTriageRows.map((row) => row.triaged_at),
-            ),
-          },
-          {
-            key: "lastPrimaryTriage",
-            label: "Last victim triaged using primary triage",
-            at: lastDate(primaryTriageRows.map((row) => row.triaged_at)),
-          },
-          {
-            key: "lastSecondaryTriage",
-            label: "Last victim triaged using secondary triage",
-            at: lastDate(
-              secondaryTriageRows.map((row) => row.triaged_at),
-            ),
-          },
-          {
-            key: "firstEmsVehicle",
-            label: "First arrived EMS vehicle",
-            at:
-              timeline?.first_ems_on_scene_at ??
-              firstDate(
-                transportRows.map((row) => row.arrived_scene_at),
-              ),
-          },
-          {
-            key: "firstDepartedScene",
-            label: "First victim departed from scene",
-            at: firstDate(
-              transportRows.map((row) => row.departed_scene_at),
-            ),
-          },
-          {
-            key: "lastDepartedScene",
-            label: "Last victim departed from scene",
-            at: lastDate(
-              transportRows.map((row) => row.departed_scene_at),
-            ),
-          },
-          {
-            key: "firstFacilityTriage",
-            label: "First victim triaged at healthcare facility",
-            at: firstDate(
-              facilityTriageRows.map((row) => row.triaged_at),
-            ),
-          },
-          {
-            key: "lastFacilityTriage",
-            label: "Last victim triaged at healthcare facility",
-            at: lastDate(
-              facilityTriageRows.map((row) => row.triaged_at),
-            ),
-          },
-          {
-            key: "ppeDecision",
-            label: "PPE use decision",
-            at: responderSafety?.ppe_decision_at ?? null,
-          },
-          {
-            key: "respondersDemobilized",
-            label: "Responders demobilized",
-            at: timeline?.scene_demobilized_at ?? null,
-          },
-          {
-            key: "lastFacilityDeactivation",
-            label:
-              "Last healthcare facility to deactivate their disaster response",
-            at: timeline?.last_facility_deactivated_at ?? null,
-          },
-        ],
+        timelineVisuals,
         durationMetrics: {
           medianOnsetToFacilityArrivalByCategory:
             arrivalMinutesByCategory,
@@ -4460,27 +4499,59 @@ export async function getIncidentAnalyticsSummary(
             safe: safeResponders,
             unsafe: unsafeResponders,
           },
-          immediatePrimaryTriageByActivation: buildIntervalRows(
-            categoryRows(primaryEvents, "immediate"),
-          ),
-          delayedPrimaryTriageByActivation: buildIntervalRows(
-            categoryRows(primaryEvents, "delayed"),
-          ),
-          immediateStabilizedByActivation: buildIntervalRows(
-            categoryRows(stabilizedEvents, "immediate"),
-          ),
-          delayedStabilizedByActivation: buildIntervalRows(
-            categoryRows(stabilizedEvents, "delayed"),
-          ),
-          immediateDepartedAndArrivedByActivation: buildIntervalRows(
-            categoryRows(departedAndArrivedEvents, "immediate"),
-          ),
-          delayedDepartedAndArrivedByActivation: buildIntervalRows(
-            categoryRows(departedAndArrivedEvents, "delayed"),
-          ),
-          facilityArrivalByActivation:
-            buildIntervalRows(arrivalEvents),
+          immediatePrimaryTriageByActivation,
+          delayedPrimaryTriageByActivation,
+          immediateStabilizedByActivation,
+          delayedStabilizedByActivation,
+          immediateDepartedAndArrivedByActivation,
+          delayedDepartedAndArrivedByActivation,
+          facilityArrivalByActivation,
           edCareByTriageCategory: edCareByCategory,
+        },
+        lineGraphs: {
+          primaryTriageByActivation: [
+            {
+              key: "immediate",
+              label: "Immediate",
+              data: immediatePrimaryTriageByActivation,
+            },
+            {
+              key: "delayed",
+              label: "Delayed",
+              data: delayedPrimaryTriageByActivation,
+            },
+          ],
+          stabilizationByActivation: [
+            {
+              key: "immediate",
+              label: "Immediate",
+              data: immediateStabilizedByActivation,
+            },
+            {
+              key: "delayed",
+              label: "Delayed",
+              data: delayedStabilizedByActivation,
+            },
+          ],
+          departedAndArrivedByActivation: [
+            {
+              key: "immediate",
+              label: "Immediate",
+              data: immediateDepartedAndArrivedByActivation,
+            },
+            {
+              key: "delayed",
+              label: "Delayed",
+              data: delayedDepartedAndArrivedByActivation,
+            },
+          ],
+          facilityArrivalByActivation: [
+            {
+              key: "all",
+              label: "All victims",
+              data: facilityArrivalByActivation,
+            },
+          ],
         },
       },
     });

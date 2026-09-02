@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
+    "test:analytics": "tsc && node dist/services/analytics/incident-analytics.test.js",
     "test:triage": "tsc && node dist/services/triage/calculate-triage.test.js && node dist/services/triage/triage-accuracy.test.js"
   },
   "dependencies": {

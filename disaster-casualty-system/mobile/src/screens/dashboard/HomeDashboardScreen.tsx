@@ -11,6 +11,7 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -25,10 +26,12 @@ import { isAuthenticationTokenError } from "../../api/client";
 import { getNotifications } from "../../api/notifications";
 import {
   getDeactivationContinuity,
+  getIncidentTimeline,
   getIncidents,
   saveDeactivationContinuity,
   type DisruptionLevel,
   type Incident,
+  updateIncidentTimeline,
 } from "../../api/incidents";
 import {
   getHealthcareFacilities,
@@ -246,6 +249,14 @@ type QuickChoiceState = {
   options: QuickChoiceOption[];
 };
 
+type QuickTimePromptState = {
+  title: string;
+  subtitle: string;
+  fieldLabel: string;
+  value: string;
+  onSave: (isoValue: string) => Promise<void>;
+};
+
 type RecentActivityCardProps = {
   item: RecentActivity;
 };
@@ -458,6 +469,82 @@ function formatRelativeTime(dateString: string): string {
   }).format(date);
 }
 
+function formatDateTimeForInput(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const year = date.getFullYear();
+  const hour24 = date.getHours();
+  const hour12 = hour24 % 12 || 12;
+  const hour = String(hour12).padStart(2, "0");
+  const minute = String(date.getMinutes()).padStart(2, "0");
+  const period = hour24 >= 12 ? "PM" : "AM";
+
+  return `${month}/${day}/${year} ${hour}:${minute} ${period}`;
+}
+
+function parseDateTimeInput(value: string): string | null {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  const isoDate = new Date(trimmed);
+
+  if (!Number.isNaN(isoDate.getTime())) {
+    return isoDate.toISOString();
+  }
+
+  const match =
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})(?:\s*([AaPp][Mm]))?$/.exec(
+      trimmed,
+    );
+
+  if (!match) {
+    return null;
+  }
+
+  const [, month, day, year, hour, minute, period] = match;
+  let normalizedHour = Number(hour);
+
+  if (period) {
+    const upperPeriod = period.toUpperCase();
+
+    if (normalizedHour < 1 || normalizedHour > 12) {
+      return null;
+    }
+
+    normalizedHour =
+      upperPeriod === "AM"
+        ? normalizedHour === 12
+          ? 0
+          : normalizedHour
+        : normalizedHour === 12
+          ? 12
+          : normalizedHour + 12;
+  }
+
+  const date = new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    normalizedHour,
+    Number(minute),
+  );
+
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function formatExistingDateTime(value: string | null | undefined): string {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+
+  return Number.isNaN(date.getTime()) ? "" : formatDateTimeForInput(date);
+}
+
 export default function HomeDashboardScreen() {
   const [summary, setSummary] =
     useState<DashboardSummary>(initialSummary);
@@ -490,6 +577,8 @@ export default function HomeDashboardScreen() {
   const [formattedDate, setFormattedDate] = useState("");
   const [quickChoice, setQuickChoice] =
     useState<QuickChoiceState | null>(null);
+  const [quickTimePrompt, setQuickTimePrompt] =
+    useState<QuickTimePromptState | null>(null);
   const [isSavingQuickAction, setIsSavingQuickAction] =
     useState(false);
 
@@ -669,6 +758,7 @@ export default function HomeDashboardScreen() {
     title: string,
     subtitle: string,
     onIncidentSelected: (incident: Incident) => void,
+    alwaysShowPicker = false,
   ) {
     try {
       const incidents = (await getIncidents()).filter(
@@ -683,7 +773,7 @@ export default function HomeDashboardScreen() {
         return;
       }
 
-      if (incidents.length === 1) {
+      if (incidents.length === 1 && !alwaysShowPicker) {
         onIncidentSelected(incidents[0]);
         return;
       }
@@ -812,6 +902,82 @@ export default function HomeDashboardScreen() {
     }
   }
 
+  function updateQuickTimePromptValue(value: string) {
+    setQuickTimePrompt((current) =>
+      current
+        ? {
+            ...current,
+            value,
+          }
+        : current,
+    );
+  }
+
+  async function handleSaveQuickTimePrompt() {
+    if (!quickTimePrompt) {
+      return;
+    }
+
+    const parsedTime = parseDateTimeInput(quickTimePrompt.value);
+
+    if (!parsedTime) {
+      Alert.alert(
+        "Invalid time",
+        "Enter the time using mm/dd/yyyy hh:mm AM/PM.",
+      );
+      return;
+    }
+
+    try {
+      setIsSavingQuickAction(true);
+      await quickTimePrompt.onSave(parsedTime);
+      setQuickTimePrompt(null);
+    } catch (error) {
+      Alert.alert(
+        "Unable to save time",
+        error instanceof Error ? error.message : "Please try again.",
+      );
+    } finally {
+      setIsSavingQuickAction(false);
+    }
+  }
+
+  async function showOpenFacilityResponsePrompt(incident: Incident) {
+    setQuickChoice(null);
+    setIsSavingQuickAction(true);
+
+    try {
+      const timeline = await getIncidentTimeline(incident.id);
+
+      setQuickTimePrompt({
+        title: "Open Facility Response",
+        subtitle: incident.incident_name,
+        fieldLabel: "OPENING TIME",
+        value: formatExistingDateTime(timeline?.dmmp_activated_at),
+        onSave: async (openedAt) => {
+          await updateIncidentTimeline(incident.id, {
+            dmmpActivated: true,
+            dmmpActivatedAt: openedAt,
+          });
+
+          Alert.alert(
+            "Facility response opened",
+            "The facility response opening time was saved.",
+          );
+        },
+      });
+    } catch (error) {
+      Alert.alert(
+        "Unable to open response",
+        error instanceof Error
+          ? error.message
+          : "Please check your connection and try again.",
+      );
+    } finally {
+      setIsSavingQuickAction(false);
+    }
+  }
+
   function showFacilityDisruptionFacilityPrompt(incident: Incident) {
     void resolveHealthcareFacility(
       incident,
@@ -907,26 +1073,37 @@ export default function HomeDashboardScreen() {
     incident: Incident,
     facility: HealthcareFacility,
   ) {
-    setQuickChoice({
-      title: "Close Healthcare Facility Response?",
-      subtitle: `${incident.incident_name}\n${facility.facility_name}\nClosing time will be recorded as the current time.`,
-      options: [
-        {
-          label: "Close Response",
-          caption: "Set healthcare facility closing time to now",
-          icon: "time-outline",
-          color: COLORS.red,
-          onSelect: () => {
-            void saveFacilityCloseQuickAction(incident, facility);
-          },
-        },
-      ],
-    });
+    setQuickChoice(null);
+    setIsSavingQuickAction(true);
+
+    void getDeactivationContinuity(incident.id)
+      .then((current) => {
+        setQuickTimePrompt({
+          title: "Close Healthcare Facility Response",
+          subtitle: `${incident.incident_name}\n${facility.facility_name}`,
+          fieldLabel: "CLOSING TIME",
+          value: formatExistingDateTime(
+            current.summary.lastFacilityDeactivatedAt,
+          ),
+          onSave: (closedAt) =>
+            saveFacilityCloseQuickAction(incident, facility, closedAt),
+        });
+      })
+      .catch((error) => {
+        Alert.alert(
+          "Unable to close response",
+          error instanceof Error
+            ? error.message
+            : "Please check your connection and try again.",
+        );
+      })
+      .finally(() => setIsSavingQuickAction(false));
   }
 
   async function saveFacilityCloseQuickAction(
     incident: Incident,
     facility: HealthcareFacility,
+    closedAt: string,
   ) {
     try {
       setIsSavingQuickAction(true);
@@ -935,7 +1112,7 @@ export default function HomeDashboardScreen() {
       await saveDeactivationContinuity(incident.id, {
         sceneDemobilizedAt:
           current.summary.sceneDemobilizedAt ?? null,
-        lastFacilityDeactivatedAt: new Date().toISOString(),
+        lastFacilityDeactivatedAt: closedAt,
         emsCoverageDisruption:
           current.summary.emsCoverageDisruption ?? null,
         facilityCareDisruption:
@@ -945,6 +1122,7 @@ export default function HomeDashboardScreen() {
           "Close Healthcare Facility Response",
           incident,
           facility,
+          closedAt,
         ),
         assessedAt: new Date().toISOString(),
       });
@@ -1224,6 +1402,24 @@ export default function HomeDashboardScreen() {
 
           {isDocumenterAccount ? (
             <QuickAction
+              icon="time-outline"
+              label="Open Facility Response"
+              caption="Opening time"
+              iconColor={COLORS.blue}
+              iconBackground={COLORS.paleBlue}
+              onPress={() => {
+                void resolveActiveIncident(
+                  "Select Incident",
+                  "Choose the incident to open facility response for.",
+                  showOpenFacilityResponsePrompt,
+                  true,
+                );
+              }}
+            />
+          ) : null}
+
+          {isDocumenterAccount ? (
+            <QuickAction
               icon="business-outline"
               label="Facility Disruption"
               caption="Routine care"
@@ -1402,6 +1598,97 @@ export default function HomeDashboardScreen() {
 
         <View style={styles.bottomSpacing} />
       </ScrollView>
+
+      <Modal
+        visible={Boolean(quickTimePrompt)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!isSavingQuickAction) {
+            setQuickTimePrompt(null);
+          }
+        }}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => {
+            if (!isSavingQuickAction) {
+              setQuickTimePrompt(null);
+            }
+          }}
+        >
+          <Pressable
+            style={styles.quickTimeSheet}
+            onPress={(event) => event.stopPropagation()}
+          >
+            <View style={styles.sheetHandle} />
+
+            <View style={styles.quickChoiceHeader}>
+              <View style={styles.quickChoiceTitleGroup}>
+                <Text style={styles.quickChoiceTitle}>
+                  {quickTimePrompt?.title}
+                </Text>
+                <Text style={styles.quickChoiceSubtitle}>
+                  {quickTimePrompt?.subtitle}
+                </Text>
+              </View>
+
+              <Pressable
+                disabled={isSavingQuickAction}
+                onPress={() => setQuickTimePrompt(null)}
+                style={styles.quickChoiceCloseButton}
+              >
+                <Ionicons
+                  name="close"
+                  size={20}
+                  color={COLORS.secondaryText}
+                />
+              </Pressable>
+            </View>
+
+            <Text style={styles.quickTimeLabel}>
+              {quickTimePrompt?.fieldLabel}
+            </Text>
+            <TextInput
+              value={quickTimePrompt?.value ?? ""}
+              placeholder="mm/dd/yyyy hh:mm AM/PM"
+              placeholderTextColor={COLORS.secondaryText}
+              onChangeText={updateQuickTimePromptValue}
+              editable={!isSavingQuickAction}
+              style={styles.quickTimeInput}
+            />
+
+            <View style={styles.quickTimeActions}>
+              <Pressable
+                disabled={isSavingQuickAction}
+                onPress={() => setQuickTimePrompt(null)}
+                style={({ pressed }) => [
+                  styles.quickTimeCancelButton,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.quickTimeCancelText}>Cancel</Text>
+              </Pressable>
+
+              <Pressable
+                disabled={isSavingQuickAction}
+                onPress={() => {
+                  void handleSaveQuickTimePrompt();
+                }}
+                style={({ pressed }) => [
+                  styles.quickTimeSaveButton,
+                  isSavingQuickAction && styles.disabledButton,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.quickTimeSaveText}>
+                  {isSavingQuickAction ? "Saving..." : "Save Time"}
+                </Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal
         visible={Boolean(quickChoice)}
@@ -1976,6 +2263,15 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
 
+  quickTimeSheet: {
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    backgroundColor: COLORS.white,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 20,
+  },
+
   sheetHandle: {
     width: 42,
     height: 4,
@@ -2078,6 +2374,64 @@ const styles = StyleSheet.create({
     color: COLORS.maroon,
     fontSize: 12,
     fontWeight: "800",
+  },
+
+  quickTimeLabel: {
+    color: COLORS.text,
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.4,
+    marginBottom: 8,
+  },
+
+  quickTimeInput: {
+    minHeight: 50,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 13,
+    paddingHorizontal: 14,
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: "700",
+    backgroundColor: "#FAFBFD",
+  },
+
+  quickTimeActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 16,
+  },
+
+  quickTimeCancelButton: {
+    minHeight: 46,
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 13,
+    backgroundColor: COLORS.white,
+  },
+
+  quickTimeCancelText: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+
+  quickTimeSaveButton: {
+    minHeight: 46,
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 13,
+    backgroundColor: COLORS.maroon,
+  },
+
+  quickTimeSaveText: {
+    color: COLORS.white,
+    fontSize: 13,
+    fontWeight: "900",
   },
 
   pressed: {

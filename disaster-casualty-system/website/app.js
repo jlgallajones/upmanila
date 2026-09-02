@@ -1027,8 +1027,27 @@ function renderAnalyticsBars(counts) {
 
 function formatMinutes(value) {
   if (value === null || value === undefined) return "Not recorded";
-  if (Number(value) === 1) return "1 minute";
-  return `${value} minutes`;
+  const numeric = Number(value);
+
+  if (Number.isNaN(numeric)) return "Not recorded";
+  if (numeric > 0 && numeric < 1) return "<1 minute";
+
+  const rounded = Math.round(numeric);
+  const hours = Math.floor(Math.abs(rounded) / 60);
+  const minutes = Math.abs(rounded) % 60;
+  const sign = rounded < 0 ? "-" : "";
+  const parts = [];
+
+  if (hours) parts.push(`${hours} hr`);
+  if (minutes || !parts.length) parts.push(`${minutes} min`);
+
+  return `${sign}${parts.join(" ")}`;
+}
+
+function formatPercentageLabel(value) {
+  const numeric = Number(value || 0);
+
+  return `${numeric % 1 === 0 ? numeric.toFixed(0) : numeric.toFixed(1)}%`;
 }
 
 function analyticsIncidentOptions(incidents, selectedId) {
@@ -1047,8 +1066,8 @@ function renderTimelineVisual(analytics) {
     <section class="panel analytics-wide">
       <div class="panel-header">
         <div>
-          <h2>Timeline visuals</h2>
-          <p class="panel-subtitle">Key incident milestones extracted from timeline, triage, transport, HCFD, and responder safety records.</p>
+          <h2>Incident Timeline</h2>
+          <p class="panel-subtitle">Key milestones extracted from incident, triage, transport, HCFD, and responder safety records.</p>
         </div>
       </div>
       <div class="analytics-timeline">
@@ -1061,6 +1080,10 @@ function renderTimelineVisual(analytics) {
                   <div>
                     <strong>${escapeHtml(item.label)}</strong>
                     <small>${formatDate(item.at)}</small>
+                    <div class="analytics-timeline-meta">
+                      <em>From previous: ${escapeHtml(formatMinutes(item.elapsedSincePreviousMinutes))}</em>
+                      <em>From DMMP: ${escapeHtml(formatMinutes(item.elapsedSinceActivationMinutes))}</em>
+                    </div>
                   </div>
                 </div>
               `,
@@ -1082,8 +1105,8 @@ function renderPlainTextAnalytics(analytics) {
     <section class="panel analytics-wide">
       <div class="panel-header">
         <div>
-          <h2>Duration metrics</h2>
-          <p class="panel-subtitle">Plain-text formulas derived from facility arrival and HCFD encounter timestamps.</p>
+          <h2>Key Performance Indicators</h2>
+          <p class="panel-subtitle">Duration metrics derived from facility arrival and HCFD encounter timestamps.</p>
         </div>
       </div>
       ${renderKeyValueSection([
@@ -1178,6 +1201,10 @@ function analyticsColorValue(label, colorKey, index = 0) {
     return "#d96d12";
   }
 
+  if (key === "all" || key === "all victims") {
+    return "#267abd";
+  }
+
   return strategyColors[key] || fallbackColors[index % fallbackColors.length];
 }
 
@@ -1265,12 +1292,17 @@ function renderAnalyticsPieChart(rows, options = {}) {
         ${rows
           .map((row, index) => {
             const percentage = total > 0 ? Math.round((row.value / total) * 1000) / 10 : 0;
+            const fallbackDetail = `${row.value} (${formatPercentageLabel(percentage)})`;
+            const detail =
+              row.detail && row.detail !== String(row.value)
+                ? row.detail
+                : fallbackDetail;
 
             return `
               <div class="analytics-pie-legend-row">
                 <i style="background:${analyticsColorValue(row.label, options.colorKey, index)}"></i>
                 <span>${escapeHtml(roleLabel(row.label))}</span>
-                <strong>${row.value} (${percentage}%)</strong>
+                <strong>${escapeHtml(detail)}</strong>
               </div>
             `;
           })
@@ -1343,21 +1375,185 @@ function renderAnalyticsAxisBarChart(rows, options = {}) {
   `;
 }
 
+function renderAnalyticsSection(title, subtitle, content) {
+  return `
+    <section class="analytics-section">
+      <div class="analytics-section-header">
+        <div>
+          <h2>${escapeHtml(title)}</h2>
+          ${subtitle ? `<p>${escapeHtml(subtitle)}</p>` : ""}
+        </div>
+      </div>
+      ${content}
+    </section>
+  `;
+}
+
+function renderAnalyticsLineChart(title, series, options = {}) {
+  const normalizedSeries = (series || [])
+    .map((item, index) => ({
+      key: item.key || item.label || `series-${index}`,
+      label: item.label || item.key || `Series ${index + 1}`,
+      data: Array.isArray(item.data) ? item.data : [],
+    }))
+    .filter((item) => item.data.length);
+  const hasKnownDenominator = normalizedSeries.some((item) =>
+    item.data.some((row) => Number(row.total || 0) > 0),
+  );
+  const hasActivationReference = normalizedSeries.some((item) =>
+    item.data.some((row) => row.cutoffAt),
+  );
+
+  if (!normalizedSeries.length || !hasKnownDenominator || !hasActivationReference) {
+    return `
+      <section class="panel analytics-graph-card">
+        <div class="panel-header">
+          <div>
+            <h2>${escapeHtml(title)}</h2>
+            ${options.note ? `<p class="panel-subtitle">${escapeHtml(options.note)}</p>` : ""}
+          </div>
+        </div>
+        <div class="empty-state">${hasKnownDenominator ? "DMMP activation time is not recorded yet." : "No line graph data available yet."}</div>
+      </section>
+    `;
+  }
+
+  const width = 640;
+  const height = 300;
+  const padding = { top: 24, right: 30, bottom: 48, left: 58 };
+  const plotWidth = width - padding.left - padding.right;
+  const plotHeight = height - padding.top - padding.bottom;
+  const yTicks = [100, 75, 50, 25, 0];
+  const labels = normalizedSeries[0].data.map((row) =>
+    compactAxisLabel(normalizeIntervalLabel(row)),
+  );
+  const pointX = (index) =>
+    padding.left +
+    (labels.length <= 1 ? plotWidth / 2 : (index / (labels.length - 1)) * plotWidth);
+  const pointY = (percentage) =>
+    padding.top + ((100 - Math.max(0, Math.min(100, percentage))) / 100) * plotHeight;
+  const lineMarkup = normalizedSeries
+    .map((item, seriesIndex) => {
+      const color = analyticsColorValue(item.label, item.key, seriesIndex);
+      const points = item.data.map((row, pointIndex) => {
+        const percentage = Number(row.percentage || 0);
+
+        return {
+          x: pointX(pointIndex),
+          y: pointY(percentage),
+          percentage,
+          count: Number(row.count || 0),
+          total: Number(row.total || 0),
+          label: normalizeIntervalLabel(row),
+        };
+      });
+      const pointString = points
+        .map((point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`)
+        .join(" ");
+
+      return `
+        <polyline points="${pointString}" fill="none" stroke="${color}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></polyline>
+        ${points
+          .map(
+            (point) => `
+              <circle cx="${point.x.toFixed(2)}" cy="${point.y.toFixed(2)}" r="5.5" fill="#fff" stroke="${color}" stroke-width="3">
+                <title>${escapeHtml(`${item.label} at ${point.label}: ${formatPercentageLabel(point.percentage)} (${point.count}/${point.total})`)}</title>
+              </circle>
+            `,
+          )
+          .join("")}
+      `;
+    })
+    .join("");
+
+  return `
+    <section class="panel analytics-graph-card analytics-line-card">
+      <div class="panel-header">
+        <div>
+          <h2>${escapeHtml(title)}</h2>
+          ${options.note ? `<p class="panel-subtitle">${escapeHtml(options.note)}</p>` : ""}
+        </div>
+      </div>
+      <div class="analytics-line-chart">
+        <div class="analytics-line-frame">
+          <svg class="analytics-line-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(title)} line graph">
+            <line x1="${padding.left}" y1="${padding.top}" x2="${padding.left}" y2="${height - padding.bottom}" class="analytics-line-axis"></line>
+            <line x1="${padding.left}" y1="${height - padding.bottom}" x2="${width - padding.right}" y2="${height - padding.bottom}" class="analytics-line-axis"></line>
+            ${yTicks
+              .map((tick) => {
+                const y = pointY(tick);
+
+                return `
+                  <line x1="${padding.left}" y1="${y}" x2="${width - padding.right}" y2="${y}" class="analytics-line-grid"></line>
+                  <text x="${padding.left - 12}" y="${y + 4}" text-anchor="end" class="analytics-line-tick">${tick}%</text>
+                `;
+              })
+              .join("")}
+            ${labels
+              .map((label, index) => {
+                const x = pointX(index);
+
+                return `
+                  <line x1="${x}" y1="${height - padding.bottom}" x2="${x}" y2="${height - padding.bottom + 7}" class="analytics-line-axis"></line>
+                  <text x="${x}" y="${height - padding.bottom + 27}" text-anchor="middle" class="analytics-line-tick">${escapeHtml(label)}</text>
+                `;
+              })
+              .join("")}
+            <text x="18" y="${padding.top + plotHeight / 2}" text-anchor="middle" class="analytics-line-axis-label" transform="rotate(-90 18 ${padding.top + plotHeight / 2})">Cumulative percentage</text>
+            <text x="${padding.left + plotWidth / 2}" y="${height - 8}" text-anchor="middle" class="analytics-line-axis-label">${escapeHtml(options.xAxisLabel || "Minutes after DMMP activation")}</text>
+            ${lineMarkup}
+          </svg>
+        </div>
+        <div class="analytics-line-legend">
+          ${normalizedSeries
+            .map((item, index) => `
+              <span><i style="background:${analyticsColorValue(item.label, item.key, index)}"></i>${escapeHtml(roleLabel(item.label))}</span>
+            `)
+            .join("")}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function getAnalyticsLineGraphs(analytics) {
+  const lineGraphs = analytics?.lineGraphs;
+  const graphs = analytics?.barGraphs || {};
+
+  return lineGraphs || {
+    primaryTriageByActivation: [
+      { key: "immediate", label: "Immediate", data: graphs.immediatePrimaryTriageByActivation || [] },
+      { key: "delayed", label: "Delayed", data: graphs.delayedPrimaryTriageByActivation || [] },
+    ],
+    stabilizationByActivation: [
+      { key: "immediate", label: "Immediate", data: graphs.immediateStabilizedByActivation || [] },
+      { key: "delayed", label: "Delayed", data: graphs.delayedStabilizedByActivation || [] },
+    ],
+    departedAndArrivedByActivation: [
+      { key: "immediate", label: "Immediate", data: graphs.immediateDepartedAndArrivedByActivation || [] },
+      { key: "delayed", label: "Delayed", data: graphs.delayedDepartedAndArrivedByActivation || [] },
+    ],
+    facilityArrivalByActivation: [
+      { key: "all", label: "All victims", data: graphs.facilityArrivalByActivation || [] },
+    ],
+  };
+}
+
 function renderAnalyticsGraphSection(title, data, options = {}) {
   const rows = Array.isArray(data)
     ? data.map((row) => ({
         label: normalizeIntervalLabel(row),
-        value: Number(row.percentage ?? row.count ?? 0),
+        value: Number(options.chart === "pie" ? row.count ?? row.percentage ?? 0 : row.percentage ?? row.count ?? 0),
         detail:
           row.percentage !== undefined
             ? `${row.percentage}% (${row.count}/${row.total})`
             : String(row.count ?? 0),
       }))
     : Object.entries(data || {}).map(([label, value]) => {
-        if (value && typeof value === "object") {
+      if (value && typeof value === "object") {
           return {
             label,
-            value: Number(value.percentage ?? value.count ?? 0),
+            value: Number(options.chart === "pie" ? value.count ?? value.percentage ?? 0 : value.percentage ?? value.count ?? 0),
             detail:
               value.percentage !== undefined
                 ? `${value.percentage}% (${value.count}/${value.total})`
@@ -1415,24 +1611,37 @@ function renderAnalyticsGraphSection(title, data, options = {}) {
 
 function renderAnalyticsGraphGrid(analytics) {
   const graphs = analytics?.barGraphs || {};
+  const lineGraphs = getAnalyticsLineGraphs(analytics);
   const cumulativeNote = "Cumulative after disaster plan activation: 1 minute, 5 minutes, 10 minutes, 15 minutes, 30 minutes, and 1 hour.";
 
   return `
-    ${renderAnalyticsLegend()}
-    <div class="analytics-graph-grid">
-      ${renderAnalyticsGraphSection("Immediate, Delayed, Minor, and Expectant Victims Using Primary Triage", graphs.primaryTriageByCategory, { chart: "pie" })}
-      ${renderAnalyticsGraphSection("Immediate, Delayed, Minor, and Expectant Victims Using Secondary Triage", graphs.secondaryTriageByCategory, { chart: "pie" })}
-      ${renderAnalyticsGraphSection("Victims Stabilized Using Each Evacuation Strategy", graphs.stabilizationStrategies, { chart: "pie" })}
-      ${renderAnalyticsGraphSection("Safe and Unsafe Responders", graphs.responderSafety, { chart: "pie" })}
-      ${renderAnalyticsGraphSection("Immediate Victims Underwent Primary Triage per Time Unit", graphs.immediatePrimaryTriageByActivation, { percent: true, note: cumulativeNote, colorKey: "immediate" })}
-      ${renderAnalyticsGraphSection("Delayed Victims Underwent Primary Triage per Time Unit", graphs.delayedPrimaryTriageByActivation, { percent: true, note: cumulativeNote, colorKey: "delayed" })}
-      ${renderAnalyticsGraphSection("Immediate Victims Stabilized in the Stabilization Area per Time Unit", graphs.immediateStabilizedByActivation, { percent: true, note: cumulativeNote, colorKey: "immediate" })}
-      ${renderAnalyticsGraphSection("Delayed Victims Stabilized in the Stabilization Area per Time Unit", graphs.delayedStabilizedByActivation, { percent: true, note: cumulativeNote, colorKey: "delayed" })}
-      ${renderAnalyticsGraphSection("Immediate Victims Departed Scene and Arrived at a Healthcare Facility per Time Unit", graphs.immediateDepartedAndArrivedByActivation, { percent: true, note: cumulativeNote, colorKey: "immediate" })}
-      ${renderAnalyticsGraphSection("Delayed Victims Departed Scene and Arrived at a Healthcare Facility per Time Unit", graphs.delayedDepartedAndArrivedByActivation, { percent: true, note: cumulativeNote, colorKey: "delayed" })}
-      ${renderAnalyticsGraphSection("Victims Arriving at the Healthcare Facility per Time Unit", graphs.facilityArrivalByActivation, { percent: true, note: cumulativeNote })}
-      ${renderAnalyticsGraphSection("Victims Seeking ED Care According to Triage Category", graphs.edCareByTriageCategory, { percent: true, xAxisLabel: "Triage category" })}
-    </div>
+    ${renderAnalyticsSection(
+      "Triage & Patient Distribution",
+      "Primary triage, secondary triage, and ED-care distribution with count and percentage labels.",
+      `<div class="analytics-graph-grid">
+        ${renderAnalyticsGraphSection("Immediate, Delayed, Minor, and Expectant Victims Using Primary Triage", graphs.primaryTriageByCategory, { chart: "pie" })}
+        ${renderAnalyticsGraphSection("Immediate, Delayed, Minor, and Expectant Victims Using Secondary Triage", graphs.secondaryTriageByCategory, { chart: "pie" })}
+        ${renderAnalyticsGraphSection("Victims Seeking ED Care According to Triage Category", graphs.edCareByTriageCategory, { chart: "pie" })}
+      </div>`,
+    )}
+    ${renderAnalyticsSection(
+      "Treatment / Stabilization & Responder Safety",
+      "Stabilization strategies and responder safety responses for the selected incident.",
+      `<div class="analytics-graph-grid">
+        ${renderAnalyticsGraphSection("Victims Stabilized Using Each Evacuation Strategy", graphs.stabilizationStrategies, { chart: "pie" })}
+        ${renderAnalyticsGraphSection("Safe and Unsafe Responders", graphs.responderSafety, { chart: "pie" })}
+      </div>`,
+    )}
+    ${renderAnalyticsSection(
+      "Time-to-Action / Cumulative Progress",
+      cumulativeNote,
+      `<div class="analytics-graph-grid">
+        ${renderAnalyticsLineChart("Immediate and Delayed Victims Primary Triaged", lineGraphs.primaryTriageByActivation, { note: cumulativeNote })}
+        ${renderAnalyticsLineChart("Immediate and Delayed Victims Stabilized in the Stabilization Area", lineGraphs.stabilizationByActivation, { note: cumulativeNote })}
+        ${renderAnalyticsLineChart("Immediate and Delayed Victims Departed Scene and Arrived at a Healthcare Facility", lineGraphs.departedAndArrivedByActivation, { note: cumulativeNote })}
+        ${renderAnalyticsLineChart("Victims Arriving at a Healthcare Facility", lineGraphs.facilityArrivalByActivation, { note: cumulativeNote })}
+      </div>`,
+    )}
   `;
 }
 

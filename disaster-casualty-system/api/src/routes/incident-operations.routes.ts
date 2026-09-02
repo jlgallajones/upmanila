@@ -10,11 +10,13 @@ import {
   getFacilityOperationalSummary,
   getHospitalResources,
   getResponderSafetyReport,
+  getResponderSafetyResponse,
   getUtsteinOperations,
   saveCoordinationAssessment,
   saveDeactivationContinuity,
   saveHospitalResources,
   saveResponderSafetyReport,
+  saveResponderSafetyResponse,
   saveUtsteinOperations,
   updateDmmpStaff,
 } from "../controllers/incident-operations.controller.js";
@@ -122,6 +124,20 @@ incidentOperationsRouter.put(
   requireAuth,
   requireRole(writableRoles),
   saveResponderSafetyReport,
+);
+
+incidentOperationsRouter.get(
+  "/incidents/:id/responder-safety-response",
+  requireAuth,
+  requireRole(["responder", "field_responder", "sa_responder"]),
+  getResponderSafetyResponse,
+);
+
+incidentOperationsRouter.put(
+  "/incidents/:id/responder-safety-response",
+  requireAuth,
+  requireRole(["responder", "field_responder", "sa_responder"]),
+  saveResponderSafetyResponse,
 );
 
 incidentOperationsRouter.get(

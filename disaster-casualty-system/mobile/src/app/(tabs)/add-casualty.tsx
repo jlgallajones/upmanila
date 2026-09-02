@@ -46,7 +46,10 @@ import { isAuthenticationTokenError } from "../../api/client";
 import {
   createIncident,
   getIncidents,
+  getResponderSafetyResponse,
+  saveResponderSafetyResponse,
   type Incident,
+  type ResponderSafetyResponseRecord,
 } from "../../api/incidents";
 import {
   createEvacuationCenter,
@@ -2036,7 +2039,12 @@ function calculateStartLikeTriage(
 function calculateStieveTriage(
   answers: Record<string, unknown>,
 ): TriageCategory {
-  if (readAssessmentBoolean(answers, "specialPopulation") === true) {
+  const specialPopulation = readAssessmentBoolean(
+    answers,
+    "specialPopulation",
+  );
+
+  if (specialPopulation === true) {
     return "immediate";
   }
 
@@ -2044,7 +2052,7 @@ function calculateStieveTriage(
     readAssessmentBoolean(answers, "canWalkOrNoVisibleInjuries") ===
       true
   ) {
-    return "minimal";
+    return specialPopulation === false ? "minimal" : "unknown";
   }
 
   if (
@@ -3270,6 +3278,24 @@ function getValidDateTimeInput(value: string): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function formatResponderSafetyStatusForForm(
+  value: string | null | undefined,
+): string {
+  if (value === "yes") {
+    return "Yes";
+  }
+
+  if (value === "no") {
+    return "No";
+  }
+
+  return "";
+}
+
+function normalizeResponderSafetyStatusForApi(value: string): "yes" | "no" {
+  return value.toLowerCase() === "yes" ? "yes" : "no";
+}
+
 function getTriageFormSignature(form: FormState): string {
   if (!form.triageSystem.trim()) {
     return "";
@@ -4031,25 +4057,29 @@ type CurrentTimeFieldProps = FieldProps & {
   buttonLabel: string;
   icon?: keyof typeof Ionicons.glyphMap;
   onUseCurrent: () => void;
+  disabled?: boolean;
 };
 
 function CurrentTimeField({
   buttonLabel,
   icon = "time-outline",
   onUseCurrent,
+  disabled = false,
   ...fieldProps
 }: CurrentTimeFieldProps) {
   return (
     <View style={styles.currentTimeRow}>
       <View style={styles.currentTimeField}>
-        <FormField {...fieldProps} />
+        <FormField {...fieldProps} editable={!disabled && fieldProps.editable !== false} />
       </View>
 
       <Pressable
         onPress={onUseCurrent}
+        disabled={disabled}
         style={({ pressed }) => [
           styles.locationButton,
           styles.currentTimeButton,
+          disabled && styles.disabledButton,
           pressed && styles.pressed,
         ]}
       >
@@ -4711,6 +4741,18 @@ export default function AddCasualtyScreen() {
     currentResponderAssignment,
     setCurrentResponderAssignment,
   ] = useState<ResponderAssignment | null>(null);
+  const [
+    responderSafetyResponse,
+    setResponderSafetyResponse,
+  ] = useState<ResponderSafetyResponseRecord | null>(null);
+  const [
+    isLoadingResponderSafetyResponse,
+    setIsLoadingResponderSafetyResponse,
+  ] = useState(false);
+  const [
+    responderSafetyResponseError,
+    setResponderSafetyResponseError,
+  ] = useState<string | null>(null);
   const [nextCasualtySequence, setNextCasualtySequence] =
     useState(1);
   const [isLoadingUserContext, setIsLoadingUserContext] =
@@ -4775,7 +4817,13 @@ export default function AddCasualtyScreen() {
     : isSaResponderFlow
       ? "Stabilization Area Responder"
       : null;
+  const showVictimNumberStickyHeader =
+    (isFieldResponderFlow || isSaResponderFlow) && stepName === "Triage";
+  const stickyVictimNumber = form.victimCode.trim() || "No victim code entered";
   const generatedUserCode = generateUserCodeFromName(currentUserFullName);
+  const hasSavedResponderSafetyResponse =
+    responderSafetyResponse !== null &&
+    responderSafetyResponse.incident_id === form.incidentId;
 
   function getAllowedTriageSystemOptions(
     triageStage: string,
@@ -4794,8 +4842,6 @@ export default function AddCasualtyScreen() {
   }
 
   const fieldResponderVictimCodeOptions = useMemo(() => {
-    const seenCodes = new Set<string>();
-
     return fieldResponderRecords
       .map((record) => {
         const victimCode =
@@ -4803,11 +4849,9 @@ export default function AddCasualtyScreen() {
             record.latest_triage_assessment?.notes,
           ) || extractVictimCodeFromTriageNotes(record.remarks);
 
-        if (!victimCode || seenCodes.has(victimCode.toLowerCase())) {
+        if (!victimCode) {
           return null;
         }
-
-        seenCodes.add(victimCode.toLowerCase());
 
         return {
           record,
@@ -5439,8 +5483,6 @@ export default function AddCasualtyScreen() {
                 generatedUserCode,
                 nextCasualtySequence,
               ),
-      triageTime:
-        current.triageTime || formatDateTimeForInput(new Date()),
     }));
   }, [
     currentAssignedBarangay,
@@ -5585,6 +5627,82 @@ export default function AddCasualtyScreen() {
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadResponderSafetyResponse() {
+      if (
+        isEditing ||
+        (!isFieldResponderFlow && !isSaResponderFlow) ||
+        !currentUserId ||
+        !form.incidentId
+      ) {
+        if (isMounted) {
+          setResponderSafetyResponse(null);
+          setResponderSafetyResponseError(null);
+          setIsLoadingResponderSafetyResponse(false);
+        }
+        return;
+      }
+
+      try {
+        setIsLoadingResponderSafetyResponse(true);
+        setResponderSafetyResponseError(null);
+
+        const response = await getResponderSafetyResponse(form.incidentId);
+
+        if (isMounted) {
+          setResponderSafetyResponse(response);
+
+          if (response) {
+            setForm((current) => ({
+              ...current,
+              responderSafetyStatus: formatResponderSafetyStatusForForm(
+                response.safety_status,
+              ),
+              ppeUseTime: response.ppe_used_at
+                ? formatDateTimeForInput(new Date(response.ppe_used_at))
+                : current.ppeUseTime,
+            }));
+          } else {
+            setForm((current) => ({
+              ...current,
+              responderSafetyStatus: "",
+              ppeUseTime: "",
+            }));
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load responder safety response:", error);
+
+        if (isMounted) {
+          setResponderSafetyResponse(null);
+          setResponderSafetyResponseError(
+            error instanceof Error
+              ? error.message
+              : "Unable to load responder safety response.",
+          );
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingResponderSafetyResponse(false);
+        }
+      }
+    }
+
+    void loadResponderSafetyResponse();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    currentUserId,
+    form.incidentId,
+    isEditing,
+    isFieldResponderFlow,
+    isSaResponderFlow,
+  ]);
 
   useEffect(() => {
     let isMounted = true;
@@ -6112,6 +6230,18 @@ export default function AddCasualtyScreen() {
   ): FormState {
     return {
       ...initialForm,
+      responderSafetyStatus:
+        hasSavedResponderSafetyResponse
+          ? formatResponderSafetyStatusForForm(
+              responderSafetyResponse.safety_status,
+            )
+          : "",
+      ppeUseTime:
+        hasSavedResponderSafetyResponse && responderSafetyResponse.ppe_used_at
+          ? formatDateTimeForInput(
+              new Date(responderSafetyResponse.ppe_used_at),
+            )
+          : "",
       idNumber: isSaResponderFlow
         ? generateCasualtyUnitIdNumber(
             currentAssignedMunicipality,
@@ -6123,7 +6253,7 @@ export default function AddCasualtyScreen() {
       incidentName: (current.incidentName || presetIncidentName) ?? "",
       triageStage: getDefaultTriageStageForCurrentFlow(),
       triageSystem: getDefaultTriageSystemForCurrentFlow(),
-      triageTime: formatDateTimeForInput(new Date()),
+      triageTime: "",
       transportRequired: "Unknown",
       transportMode: "Unknown",
       emsUnitType: "Unknown",
@@ -6260,12 +6390,14 @@ export default function AddCasualtyScreen() {
       return null;
     }
 
-    const matchingOption = fieldResponderVictimCodeOptions.find(
+    const matchingOptions = fieldResponderVictimCodeOptions.filter(
       (option) =>
         option.victimCode.trim().toLowerCase() === selectedVictimCode,
     );
 
-    return matchingOption?.record.id ?? null;
+    return matchingOptions.length === 1
+      ? matchingOptions[0].record.id
+      : null;
   }
 
   function openTriageAssessment() {
@@ -6344,12 +6476,44 @@ export default function AddCasualtyScreen() {
   function validatePartialCurrentStep(): boolean {
     switch (stepName) {
       case "Safety":
-        if (isFieldResponderFlow && !form.incidentId && currentUserId) {
+        if (
+          (isFieldResponderFlow || isSaResponderFlow) &&
+          !form.incidentId &&
+          currentUserId
+        ) {
           Alert.alert(
             "Incident required",
             "Select the active incident before submitting this casualty.",
           );
           openChoiceSheet("incident");
+          return false;
+        }
+
+        if (hasSavedResponderSafetyResponse) {
+          return true;
+        }
+
+        if (isLoadingResponderSafetyResponse) {
+          Alert.alert(
+            "Responder safety loading",
+            "Please wait while the app checks if you already answered responder safety for this incident.",
+          );
+          return false;
+        }
+
+        if (!form.responderSafetyStatus.trim()) {
+          Alert.alert(
+            "Safety response required",
+            "Answer Are you safe? before continuing.",
+          );
+          return false;
+        }
+
+        if (!form.ppeUseTime.trim()) {
+          Alert.alert(
+            "PPE time required",
+            "Enter the Time of PPE Use before continuing.",
+          );
           return false;
         }
 
@@ -8913,8 +9077,11 @@ export default function AddCasualtyScreen() {
           selected: form.incidentId === incident.id,
           onSelect: () => {
             setSelectedFieldResponderRecordId(null);
+            setResponderSafetyResponse(null);
             updateField("incidentId", incident.id);
             updateField("incidentName", incident.incident_name);
+            updateField("responderSafetyStatus", "");
+            updateField("ppeUseTime", "");
             updateField("victimCode", "");
             updateField("patientIdentified", "");
             updateField("evacuationCenterId", "");
@@ -9250,7 +9417,42 @@ export default function AddCasualtyScreen() {
     }
   }
 
+  async function ensureResponderSafetyResponseSaved() {
+    if (
+      isEditing ||
+      (!isFieldResponderFlow && !isSaResponderFlow) ||
+      hasSavedResponderSafetyResponse
+    ) {
+      return;
+    }
+
+    if (!currentUserId || !form.incidentId) {
+      return;
+    }
+
+    const ppeUsedAt = parseDateTimeInput(form.ppeUseTime);
+
+    if (!ppeUsedAt) {
+      throw new Error("Time of PPE Use is required.");
+    }
+
+    const response = await saveResponderSafetyResponse(form.incidentId, {
+      safetyStatus: normalizeResponderSafetyStatusForApi(
+        form.responderSafetyStatus,
+      ),
+      ppeUsedAt,
+      responderFunction: currentResponderAssignment,
+    });
+
+    setResponderSafetyResponse(response);
+  }
+
   async function handleSubmit() {
+    const shouldResetPendingDepartureForm =
+      !isEditing &&
+      isSaResponderFlow &&
+      form.patientFor === "Pending Departure";
+
     if (
       !isEditing &&
       isFieldResponderFlow &&
@@ -9286,10 +9488,15 @@ export default function AddCasualtyScreen() {
 
           await queueCasualtySubmission(queuedPayload);
 
+          if (shouldResetPendingDepartureForm) {
+            resetForNextCasualty();
+          }
+
           setSubmissionFeedback({
             title: "Saved on this device",
             message:
               "The casualty record was saved locally. Log in from Profile later to sync records to DCMS.",
+            resetOnClose: shouldResetPendingDepartureForm ? false : undefined,
           });
         } catch (error) {
           Alert.alert(
@@ -9323,6 +9530,8 @@ export default function AddCasualtyScreen() {
       try {
         setIsSubmitting(true);
 
+        await ensureResponderSafetyResponseSaved();
+
         const payload: CreateCasualtyPayload = {
           clientRecordId,
           incidentId: form.incidentId,
@@ -9343,11 +9552,16 @@ export default function AddCasualtyScreen() {
         const photoUploadError =
           await uploadSelectedPhoto(createdRecordId);
 
+        if (shouldResetPendingDepartureForm) {
+          resetForNextCasualty();
+        }
+
         setSubmissionFeedback({
           title: "Casualty submitted",
           message: photoUploadError
             ? `The casualty record was saved, but the photo upload failed: ${photoUploadError}`
             : "The casualty record has been saved successfully.",
+          resetOnClose: shouldResetPendingDepartureForm ? false : undefined,
         });
       } catch (error) {
         console.error("Failed to submit casualty:", error);
@@ -9355,16 +9569,25 @@ export default function AddCasualtyScreen() {
         if (isNetworkSubmissionError(error)) {
           await queueCasualtySubmission(queuedPayload);
 
+          if (shouldResetPendingDepartureForm) {
+            resetForNextCasualty();
+          }
+
           setSubmissionFeedback({
             title: "Saved offline",
             message:
               "The casualty record was saved on this device and will sync when the connection is available.",
+            resetOnClose: shouldResetPendingDepartureForm ? false : undefined,
           });
           return;
         }
 
         if (isAuthenticationTokenError(error)) {
           await queueCasualtySubmission(queuedPayload);
+
+          if (shouldResetPendingDepartureForm) {
+            resetForNextCasualty();
+          }
 
           Alert.alert(
             "Session expired",
@@ -9465,9 +9688,13 @@ export default function AddCasualtyScreen() {
   }
 
   function renderResponderSafetyStep() {
+    const safetyControlsDisabled =
+      hasSavedResponderSafetyResponse ||
+      isLoadingResponderSafetyResponse;
+
     return (
       <>
-        {isFieldResponderFlow ? (
+        {isFieldResponderFlow || isSaResponderFlow ? (
           <>
             <SectionLabel title="Incident" />
 
@@ -9499,6 +9726,33 @@ export default function AddCasualtyScreen() {
 
         <SectionLabel title="Responder safety" />
 
+        {hasSavedResponderSafetyResponse ? (
+          <View style={styles.inlineSuccess}>
+            <Ionicons
+              name="checkmark-circle-outline"
+              size={18}
+              color={COLORS.green}
+            />
+            <Text style={styles.inlineSuccessText}>
+              Responder safety was already recorded for this incident.
+              This answer is locked to avoid duplicate entries.
+            </Text>
+          </View>
+        ) : null}
+
+        {responderSafetyResponseError ? (
+          <View style={styles.inlineWarning}>
+            <Ionicons
+              name="alert-circle-outline"
+              size={18}
+              color={COLORS.maroon}
+            />
+            <Text style={styles.inlineWarningText}>
+              {responderSafetyResponseError}
+            </Text>
+          </View>
+        ) : null}
+
         <View style={styles.safetyPromptCard}>
           <Text style={styles.safetyPromptTitle}>
             Are you safe?
@@ -9512,12 +9766,14 @@ export default function AddCasualtyScreen() {
               return (
                 <Pressable
                   key={option}
+                  disabled={safetyControlsDisabled}
                   onPress={() =>
                     updateField("responderSafetyStatus", option)
                   }
                   style={({ pressed }) => [
                     styles.safetyOption,
                     selected && styles.safetyOptionSelected,
+                    safetyControlsDisabled && styles.safetyOptionDisabled,
                     pressed && styles.pressed,
                   ]}
                 >
@@ -9556,6 +9812,7 @@ export default function AddCasualtyScreen() {
           placeholder="mm/dd/yyyy hh:mm AM/PM"
           buttonLabel="Use current time"
           icon="time-outline"
+          disabled={safetyControlsDisabled}
           onChangeText={(value) => updateField("ppeUseTime", value)}
           onUseCurrent={() =>
             updateField(
@@ -9591,22 +9848,6 @@ export default function AddCasualtyScreen() {
               : "Select receiving facility"
           }
           onPress={() => openChoiceSheet("healthcareFacility")}
-        />
-
-        <CurrentTimeField
-          label="DISASTER PLAN ACTIVATION TIME"
-          value={form.disasterPlanActivationTime}
-          placeholder="mm/dd/yyyy hh:mm"
-          buttonLabel="Use current activation time"
-          onChangeText={(value) =>
-            updateField("disasterPlanActivationTime", value)
-          }
-          onUseCurrent={() =>
-            updateField(
-              "disasterPlanActivationTime",
-              formatDateTimeForInput(new Date()),
-            )
-          }
         />
 
         <CurrentTimeField
@@ -10785,6 +11026,9 @@ export default function AddCasualtyScreen() {
         <View style={styles.appendixOptionGrid}>
           {(question.options ?? []).map((option) => {
             const selected = selectedValue === option.value;
+            const finalTriageColorStyle = isFinalTriageQuestion
+              ? getTriageColorButtonStyle(option.value)
+              : null;
 
             return (
               <Pressable
@@ -10801,13 +11045,14 @@ export default function AddCasualtyScreen() {
                   isFinalTriageQuestion &&
                     styles.finalTriageOption,
                   selected && styles.appendixOptionSelected,
-                  isFinalTriageQuestion &&
-                    getTriageColorButtonStyle(option.value),
+                  finalTriageColorStyle,
                   isFinalTriageQuestion &&
                     !selected &&
+                    finalTriageColorStyle &&
                     styles.finalTriageOptionInactive,
                   isFinalTriageQuestion &&
                     selected &&
+                    finalTriageColorStyle &&
                     styles.finalTriageOptionSelected,
                   pressed && !isFinalTriageQuestion && styles.pressed,
                 ]}
@@ -10817,10 +11062,12 @@ export default function AddCasualtyScreen() {
                   style={[
                     styles.appendixOptionText,
                     isFinalTriageQuestion &&
+                      finalTriageColorStyle &&
                       getTriageColorTextStyle(option.value),
                     selected && styles.appendixOptionTextSelected,
                     isFinalTriageQuestion &&
                       selected &&
+                      finalTriageColorStyle &&
                       getTriageColorTextStyle(option.value),
                   ]}
                 >
@@ -12400,6 +12647,17 @@ export default function AddCasualtyScreen() {
           </View>
         ) : null}
 
+        {showVictimNumberStickyHeader ? (
+          <View style={styles.victimNumberStickyHeader}>
+            <Text style={styles.victimNumberStickyLabel}>
+              CURRENT VICTIM NUMBER
+            </Text>
+            <Text style={styles.victimNumberStickyValue}>
+              {stickyVictimNumber}
+            </Text>
+          </View>
+        ) : null}
+
         <ScrollView
           contentContainerStyle={styles.formContent}
           keyboardShouldPersistTaps="handled"
@@ -12987,6 +13245,25 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     marginTop: 2,
   },
+  victimNumberStickyHeader: {
+    borderBottomWidth: 1,
+    borderBottomColor: "#E8D4D6",
+    backgroundColor: "#FFF8F8",
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  victimNumberStickyLabel: {
+    color: COLORS.secondaryText,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+  },
+  victimNumberStickyValue: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: "900",
+    marginTop: 2,
+  },
   fieldGroup: {
     marginBottom: 17,
   },
@@ -13260,7 +13537,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   appendixOptionText: {
-    color: COLORS.secondaryText,
+    color: COLORS.text,
     fontSize: 11,
     lineHeight: 14,
     fontWeight: "800",
@@ -13315,6 +13592,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.maroon,
   },
 
+  safetyOptionDisabled: {
+    opacity: 0.65,
+  },
+
   safetyOptionText: {
     color: COLORS.text,
     fontSize: 13,
@@ -13339,6 +13620,25 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   inlineWarningText: {
+    flex: 1,
+    color: COLORS.secondaryText,
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  inlineSuccess: {
+    minHeight: 46,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#BFE9CD",
+    backgroundColor: "#EFFAF3",
+    marginTop: -5,
+    marginBottom: 17,
+    gap: 8,
+  },
+  inlineSuccessText: {
     flex: 1,
     color: COLORS.secondaryText,
     fontSize: 11,

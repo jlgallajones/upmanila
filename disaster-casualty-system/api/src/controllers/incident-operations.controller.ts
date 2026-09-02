@@ -1238,6 +1238,48 @@ export async function getResponderSafetyReport(
   }
 }
 
+/**
+ * GET /api/incidents/:id/responder-safety-response
+ */
+export async function getResponderSafetyResponse(
+  request: Request<{ id: string }>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const incidentId = request.params.id;
+
+    if (!isValidUuid(incidentId)) {
+      response.status(400).json({
+        success: false,
+        message: "A valid incident UUID is required.",
+      });
+      return;
+    }
+
+    const authenticatedUser = getAuthenticatedUser(request);
+    const { data, error } = await supabase
+      .from("responder_safety_responses")
+      .select("*")
+      .eq("incident_id", incidentId)
+      .eq("responder_id", authenticatedUser.id)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(
+        `Unable to retrieve responder safety response: ${error.message}`,
+      );
+    }
+
+    response.status(200).json({
+      success: true,
+      data: data ?? null,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 function buildDeactivationContinuitySummary(
   timeline: Record<string, unknown> | null,
   assessment: Record<string, unknown> | null,
@@ -2114,6 +2156,134 @@ export async function saveResponderSafetyReport(
       message: "Responder safety report saved successfully.",
       data,
       summary: buildResponderSafetySummary(data, timeline, incident),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * PUT /api/incidents/:id/responder-safety-response
+ */
+export async function saveResponderSafetyResponse(
+  request: Request<{ id: string }>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const incidentId = request.params.id;
+
+    if (!isValidUuid(incidentId)) {
+      response.status(400).json({
+        success: false,
+        message: "A valid incident UUID is required.",
+      });
+      return;
+    }
+
+    if (!isPlainObject(request.body)) {
+      response.status(400).json({
+        success: false,
+        message: "A JSON request body is required.",
+      });
+      return;
+    }
+
+    const { data: incident, error: incidentError } = await supabase
+      .from("incidents")
+      .select("id")
+      .eq("id", incidentId)
+      .maybeSingle();
+
+    if (incidentError) {
+      throw new Error(
+        `Unable to retrieve incident: ${incidentError.message}`,
+      );
+    }
+
+    if (!incident) {
+      response.status(404).json({
+        success: false,
+        message: "Incident not found.",
+      });
+      return;
+    }
+
+    let safetyStatus: string | null | undefined;
+    let ppeUsedAt: string | null | undefined;
+
+    try {
+      safetyStatus = parseSafetyActionStatus(
+        request.body.safetyStatus,
+        "safetyStatus",
+      );
+      ppeUsedAt = parseNullableDate(
+        request.body.ppeUsedAt,
+        "ppeUsedAt",
+      );
+    } catch (validationError) {
+      response.status(400).json({
+        success: false,
+        message:
+          validationError instanceof Error
+            ? validationError.message
+            : "Invalid responder safety response.",
+      });
+      return;
+    }
+
+    if (!safetyStatus) {
+      response.status(400).json({
+        success: false,
+        message: "safetyStatus is required.",
+      });
+      return;
+    }
+
+    if (!ppeUsedAt) {
+      response.status(400).json({
+        success: false,
+        message: "ppeUsedAt is required.",
+      });
+      return;
+    }
+
+    const authenticatedUser = getAuthenticatedUser(request);
+    const now = new Date().toISOString();
+    const values = {
+      incident_id: incidentId,
+      responder_id: authenticatedUser.id,
+      responder_role: authenticatedUser.role,
+      responder_function:
+        typeof request.body.responderFunction === "string"
+          ? request.body.responderFunction.trim() || null
+          : null,
+      safety_status: safetyStatus,
+      ppe_used_at: ppeUsedAt,
+      recorded_at: now,
+      updated_at: now,
+    };
+
+    const { data, error } = await supabase
+      .from("responder_safety_responses")
+      .upsert(values, {
+        onConflict: "incident_id,responder_id",
+      })
+      .select("*")
+      .single();
+
+    if (error || !data) {
+      throw new Error(
+        `Unable to save responder safety response: ${
+          error?.message ?? "Unknown database error"
+        }`,
+      );
+    }
+
+    response.status(200).json({
+      success: true,
+      message: "Responder safety response saved successfully.",
+      data,
     });
   } catch (error) {
     next(error);

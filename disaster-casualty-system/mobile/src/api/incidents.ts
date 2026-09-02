@@ -136,6 +136,24 @@ export type ResponderSafetyResult = {
   summary: ResponderSafetySummary;
 };
 
+export type ResponderSafetyResponseRecord = {
+  id: string;
+  incident_id: string;
+  responder_id: string;
+  responder_role: string | null;
+  responder_function: string | null;
+  safety_status: ResponderSafetyStatus;
+  ppe_used_at: string;
+  recorded_at: string;
+  updated_at: string;
+};
+
+export type ResponderSafetyResponsePayload = {
+  safetyStatus: ResponderSafetyStatus;
+  ppeUsedAt: string;
+  responderFunction?: string | null;
+};
+
 export type DisruptionLevel =
   | "none"
   | "minimal"
@@ -655,6 +673,12 @@ type ResponderSafetyResponse = {
   summary: ResponderSafetySummary;
 };
 
+type IndividualResponderSafetyResponse = {
+  success: boolean;
+  message?: string;
+  data: ResponderSafetyResponseRecord | null;
+};
+
 type DeactivationContinuityResponse = {
   success: boolean;
   message?: string;
@@ -910,6 +934,32 @@ export async function saveResponderSafetyReport(
     report: response.data.data,
     summary: response.data.summary,
   };
+}
+
+export async function getResponderSafetyResponse(
+  id: string,
+): Promise<ResponderSafetyResponseRecord | null> {
+  const response = await api.get<IndividualResponderSafetyResponse>(
+    `/incidents/${encodeURIComponent(id)}/responder-safety-response`,
+  );
+
+  return response.data.data;
+}
+
+export async function saveResponderSafetyResponse(
+  id: string,
+  payload: ResponderSafetyResponsePayload,
+): Promise<ResponderSafetyResponseRecord> {
+  const response = await api.put<IndividualResponderSafetyResponse>(
+    `/incidents/${encodeURIComponent(id)}/responder-safety-response`,
+    payload,
+  );
+
+  if (!response.data.data) {
+    throw new Error("Responder safety response was not returned.");
+  }
+
+  return response.data.data;
 }
 
 export async function getDeactivationContinuity(
