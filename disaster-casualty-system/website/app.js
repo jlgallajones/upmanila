@@ -51,6 +51,7 @@ const state = {
   apiBaseUrl: getInitialApiBaseUrl(),
   user: readJson("dcms.admin.user"),
   accessToken: localStorage.getItem("dcms.admin.accessToken"),
+  sidebarCollapsed: localStorage.getItem("dcms.admin.sidebarCollapsed") === "true",
   activeView: "home",
   incidents: [],
   allIncidents: [],
@@ -671,14 +672,23 @@ function renderDashboardShell() {
   const views = isSuperAdmin() ? superAdminViews : adminViews;
 
   return `
-    <div class="app-shell">
+    <div class="app-shell ${state.sidebarCollapsed ? "sidebar-collapsed" : ""}">
       <aside class="sidebar">
         <div class="sidebar-title">
           <div class="sidebar-mark">DC</div>
-          <div>
+          <div class="sidebar-brand-text">
             <strong>DCMS Admin</strong>
             <span>${isSuperAdmin() ? "Super Admin Portal" : "Admin Portal"}</span>
           </div>
+          <button
+            id="sidebarToggle"
+            class="sidebar-toggle"
+            type="button"
+            aria-label="${state.sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}"
+            title="${state.sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}"
+          >
+            ${state.sidebarCollapsed ? "&gt;" : "&lt;"}
+          </button>
         </div>
 
         <div class="nav-section-label">Workspace</div>
@@ -686,7 +696,7 @@ function renderDashboardShell() {
           ${views
             .map(
               ([id, label]) => `
-                <button class="nav-button ${state.activeView === id ? "active" : ""}" data-view="${id}">
+                <button class="nav-button ${state.activeView === id ? "active" : ""}" data-view="${id}" title="${escapeHtml(label)}">
                   <span class="nav-glyph"></span>
                   <span>${label}</span>
                 </button>
@@ -698,7 +708,7 @@ function renderDashboardShell() {
         <div class="sidebar-footer">
           <div class="user-chip">
             <div class="user-avatar">${escapeHtml(state.user.full_name?.slice(0, 1) || "A")}</div>
-            <div>
+            <div class="user-chip-text">
             <strong>${escapeHtml(state.user.full_name)}</strong>
             <span>${roleLabel(state.user.role)}</span>
             </div>
@@ -722,6 +732,15 @@ function renderDashboardShell() {
 }
 
 function bindShell() {
+  qs("#sidebarToggle").addEventListener("click", () => {
+    state.sidebarCollapsed = !state.sidebarCollapsed;
+    localStorage.setItem(
+      "dcms.admin.sidebarCollapsed",
+      String(state.sidebarCollapsed),
+    );
+    renderDashboardShellIntoExisting();
+  });
+
   document.querySelectorAll(".nav-button").forEach((button) => {
     button.addEventListener("click", () => {
       state.activeView = button.dataset.view;
@@ -931,14 +950,14 @@ function renderAdminView() {
   }
 }
 
-function renderMetric(label, value, extraClass = "") {
+function renderMetric(label, value, extraClass = "", caption) {
   return `
     <section class="panel metric ${extraClass}">
       <div>
         <span>${label}</span>
         <strong>${value}</strong>
       </div>
-      <small>${extraClass ? "Current active system count" : "Updated from mobile records"}</small>
+      <small>${caption || (extraClass ? "Current active system count" : "Updated from mobile records")}</small>
     </section>
   `;
 }
@@ -1085,6 +1104,245 @@ function normalizeIntervalLabel(row) {
   return row.label || (row.minutes === 60 ? "1 hour" : `${row.minutes} minutes`);
 }
 
+function analyticsBarClass(label, colorKey) {
+  const key = String(colorKey || label || "").toLowerCase();
+
+  if (["immediate", "red", "critical", "t1"].includes(key)) {
+    return "triage-immediate";
+  }
+
+  if (["delayed", "yellow", "urgent", "t2"].includes(key)) {
+    return "triage-delayed";
+  }
+
+  if (["minor", "minimal", "green", "non-urgent", "t3"].includes(key)) {
+    return "triage-minor";
+  }
+
+  if (["expectant", "black", "dead", "deceased", "t4"].includes(key)) {
+    return "triage-expectant";
+  }
+
+  if (key === "safe") {
+    return "status-safe";
+  }
+
+  if (key === "unsafe") {
+    return "status-unsafe";
+  }
+
+  return "default";
+}
+
+function analyticsColorValue(label, colorKey, index = 0) {
+  const key = String(colorKey || label || "").toLowerCase();
+  const strategyColors = {
+    "scoop and run": "#7b1113",
+    scooter: "#267abd",
+    "stay and play": "#2e7d4f",
+    "1+3": "#f0b429",
+    "play and run": "#d96d12",
+    unknown: "#69758c",
+  };
+  const fallbackColors = [
+    "#7b1113",
+    "#267abd",
+    "#2e7d4f",
+    "#f0b429",
+    "#d96d12",
+    "#8b5cf6",
+    "#64748b",
+  ];
+
+  if (["immediate", "red", "critical", "t1"].includes(key)) {
+    return "#c92d32";
+  }
+
+  if (["delayed", "yellow", "urgent", "t2"].includes(key)) {
+    return "#f0b429";
+  }
+
+  if (["minor", "minimal", "green", "non-urgent", "t3"].includes(key)) {
+    return "#2e7d4f";
+  }
+
+  if (["expectant", "black", "dead", "deceased", "t4"].includes(key)) {
+    return "#1f2937";
+  }
+
+  if (key === "safe") {
+    return "#267abd";
+  }
+
+  if (key === "unsafe") {
+    return "#d96d12";
+  }
+
+  return strategyColors[key] || fallbackColors[index % fallbackColors.length];
+}
+
+function renderAnalyticsLegend() {
+  const items = [
+    ["Immediate / Critical", "triage-immediate"],
+    ["Delayed / Urgent", "triage-delayed"],
+    ["Minor / Non-urgent", "triage-minor"],
+    ["Expectant / Dead", "triage-expectant"],
+    ["Safe responders", "status-safe"],
+    ["Unsafe responders", "status-unsafe"],
+    ["Other values", "default"],
+  ];
+
+  return `
+    <section class="panel analytics-legend">
+      <div>
+        <h2>Graph legend</h2>
+        <p class="panel-subtitle">Colors follow triage category and responder safety meaning where applicable.</p>
+      </div>
+      <div class="analytics-legend-items">
+        ${items
+          .map(
+            ([label, className]) => `
+              <span><i class="${className}"></i>${escapeHtml(label)}</span>
+            `,
+          )
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderAnalyticsPieChart(rows, options = {}) {
+  const total = rows.reduce((sum, row) => sum + Math.max(0, row.value), 0);
+
+  if (total <= 0) {
+    return `<div class="empty-state">No pie chart data available yet.</div>`;
+  }
+
+  let cursor = 0;
+  const segments = [];
+  const labels = [];
+
+  rows.forEach((row, index) => {
+    const value = Math.max(0, row.value);
+    const start = cursor;
+    const size = (value / total) * 100;
+    cursor += size;
+    const middle = start + size / 2;
+    const radians = (middle / 100) * Math.PI * 2 - Math.PI / 2;
+    const distance = 33;
+    const x = 50 + Math.cos(radians) * distance;
+    const y = 50 + Math.sin(radians) * distance;
+    const percentage =
+      total > 0 ? Math.round((value / total) * 1000) / 10 : 0;
+
+    segments.push(
+      `${analyticsColorValue(row.label, options.colorKey, index)} ${start}% ${cursor}%`,
+    );
+
+    if (percentage >= 5) {
+      labels.push(`
+        <span
+          class="analytics-pie-label"
+          style="left:${x}%; top:${y}%"
+        >
+          ${percentage % 1 === 0 ? percentage.toFixed(0) : percentage}%
+        </span>
+      `);
+    }
+  });
+
+  return `
+    <div class="analytics-pie-wrap">
+      <div
+        class="analytics-pie"
+        style="background: conic-gradient(${segments.join(", ")})"
+        role="img"
+        aria-label="Pie chart showing ${escapeHtml(String(total))} total records"
+      >
+        ${labels.join("")}
+      </div>
+      <div class="analytics-pie-legend">
+        ${rows
+          .map((row, index) => {
+            const percentage = total > 0 ? Math.round((row.value / total) * 1000) / 10 : 0;
+
+            return `
+              <div class="analytics-pie-legend-row">
+                <i style="background:${analyticsColorValue(row.label, options.colorKey, index)}"></i>
+                <span>${escapeHtml(roleLabel(row.label))}</span>
+                <strong>${row.value} (${percentage}%)</strong>
+              </div>
+            `;
+          })
+          .join("")}
+      </div>
+    </div>
+  `;
+}
+
+function compactAxisLabel(label) {
+  const normalized = String(label || "");
+
+  if (normalized === "1 minute") {
+    return "1m";
+  }
+
+  if (normalized.endsWith(" minutes")) {
+    return `${normalized.replace(" minutes", "")}m`;
+  }
+
+  if (normalized === "1 hour") {
+    return "1h";
+  }
+
+  return roleLabel(normalized);
+}
+
+function renderAnalyticsAxisBarChart(rows, options = {}) {
+  if (!rows.length) {
+    return `<div class="empty-state">No bar chart data available yet.</div>`;
+  }
+
+  const ticks = [100, 75, 50, 25, 0];
+
+  return `
+    <div class="analytics-axis-chart">
+      <div class="analytics-axis-y-title">Percentage</div>
+      <div class="analytics-axis-body">
+        <div class="analytics-axis-ticks">
+          ${ticks.map((tick) => `<span>${tick}%</span>`).join("")}
+        </div>
+        <div class="analytics-axis-plot">
+          <div class="analytics-axis-bars-row">
+            ${rows
+              .map((row) => {
+                const value = Math.max(0, Math.min(100, row.value));
+                const colorClass = analyticsBarClass(
+                  row.label,
+                  options.colorKey,
+                );
+
+                return `
+                  <div class="analytics-axis-bar-item">
+                    <div
+                      class="analytics-axis-bar ${colorClass}"
+                      style="height:${value}%"
+                    >
+                      <span>${escapeHtml(row.detail)}</span>
+                    </div>
+                    <small>${escapeHtml(compactAxisLabel(row.label))}</small>
+                  </div>
+                `;
+              })
+              .join("")}
+          </div>
+        </div>
+      </div>
+      <div class="analytics-axis-x-title">${escapeHtml(options.xAxisLabel || "Minutes")}</div>
+    </div>
+  `;
+}
+
 function renderAnalyticsGraphSection(title, data, options = {}) {
   const rows = Array.isArray(data)
     ? data.map((row) => ({
@@ -1117,6 +1375,30 @@ function renderAnalyticsGraphSection(title, data, options = {}) {
     options.percent ? 100 : 1,
     ...rows.map((row) => row.value),
   );
+  const graphBody =
+    options.chart === "pie"
+      ? renderAnalyticsPieChart(rows, options)
+      : options.percent
+        ? renderAnalyticsAxisBarChart(rows, options)
+      : `
+        <div class="analytics-bars">
+          ${
+            rows
+              .map((row) => {
+                const width = Math.max(4, (row.value / max) * 100);
+                const colorClass = analyticsBarClass(row.label, options.colorKey);
+                return `
+                  <div class="analytics-bar-row">
+                    <span>${escapeHtml(roleLabel(row.label))}</span>
+                    <div><i class="${colorClass}" style="width:${width}%"></i></div>
+                    <strong>${escapeHtml(row.detail)}</strong>
+                  </div>
+                `;
+              })
+              .join("") || `<div class="empty-state">No graph data available yet.</div>`
+          }
+        </div>
+      `;
 
   return `
     <section class="panel analytics-graph-card">
@@ -1126,22 +1408,7 @@ function renderAnalyticsGraphSection(title, data, options = {}) {
           ${options.note ? `<p class="panel-subtitle">${escapeHtml(options.note)}</p>` : ""}
         </div>
       </div>
-      <div class="analytics-bars">
-        ${
-          rows
-            .map((row) => {
-              const width = Math.max(4, (row.value / max) * 100);
-              return `
-                <div class="analytics-bar-row">
-                  <span>${escapeHtml(roleLabel(row.label))}</span>
-                  <div><i style="width:${width}%"></i></div>
-                  <strong>${escapeHtml(row.detail)}</strong>
-                </div>
-              `;
-            })
-            .join("") || `<div class="empty-state">No graph data available yet.</div>`
-        }
-      </div>
+      ${graphBody}
     </section>
   `;
 }
@@ -1151,19 +1418,20 @@ function renderAnalyticsGraphGrid(analytics) {
   const cumulativeNote = "Cumulative after disaster plan activation: 1 minute, 5 minutes, 10 minutes, 15 minutes, 30 minutes, and 1 hour.";
 
   return `
+    ${renderAnalyticsLegend()}
     <div class="analytics-graph-grid">
-      ${renderAnalyticsGraphSection("1. Immediate, Delayed, Minor, and Expectant Victims Using Primary Triage", graphs.primaryTriageByCategory)}
-      ${renderAnalyticsGraphSection("2. Immediate, Delayed, Minor, and Expectant Victims Using Secondary Triage", graphs.secondaryTriageByCategory)}
-      ${renderAnalyticsGraphSection("3. Victims Stabilized Using Each Evacuation Strategy", graphs.stabilizationStrategies)}
-      ${renderAnalyticsGraphSection("4. Safe and Unsafe Responders", graphs.responderSafety)}
-      ${renderAnalyticsGraphSection("5. Immediate Victims Underwent Primary Triage per Time Unit", graphs.immediatePrimaryTriageByActivation, { percent: true, note: cumulativeNote })}
-      ${renderAnalyticsGraphSection("6. Delayed Victims Underwent Primary Triage per Time Unit", graphs.delayedPrimaryTriageByActivation, { percent: true, note: cumulativeNote })}
-      ${renderAnalyticsGraphSection("7. Immediate Victims Stabilized in the Stabilization Area per Time Unit", graphs.immediateStabilizedByActivation, { percent: true, note: cumulativeNote })}
-      ${renderAnalyticsGraphSection("8. Delayed Victims Stabilized in the Stabilization Area per Time Unit", graphs.delayedStabilizedByActivation, { percent: true, note: cumulativeNote })}
-      ${renderAnalyticsGraphSection("9. Immediate Victims Departed Scene and Arrived at a Healthcare Facility per Time Unit", graphs.immediateDepartedAndArrivedByActivation, { percent: true, note: cumulativeNote })}
-      ${renderAnalyticsGraphSection("10. Delayed Victims Departed Scene and Arrived at a Healthcare Facility per Time Unit", graphs.delayedDepartedAndArrivedByActivation, { percent: true, note: cumulativeNote })}
-      ${renderAnalyticsGraphSection("11. Victims Arriving at the Healthcare Facility per Time Unit", graphs.facilityArrivalByActivation, { percent: true, note: cumulativeNote })}
-      ${renderAnalyticsGraphSection("12. Victims Seeking ED Care According to Triage Category", graphs.edCareByTriageCategory, { percent: true })}
+      ${renderAnalyticsGraphSection("Immediate, Delayed, Minor, and Expectant Victims Using Primary Triage", graphs.primaryTriageByCategory, { chart: "pie" })}
+      ${renderAnalyticsGraphSection("Immediate, Delayed, Minor, and Expectant Victims Using Secondary Triage", graphs.secondaryTriageByCategory, { chart: "pie" })}
+      ${renderAnalyticsGraphSection("Victims Stabilized Using Each Evacuation Strategy", graphs.stabilizationStrategies, { chart: "pie" })}
+      ${renderAnalyticsGraphSection("Safe and Unsafe Responders", graphs.responderSafety, { chart: "pie" })}
+      ${renderAnalyticsGraphSection("Immediate Victims Underwent Primary Triage per Time Unit", graphs.immediatePrimaryTriageByActivation, { percent: true, note: cumulativeNote, colorKey: "immediate" })}
+      ${renderAnalyticsGraphSection("Delayed Victims Underwent Primary Triage per Time Unit", graphs.delayedPrimaryTriageByActivation, { percent: true, note: cumulativeNote, colorKey: "delayed" })}
+      ${renderAnalyticsGraphSection("Immediate Victims Stabilized in the Stabilization Area per Time Unit", graphs.immediateStabilizedByActivation, { percent: true, note: cumulativeNote, colorKey: "immediate" })}
+      ${renderAnalyticsGraphSection("Delayed Victims Stabilized in the Stabilization Area per Time Unit", graphs.delayedStabilizedByActivation, { percent: true, note: cumulativeNote, colorKey: "delayed" })}
+      ${renderAnalyticsGraphSection("Immediate Victims Departed Scene and Arrived at a Healthcare Facility per Time Unit", graphs.immediateDepartedAndArrivedByActivation, { percent: true, note: cumulativeNote, colorKey: "immediate" })}
+      ${renderAnalyticsGraphSection("Delayed Victims Departed Scene and Arrived at a Healthcare Facility per Time Unit", graphs.delayedDepartedAndArrivedByActivation, { percent: true, note: cumulativeNote, colorKey: "delayed" })}
+      ${renderAnalyticsGraphSection("Victims Arriving at the Healthcare Facility per Time Unit", graphs.facilityArrivalByActivation, { percent: true, note: cumulativeNote })}
+      ${renderAnalyticsGraphSection("Victims Seeking ED Care According to Triage Category", graphs.edCareByTriageCategory, { percent: true, xAxisLabel: "Triage category" })}
     </div>
   `;
 }
@@ -1182,13 +1450,23 @@ function renderIncidentAnalytics() {
   const isLoading = state.loadingIncidentManagementId === selectedIncidentId;
   const analytics = details?.analytics?.data;
   const casualtyCounts = countRecordsByIncident();
-  const totalCasualties = state.casualties.length;
-  const verifiedRecords = state.casualties.filter(
+  const selectedIncidentRecords = state.casualties.filter(
+    (record) => record.incident?.id === selectedIncidentId,
+  );
+  const totalCasualties =
+    analytics?.casualtyRecords ??
+    analytics?.totalVictims ??
+    selectedIncidentRecords.length;
+  const verifiedRecords =
+    analytics?.verifiedRecords ??
+    selectedIncidentRecords.filter(
     (record) => record.verification_status === "verified",
   ).length;
-  const pendingRecords = state.casualties.filter((record) =>
-    ["submitted", "under_review"].includes(record.verification_status),
-  ).length;
+  const pendingRecords =
+    analytics?.pendingReview ??
+    selectedIncidentRecords.filter((record) =>
+      ["submitted", "under_review"].includes(record.verification_status),
+    ).length;
 
   return `
     <section class="panel">
@@ -1209,10 +1487,10 @@ function renderIncidentAnalytics() {
       </label>
     </section>
     <div class="grid four">
-      ${renderMetric("Incidents", incidents.length, "emphasis")}
-      ${renderMetric("Casualty records", totalCasualties)}
-      ${renderMetric("Verified records", verifiedRecords)}
-      ${renderMetric("Pending review", pendingRecords)}
+      ${renderMetric("Selected incident", selectedIncident ? 1 : 0, "emphasis", selectedIncident ? `Status: ${roleLabel(selectedIncident.status)}` : "No incident selected")}
+      ${renderMetric("Casualty records", totalCasualties, "", "For selected incident")}
+      ${renderMetric("Verified records", verifiedRecords, "", "For selected incident")}
+      ${renderMetric("Pending review", pendingRecords, "", "For selected incident")}
     </div>
     ${
       !selectedIncident

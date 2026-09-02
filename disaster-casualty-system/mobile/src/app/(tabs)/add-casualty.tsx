@@ -6402,12 +6402,11 @@ export default function AddCasualtyScreen() {
       case "Info":
       case "Patient Information":
       case "Personal":
-        if (isSaResponderFlow && !selectedFieldResponderRecordId) {
+        if (isSaResponderFlow && !form.victimCode.trim()) {
           Alert.alert(
             "Victim code required",
-            "Select an existing Field Responder victim code before continuing.",
+            "Enter the victim code before continuing.",
           );
-          openChoiceSheet("fieldResponderVictimCode");
           return false;
         }
 

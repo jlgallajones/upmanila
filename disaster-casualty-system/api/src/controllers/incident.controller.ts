@@ -4028,7 +4028,7 @@ export async function getIncidentAnalyticsSummary(
         .maybeSingle(),
       supabase
         .from("casualty_incidents")
-        .select("id")
+        .select("id, verification_status")
         .eq("incident_id", id)
         .is("deleted_at", null),
       supabase
@@ -4051,7 +4051,11 @@ export async function getIncidentAnalyticsSummary(
       );
     }
 
-    const casualtyIncidentIds = (casualtiesResult.data ?? []).map(
+    const casualtyIncidentRows = (casualtiesResult.data ?? []) as Array<{
+      id: string;
+      verification_status: string | null;
+    }>;
+    const casualtyIncidentIds = casualtyIncidentRows.map(
       (item) => item.id,
     );
     const triageResult =
@@ -4121,6 +4125,14 @@ export async function getIncidentAnalyticsSummary(
       null;
     const intervalMinutes = [1, 5, 10, 15, 30, 60];
     const totalVictims = casualtyIncidentIds.length;
+    const verifiedRecords = casualtyIncidentRows.filter(
+      (item) => item.verification_status === "verified",
+    ).length;
+    const pendingReview = casualtyIncidentRows.filter((item) =>
+      ["submitted", "under_review"].includes(
+        item.verification_status ?? "",
+      ),
+    ).length;
     const responseInitiatedAt =
       timeline?.dmmp_activated_at ?? incident.started_at ?? null;
     const responseInitiatedDate = responseInitiatedAt
@@ -4321,6 +4333,9 @@ export async function getIncidentAnalyticsSummary(
         incidentId: id,
         incidentName: incident.incident_name,
         totalVictims,
+        casualtyRecords: totalVictims,
+        verifiedRecords,
+        pendingReview,
         responseInitiatedAt,
         timelineVisuals: [
           {
