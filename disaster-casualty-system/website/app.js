@@ -55,6 +55,7 @@ const state = {
   incidents: [],
   allIncidents: [],
   expandedIncidentId: null,
+  analyticsIncidentId: null,
   activeIncidentSectionModal: null,
   incidentManagementDetails: {},
   loadingIncidentManagementId: null,
@@ -795,6 +796,7 @@ function bindView() {
   bindRegisterUnitUserForm();
   bindAccountActions();
   bindIncidentManagementActions();
+  bindIncidentAnalyticsActions();
   bindOpenCasualtyRecord();
   bindVerificationReviewActions();
   bindScopeLinks();
@@ -807,6 +809,59 @@ function bindScopeLinks() {
       renderDashboardShellIntoExisting();
     });
   });
+}
+
+function bindIncidentAnalyticsActions() {
+  if (state.activeView !== "incident-analytics") return;
+
+  const incidents = state.allIncidents.length ? state.allIncidents : state.incidents;
+  const selectedIncident =
+    incidents.find((incident) => incident.id === state.analyticsIncidentId) ||
+    incidents.find((incident) => incident.status === "active") ||
+    incidents[0] ||
+    null;
+  const selectedIncidentId = selectedIncident?.id ?? "";
+  const select = qs("#analyticsIncidentSelect");
+
+  if (selectedIncidentId && state.analyticsIncidentId !== selectedIncidentId) {
+    state.analyticsIncidentId = selectedIncidentId;
+  }
+
+  if (select) {
+    select.addEventListener("change", async () => {
+      state.analyticsIncidentId = select.value;
+
+      if (!state.incidentManagementDetails[select.value]) {
+        await loadIncidentManagementDetails(select.value);
+      } else {
+        renderCurrentView();
+        bindView();
+      }
+    });
+  }
+
+  document.querySelectorAll("[data-load-analytics]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const incidentId = button.dataset.loadAnalytics;
+      if (!incidentId) return;
+
+      delete state.incidentManagementDetails[incidentId];
+      await loadIncidentManagementDetails(incidentId);
+      renderCurrentView();
+      bindView();
+    });
+  });
+
+  if (
+    selectedIncidentId &&
+    !state.incidentManagementDetails[selectedIncidentId] &&
+    state.loadingIncidentManagementId !== selectedIncidentId
+  ) {
+    void loadIncidentManagementDetails(selectedIncidentId).then(() => {
+      renderCurrentView();
+      bindView();
+    });
+  }
 }
 
 function renderDashboardShellIntoExisting() {
@@ -951,8 +1006,181 @@ function renderAnalyticsBars(counts) {
   `;
 }
 
+function formatMinutes(value) {
+  if (value === null || value === undefined) return "Not recorded";
+  if (Number(value) === 1) return "1 minute";
+  return `${value} minutes`;
+}
+
+function analyticsIncidentOptions(incidents, selectedId) {
+  return incidents
+    .map(
+      (incident) =>
+        `<option value="${escapeHtml(incident.id)}" ${incident.id === selectedId ? "selected" : ""}>${escapeHtml(incident.incident_name)}</option>`,
+    )
+    .join("");
+}
+
+function renderTimelineVisual(analytics) {
+  const items = analytics?.timelineVisuals || [];
+
+  return `
+    <section class="panel analytics-wide">
+      <div class="panel-header">
+        <div>
+          <h2>Timeline visuals</h2>
+          <p class="panel-subtitle">Key incident milestones extracted from timeline, triage, transport, HCFD, and responder safety records.</p>
+        </div>
+      </div>
+      <div class="analytics-timeline">
+        ${
+          items
+            .map(
+              (item) => `
+                <div class="analytics-timeline-item ${item.at ? "complete" : ""}">
+                  <span></span>
+                  <div>
+                    <strong>${escapeHtml(item.label)}</strong>
+                    <small>${formatDate(item.at)}</small>
+                  </div>
+                </div>
+              `,
+            )
+            .join("") || `<div class="empty-state">No timeline values available yet.</div>`
+        }
+      </div>
+    </section>
+  `;
+}
+
+function renderPlainTextAnalytics(analytics) {
+  const arrival =
+    analytics?.durationMetrics?.medianOnsetToFacilityArrivalByCategory || {};
+  const stays =
+    analytics?.durationMetrics?.healthcareFacilityLengthOfStayMinutes || {};
+
+  return `
+    <section class="panel analytics-wide">
+      <div class="panel-header">
+        <div>
+          <h2>Duration metrics</h2>
+          <p class="panel-subtitle">Plain-text formulas derived from facility arrival and HCFD encounter timestamps.</p>
+        </div>
+      </div>
+      ${renderKeyValueSection([
+        ["Median incident onset to healthcare facility arrival - Immediate", formatMinutes(arrival.immediate)],
+        ["Median incident onset to healthcare facility arrival - Delayed", formatMinutes(arrival.delayed)],
+        ["Median incident onset to healthcare facility arrival - Minor", formatMinutes(arrival.minimal)],
+        ["Median incident onset to healthcare facility arrival - Expectant", formatMinutes(arrival.expectant)],
+        ["Average LOS of immediate victims at healthcare facility", formatMinutes(stays.immediate?.averageMinutes)],
+        ["Median LOS of immediate victims at healthcare facility", formatMinutes(stays.immediate?.medianMinutes)],
+        ["Average LOS of delayed victims at healthcare facility", formatMinutes(stays.delayed?.averageMinutes)],
+        ["Median LOS of delayed victims at healthcare facility", formatMinutes(stays.delayed?.medianMinutes)],
+      ])}
+    </section>
+  `;
+}
+
+function normalizeIntervalLabel(row) {
+  return row.label || (row.minutes === 60 ? "1 hour" : `${row.minutes} minutes`);
+}
+
+function renderAnalyticsGraphSection(title, data, options = {}) {
+  const rows = Array.isArray(data)
+    ? data.map((row) => ({
+        label: normalizeIntervalLabel(row),
+        value: Number(row.percentage ?? row.count ?? 0),
+        detail:
+          row.percentage !== undefined
+            ? `${row.percentage}% (${row.count}/${row.total})`
+            : String(row.count ?? 0),
+      }))
+    : Object.entries(data || {}).map(([label, value]) => {
+        if (value && typeof value === "object") {
+          return {
+            label,
+            value: Number(value.percentage ?? value.count ?? 0),
+            detail:
+              value.percentage !== undefined
+                ? `${value.percentage}% (${value.count}/${value.total})`
+                : String(value.count ?? 0),
+          };
+        }
+
+        return {
+          label,
+          value: Number(value || 0),
+          detail: String(value || 0),
+        };
+      });
+  const max = Math.max(
+    options.percent ? 100 : 1,
+    ...rows.map((row) => row.value),
+  );
+
+  return `
+    <section class="panel analytics-graph-card">
+      <div class="panel-header">
+        <div>
+          <h2>${escapeHtml(title)}</h2>
+          ${options.note ? `<p class="panel-subtitle">${escapeHtml(options.note)}</p>` : ""}
+        </div>
+      </div>
+      <div class="analytics-bars">
+        ${
+          rows
+            .map((row) => {
+              const width = Math.max(4, (row.value / max) * 100);
+              return `
+                <div class="analytics-bar-row">
+                  <span>${escapeHtml(roleLabel(row.label))}</span>
+                  <div><i style="width:${width}%"></i></div>
+                  <strong>${escapeHtml(row.detail)}</strong>
+                </div>
+              `;
+            })
+            .join("") || `<div class="empty-state">No graph data available yet.</div>`
+        }
+      </div>
+    </section>
+  `;
+}
+
+function renderAnalyticsGraphGrid(analytics) {
+  const graphs = analytics?.barGraphs || {};
+  const cumulativeNote = "Cumulative after disaster plan activation: 1 minute, 5 minutes, 10 minutes, 15 minutes, 30 minutes, and 1 hour.";
+
+  return `
+    <div class="analytics-graph-grid">
+      ${renderAnalyticsGraphSection("1. Immediate, Delayed, Minor, and Expectant Victims Using Primary Triage", graphs.primaryTriageByCategory)}
+      ${renderAnalyticsGraphSection("2. Immediate, Delayed, Minor, and Expectant Victims Using Secondary Triage", graphs.secondaryTriageByCategory)}
+      ${renderAnalyticsGraphSection("3. Victims Stabilized Using Each Evacuation Strategy", graphs.stabilizationStrategies)}
+      ${renderAnalyticsGraphSection("4. Safe and Unsafe Responders", graphs.responderSafety)}
+      ${renderAnalyticsGraphSection("5. Immediate Victims Underwent Primary Triage per Time Unit", graphs.immediatePrimaryTriageByActivation, { percent: true, note: cumulativeNote })}
+      ${renderAnalyticsGraphSection("6. Delayed Victims Underwent Primary Triage per Time Unit", graphs.delayedPrimaryTriageByActivation, { percent: true, note: cumulativeNote })}
+      ${renderAnalyticsGraphSection("7. Immediate Victims Stabilized in the Stabilization Area per Time Unit", graphs.immediateStabilizedByActivation, { percent: true, note: cumulativeNote })}
+      ${renderAnalyticsGraphSection("8. Delayed Victims Stabilized in the Stabilization Area per Time Unit", graphs.delayedStabilizedByActivation, { percent: true, note: cumulativeNote })}
+      ${renderAnalyticsGraphSection("9. Immediate Victims Departed Scene and Arrived at a Healthcare Facility per Time Unit", graphs.immediateDepartedAndArrivedByActivation, { percent: true, note: cumulativeNote })}
+      ${renderAnalyticsGraphSection("10. Delayed Victims Departed Scene and Arrived at a Healthcare Facility per Time Unit", graphs.delayedDepartedAndArrivedByActivation, { percent: true, note: cumulativeNote })}
+      ${renderAnalyticsGraphSection("11. Victims Arriving at the Healthcare Facility per Time Unit", graphs.facilityArrivalByActivation, { percent: true, note: cumulativeNote })}
+      ${renderAnalyticsGraphSection("12. Victims Seeking ED Care According to Triage Category", graphs.edCareByTriageCategory, { percent: true })}
+    </div>
+  `;
+}
+
 function renderIncidentAnalytics() {
   const incidents = state.allIncidents.length ? state.allIncidents : state.incidents;
+  const selectedIncident =
+    incidents.find((incident) => incident.id === state.analyticsIncidentId) ||
+    incidents.find((incident) => incident.status === "active") ||
+    incidents[0] ||
+    null;
+  const selectedIncidentId = selectedIncident?.id ?? "";
+  const details = selectedIncidentId
+    ? state.incidentManagementDetails[selectedIncidentId]
+    : null;
+  const isLoading = state.loadingIncidentManagementId === selectedIncidentId;
+  const analytics = details?.analytics?.data;
   const casualtyCounts = countRecordsByIncident();
   const totalCasualties = state.casualties.length;
   const verifiedRecords = state.casualties.filter(
@@ -963,71 +1191,48 @@ function renderIncidentAnalytics() {
   ).length;
 
   return `
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Incident Analytics</h2>
+          <p class="panel-subtitle">Read-only timeline, duration, and graph summaries for one incident.</p>
+        </div>
+        <button class="ghost-button" type="button" data-load-analytics="${escapeHtml(selectedIncidentId)}" ${!selectedIncidentId || isLoading ? "disabled" : ""}>
+          ${isLoading ? "Loading..." : "Refresh Analytics"}
+        </button>
+      </div>
+      <label class="field">
+        <span>Select incident</span>
+        <select id="analyticsIncidentSelect">
+          ${analyticsIncidentOptions(incidents, selectedIncidentId)}
+        </select>
+      </label>
+    </section>
     <div class="grid four">
       ${renderMetric("Incidents", incidents.length, "emphasis")}
       ${renderMetric("Casualty records", totalCasualties)}
       ${renderMetric("Verified records", verifiedRecords)}
       ${renderMetric("Pending review", pendingRecords)}
     </div>
-    <div class="grid two" style="margin-top:18px">
-      <section class="panel">
-        <div class="panel-header">
-          <div>
-            <h2>Incident status</h2>
-            <p class="panel-subtitle">Read-only distribution of visible incidents.</p>
-          </div>
-        </div>
-        ${renderAnalyticsBars(countByField(incidents, (incident) => incident.status))}
-      </section>
-      <section class="panel">
-        <div class="panel-header">
-          <div>
-            <h2>Verification status</h2>
-            <p class="panel-subtitle">Read-only distribution of visible casualty entries.</p>
-          </div>
-        </div>
-        ${renderAnalyticsBars(countByField(state.casualties, (record) => record.verification_status))}
-      </section>
-    </div>
+    ${
+      !selectedIncident
+        ? `<section class="panel" style="margin-top:18px"><div class="empty-state">No incidents available for analytics.</div></section>`
+        : isLoading || !analytics
+          ? `<section class="panel" style="margin-top:18px"><div class="empty-state">${isLoading ? "Loading analytics..." : "Analytics data is not loaded yet."}</div></section>`
+          : `
+            <div style="margin-top:18px">${renderTimelineVisual(analytics)}</div>
+            <div style="margin-top:18px">${renderPlainTextAnalytics(analytics)}</div>
+            <div style="margin-top:18px">${renderAnalyticsGraphGrid(analytics)}</div>
+          `
+    }
     <section class="panel" style="margin-top:18px">
       <div class="panel-header">
         <div>
-          <h2>Incident analytics</h2>
-          <p class="panel-subtitle">Per-incident summary. Open Incident Management for detailed section summaries.</p>
+          <h2>Visible incident list</h2>
+          <p class="panel-subtitle">Scoped to ${isSuperAdmin() ? "all units" : "the logged-in admin account"}.</p>
         </div>
       </div>
-      <div class="table-wrap" style="margin-top:12px">
-        <table>
-          <thead>
-            <tr>
-              <th>Incident</th>
-              <th>Hazard</th>
-              <th>Status</th>
-              <th>Started</th>
-              <th>Casualties</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${
-              incidents
-                .slice()
-                .sort((first, second) => new Date(second.started_at).getTime() - new Date(first.started_at).getTime())
-                .map(
-                  (incident) => `
-                    <tr>
-                      <td>${escapeHtml(incident.incident_name)}</td>
-                      <td>${escapeHtml(incident.disaster_type || "Unknown")}</td>
-                      <td><span class="pill ${incident.status === "active" ? "green" : "blue"}">${escapeHtml(roleLabel(incident.status))}</span></td>
-                      <td>${formatDate(incident.started_at)}</td>
-                      <td>${casualtyCounts.get(incident.id) || 0}</td>
-                    </tr>
-                  `,
-                )
-                .join("") || `<tr><td colspan="5"><div class="empty-state">No incidents found.</div></td></tr>`
-            }
-          </tbody>
-        </table>
-      </div>
+      ${renderAnalyticsBars(Object.fromEntries(incidents.map((incident) => [incident.incident_name, casualtyCounts.get(incident.id) || 0])))}
     </section>
   `;
 }
@@ -1900,6 +2105,7 @@ async function loadIncidentManagementDetails(incidentId) {
   bindView();
 
   const endpoints = {
+    analytics: `/incidents/${encodeURIComponent(incidentId)}/analytics`,
     timeline: `/incidents/${encodeURIComponent(incidentId)}/timeline`,
     dmmpStaff: `/incidents/${encodeURIComponent(incidentId)}/dmmp-staff`,
     dmmpStaffSummary: `/incidents/${encodeURIComponent(incidentId)}/dmmp-staff-summary`,

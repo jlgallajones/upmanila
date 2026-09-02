@@ -233,6 +233,15 @@ type CasualtyOutcomeRow = {
   final_disposition: string | null;
 };
 
+type ResponderSafetyReportRow = {
+  safety_actions_established: string | null;
+  ppe_decision_at: string | null;
+  deployed_responders: number | null;
+  injured_responders: number | null;
+  ill_responders: number | null;
+  deceased_responders: number | null;
+};
+
 type HospitalResourceSnapshotRow = {
   id: string;
   incident_id: string;
@@ -3969,6 +3978,494 @@ export async function getIncidentMorbidityMortalitySummary(
             ).length,
             t1Victims.length,
           ),
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getIncidentAnalyticsSummary(
+  request: Request<{ id: string }>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { id } = request.params;
+
+    const { data: incident, error: incidentError } = await supabase
+      .from("incidents")
+      .select("id, incident_name, started_at")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (incidentError) {
+      throw new Error(
+        `Unable to retrieve incident: ${incidentError.message}`,
+      );
+    }
+
+    if (!incident) {
+      response.status(404).json({
+        success: false,
+        message: "Incident not found.",
+      });
+      return;
+    }
+
+    const [
+      timelineResult,
+      casualtiesResult,
+      responderSafetyResult,
+    ] = await Promise.all([
+      supabase
+        .from("incident_response_timelines")
+        .select(
+          "event_notification_at, dmmp_activated_at, medical_coordinator_notified_at, first_ems_on_scene_at, triage_ordered_at, scene_demobilized_at, last_facility_deactivated_at",
+        )
+        .eq("incident_id", id)
+        .maybeSingle(),
+      supabase
+        .from("casualty_incidents")
+        .select("id")
+        .eq("incident_id", id)
+        .is("deleted_at", null),
+      supabase
+        .from("responder_safety_reports")
+        .select(
+          "safety_actions_established, ppe_decision_at, deployed_responders, injured_responders, ill_responders, deceased_responders",
+        )
+        .eq("incident_id", id)
+        .maybeSingle(),
+    ]);
+
+    const firstError =
+      timelineResult.error ??
+      casualtiesResult.error ??
+      responderSafetyResult.error;
+
+    if (firstError) {
+      throw new Error(
+        `Unable to retrieve incident analytics: ${firstError.message}`,
+      );
+    }
+
+    const casualtyIncidentIds = (casualtiesResult.data ?? []).map(
+      (item) => item.id,
+    );
+    const triageResult =
+      casualtyIncidentIds.length > 0
+        ? await supabase
+            .from("casualty_triage_assessments")
+            .select(
+              "casualty_incident_id, triage_system, triage_category, responder_category, calculated_category, triage_stage, triaged_at",
+            )
+            .in("casualty_incident_id", casualtyIncidentIds)
+            .order("triaged_at", { ascending: true })
+        : { data: [], error: null };
+    const transportResult =
+      casualtyIncidentIds.length > 0
+        ? await supabase
+            .from("casualty_transport_records")
+            .select(
+              "casualty_incident_id, transport_required, transport_mode, ems_unit_type, arrived_scene_at, departed_scene_at, arrived_facility_at, receiving_facility_id",
+            )
+            .in("casualty_incident_id", casualtyIncidentIds)
+            .order("created_at", { ascending: true })
+        : { data: [], error: null };
+    const treatmentResult =
+      casualtyIncidentIds.length > 0
+        ? await supabase
+            .from("casualty_treatments")
+            .select(
+              "casualty_incident_id, treatment_strategy, treatment_area_name, stabilization_started_at, stabilized_at, created_at",
+            )
+            .in("casualty_incident_id", casualtyIncidentIds)
+            .order("created_at", { ascending: true })
+        : { data: [], error: null };
+    const encounterResult =
+      casualtyIncidentIds.length > 0
+        ? await supabase
+            .from("facility_encounters")
+            .select(
+              "casualty_incident_id, facility_id, arrived_at, sought_ed_care, admitted_to_hospital, ed_admitted_at, ed_departed_at, hospital_admitted_at, hospital_discharged_at, created_at",
+            )
+            .in("casualty_incident_id", casualtyIncidentIds)
+            .order("created_at", { ascending: true })
+        : { data: [], error: null };
+
+    const detailsError =
+      triageResult.error ??
+      transportResult.error ??
+      treatmentResult.error ??
+      encounterResult.error;
+
+    if (detailsError) {
+      throw new Error(
+        `Unable to retrieve incident analytics details: ${detailsError.message}`,
+      );
+    }
+
+    const timeline = timelineResult.data as Record<string, string | null> | null;
+    const triageRows =
+      (triageResult.data ?? []) as TriageAssessmentRow[];
+    const transportRows =
+      (transportResult.data ?? []) as TransportRecordRow[];
+    const treatmentRows =
+      (treatmentResult.data ?? []) as TreatmentRecordRow[];
+    const encounterRows =
+      (encounterResult.data ?? []) as FacilityEncounterRow[];
+    const responderSafety =
+      (responderSafetyResult.data as ResponderSafetyReportRow | null) ??
+      null;
+    const intervalMinutes = [1, 5, 10, 15, 30, 60];
+    const totalVictims = casualtyIncidentIds.length;
+    const responseInitiatedAt =
+      timeline?.dmmp_activated_at ?? incident.started_at ?? null;
+    const responseInitiatedDate = responseInitiatedAt
+      ? new Date(responseInitiatedAt)
+      : null;
+    const sortedDates = (values: Array<string | null | undefined>) =>
+      values
+        .map((value) => (value ? new Date(value) : null))
+        .filter(
+          (value): value is Date =>
+            value !== null && !Number.isNaN(value.getTime()),
+        )
+        .sort((first, second) => first.getTime() - second.getTime());
+    const firstDate = (values: Array<string | null | undefined>) =>
+      sortedDates(values)[0]?.toISOString() ?? null;
+    const lastDate = (values: Array<string | null | undefined>) => {
+      const dates = sortedDates(values);
+
+      return dates[dates.length - 1]?.toISOString() ?? null;
+    };
+    const isPrimaryTriage = (row: TriageAssessmentRow) =>
+      row.triage_stage === "on_site" ||
+      primaryTriageSystems.has(row.triage_system ?? "");
+    const isSecondaryTriage = (row: TriageAssessmentRow) =>
+      row.triage_stage === "reassessment" ||
+      secondaryTriageSystems.has(row.triage_system ?? "");
+    const primaryTriageRows = triageRows.filter(isPrimaryTriage);
+    const secondaryTriageRows = triageRows.filter(isSecondaryTriage);
+    const facilityTriageRows = triageRows.filter(
+      (row) => row.triage_stage === "facility_arrival",
+    );
+    const latestTriageByCasualty = new Map<string, TriageAssessmentRow>();
+
+    for (const row of [...triageRows].reverse()) {
+      if (!latestTriageByCasualty.has(row.casualty_incident_id)) {
+        latestTriageByCasualty.set(row.casualty_incident_id, row);
+      }
+    }
+
+    const categoryForCasualty = (casualtyIncidentId: string) =>
+      latestTriageByCasualty.get(casualtyIncidentId)?.triage_category ??
+      "unknown";
+    const categoryRows = (
+      rows: Array<{
+        casualty_incident_id: string;
+        occurred_at: string | null;
+      }>,
+      category: string,
+    ) =>
+      rows.filter(
+        (row) =>
+          categoryForCasualty(row.casualty_incident_id) === category &&
+          Boolean(row.occurred_at),
+      );
+    const buildIntervalRows = (
+      rows: Array<{
+        casualty_incident_id: string;
+        occurred_at: string | null;
+      }>,
+    ) =>
+      intervalMinutes.map((minutes) => {
+        const cutoff =
+          responseInitiatedDate &&
+          !Number.isNaN(responseInitiatedDate.getTime())
+            ? new Date(
+                responseInitiatedDate.getTime() + minutes * 60 * 1000,
+              )
+            : null;
+        const count =
+          cutoff === null
+            ? 0
+            : rows.filter((row) => {
+                if (!row.occurred_at) {
+                  return false;
+                }
+
+                const occurredAt = new Date(row.occurred_at);
+
+                return (
+                  !Number.isNaN(occurredAt.getTime()) &&
+                  occurredAt <= cutoff
+                );
+              }).length;
+
+        return {
+          minutes,
+          label: minutes === 60 ? "1 hour" : `${minutes} minutes`,
+          cutoffAt: cutoff?.toISOString() ?? null,
+          count,
+          total: totalVictims,
+          percentage: calculatePercentage(count, totalVictims),
+        };
+      });
+    const primaryEvents = primaryTriageRows.map((row) => ({
+      casualty_incident_id: row.casualty_incident_id,
+      occurred_at: row.triaged_at,
+    }));
+    const stabilizedEvents = treatmentRows.map((row) => ({
+      casualty_incident_id: row.casualty_incident_id,
+      occurred_at: row.stabilized_at,
+    }));
+    const departedAndArrivedEvents = transportRows.map((row) => ({
+      casualty_incident_id: row.casualty_incident_id,
+      occurred_at:
+        row.departed_scene_at && row.arrived_facility_at
+          ? row.arrived_facility_at
+          : null,
+    }));
+    const arrivalEvents = [
+      ...transportRows.map((row) => ({
+        casualty_incident_id: row.casualty_incident_id,
+        occurred_at: row.arrived_facility_at,
+      })),
+      ...encounterRows.map((row) => ({
+        casualty_incident_id: row.casualty_incident_id,
+        occurred_at: row.arrived_at,
+      })),
+    ];
+    const arrivalMinutesByCategory = (
+      ["immediate", "delayed", "minimal", "expectant"] as const
+    ).reduce<Record<string, number | null>>((values, category) => {
+      const minutes = arrivalEvents
+        .filter(
+          (row) =>
+            categoryForCasualty(row.casualty_incident_id) === category &&
+            row.occurred_at,
+        )
+        .map((row) =>
+          row.occurred_at
+            ? minutesBetween(incident.started_at, row.occurred_at)
+            : null,
+        )
+        .filter((value): value is number => value !== null);
+
+      values[category] = median(minutes);
+      return values;
+    }, {});
+    const healthcareStayByCategory = (
+      ["immediate", "delayed"] as const
+    ).reduce<
+      Record<string, { averageMinutes: number | null; medianMinutes: number | null }>
+    >((values, category) => {
+      const minutes = encounterRows
+        .filter(
+          (row) => categoryForCasualty(row.casualty_incident_id) === category,
+        )
+        .map((row) => {
+          const start = row.hospital_admitted_at ?? row.arrived_at;
+          const end = row.hospital_discharged_at ?? row.ed_departed_at;
+
+          return start && end ? minutesBetween(start, end) : null;
+        })
+        .filter((value): value is number => value !== null);
+
+      values[category] = {
+        averageMinutes: average(minutes),
+        medianMinutes: median(minutes),
+      };
+      return values;
+    }, {});
+    const deployedResponders =
+      responderSafety?.deployed_responders ?? 0;
+    const unsafeResponders =
+      (responderSafety?.injured_responders ?? 0) +
+      (responderSafety?.ill_responders ?? 0) +
+      (responderSafety?.deceased_responders ?? 0);
+    const safeResponders = Math.max(
+      0,
+      deployedResponders - unsafeResponders,
+    );
+    const edCareByCategory = (
+      ["immediate", "delayed", "minimal", "expectant"] as const
+    ).reduce<Record<string, { count: number; total: number; percentage: number }>>(
+      (values, category) => {
+        const total = casualtyIncidentIds.filter(
+          (casualtyIncidentId) =>
+            categoryForCasualty(casualtyIncidentId) === category,
+        ).length;
+        const count = encounterRows.filter(
+          (row) =>
+            categoryForCasualty(row.casualty_incident_id) === category &&
+            row.sought_ed_care === true,
+        ).length;
+
+        values[category] = {
+          count,
+          total,
+          percentage: calculatePercentage(count, total),
+        };
+        return values;
+      },
+      {},
+    );
+
+    response.status(200).json({
+      success: true,
+      data: {
+        incidentId: id,
+        incidentName: incident.incident_name,
+        totalVictims,
+        responseInitiatedAt,
+        timelineVisuals: [
+          {
+            key: "incidentOnset",
+            label: "Incident onset",
+            at: incident.started_at,
+          },
+          {
+            key: "dmmpActivation",
+            label: "Activation of DMMP",
+            at: timeline?.dmmp_activated_at ?? null,
+          },
+          {
+            key: "medicalCoordinatorNotification",
+            label:
+              "Notification of first appropriate staff person to assume medical management coordination role",
+            at: timeline?.medical_coordinator_notified_at ?? null,
+          },
+          {
+            key: "triageInitiated",
+            label: "Triage initiated",
+            at: timeline?.triage_ordered_at ?? null,
+          },
+          {
+            key: "firstPrimaryTriage",
+            label: "First victim triaged using primary triage",
+            at: firstDate(primaryTriageRows.map((row) => row.triaged_at)),
+          },
+          {
+            key: "firstSecondaryTriage",
+            label: "First victim triaged using secondary triage",
+            at: firstDate(
+              secondaryTriageRows.map((row) => row.triaged_at),
+            ),
+          },
+          {
+            key: "lastPrimaryTriage",
+            label: "Last victim triaged using primary triage",
+            at: lastDate(primaryTriageRows.map((row) => row.triaged_at)),
+          },
+          {
+            key: "lastSecondaryTriage",
+            label: "Last victim triaged using secondary triage",
+            at: lastDate(
+              secondaryTriageRows.map((row) => row.triaged_at),
+            ),
+          },
+          {
+            key: "firstEmsVehicle",
+            label: "First arrived EMS vehicle",
+            at:
+              timeline?.first_ems_on_scene_at ??
+              firstDate(
+                transportRows.map((row) => row.arrived_scene_at),
+              ),
+          },
+          {
+            key: "firstDepartedScene",
+            label: "First victim departed from scene",
+            at: firstDate(
+              transportRows.map((row) => row.departed_scene_at),
+            ),
+          },
+          {
+            key: "lastDepartedScene",
+            label: "Last victim departed from scene",
+            at: lastDate(
+              transportRows.map((row) => row.departed_scene_at),
+            ),
+          },
+          {
+            key: "firstFacilityTriage",
+            label: "First victim triaged at healthcare facility",
+            at: firstDate(
+              facilityTriageRows.map((row) => row.triaged_at),
+            ),
+          },
+          {
+            key: "lastFacilityTriage",
+            label: "Last victim triaged at healthcare facility",
+            at: lastDate(
+              facilityTriageRows.map((row) => row.triaged_at),
+            ),
+          },
+          {
+            key: "ppeDecision",
+            label: "PPE use decision",
+            at: responderSafety?.ppe_decision_at ?? null,
+          },
+          {
+            key: "respondersDemobilized",
+            label: "Responders demobilized",
+            at: timeline?.scene_demobilized_at ?? null,
+          },
+          {
+            key: "lastFacilityDeactivation",
+            label:
+              "Last healthcare facility to deactivate their disaster response",
+            at: timeline?.last_facility_deactivated_at ?? null,
+          },
+        ],
+        durationMetrics: {
+          medianOnsetToFacilityArrivalByCategory:
+            arrivalMinutesByCategory,
+          healthcareFacilityLengthOfStayMinutes:
+            healthcareStayByCategory,
+        },
+        barGraphs: {
+          primaryTriageByCategory: countBy(
+            primaryTriageRows,
+            (row) => row.triage_category,
+          ),
+          secondaryTriageByCategory: countBy(
+            secondaryTriageRows,
+            (row) => row.triage_category,
+          ),
+          stabilizationStrategies: countBy(
+            treatmentRows,
+            (row) => row.treatment_strategy,
+          ),
+          responderSafety: {
+            safe: safeResponders,
+            unsafe: unsafeResponders,
+          },
+          immediatePrimaryTriageByActivation: buildIntervalRows(
+            categoryRows(primaryEvents, "immediate"),
+          ),
+          delayedPrimaryTriageByActivation: buildIntervalRows(
+            categoryRows(primaryEvents, "delayed"),
+          ),
+          immediateStabilizedByActivation: buildIntervalRows(
+            categoryRows(stabilizedEvents, "immediate"),
+          ),
+          delayedStabilizedByActivation: buildIntervalRows(
+            categoryRows(stabilizedEvents, "delayed"),
+          ),
+          immediateDepartedAndArrivedByActivation: buildIntervalRows(
+            categoryRows(departedAndArrivedEvents, "immediate"),
+          ),
+          delayedDepartedAndArrivedByActivation: buildIntervalRows(
+            categoryRows(departedAndArrivedEvents, "delayed"),
+          ),
+          facilityArrivalByActivation:
+            buildIntervalRows(arrivalEvents),
+          edCareByTriageCategory: edCareByCategory,
         },
       },
     });
