@@ -181,6 +181,43 @@ export type DeactivationContinuityResult = {
   summary: DeactivationContinuitySummary;
 };
 
+export type FacilityOperationalSummary = {
+  incidentId: string;
+  facilities: Array<{
+    facilityId: string;
+    facilityName: string;
+    facilityLevel: string | null;
+    municipality: string | null;
+    province: string | null;
+    continuity: {
+      facilityCareDisruption: DisruptionLevel | string | null;
+      lastFacilityDeactivatedAt: string | null;
+      assessedAt: string | null;
+    };
+    resources: {
+      recordedAt: string | null;
+      totalOperatingRooms: number | null;
+      totalResuscitationRooms: number | null;
+      alternativeIcuInUse: boolean | null;
+      notes: string | null;
+    } | null;
+    hofdEntries: {
+      encountersTotal: number;
+      arrivedTotal: number;
+      admittedTotal: number;
+      dischargedTotal: number;
+      surgeryTotal: number;
+      operatingRoomUseTotal: number;
+      xrayUseTotal: number;
+      ultrasoundUseTotal: number;
+      ctUseTotal: number;
+      icuAdmissions: number;
+      ventilatedTotal: number;
+      alternativeIcuUseTotal: number;
+    };
+  }>;
+};
+
 export type OnsiteTriageIntervalMetric = {
   minutes: number;
   cutoffAt: string | null;
@@ -677,6 +714,11 @@ type HospitalResourcesResponse = {
   data: HospitalResourceSnapshot | null;
 };
 
+type FacilityOperationalSummaryResponse = {
+  success: boolean;
+  data: FacilityOperationalSummary;
+};
+
 type IncidentSitrepResponse = {
   success: boolean;
   message?: string;
@@ -882,6 +924,17 @@ export async function getDeactivationContinuity(
     assessment: response.data.data.assessment,
     summary: response.data.summary,
   };
+}
+
+export async function getFacilityOperationalSummary(
+  id: string,
+): Promise<FacilityOperationalSummary> {
+  const response =
+    await api.get<FacilityOperationalSummaryResponse>(
+      `/incidents/${encodeURIComponent(id)}/facility-operational-summary`,
+    );
+
+  return response.data.data;
 }
 
 export async function saveDeactivationContinuity(

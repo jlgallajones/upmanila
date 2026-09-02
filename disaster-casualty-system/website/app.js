@@ -121,6 +121,7 @@ const superAdminViews = [
   ["home", "Summary"],
   ["registration", "Account Registration"],
   ["incident-management", "Incident Management"],
+  ["incident-analytics", "Incident Analytics"],
   ["history", "Incident History"],
   ["logs", "Action Logs"],
 ];
@@ -128,6 +129,7 @@ const superAdminViews = [
 const adminViews = [
   ["home", "Homepage"],
   ["incident-management", "Incident Management"],
+  ["incident-analytics", "Incident Analytics"],
   ["incidents", "Official Incidents"],
   ["evacuation", "Evacuation Centers"],
   ["facilities", "Healthcare Facilities"],
@@ -745,12 +747,14 @@ function renderCurrentView(errorMessage = "") {
         home: "Super Admin Summary",
         registration: "Account Registration",
         "incident-management": "Incident Management",
+        "incident-analytics": "Incident Analytics",
         history: "Reported Incident History",
         logs: "Action Logs",
       }[state.activeView]
     : {
         home: "Admin Homepage",
         "incident-management": "Incident Management",
+        "incident-analytics": "Incident Analytics",
         incidents: "Official Incidents",
         evacuation: "Evacuation Centers",
         facilities: "Healthcare Facilities",
@@ -819,6 +823,8 @@ function renderSuperAdminView() {
       return renderRegistrationShell();
     case "incident-management":
       return renderIncidentManagement();
+    case "incident-analytics":
+      return renderIncidentAnalytics();
     case "history":
       return renderIncidentHistory();
     case "logs":
@@ -833,6 +839,8 @@ function renderAdminView() {
   switch (state.activeView) {
     case "incident-management":
       return renderIncidentManagement();
+    case "incident-analytics":
+      return renderIncidentAnalytics();
     case "incidents":
       return renderIncidentCreator();
     case "evacuation":
@@ -891,6 +899,136 @@ function renderSuperAdminHome() {
       ${renderIncidentSummaryTable()}
       ${renderRecentActivity()}
     </div>
+  `;
+}
+
+function countRecordsByIncident() {
+  const counts = new Map();
+
+  for (const record of state.casualties) {
+    const incidentId = record.incident?.id;
+    if (!incidentId) continue;
+
+    counts.set(incidentId, (counts.get(incidentId) || 0) + 1);
+  }
+
+  return counts;
+}
+
+function countByField(rows, getValue) {
+  return rows.reduce((counts, row) => {
+    const value = getValue(row) || "unknown";
+    counts[value] = (counts[value] || 0) + 1;
+    return counts;
+  }, {});
+}
+
+function renderAnalyticsBars(counts) {
+  const entries = Object.entries(counts).sort(
+    ([firstLabel, firstCount], [secondLabel, secondCount]) =>
+      Number(secondCount) - Number(firstCount) ||
+      compareText(firstLabel, secondLabel),
+  );
+  const max = Math.max(1, ...entries.map(([, count]) => Number(count)));
+
+  return `
+    <div class="analytics-bars">
+      ${
+        entries
+          .map(([label, count]) => {
+            const width = Math.max(6, (Number(count) / max) * 100);
+            return `
+              <div class="analytics-bar-row">
+                <span>${escapeHtml(roleLabel(label))}</span>
+                <div><i style="width:${width}%"></i></div>
+                <strong>${escapeHtml(count)}</strong>
+              </div>
+            `;
+          })
+          .join("") || `<div class="empty-state">No analytics data available yet.</div>`
+      }
+    </div>
+  `;
+}
+
+function renderIncidentAnalytics() {
+  const incidents = state.allIncidents.length ? state.allIncidents : state.incidents;
+  const casualtyCounts = countRecordsByIncident();
+  const totalCasualties = state.casualties.length;
+  const verifiedRecords = state.casualties.filter(
+    (record) => record.verification_status === "verified",
+  ).length;
+  const pendingRecords = state.casualties.filter((record) =>
+    ["submitted", "under_review"].includes(record.verification_status),
+  ).length;
+
+  return `
+    <div class="grid four">
+      ${renderMetric("Incidents", incidents.length, "emphasis")}
+      ${renderMetric("Casualty records", totalCasualties)}
+      ${renderMetric("Verified records", verifiedRecords)}
+      ${renderMetric("Pending review", pendingRecords)}
+    </div>
+    <div class="grid two" style="margin-top:18px">
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>Incident status</h2>
+            <p class="panel-subtitle">Read-only distribution of visible incidents.</p>
+          </div>
+        </div>
+        ${renderAnalyticsBars(countByField(incidents, (incident) => incident.status))}
+      </section>
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>Verification status</h2>
+            <p class="panel-subtitle">Read-only distribution of visible casualty entries.</p>
+          </div>
+        </div>
+        ${renderAnalyticsBars(countByField(state.casualties, (record) => record.verification_status))}
+      </section>
+    </div>
+    <section class="panel" style="margin-top:18px">
+      <div class="panel-header">
+        <div>
+          <h2>Incident analytics</h2>
+          <p class="panel-subtitle">Per-incident summary. Open Incident Management for detailed section summaries.</p>
+        </div>
+      </div>
+      <div class="table-wrap" style="margin-top:12px">
+        <table>
+          <thead>
+            <tr>
+              <th>Incident</th>
+              <th>Hazard</th>
+              <th>Status</th>
+              <th>Started</th>
+              <th>Casualties</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${
+              incidents
+                .slice()
+                .sort((first, second) => new Date(second.started_at).getTime() - new Date(first.started_at).getTime())
+                .map(
+                  (incident) => `
+                    <tr>
+                      <td>${escapeHtml(incident.incident_name)}</td>
+                      <td>${escapeHtml(incident.disaster_type || "Unknown")}</td>
+                      <td><span class="pill ${incident.status === "active" ? "green" : "blue"}">${escapeHtml(roleLabel(incident.status))}</span></td>
+                      <td>${formatDate(incident.started_at)}</td>
+                      <td>${casualtyCounts.get(incident.id) || 0}</td>
+                    </tr>
+                  `,
+                )
+                .join("") || `<tr><td colspan="5"><div class="empty-state">No incidents found.</div></td></tr>`
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
   `;
 }
 
@@ -1724,10 +1862,6 @@ const incidentTimelineFields = [
   ["medicalCoordinatorNotifiedAt", "Medical coordinator notified", "medical_coordinator_notified_at"],
   ["firstEmsOnSceneAt", "First EMS on scene", "first_ems_on_scene_at"],
   ["triageOrderedAt", "Triage ordered", "triage_ordered_at"],
-  ["firstSiteTriageAt", "First site triage", "first_site_triage_at"],
-  ["lastSiteTriageAt", "Last site triage", "last_site_triage_at"],
-  ["firstTransportFromSceneAt", "First transport from scene", "first_transport_from_scene_at"],
-  ["lastTransportFromSceneAt", "Last transport from scene", "last_transport_from_scene_at"],
   ["sceneDemobilizedAt", "Scene demobilized", "scene_demobilized_at"],
 ];
 
@@ -1754,7 +1888,7 @@ const incidentManagementSections = [
   ["scene-clearance", "Scene Clearance", false],
   ["survivor-distribution", "Survivor Distribution", false],
   ["ed-resources", "ED Resources", false],
-  ["hospital-resources", "Hospital Resources", true],
+  ["hospital-resources", "Hospital Resources", false],
   ["morbidity-mortality", "Morbidity & Mortality", false],
   ["sitrep-close", "SitRep & Close Incident", false],
   ["edit-incident", "Edit Incident", true],
@@ -1772,6 +1906,7 @@ async function loadIncidentManagementDetails(incidentId) {
     coordination: `/incidents/${encodeURIComponent(incidentId)}/coordination-assessment`,
     responderSafety: `/incidents/${encodeURIComponent(incidentId)}/responder-safety-report`,
     deactivation: `/incidents/${encodeURIComponent(incidentId)}/deactivation-continuity`,
+    facilityOperational: `/incidents/${encodeURIComponent(incidentId)}/facility-operational-summary`,
     onsiteTriage: `/incidents/${encodeURIComponent(incidentId)}/onsite-triage-summary`,
     facilityTriage: `/incidents/${encodeURIComponent(incidentId)}/facility-triage-summary`,
     onsiteCare: `/incidents/${encodeURIComponent(incidentId)}/onsite-care-summary`,
@@ -1939,7 +2074,7 @@ function renderIncidentSectionModal() {
 function renderIncidentSectionEditContent(incident, details, sectionId) {
   switch (sectionId) {
     case "timeline":
-      return renderTimelineManagementForm(incident, details.timeline?.data, true);
+      return renderTimelineManagementForm(incident, details, true);
     case "dmmp-staff":
       return renderDmmpStaffManagement(
         details.dmmpStaff?.data || [],
@@ -1955,7 +2090,7 @@ function renderIncidentSectionEditContent(incident, details, sectionId) {
         true,
       );
     case "deactivation":
-      return renderDeactivationManagementForm(details.deactivation?.summary, true);
+      return renderDeactivationManagementForm(details, true);
     case "hospital-resources":
       return renderHospitalResourcesManagementForm(
         details.hospitalResources?.data,
@@ -1979,6 +2114,10 @@ function renderIncidentSectionViewContent(incident, details, sectionId) {
             ? formatDate(incident.started_at)
             : formatDate(details.timeline?.data?.[key]),
         ]).concat([
+          ["First site triage", formatDate(details.onsiteTriage?.data?.firstSiteTriageAt)],
+          ["Last site triage", formatDate(details.onsiteTriage?.data?.lastSiteTriageAt)],
+          ["First transport from scene", formatDate(details.sceneClearance?.data?.firstTransportFromSceneAt)],
+          ["Last transport from scene", formatDate(details.sceneClearance?.data?.lastTransportFromSceneAt)],
           ["DMMP activated?", formatBoolean(details.timeline?.data?.dmmp_activated)],
           ["DMMP activation trigger", details.timeline?.data?.dmmp_activation_trigger || "Not recorded"],
         ]),
@@ -2009,14 +2148,7 @@ function renderIncidentSectionViewContent(incident, details, sectionId) {
         ["Killed percentage", `${details.responderSafety?.summary?.killedPercentage ?? 0}%`],
       ]);
     case "deactivation":
-      return renderKeyValueSection([
-        ["Scene demobilized", formatDate(details.deactivation?.summary?.sceneDemobilizedAt)],
-        ["Last facility deactivated", formatDate(details.deactivation?.summary?.lastFacilityDeactivatedAt)],
-        ["EMS coverage disruption", roleLabel(details.deactivation?.summary?.emsCoverageDisruption || "unknown")],
-        ["Facility care disruption", roleLabel(details.deactivation?.summary?.facilityCareDisruption || "unknown")],
-        ["Assessed at", formatDate(details.deactivation?.summary?.assessedAt)],
-        ["Notes", details.deactivation?.summary?.notes || "Not recorded"],
-      ]);
+      return renderDeactivationSummaryView(details);
     case "onsite-triage":
       return renderSummaryFacts(details.onsiteTriage?.data);
     case "facility-triage":
@@ -2030,15 +2162,7 @@ function renderIncidentSectionViewContent(incident, details, sectionId) {
     case "ed-resources":
       return renderSummaryFacts(details.edResources?.data);
     case "hospital-resources":
-      return renderKeyValueSection([
-        ["Recorded at", formatDate(details.hospitalResources?.data?.recorded_at)],
-        ["Total operating rooms", details.hospitalResources?.data?.total_operating_rooms ?? "Not recorded"],
-        ["Total resuscitation rooms", details.hospitalResources?.data?.total_resuscitation_rooms ?? "Not recorded"],
-        ["Alternative ICU in use?", formatBoolean(details.hospitalResources?.data?.alternative_icu_in_use)],
-        ["ICU admissions", details.hospitalResourceSummary?.data?.icu?.admittedTotal ?? 0],
-        ["Ventilated percentage", `${details.hospitalResourceSummary?.data?.icu?.ventilatedPercentage ?? 0}%`],
-        ["Notes", details.hospitalResources?.data?.notes || "Not recorded"],
-      ]);
+      return renderHospitalResourceSummaryView(details);
     case "morbidity-mortality":
       return renderSummaryFacts(details.morbidityMortality?.data);
     case "sitrep-close":
@@ -2156,6 +2280,110 @@ function renderKeyValueSection(rows) {
   `;
 }
 
+function renderExtractedTimelineFacts(details) {
+  return `
+    <section class="incident-section-card summary-preview full-width">
+      <div class="section-card-header">
+        <div>
+          <h3>Extracted from records</h3>
+          <p class="panel-subtitle">Calculated from the Onsite Triage and Scene Clearance summaries.</p>
+        </div>
+      </div>
+      ${renderKeyValueSection([
+        ["First site triage", formatDate(details?.onsiteTriage?.data?.firstSiteTriageAt)],
+        ["Last site triage", formatDate(details?.onsiteTriage?.data?.lastSiteTriageAt)],
+        ["First transport from scene", formatDate(details?.sceneClearance?.data?.firstTransportFromSceneAt)],
+        ["Last transport from scene", formatDate(details?.sceneClearance?.data?.lastTransportFromSceneAt)],
+      ])}
+    </section>
+  `;
+}
+
+function renderDeactivationSummaryView(details) {
+  return `
+    ${renderKeyValueSection([
+      ["Scene demobilized", formatDate(details.deactivation?.summary?.sceneDemobilizedAt)],
+      ["EMS coverage disruption", roleLabel(details.deactivation?.summary?.emsCoverageDisruption || "unknown")],
+      ["Assessed at", formatDate(details.deactivation?.summary?.assessedAt)],
+      ["Notes", details.deactivation?.summary?.notes || "Not recorded"],
+    ])}
+    ${renderFacilityOperationalSummary(details.facilityOperational?.data, "continuity")}
+  `;
+}
+
+function renderHospitalResourceSummaryView(details) {
+  return `
+    ${renderKeyValueSection([
+      ["ICU admissions", details.hospitalResourceSummary?.data?.icu?.admittedTotal ?? 0],
+      ["Ventilated percentage", `${details.hospitalResourceSummary?.data?.icu?.ventilatedPercentage ?? 0}%`],
+      ["First surgical intervention", formatDate(details.hospitalResourceSummary?.data?.surgery?.firstSurgicalInterventionAt)],
+      ["Last surgical intervention", formatDate(details.hospitalResourceSummary?.data?.surgery?.lastSurgicalInterventionAt)],
+      ["Mean surgery minutes", details.hospitalResourceSummary?.data?.surgery?.meanDurationMinutes ?? "Not recorded"],
+    ])}
+    ${renderFacilityOperationalSummary(details.facilityOperational?.data, "resources")}
+  `;
+}
+
+function renderFacilityOperationalSummary(summary, mode = "continuity") {
+  const facilities = summary?.facilities || [];
+
+  return `
+    <section class="incident-section-card summary-preview full-width">
+      <div class="section-card-header">
+        <div>
+          <h3>View Summary by Hospital</h3>
+          <p class="panel-subtitle">Extracted from HCFD entries and healthcare facility records.</p>
+        </div>
+      </div>
+      <div class="facility-summary-list">
+        ${
+          facilities
+            .map((facility) => {
+              const subtitle = [
+                facility.facilityLevel ? roleLabel(facility.facilityLevel) : null,
+                facility.municipality,
+                facility.province,
+              ]
+                .filter(Boolean)
+                .join(" - ");
+
+              return `
+                <article class="facility-summary-card">
+                  <div>
+                    <h4>${escapeHtml(facility.facilityName)}</h4>
+                    <p>${escapeHtml(subtitle || "Official healthcare facility")}</p>
+                  </div>
+                  ${
+                    mode === "continuity"
+                      ? renderKeyValueSection([
+                          ["Facility care disruption", roleLabel(facility.continuity?.facilityCareDisruption || "unknown")],
+                          ["Last facility deactivation", formatDate(facility.continuity?.lastFacilityDeactivatedAt)],
+                        ])
+                      : renderKeyValueSection([
+                          ["HCFD encounters", facility.hofdEntries?.encountersTotal ?? 0],
+                          ["Arrivals", facility.hofdEntries?.arrivedTotal ?? 0],
+                          ["Admitted / discharged", `${facility.hofdEntries?.admittedTotal ?? 0}/${facility.hofdEntries?.dischargedTotal ?? 0}`],
+                          ["Surgery / OR use", `${facility.hofdEntries?.surgeryTotal ?? 0}/${facility.hofdEntries?.operatingRoomUseTotal ?? 0}`],
+                          ["X-ray / US / CT", `${facility.hofdEntries?.xrayUseTotal ?? 0}/${facility.hofdEntries?.ultrasoundUseTotal ?? 0}/${facility.hofdEntries?.ctUseTotal ?? 0}`],
+                          ["ICU / ventilated", `${facility.hofdEntries?.icuAdmissions ?? 0}/${facility.hofdEntries?.ventilatedTotal ?? 0}`],
+                          [
+                            "Resource snapshot",
+                            facility.resources
+                              ? `${facility.resources.totalOperatingRooms ?? "?"} OR, ${facility.resources.totalResuscitationRooms ?? "?"} resus`
+                              : "Not recorded",
+                          ],
+                        ])
+                  }
+                </article>
+              `;
+            })
+            .join("") || `<div class="empty-state">No hospital summary is available yet.</div>`
+        }
+      </div>
+    </section>
+  `;
+}
+
 function renderDmmpStaffView(staffRecords, summary) {
   return `
     ${renderKeyValueSection([
@@ -2188,7 +2416,9 @@ function formatBoolean(value) {
   return "Unknown";
 }
 
-function renderTimelineManagementForm(incident, timeline, forModal = false) {
+function renderTimelineManagementForm(incident, details, forModal = false) {
+  const timeline = details?.timeline?.data ?? null;
+
   return `
     <form id="${forModal ? "incidentSectionEditForm" : ""}" class="incident-section-card" data-incident-section-form="timeline">
       <div class="section-card-header">
@@ -2221,6 +2451,7 @@ function renderTimelineManagementForm(incident, timeline, forModal = false) {
           })
           .join("")}
       </div>
+      ${renderExtractedTimelineFacts(details)}
       <div id="timelineMessage" class="status-message" hidden></div>
     </form>
   `;
@@ -2327,7 +2558,9 @@ function renderResponderSafetyManagementForm(report, summary, forModal = false) 
   `;
 }
 
-function renderDeactivationManagementForm(summary, forModal = false) {
+function renderDeactivationManagementForm(details, forModal = false) {
+  const summary = details?.deactivation?.summary ?? details ?? null;
+
   return `
     <form id="${forModal ? "incidentSectionEditForm" : ""}" class="incident-section-card" data-incident-section-form="deactivation">
       <div class="section-card-header">
@@ -2339,11 +2572,10 @@ function renderDeactivationManagementForm(summary, forModal = false) {
       </div>
       <div class="form-grid two">
         <label class="field"><span>Scene demobilized</span><input name="sceneDemobilizedAt" type="datetime-local" value="${toLocalDateTimeInput(summary?.sceneDemobilizedAt)}" /></label>
-        <label class="field"><span>Last facility deactivated</span><input name="lastFacilityDeactivatedAt" type="datetime-local" value="${toLocalDateTimeInput(summary?.lastFacilityDeactivatedAt)}" /></label>
         ${renderDisruptionSelect("emsCoverageDisruption", "EMS coverage disruption", summary?.emsCoverageDisruption)}
-        ${renderDisruptionSelect("facilityCareDisruption", "Facility care disruption", summary?.facilityCareDisruption)}
         <label class="field"><span>Assessed at</span><input name="assessedAt" type="datetime-local" value="${toLocalDateTimeInput(summary?.assessedAt)}" /></label>
       </div>
+      ${renderFacilityOperationalSummary(details?.facilityOperational?.data, "continuity")}
       <label class="field"><span>Notes</span><textarea name="notes">${escapeHtml(summary?.notes || "")}</textarea></label>
       <div id="deactivationMessage" class="status-message" hidden></div>
     </form>
@@ -2842,9 +3074,7 @@ async function saveDeactivationSection(incidentId, form) {
     method: "PUT",
     body: JSON.stringify({
       sceneDemobilizedAt: toNullableIsoFromLocal(formValue(form, "sceneDemobilizedAt")),
-      lastFacilityDeactivatedAt: toNullableIsoFromLocal(formValue(form, "lastFacilityDeactivatedAt")),
       emsCoverageDisruption: nullableFormText(form, "emsCoverageDisruption"),
-      facilityCareDisruption: nullableFormText(form, "facilityCareDisruption"),
       notes: nullableFormText(form, "notes"),
       assessedAt: toNullableIsoFromLocal(formValue(form, "assessedAt")),
     }),

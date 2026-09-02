@@ -7,6 +7,7 @@ import {
   getDeactivationContinuity,
   getDmmpStaff,
   getDmmpStaffSummary,
+  getFacilityOperationalSummary,
   getHospitalResources,
   getResponderSafetyReport,
   getUtsteinOperations,
@@ -128,6 +129,13 @@ incidentOperationsRouter.get(
   requireAuth,
   requireRole(readableRoles),
   getDeactivationContinuity,
+);
+
+incidentOperationsRouter.get(
+  "/incidents/:id/facility-operational-summary",
+  requireAuth,
+  requireRole(readableRoles),
+  getFacilityOperationalSummary,
 );
 
 incidentOperationsRouter.put(

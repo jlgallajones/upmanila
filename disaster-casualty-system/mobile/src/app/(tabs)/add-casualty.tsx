@@ -154,6 +154,7 @@ const CPR_TYPE_OPTIONS = [
 ] as const;
 
 const PATIENT_FOR_OPTIONS = [
+  "Pending Departure",
   "Release",
   "Referral or Transfer to Health Facility",
 ] as const;
@@ -3198,10 +3199,13 @@ function formatDateTimeForInput(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   const year = date.getFullYear();
-  const hour = String(date.getHours()).padStart(2, "0");
+  const hour24 = date.getHours();
+  const hour12 = hour24 % 12 || 12;
+  const hour = String(hour12).padStart(2, "0");
   const minute = String(date.getMinutes()).padStart(2, "0");
+  const period = hour24 >= 12 ? "PM" : "AM";
 
-  return `${month}/${day}/${year} ${hour}:${minute}`;
+  return `${month}/${day}/${year} ${hour}:${minute} ${period}`;
 }
 
 function parseDateTimeInput(value: string): string | undefined {
@@ -3218,7 +3222,7 @@ function parseDateTimeInput(value: string): string | undefined {
   }
 
   const match =
-    /^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})$/.exec(
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})(?:\s*([AaPp][Mm]))?$/.exec(
       trimmed,
     );
 
@@ -3226,12 +3230,28 @@ function parseDateTimeInput(value: string): string | undefined {
     return trimmed;
   }
 
-  const [, month, day, year, hour, minute] = match;
+  const [, month, day, year, hour, minute, period] = match;
+  let normalizedHour = Number(hour);
+
+  if (period) {
+    const upperPeriod = period.toUpperCase();
+
+    if (normalizedHour < 1 || normalizedHour > 12) {
+      return trimmed;
+    }
+
+    if (upperPeriod === "AM") {
+      normalizedHour = normalizedHour === 12 ? 0 : normalizedHour;
+    } else {
+      normalizedHour = normalizedHour === 12 ? 12 : normalizedHour + 12;
+    }
+  }
+
   const date = new Date(
     Number(year),
     Number(month) - 1,
     Number(day),
-    Number(hour),
+    normalizedHour,
     Number(minute),
   );
 
@@ -4534,13 +4554,18 @@ function DatePickerSheet({
 }
 
 export default function AddCasualtyScreen() {
-  const { editId, incidentId, incidentName } = useLocalSearchParams<{
+  const { editId, incidentId, incidentName, focusStep } =
+    useLocalSearchParams<{
     editId?: string;
     incidentId?: string;
     incidentName?: string;
+    focusStep?: string;
   }>();
 
   const casualtyId = Array.isArray(editId) ? editId[0] : editId;
+  const requestedFocusStep = Array.isArray(focusStep)
+    ? focusStep[0]
+    : focusStep;
   const presetIncidentId = Array.isArray(incidentId)
     ? incidentId[0]
     : incidentId;
@@ -4584,6 +4609,8 @@ export default function AddCasualtyScreen() {
   const [initialTreatmentSignature, setInitialTreatmentSignature] =
     useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [hasAppliedFocusStep, setHasAppliedFocusStep] =
+    useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeChoiceSheet, setActiveChoiceSheet] =
     useState<ChoiceSheetName | null>(null);
@@ -4705,9 +4732,11 @@ export default function AddCasualtyScreen() {
   );
   const isHealthcareDocumenterFlow =
     isHealthcareDocumenterCaptureFlow(currentUserRole);
+  const isResponderEditFlow =
+    isEditing && (isFieldResponderFlow || isSaResponderFlow);
   const activeSteps: AddCasualtyStep[] = isFieldResponderFlow
     ? isEditing
-      ? FIELD_RESPONDER_STEPS.filter((step) => step !== "Safety")
+      ? ["Triage", "Status", "Transport"]
       : [...FIELD_RESPONDER_STEPS]
     : isSaResponderFlow
       ? [...SA_RESPONDER_STEPS]
@@ -4716,6 +4745,11 @@ export default function AddCasualtyScreen() {
         : [...DEFAULT_STEPS];
   const stepName: AddCasualtyStep =
     activeSteps[currentStep] ?? activeSteps[0];
+  const isResponderEditLockedStep =
+    isResponderEditFlow && stepName !== "Transport";
+  const isResponderTransportFocusedEdit =
+    isResponderEditFlow &&
+    requestedFocusStep?.toLowerCase() === "transport";
   const screenTitle = isEditing ? "Edit Casualty" : "Add Casualty";
   const finalActionLabel = isEditing
     ? "Save Changes"
@@ -5197,21 +5231,30 @@ export default function AddCasualtyScreen() {
   }, [form, isSaResponderFlow]);
 
   const updatePayload = useMemo<UpdateCasualtyPayload>(
-    () => ({
-      incidentId: form.incidentId || undefined,
-      person: personPayload,
-      incidentDetails: incidentDetailsPayload,
-      triageAssessment: triageAssessmentPayload,
-      transportRecord: transportRecordPayload,
-      treatmentRecord: treatmentRecordPayload,
-      facilityEncounter: facilityEncounterPayload,
-      casualtyOutcome: casualtyOutcomePayload,
-    }),
+    () => {
+      if (isResponderTransportFocusedEdit) {
+        return {
+          transportRecord: transportRecordPayload,
+        };
+      }
+
+      return {
+        incidentId: form.incidentId || undefined,
+        person: personPayload,
+        incidentDetails: incidentDetailsPayload,
+        triageAssessment: triageAssessmentPayload,
+        transportRecord: transportRecordPayload,
+        treatmentRecord: treatmentRecordPayload,
+        facilityEncounter: facilityEncounterPayload,
+        casualtyOutcome: casualtyOutcomePayload,
+      };
+    },
     [
       casualtyOutcomePayload,
       facilityEncounterPayload,
       form.incidentId,
       incidentDetailsPayload,
+      isResponderTransportFocusedEdit,
       personPayload,
       treatmentRecordPayload,
       triageAssessmentPayload,
@@ -5255,6 +5298,36 @@ export default function AddCasualtyScreen() {
       Math.min(step, Math.max(activeSteps.length - 1, 0)),
     );
   }, [activeSteps.length]);
+
+  useEffect(() => {
+    if (
+      !isEditing ||
+      hasAppliedFocusStep ||
+      isLoadingRecord ||
+      isLoadingUserContext ||
+      !requestedFocusStep
+    ) {
+      return;
+    }
+
+    const focusStepIndex = activeSteps.findIndex(
+      (step) =>
+        step.toLowerCase() === requestedFocusStep.toLowerCase(),
+    );
+
+    if (focusStepIndex >= 0) {
+      setCurrentStep(focusStepIndex);
+    }
+
+    setHasAppliedFocusStep(true);
+  }, [
+    activeSteps,
+    hasAppliedFocusStep,
+    isEditing,
+    isLoadingRecord,
+    isLoadingUserContext,
+    requestedFocusStep,
+  ]);
 
   useEffect(() => {
     if (isEditing || !isHealthcareDocumenterFlow) {
@@ -5726,6 +5799,17 @@ export default function AddCasualtyScreen() {
     value: FormState[K],
   ) {
     setForm((current) => {
+      if (isResponderEditLockedStep) {
+        const currentValue = current[key];
+
+        if (
+          typeof currentValue === "string" &&
+          currentValue.trim().length > 0
+        ) {
+          return current;
+        }
+      }
+
       if (key === "triageSystem") {
         return {
           ...current,
@@ -6743,6 +6827,14 @@ export default function AddCasualtyScreen() {
         return true;
 
       case "Info":
+        if (isSaResponderFlow && !form.victimCode.trim()) {
+          Alert.alert(
+            "Victim code required",
+            "Enter the victim code before continuing.",
+          );
+          return false;
+        }
+
         if (isSaResponderFlow && form.patientIdentified === "No") {
           return true;
         }
@@ -7333,7 +7425,7 @@ export default function AddCasualtyScreen() {
           if (!form.patientFor.trim()) {
             Alert.alert(
               "Patient disposition required",
-              "Select Release or Referral/Transfer to Health Facility.",
+              "Select Pending Departure, Release, or Referral/Transfer to Health Facility.",
             );
             return false;
           }
@@ -7415,6 +7507,27 @@ export default function AddCasualtyScreen() {
             );
             return false;
             }
+          }
+
+          if (
+            !validateOptionalDateTime(
+              form.departedSceneTime,
+              "Invalid departure time",
+              "departed scene time",
+            )
+          ) {
+            return false;
+          }
+
+          if (
+            form.patientFor === "Referral or Transfer to Health Facility" &&
+            !validateOptionalDateTime(
+              form.arrivedFacilityTime,
+              "Invalid facility arrival time",
+              "arrived facility time",
+            )
+          ) {
+            return false;
           }
 
           return true;
@@ -9153,71 +9266,6 @@ export default function AddCasualtyScreen() {
       return;
     }
 
-    if (!isEditing && isSaResponderFlow) {
-      const targetFieldResponderRecordId =
-        resolveSelectedFieldResponderRecordId();
-
-      if (!targetFieldResponderRecordId) {
-        Alert.alert(
-          "Victim code required",
-          "Select an existing Field Responder victim code before submitting.",
-        );
-        const infoStepIndex = activeSteps.indexOf("Info");
-        setCurrentStep(infoStepIndex >= 0 ? infoStepIndex : 0);
-        openChoiceSheet("fieldResponderVictimCode");
-        return;
-      }
-
-      try {
-        setIsSubmitting(true);
-
-        const response = await updateCasualty(
-          targetFieldResponderRecordId,
-          updatePayload,
-          { responderFunction: "sa_responder" },
-        );
-
-        const photoUploadError = await uploadSelectedPhoto(
-          targetFieldResponderRecordId,
-        );
-
-        setSubmissionFeedback({
-          title: "Casualty updated",
-          message: photoUploadError
-            ? `The casualty record was updated, but the photo upload failed: ${photoUploadError}`
-            : response.message ||
-              "The selected casualty record has been updated successfully.",
-        });
-      } catch (error) {
-        console.error("Failed to update linked casualty:", error);
-
-        if (isAuthenticationTokenError(error)) {
-          Alert.alert(
-            "Session expired",
-            "Please log in again from Profile, then try saving the casualty update again.",
-            [
-              {
-                text: "OK",
-                onPress: () => router.replace("/profile"),
-              },
-            ],
-          );
-          return;
-        }
-
-        Alert.alert(
-          "Unable to update casualty",
-          error instanceof Error
-            ? error.message
-            : "Please review the record and try again.",
-        );
-      } finally {
-        setIsSubmitting(false);
-      }
-
-      return;
-    }
-
     if (!isEditing || !casualtyId) {
       const clientRecordId = generateUuid();
       const queuedPayload: QueuedCasualtyPayload = {
@@ -9506,7 +9554,7 @@ export default function AddCasualtyScreen() {
         <CurrentTimeField
           label="TIME OF PPE USE"
           value={form.ppeUseTime}
-          placeholder="mm/dd/yyyy hh:mm"
+          placeholder="mm/dd/yyyy hh:mm AM/PM"
           buttonLabel="Use current time"
           icon="time-outline"
           onChangeText={(value) => updateField("ppeUseTime", value)}
@@ -10050,46 +10098,14 @@ export default function AddCasualtyScreen() {
 
     return (
       <>
-        <SelectField
+        <FormField
           label="VICTIM CODE"
           value={form.victimCode}
-          placeholder={
-            !form.incidentId
-              ? "Select incident first"
-              : isLoadingFieldResponderRecords
-                ? "Loading Field Responder records..."
-                : "Select Field Responder victim code"
+          placeholder="Enter victim code"
+          onChangeText={(value) =>
+            updateField("victimCode", value)
           }
-          onPress={() => openChoiceSheet("fieldResponderVictimCode")}
         />
-
-        {fieldResponderRecordsError ? (
-          <View style={styles.inlineWarning}>
-            <Ionicons
-              name="alert-circle-outline"
-              size={18}
-              color={COLORS.maroon}
-            />
-            <Text style={styles.inlineWarningText}>
-              {fieldResponderRecordsError}
-            </Text>
-          </View>
-        ) : null}
-
-        {form.incidentId &&
-        !isLoadingFieldResponderRecords &&
-        fieldResponderVictimCodeOptions.length === 0 ? (
-          <View style={styles.inlineWarning}>
-            <Ionicons
-              name="information-circle-outline"
-              size={18}
-              color={COLORS.maroon}
-            />
-            <Text style={styles.inlineWarningText}>
-              No Field Responder victim codes are available for this incident yet.
-            </Text>
-          </View>
-        ) : null}
 
         {form.victimCode ? (
           <SelectField
@@ -10100,31 +10116,43 @@ export default function AddCasualtyScreen() {
           />
         ) : null}
 
-        <View style={styles.twoColumnRow}>
-          <View style={styles.halfColumn}>
-            <FormField
-              label="ID NUMBER"
-              value={form.idNumber}
-              placeholder="CAS-UNIT-001"
-              editable={false}
-              onChangeText={(value) =>
-                updateField("idNumber", value)
-              }
-            />
-          </View>
+        {showPersonalDetails ? (
+          <View style={styles.twoColumnRow}>
+            <View style={styles.halfColumn}>
+              <FormField
+                label="ID NUMBER"
+                value={form.idNumber}
+                placeholder="CAS-UNIT-001"
+                editable={false}
+                onChangeText={(value) =>
+                  updateField("idNumber", value)
+                }
+              />
+            </View>
 
-          <View style={styles.halfColumn}>
-            <FormField
-              label="AGE"
-              value={form.age}
-              placeholder="Age"
-              keyboardType="numeric"
-              onChangeText={(value) =>
-                updateField("age", value)
-              }
-            />
+            <View style={styles.halfColumn}>
+              <FormField
+                label="AGE"
+                value={form.age}
+                placeholder="Age"
+                keyboardType="numeric"
+                onChangeText={(value) =>
+                  updateField("age", value)
+                }
+              />
+            </View>
           </View>
-        </View>
+        ) : (
+          <FormField
+            label="ID NUMBER"
+            value={form.idNumber}
+            placeholder="CAS-UNIT-001"
+            editable={false}
+            onChangeText={(value) =>
+              updateField("idNumber", value)
+            }
+          />
+        )}
 
         {showPersonalDetails ? (
           <>
@@ -10995,7 +11023,7 @@ export default function AddCasualtyScreen() {
           <CurrentTimeField
             label="TRIAGE TIME"
             value={form.triageTime}
-            placeholder="mm/dd/yyyy hh:mm"
+            placeholder="mm/dd/yyyy hh:mm AM/PM"
             buttonLabel="Use current triage time"
             onChangeText={(value) =>
               updateField("triageTime", value)
@@ -11014,7 +11042,7 @@ export default function AddCasualtyScreen() {
             <CurrentTimeField
               label="TRIAGE TIME"
               value={form.triageTime}
-              placeholder="mm/dd/yyyy hh:mm"
+              placeholder="mm/dd/yyyy hh:mm AM/PM"
               buttonLabel="Use current triage time"
               onChangeText={(value) =>
                 updateField("triageTime", value)
@@ -11129,7 +11157,7 @@ export default function AddCasualtyScreen() {
           <SelectField
             label="PATIENT FOR"
             value={form.patientFor}
-            placeholder="Release or referral/transfer"
+            placeholder="Pending departure, release, or referral/transfer"
             onPress={() => openChoiceSheet("patientFor")}
           />
 
@@ -11277,6 +11305,23 @@ export default function AddCasualtyScreen() {
                   />
                 </View>
               ) : null}
+
+              <CurrentTimeField
+                label="DEPARTED SCENE TIME"
+                value={form.departedSceneTime}
+                placeholder="mm/dd/yyyy hh:mm AM/PM"
+                icon="exit-outline"
+                buttonLabel="Use current departure time"
+                onChangeText={(value) =>
+                  updateField("departedSceneTime", value)
+                }
+                onUseCurrent={() =>
+                  updateField(
+                    "departedSceneTime",
+                    formatDateTimeForInput(new Date()),
+                  )
+                }
+              />
 
               <View style={styles.releaseTextCard}>
                 <Text style={styles.releaseTextTitle}>
@@ -12361,7 +12406,28 @@ export default function AddCasualtyScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {renderCurrentStep()}
+          {isResponderEditLockedStep ? (
+            <View style={styles.inlineWarning}>
+              <Ionicons
+                name="lock-closed-outline"
+                size={18}
+                color={COLORS.maroon}
+              />
+              <Text style={styles.inlineWarningText}>
+                Filled responder fields are locked while editing. Use the Transport section for updates.
+              </Text>
+            </View>
+          ) : null}
+
+          <View
+            style={
+              isResponderEditLockedStep
+                ? styles.lockedStepContent
+                : undefined
+            }
+          >
+            {renderCurrentStep()}
+          </View>
         </ScrollView>
 
         <SafeAreaView
@@ -13302,6 +13368,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     fontWeight: "800",
+  },
+  lockedStepContent: {
+    opacity: 0.55,
   },
 
   quickCreateCard: {

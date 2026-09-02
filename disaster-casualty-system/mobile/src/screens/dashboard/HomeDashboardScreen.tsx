@@ -236,6 +236,7 @@ type QuickChoiceOption = {
   caption?: string;
   icon?: keyof typeof Ionicons.glyphMap;
   color?: string;
+  disabled?: boolean;
   onSelect: () => void;
 };
 
@@ -734,13 +735,18 @@ export default function HomeDashboardScreen() {
     action: string,
     incident: Incident,
     facility: HealthcareFacility,
+    value?: string,
   ): string {
     const note = [
       `[${action}]`,
       `Incident: ${incident.incident_name}`,
+      `Healthcare facility ID: ${facility.id}`,
       `Healthcare facility: ${facility.facility_name}`,
+      value ? `Value: ${value}` : null,
       `Recorded at: ${new Date().toISOString()}`,
-    ].join("\n");
+    ]
+      .filter(Boolean)
+      .join("\n");
 
     return [currentNotes?.trim(), note].filter(Boolean).join("\n\n");
   }
@@ -754,12 +760,28 @@ export default function HomeDashboardScreen() {
       facility: HealthcareFacility,
     ) => void,
   ) {
+    setQuickChoice({
+      title,
+      subtitle,
+      options: [
+        {
+          label: "Loading official hospitals...",
+          caption: "Please wait while facilities are loaded.",
+          icon: "business-outline",
+          color: COLORS.gray,
+          disabled: true,
+          onSelect: () => undefined,
+        },
+      ],
+    });
+
     try {
       const facilities = (await getHealthcareFacilities()).filter(
         (facility) => facility.is_active,
       );
 
       if (facilities.length === 0) {
+        setQuickChoice(null);
         Alert.alert(
           "No healthcare facilities",
           "Ask an admin to add an official healthcare facility first.",
@@ -780,6 +802,7 @@ export default function HomeDashboardScreen() {
       });
     } catch (error) {
       console.error("Unable to load healthcare facilities:", error);
+      setQuickChoice(null);
       Alert.alert(
         "Unable to load facilities",
         error instanceof Error
@@ -848,6 +871,7 @@ export default function HomeDashboardScreen() {
           "Healthcare Facility Routine Care Disruption",
           incident,
           facility,
+          facilityCareDisruption,
         ),
         assessedAt: new Date().toISOString(),
       });
@@ -1397,7 +1421,10 @@ export default function HomeDashboardScreen() {
             }
           }}
         >
-          <Pressable style={styles.quickChoiceSheet}>
+          <Pressable
+            style={styles.quickChoiceSheet}
+            onPress={(event) => event.stopPropagation()}
+          >
             <View style={styles.sheetHandle} />
 
             <View style={styles.quickChoiceHeader}>
@@ -1431,12 +1458,16 @@ export default function HomeDashboardScreen() {
               {quickChoice?.options.map((option) => (
                 <Pressable
                   key={`${option.label}-${option.caption ?? ""}`}
-                  disabled={isSavingQuickAction}
-                  onPress={option.onSelect}
+                  disabled={isSavingQuickAction || option.disabled}
+                  onPress={(event) => {
+                    event.stopPropagation();
+                    option.onSelect();
+                  }}
                   style={({ pressed }) => [
                     styles.quickChoiceOption,
                     pressed && styles.pressed,
-                    isSavingQuickAction && styles.disabledButton,
+                    (isSavingQuickAction || option.disabled) &&
+                      styles.disabledButton,
                   ]}
                 >
                   <View

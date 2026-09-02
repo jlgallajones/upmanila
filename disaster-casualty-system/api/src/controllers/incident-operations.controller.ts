@@ -1255,6 +1255,330 @@ function buildDeactivationContinuitySummary(
   };
 }
 
+type FacilityOperationNoteEvent = {
+  action: string;
+  facilityId: string | null;
+  facilityName: string | null;
+  recordedAt: string | null;
+  value: string | null;
+};
+
+function parseFacilityOperationNoteEvents(
+  notes: string | null | undefined,
+): FacilityOperationNoteEvent[] {
+  if (!notes) {
+    return [];
+  }
+
+  return notes
+    .split(/\n{2,}/)
+    .map((block) => {
+      const lines = block
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+      const header = lines[0]?.match(/^\[(.+)\]$/)?.[1] ?? null;
+
+      if (!header) {
+        return null;
+      }
+
+      const readLine = (prefix: string) =>
+        lines
+          .find((line) =>
+            line.toLowerCase().startsWith(prefix.toLowerCase()),
+          )
+          ?.slice(prefix.length)
+          .trim() || null;
+
+      return {
+        action: header,
+        facilityId: readLine("Healthcare facility ID:"),
+        facilityName: readLine("Healthcare facility:"),
+        recordedAt: readLine("Recorded at:"),
+        value: readLine("Value:"),
+      };
+    })
+    .filter(
+      (event): event is FacilityOperationNoteEvent =>
+        event !== null &&
+        Boolean(event.facilityId || event.facilityName),
+    );
+}
+
+function normalizeFacilityName(value: string | null | undefined): string {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function latestDateValue(
+  values: Array<string | null | undefined>,
+): string | null {
+  const dates = values
+    .map((value) => (value ? new Date(value) : null))
+    .filter(
+      (value): value is Date =>
+        value !== null && !Number.isNaN(value.getTime()),
+    )
+    .sort((first, second) => second.getTime() - first.getTime());
+
+  return dates[0]?.toISOString() ?? null;
+}
+
+/**
+ * GET /api/incidents/:id/facility-operational-summary
+ */
+export async function getFacilityOperationalSummary(
+  request: Request<{ id: string }>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const incidentId = request.params.id;
+
+    if (!isValidUuid(incidentId)) {
+      response.status(400).json({
+        success: false,
+        message: "A valid incident UUID is required.",
+      });
+      return;
+    }
+
+    const incidentExists = await verifyIncidentExists(incidentId);
+
+    if (!incidentExists) {
+      response.status(404).json({
+        success: false,
+        message: "Incident not found.",
+      });
+      return;
+    }
+
+    const [
+      facilitiesResult,
+      casualtyResult,
+      continuityResult,
+      resourceResult,
+    ] = await Promise.all([
+      supabase
+        .from("healthcare_facilities")
+        .select(
+          "id, facility_name, facility_level, municipality, province, is_active",
+        )
+        .eq("is_active", true)
+        .order("facility_name", { ascending: true }),
+      supabase
+        .from("casualty_incidents")
+        .select("id")
+        .eq("incident_id", incidentId)
+        .is("deleted_at", null),
+      supabase
+        .from("continuity_of_care_assessments")
+        .select("facility_care_disruption, notes, assessed_at")
+        .eq("incident_id", incidentId)
+        .maybeSingle(),
+      supabase
+        .from("facility_resource_snapshots")
+        .select(
+          "id, facility_id, recorded_at, total_operating_rooms, total_resuscitation_rooms, alternative_icu_in_use, notes",
+        )
+        .eq("incident_id", incidentId)
+        .order("recorded_at", { ascending: false }),
+    ]);
+
+    const firstError =
+      facilitiesResult.error ??
+      casualtyResult.error ??
+      continuityResult.error ??
+      resourceResult.error;
+
+    if (firstError) {
+      throw new Error(
+        `Unable to retrieve facility operational summary: ${firstError.message}`,
+      );
+    }
+
+    const casualtyIncidentIds = (casualtyResult.data ?? []).map(
+      (item) => item.id,
+    );
+    const encounterResult =
+      casualtyIncidentIds.length > 0
+        ? await supabase
+            .from("facility_encounters")
+            .select(
+              "casualty_incident_id, facility_id, arrived_at, admitted_to_hospital, discharged_home, surgical_intervention_started_at, operating_room_started_at, xray_performed_at, ultrasound_performed_at, ct_performed_at, icu_admitted_at, mechanical_ventilation_required, alternative_icu_used, created_at",
+            )
+            .in("casualty_incident_id", casualtyIncidentIds)
+            .order("created_at", { ascending: false })
+        : { data: [], error: null };
+
+    if (encounterResult.error) {
+      throw new Error(
+        `Unable to retrieve facility encounters: ${encounterResult.error.message}`,
+      );
+    }
+
+    const facilities = new Map<
+      string,
+      {
+        id: string;
+        facility_name: string;
+        facility_level: string | null;
+        municipality: string | null;
+        province: string | null;
+      }
+    >();
+
+    for (const facility of facilitiesResult.data ?? []) {
+      facilities.set(facility.id, facility);
+    }
+
+    const noteEvents = parseFacilityOperationNoteEvents(
+      continuityResult.data?.notes,
+    );
+    const resources = resourceResult.data ?? [];
+    const encounters = encounterResult.data ?? [];
+    const facilityIds = new Set<string>();
+
+    for (const encounter of encounters) {
+      if (encounter.facility_id) {
+        facilityIds.add(encounter.facility_id);
+      }
+    }
+
+    for (const resource of resources) {
+      if (resource.facility_id) {
+        facilityIds.add(resource.facility_id);
+      }
+    }
+
+    for (const event of noteEvents) {
+      if (event.facilityId) {
+        facilityIds.add(event.facilityId);
+      }
+    }
+
+    for (const facilityId of facilities.keys()) {
+      facilityIds.add(facilityId);
+    }
+
+    const summaries = Array.from(facilityIds)
+      .map((facilityId) => {
+        const facility = facilities.get(facilityId) ?? null;
+        const facilityName = facility?.facility_name ?? null;
+        const nameKey = normalizeFacilityName(facilityName);
+        const matchingEvents = noteEvents.filter(
+          (event) =>
+            event.facilityId === facilityId ||
+            (
+              !event.facilityId &&
+              nameKey &&
+              normalizeFacilityName(event.facilityName) === nameKey
+            ),
+        );
+        const disruptionEvents = matchingEvents.filter((event) =>
+          event.action
+            .toLowerCase()
+            .includes("routine care disruption"),
+        );
+        const closeEvents = matchingEvents.filter((event) =>
+          event.action
+            .toLowerCase()
+            .includes("close healthcare facility response"),
+        );
+        const facilityEncounters = encounters.filter(
+          (encounter) => encounter.facility_id === facilityId,
+        );
+        const latestResource =
+          resources.find((resource) => resource.facility_id === facilityId) ??
+          null;
+        const latestDisruption = disruptionEvents[0] ?? null;
+
+        return {
+          facilityId,
+          facilityName:
+            facilityName ??
+            matchingEvents[0]?.facilityName ??
+            "Unspecified healthcare facility",
+          facilityLevel: facility?.facility_level ?? null,
+          municipality: facility?.municipality ?? null,
+          province: facility?.province ?? null,
+          continuity: {
+            facilityCareDisruption:
+              latestDisruption?.value?.toLowerCase() ??
+              (disruptionEvents.length > 0
+                ? continuityResult.data?.facility_care_disruption ?? null
+                : null),
+            lastFacilityDeactivatedAt: latestDateValue(
+              closeEvents.map((event) => event.recordedAt),
+            ),
+            assessedAt: continuityResult.data?.assessed_at ?? null,
+          },
+          resources: latestResource
+            ? {
+                recordedAt: latestResource.recorded_at,
+                totalOperatingRooms:
+                  latestResource.total_operating_rooms,
+                totalResuscitationRooms:
+                  latestResource.total_resuscitation_rooms,
+                alternativeIcuInUse:
+                  latestResource.alternative_icu_in_use,
+                notes: latestResource.notes,
+              }
+            : null,
+          hofdEntries: {
+            encountersTotal: facilityEncounters.length,
+            arrivedTotal: facilityEncounters.filter((row) =>
+              Boolean(row.arrived_at),
+            ).length,
+            admittedTotal: facilityEncounters.filter(
+              (row) => row.admitted_to_hospital === true,
+            ).length,
+            dischargedTotal: facilityEncounters.filter(
+              (row) => row.discharged_home === true,
+            ).length,
+            surgeryTotal: facilityEncounters.filter((row) =>
+              Boolean(row.surgical_intervention_started_at),
+            ).length,
+            operatingRoomUseTotal: facilityEncounters.filter((row) =>
+              Boolean(row.operating_room_started_at),
+            ).length,
+            xrayUseTotal: facilityEncounters.filter((row) =>
+              Boolean(row.xray_performed_at),
+            ).length,
+            ultrasoundUseTotal: facilityEncounters.filter((row) =>
+              Boolean(row.ultrasound_performed_at),
+            ).length,
+            ctUseTotal: facilityEncounters.filter((row) =>
+              Boolean(row.ct_performed_at),
+            ).length,
+            icuAdmissions: facilityEncounters.filter((row) =>
+              Boolean(row.icu_admitted_at),
+            ).length,
+            ventilatedTotal: facilityEncounters.filter(
+              (row) => row.mechanical_ventilation_required === true,
+            ).length,
+            alternativeIcuUseTotal: facilityEncounters.filter(
+              (row) => row.alternative_icu_used === true,
+            ).length,
+          },
+        };
+      })
+      .sort((first, second) =>
+        first.facilityName.localeCompare(second.facilityName),
+      );
+
+    response.status(200).json({
+      success: true,
+      data: {
+        incidentId,
+        facilities: summaries,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 /**
  * GET /api/incidents/:id/deactivation-continuity
  */

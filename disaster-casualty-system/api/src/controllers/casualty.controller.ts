@@ -2933,6 +2933,18 @@ export async function updateCasualty(
       ["responder", "field_responder", "sa_responder"].includes(
         user.role,
       );
+    const isResponderTransportOnlyUpdate =
+      Boolean(transportRecord) &&
+      !person &&
+      !incidentDetails &&
+      !incidentId &&
+      !triageAssessment &&
+      !treatmentRecord &&
+      !facilityEncounter &&
+      !casualtyOutcome &&
+      ["responder", "field_responder", "sa_responder"].includes(
+        user.role,
+      );
 
     if (
       !person &&
@@ -2993,6 +3005,10 @@ export async function updateCasualty(
       return;
     }
 
+    const canEditOwnTransport =
+      isResponderTransportOnlyUpdate &&
+      existingRecord.encoded_by === user.id;
+
     if (shouldScopeToOwnCasualties(user.role)) {
       if (
         existingRecord.encoded_by !== user.id &&
@@ -3007,6 +3023,7 @@ export async function updateCasualty(
 
       if (
         !isStabilizationResponderUpdate &&
+        !canEditOwnTransport &&
         existingRecord.verification_status !== "rejected"
       ) {
         response.status(403).json({

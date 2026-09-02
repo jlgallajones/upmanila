@@ -27,7 +27,11 @@ import {
   getAttachments,
   type Attachment,
 } from "../../api/attachments";
-import { getCurrentUser } from "../../auth/session";
+import { isAuthenticationTokenError } from "../../api/client";
+import {
+  getAccessToken,
+  getCurrentUser,
+} from "../../auth/session";
 
 const COLORS = {
   maroon: "#7B1113",
@@ -70,6 +74,14 @@ function canEditRecord(
   return verificationStatus === "rejected";
 }
 
+function isResponderRole(role: string | null): boolean {
+  return (
+    role === "responder" ||
+    role === "field_responder" ||
+    role === "sa_responder"
+  );
+}
+
 type DetailRowProps = {
   label: string;
   value: string;
@@ -101,16 +113,21 @@ function DetailRow({
 
 type SectionCardProps = {
   title: string;
+  action?: React.ReactNode;
   children: React.ReactNode;
 };
 
 function SectionCard({
   title,
+  action,
   children,
 }: SectionCardProps) {
   return (
     <View style={styles.sectionCard}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <View style={styles.sectionTitleRow}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        {action}
+      </View>
       {children}
     </View>
   );
@@ -497,6 +514,9 @@ export default function CasualtyDetailScreen() {
   const [currentUserRole, setCurrentUserRole] = useState<string | null>(
     null,
   );
+  const [currentUserId, setCurrentUserId] = useState<string | null>(
+    null,
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] =
     useState<string | null>(null);
@@ -511,24 +531,34 @@ export default function CasualtyDetailScreen() {
     try {
       setErrorMessage(null);
 
+      const [user, token] = await Promise.all([
+        getCurrentUser(),
+        getAccessToken(),
+      ]);
+
+      setCurrentUserRole(user?.role ?? null);
+      setCurrentUserId(user?.id ?? null);
+
+      if (!token) {
+        setErrorMessage(
+          "Your session has expired. Please sign in again before opening casualty records.",
+        );
+        return;
+      }
+
+      const data = await getCasualty(casualtyId);
       const [
-        user,
-        data,
         attachmentData,
         historyData,
         triageData,
         transportData,
-      ] =
-        await Promise.all([
-          getCurrentUser(),
-          getCasualty(casualtyId),
-          getAttachments(casualtyId),
-          getCasualtyStatusHistory(casualtyId),
-          getCasualtyTriageHistory(casualtyId),
-          getCasualtyTransportHistory(casualtyId),
-        ]);
+      ] = await Promise.all([
+        getAttachments(casualtyId),
+        getCasualtyStatusHistory(casualtyId),
+        getCasualtyTriageHistory(casualtyId),
+        getCasualtyTransportHistory(casualtyId),
+      ]);
 
-      setCurrentUserRole(user?.role ?? null);
       setRecord(data);
       setAttachments(attachmentData);
       setStatusHistory(historyData);
@@ -538,7 +568,9 @@ export default function CasualtyDetailScreen() {
       console.error("Failed to load casualty detail:", error);
 
       setErrorMessage(
-        error instanceof Error
+        isAuthenticationTokenError(error)
+          ? "Your session has expired. Please sign in again before opening casualty records."
+          : error instanceof Error
           ? error.message
           : "Unable to load casualty details.",
       );
@@ -569,6 +601,7 @@ export default function CasualtyDetailScreen() {
     return {
       id: record.casualty.id_number ?? record.id.slice(0, 8),
       recordId: record.id,
+      encoderId: record.encoder.id,
       fullName,
       initials: getInitials(fullName),
       age: formatValue(record.casualty.estimated_age),
@@ -620,10 +653,33 @@ export default function CasualtyDetailScreen() {
     } as never);
   }
 
+  function handleEditTransport() {
+    if (!casualty) {
+      return;
+    }
+
+    router.push({
+      pathname: "/add-casualty",
+      params: {
+        editId: casualty.recordId,
+        focusStep: "Transport",
+      },
+    } as never);
+  }
+
   const canEditCurrentRecord = canEditRecord(
     currentUserRole,
     casualty?.verificationStatusRaw,
   );
+  const isResponderCurrentUser = isResponderRole(currentUserRole);
+  const isOwnRecord = casualty?.encoderId === currentUserId;
+  const canShowHeaderEdit =
+    canEditCurrentRecord && !isResponderCurrentUser;
+  const canEditTransportCard =
+    canEditCurrentRecord ||
+    (isResponderCurrentUser && isOwnRecord);
+  const requiresLogin =
+    errorMessage?.toLowerCase().includes("sign in") ?? false;
 
   if (isLoading) {
     return (
@@ -659,6 +715,11 @@ export default function CasualtyDetailScreen() {
 
         <Pressable
           onPress={() => {
+            if (requiresLogin) {
+              router.replace("/login");
+              return;
+            }
+
             setIsLoading(true);
             void loadCasualty();
           }}
@@ -667,7 +728,9 @@ export default function CasualtyDetailScreen() {
             pressed && styles.pressed,
           ]}
         >
-          <Text style={styles.retryButtonText}>Retry</Text>
+          <Text style={styles.retryButtonText}>
+            {requiresLogin ? "Sign In" : "Retry"}
+          </Text>
         </Pressable>
       </View>
     );
@@ -800,7 +863,7 @@ export default function CasualtyDetailScreen() {
             </View>
           </View>
 
-          {canEditCurrentRecord ? (
+          {canShowHeaderEdit ? (
             <Pressable
               onPress={handleEdit}
               style={({ pressed }) => [
@@ -1015,7 +1078,31 @@ export default function CasualtyDetailScreen() {
           ) : null}
         </SectionCard>
 
-        <SectionCard title="TRANSPORT">
+        <SectionCard
+          title="TRANSPORT"
+          action={
+            canEditTransportCard ? (
+              <Pressable
+                onPress={handleEditTransport}
+                style={({ pressed }) => [
+                  styles.sectionEditButton,
+                  pressed && styles.pressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Edit transport"
+              >
+                <Ionicons
+                  name="create-outline"
+                  size={15}
+                  color={COLORS.maroon}
+                />
+                <Text style={styles.sectionEditButtonText}>
+                  Edit
+                </Text>
+              </Pressable>
+            ) : null
+          }
+        >
           {casualty.latestTransport ? (
             <>
               <DetailRow
@@ -1432,12 +1519,38 @@ const styles = StyleSheet.create({
     },
   },
 
+  sectionTitleRow: {
+    minHeight: 28,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 14,
+    gap: 10,
+  },
+
   sectionTitle: {
     color: COLORS.maroon,
     fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.3,
-    marginBottom: 14,
+  },
+
+  sectionEditButton: {
+    minHeight: 30,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: "#E8D4D6",
+    backgroundColor: "#FFF6F6",
+    gap: 5,
+  },
+
+  sectionEditButtonText: {
+    color: COLORS.maroon,
+    fontSize: 11,
+    fontWeight: "900",
   },
 
   detailRow: {

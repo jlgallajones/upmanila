@@ -29,6 +29,7 @@ import {
   getDmmpStaff,
   getDmmpStaffSummary,
   getEdResourceSummary,
+  getFacilityOperationalSummary,
   getHospitalResources,
   getHospitalResourceSummary,
   getFacilityTriageSummary,
@@ -51,6 +52,7 @@ import {
   type DmmpStaffRecord,
   type DmmpStaffSummary,
   type EdResourceSummary,
+  type FacilityOperationalSummary,
   type FacilityTriageSummary,
   type HospitalResourcesResult,
   type HospitalResourceSummary,
@@ -429,14 +431,6 @@ function buildTimelinePayload(
     ),
     firstEmsOnSceneAt: parseDateTimeInput(form.firstEmsOnSceneAt),
     triageOrderedAt: parseDateTimeInput(form.triageOrderedAt),
-    firstSiteTriageAt: parseDateTimeInput(form.firstSiteTriageAt),
-    lastSiteTriageAt: parseDateTimeInput(form.lastSiteTriageAt),
-    firstTransportFromSceneAt: parseDateTimeInput(
-      form.firstTransportFromSceneAt,
-    ),
-    lastTransportFromSceneAt: parseDateTimeInput(
-      form.lastTransportFromSceneAt,
-    ),
     sceneDemobilizedAt: parseDateTimeInput(form.sceneDemobilizedAt),
   };
 }
@@ -452,10 +446,6 @@ function validateTimelineForm(form: TimelineFormState): string | null {
     ],
     ["firstEmsOnSceneAt", "First EMS on scene"],
     ["triageOrderedAt", "Triage ordered"],
-    ["firstSiteTriageAt", "First site triage"],
-    ["lastSiteTriageAt", "Last site triage"],
-    ["firstTransportFromSceneAt", "First transport from scene"],
-    ["lastTransportFromSceneAt", "Last transport from scene"],
     ["sceneDemobilizedAt", "Scene demobilized"],
   ];
 
@@ -1289,6 +1279,10 @@ export default function IncidentsPage() {
     useState<Incident | null>(null);
   const [timelineForm, setTimelineForm] =
     useState<TimelineFormState>(initialTimelineForm);
+  const [timelineOnsiteTriageSummary, setTimelineOnsiteTriageSummary] =
+    useState<OnsiteTriageSummary | null>(null);
+  const [timelineSceneClearanceSummary, setTimelineSceneClearanceSummary] =
+    useState<SceneClearanceSummary | null>(null);
   const [isLoadingTimeline, setIsLoadingTimeline] = useState(false);
   const [isSavingTimeline, setIsSavingTimeline] = useState(false);
   const [isStaffModalVisible, setIsStaffModalVisible] =
@@ -1366,6 +1360,10 @@ export default function IncidentsPage() {
     isSavingDeactivationContinuity,
     setIsSavingDeactivationContinuity,
   ] = useState(false);
+  const [
+    facilityOperationalSummary,
+    setFacilityOperationalSummary,
+  ] = useState<FacilityOperationalSummary | null>(null);
   const [isOnsiteTriageModalVisible, setIsOnsiteTriageModalVisible] =
     useState(false);
   const [selectedOnsiteTriageIncident, setSelectedOnsiteTriageIncident] =
@@ -1740,13 +1738,22 @@ export default function IncidentsPage() {
   async function handleOpenTimeline(incident: Incident) {
     setSelectedTimelineIncident(incident);
     setTimelineForm(initialTimelineForm);
+    setTimelineOnsiteTriageSummary(null);
+    setTimelineSceneClearanceSummary(null);
     setIsTimelineModalVisible(true);
     setIsLoadingTimeline(true);
 
     try {
-      const timeline = await getIncidentTimeline(incident.id);
+      const [timeline, onsiteSummary, sceneSummary] =
+        await Promise.all([
+          getIncidentTimeline(incident.id),
+          getOnsiteTriageSummary(incident.id),
+          getSceneClearanceSummary(incident.id),
+        ]);
 
       setTimelineForm(mapTimelineToForm(timeline, incident));
+      setTimelineOnsiteTriageSummary(onsiteSummary);
+      setTimelineSceneClearanceSummary(sceneSummary);
     } catch (error) {
       console.error("Unable to load incident timeline:", error);
 
@@ -1842,6 +1849,8 @@ export default function IncidentsPage() {
     setIsTimelineModalVisible(false);
     setSelectedTimelineIncident(null);
     setTimelineForm(initialTimelineForm);
+    setTimelineOnsiteTriageSummary(null);
+    setTimelineSceneClearanceSummary(null);
   }
 
   function updateTimelineField<K extends keyof TimelineFormState>(
@@ -2419,16 +2428,21 @@ export default function IncidentsPage() {
       initialDeactivationContinuityForm,
     );
     setDeactivationContinuitySummary(null);
+    setFacilityOperationalSummary(null);
     setIsDeactivationContinuityModalVisible(true);
     setIsLoadingDeactivationContinuity(true);
 
     try {
-      const result = await getDeactivationContinuity(incident.id);
+      const [result, facilitySummary] = await Promise.all([
+        getDeactivationContinuity(incident.id),
+        getFacilityOperationalSummary(incident.id),
+      ]);
 
       setDeactivationContinuityForm(
         mapDeactivationContinuityToForm(result),
       );
       setDeactivationContinuitySummary(result.summary);
+      setFacilityOperationalSummary(facilitySummary);
     } catch (error) {
       console.error(
         "Unable to load deactivation and continuity:",
@@ -2457,6 +2471,7 @@ export default function IncidentsPage() {
       initialDeactivationContinuityForm,
     );
     setDeactivationContinuitySummary(null);
+    setFacilityOperationalSummary(null);
   }
 
   function updateDeactivationContinuityField<
@@ -2471,7 +2486,7 @@ export default function IncidentsPage() {
   function setDeactivationContinuityFieldToNow(
     key: keyof Pick<
       DeactivationContinuityFormState,
-      "sceneDemobilizedAt" | "lastFacilityDeactivatedAt" | "assessedAt"
+      "sceneDemobilizedAt" | "assessedAt"
     >,
   ) {
     updateDeactivationContinuityField(
@@ -2487,10 +2502,6 @@ export default function IncidentsPage() {
       [keyof DeactivationContinuityFormState, string]
     > = [
       ["sceneDemobilizedAt", "Scene demobilized time"],
-      [
-        "lastFacilityDeactivatedAt",
-        "Last healthcare facility deactivation time",
-      ],
       ["assessedAt", "Assessment time"],
     ];
 
@@ -2500,22 +2511,6 @@ export default function IncidentsPage() {
       if (value && !getValidDateTimeInput(value)) {
         return `${label} must use mm/dd/yyyy hh:mm.`;
       }
-    }
-
-    const sceneDemobilizedAt = form.sceneDemobilizedAt.trim()
-      ? getValidDateTimeInput(form.sceneDemobilizedAt)
-      : null;
-    const lastFacilityDeactivatedAt =
-      form.lastFacilityDeactivatedAt.trim()
-        ? getValidDateTimeInput(form.lastFacilityDeactivatedAt)
-        : null;
-
-    if (
-      sceneDemobilizedAt &&
-      lastFacilityDeactivatedAt &&
-      lastFacilityDeactivatedAt < sceneDemobilizedAt
-    ) {
-      return "Last healthcare facility deactivation cannot be before scene demobilization.";
     }
 
     return null;
@@ -2552,13 +2547,8 @@ export default function IncidentsPage() {
           sceneDemobilizedAt: parseDateTimeInput(
             deactivationContinuityForm.sceneDemobilizedAt,
           ),
-          lastFacilityDeactivatedAt: parseDateTimeInput(
-            deactivationContinuityForm.lastFacilityDeactivatedAt,
-          ),
           emsCoverageDisruption:
             deactivationContinuityForm.emsCoverageDisruption,
-          facilityCareDisruption:
-            deactivationContinuityForm.facilityCareDisruption,
           notes: deactivationContinuityForm.notes.trim() || null,
           assessedAt: parseDateTimeInput(
             deactivationContinuityForm.assessedAt,
@@ -2776,17 +2766,20 @@ export default function IncidentsPage() {
     setSelectedHospitalResourceIncident(incident);
     setHospitalResourcesForm(initialHospitalResourcesForm);
     setHospitalResourceSummary(null);
+    setFacilityOperationalSummary(null);
     setIsHospitalResourceModalVisible(true);
     setIsLoadingHospitalResource(true);
 
     try {
-      const [resources, summary] = await Promise.all([
+      const [resources, summary, facilitySummary] = await Promise.all([
         getHospitalResources(incident.id),
         getHospitalResourceSummary(incident.id),
+        getFacilityOperationalSummary(incident.id),
       ]);
 
       setHospitalResourcesForm(mapHospitalResourcesToForm(resources));
       setHospitalResourceSummary(summary);
+      setFacilityOperationalSummary(facilitySummary);
     } catch (error) {
       console.error("Unable to load hospital resources:", error);
 
@@ -2810,6 +2803,7 @@ export default function IncidentsPage() {
     setSelectedHospitalResourceIncident(null);
     setHospitalResourcesForm(initialHospitalResourcesForm);
     setHospitalResourceSummary(null);
+    setFacilityOperationalSummary(null);
   }
 
   async function handleOpenMorbidityMortality(incident: Incident) {
@@ -3151,7 +3145,7 @@ export default function IncidentsPage() {
     label: string,
     key: keyof Pick<
       DeactivationContinuityFormState,
-      "sceneDemobilizedAt" | "lastFacilityDeactivatedAt" | "assessedAt"
+      "sceneDemobilizedAt" | "assessedAt"
     >,
   ) {
     return renderCurrentTimeField({
@@ -3214,6 +3208,188 @@ export default function IncidentsPage() {
         </View>
       </View>
     );
+  }
+
+  function renderExtractedTimelineSummary() {
+    return (
+      <View style={styles.summaryPanel}>
+        <View style={styles.summaryPanelHeader}>
+          <Ionicons
+            name="analytics-outline"
+            size={17}
+            color={COLORS.maroon}
+          />
+          <Text style={styles.summaryPanelTitle}>
+            Extracted from records
+          </Text>
+        </View>
+
+        <View style={styles.summaryFactRow}>
+          <Text style={styles.summaryFactLabel}>
+            First site triage
+          </Text>
+          <Text style={styles.summaryFactValue}>
+            {formatDateTime(
+              timelineOnsiteTriageSummary?.firstSiteTriageAt,
+            )}
+          </Text>
+        </View>
+        <View style={styles.summaryFactRow}>
+          <Text style={styles.summaryFactLabel}>
+            Last site triage
+          </Text>
+          <Text style={styles.summaryFactValue}>
+            {formatDateTime(
+              timelineOnsiteTriageSummary?.lastSiteTriageAt,
+            )}
+          </Text>
+        </View>
+        <View style={styles.summaryFactRow}>
+          <Text style={styles.summaryFactLabel}>
+            First transport from scene
+          </Text>
+          <Text style={styles.summaryFactValue}>
+            {formatDateTime(
+              timelineSceneClearanceSummary
+                ?.firstTransportFromSceneAt,
+            )}
+          </Text>
+        </View>
+        <View style={styles.summaryFactRow}>
+          <Text style={styles.summaryFactLabel}>
+            Last transport from scene
+          </Text>
+          <Text style={styles.summaryFactValue}>
+            {formatDateTime(
+              timelineSceneClearanceSummary
+                ?.lastTransportFromSceneAt,
+            )}
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  function renderFacilityOperationalSummaryCards(
+    mode: "continuity" | "resources",
+  ) {
+    const facilities = facilityOperationalSummary?.facilities ?? [];
+
+    if (facilities.length === 0) {
+      return (
+        <Text style={styles.sitrepSectionText}>
+          No healthcare facility summary is available yet.
+        </Text>
+      );
+    }
+
+    return facilities.map((facility) => (
+      <View
+        key={`${mode}-${facility.facilityId}`}
+        style={styles.facilitySummaryCard}
+      >
+        <Text style={styles.facilitySummaryTitle}>
+          {facility.facilityName}
+        </Text>
+        <Text style={styles.facilitySummarySubtitle}>
+          {[
+            facility.facilityLevel
+              ? formatFacilityLevelLabel(
+                  facility.facilityLevel,
+                )
+              : null,
+            facility.municipality,
+            facility.province,
+          ]
+            .filter(Boolean)
+            .join(" - ") || "Official healthcare facility"}
+        </Text>
+
+        {mode === "continuity" ? (
+          <>
+            <View style={styles.summaryFactRow}>
+              <Text style={styles.summaryFactLabel}>
+                Facility care disruption
+              </Text>
+              <Text style={styles.summaryFactValue}>
+                {formatDisruptionLevel(
+                  facility.continuity
+                    .facilityCareDisruption as DisruptionLevel | null,
+                )}
+              </Text>
+            </View>
+            <View style={styles.summaryFactRow}>
+              <Text style={styles.summaryFactLabel}>
+                Last facility deactivation
+              </Text>
+              <Text style={styles.summaryFactValue}>
+                {formatDateTime(
+                  facility.continuity.lastFacilityDeactivatedAt,
+                )}
+              </Text>
+            </View>
+          </>
+        ) : (
+          <>
+            <View style={styles.summaryFactRow}>
+              <Text style={styles.summaryFactLabel}>
+                HCFD encounters
+              </Text>
+              <Text style={styles.summaryFactValue}>
+                {facility.hofdEntries.encountersTotal}
+              </Text>
+            </View>
+            <View style={styles.summaryFactRow}>
+              <Text style={styles.summaryFactLabel}>
+                Admitted / discharged
+              </Text>
+              <Text style={styles.summaryFactValue}>
+                {facility.hofdEntries.admittedTotal}/
+                {facility.hofdEntries.dischargedTotal}
+              </Text>
+            </View>
+            <View style={styles.summaryFactRow}>
+              <Text style={styles.summaryFactLabel}>
+                Surgery / OR use
+              </Text>
+              <Text style={styles.summaryFactValue}>
+                {facility.hofdEntries.surgeryTotal}/
+                {facility.hofdEntries.operatingRoomUseTotal}
+              </Text>
+            </View>
+            <View style={styles.summaryFactRow}>
+              <Text style={styles.summaryFactLabel}>
+                X-ray / US / CT
+              </Text>
+              <Text style={styles.summaryFactValue}>
+                {facility.hofdEntries.xrayUseTotal}/
+                {facility.hofdEntries.ultrasoundUseTotal}/
+                {facility.hofdEntries.ctUseTotal}
+              </Text>
+            </View>
+            <View style={styles.summaryFactRow}>
+              <Text style={styles.summaryFactLabel}>
+                ICU / ventilated
+              </Text>
+              <Text style={styles.summaryFactValue}>
+                {facility.hofdEntries.icuAdmissions}/
+                {facility.hofdEntries.ventilatedTotal}
+              </Text>
+            </View>
+            <View style={styles.summaryFactRow}>
+              <Text style={styles.summaryFactLabel}>
+                Resource snapshot
+              </Text>
+              <Text style={styles.summaryFactValue}>
+                {facility.resources
+                  ? `${facility.resources.totalOperatingRooms ?? "?"} OR, ${facility.resources.totalResuscitationRooms ?? "?"} resus`
+                  : "Not recorded"}
+              </Text>
+            </View>
+          </>
+        )}
+      </View>
+    ));
   }
 
   function renderTriageIntervalSection(
@@ -4225,22 +4401,7 @@ export default function IncidentsPage() {
                   "TRIAGE ORDERED",
                   "triageOrderedAt",
                 )}
-                {renderTimelineDateField(
-                  "FIRST SITE TRIAGE",
-                  "firstSiteTriageAt",
-                )}
-                {renderTimelineDateField(
-                  "LAST SITE TRIAGE",
-                  "lastSiteTriageAt",
-                )}
-                {renderTimelineDateField(
-                  "FIRST TRANSPORT FROM SCENE",
-                  "firstTransportFromSceneAt",
-                )}
-                {renderTimelineDateField(
-                  "LAST TRANSPORT FROM SCENE",
-                  "lastTransportFromSceneAt",
-                )}
+                {renderExtractedTimelineSummary()}
                 {renderTimelineDateField(
                   "SCENE DEMOBILIZED",
                   "sceneDemobilizedAt",
@@ -5156,10 +5317,6 @@ export default function IncidentsPage() {
                   "SCENE MEDICAL RESPONDERS DEMOBILIZED",
                   "sceneDemobilizedAt",
                 )}
-                {renderDeactivationContinuityDateField(
-                  "LAST HEALTHCARE FACILITY DEACTIVATED RESPONSE PLAN",
-                  "lastFacilityDeactivatedAt",
-                )}
 
                 <Text style={styles.fieldLabel}>
                   CONTINUITY OF CARE
@@ -5168,10 +5325,11 @@ export default function IncidentsPage() {
                   "NORMAL EMS CALL COVERAGE DISRUPTION",
                   "emsCoverageDisruption",
                 )}
-                {renderDisruptionField(
-                  "HEALTHCARE FACILITY ROUTINE CARE DISRUPTION",
-                  "facilityCareDisruption",
-                )}
+
+                <Text style={styles.fieldLabel}>
+                  HEALTHCARE FACILITY SUMMARY
+                </Text>
+                {renderFacilityOperationalSummaryCards("continuity")}
 
                 {renderDeactivationContinuityDateField(
                   "ASSESSED AT",
@@ -6111,95 +6269,40 @@ export default function IncidentsPage() {
                   contentContainerStyle={styles.timelineScrollContent}
                 >
                   <View style={styles.sitrepMetricGrid}>
-                  <View style={styles.sitrepMetric}>
-                    <Text style={styles.sitrepMetricValue}>
-                      {hospitalResourceSummary.surgery.meanDurationMinutes ??
-                        0}
-                    </Text>
-                    <Text style={styles.sitrepMetricLabel}>
-                      Mean Surgery Min
-                    </Text>
+                    <View style={styles.sitrepMetric}>
+                      <Text style={styles.sitrepMetricValue}>
+                        {hospitalResourceSummary.surgery
+                          .meanDurationMinutes ?? 0}
+                      </Text>
+                      <Text style={styles.sitrepMetricLabel}>
+                        Mean Surgery Min
+                      </Text>
+                    </View>
+                    <View style={styles.sitrepMetric}>
+                      <Text style={styles.sitrepMetricValue}>
+                        {hospitalResourceSummary.icu.admittedTotal}
+                      </Text>
+                      <Text style={styles.sitrepMetricLabel}>
+                        ICU Admissions
+                      </Text>
+                    </View>
+                    <View style={styles.sitrepMetric}>
+                      <Text style={styles.sitrepMetricValue}>
+                        {hospitalResourceSummary.icu.ventilatedPercentage}
+                        %
+                      </Text>
+                      <Text style={styles.sitrepMetricLabel}>
+                        ICU Vent
+                      </Text>
+                    </View>
                   </View>
-                  <View style={styles.sitrepMetric}>
-                    <Text style={styles.sitrepMetricValue}>
-                      {hospitalResourceSummary.icu.admittedTotal}
-                    </Text>
-                    <Text style={styles.sitrepMetricLabel}>
-                      ICU Admissions
-                    </Text>
-                  </View>
-                  <View style={styles.sitrepMetric}>
-                    <Text style={styles.sitrepMetricValue}>
-                      {hospitalResourceSummary.icu.ventilatedPercentage}%
-                    </Text>
-                    <Text style={styles.sitrepMetricLabel}>
-                      ICU Vent
-                    </Text>
-                  </View>
-                </View>
 
-                <Text style={styles.fieldLabel}>
-                  RESOURCE SETTINGS
-                </Text>
-                <View style={styles.timelineFieldGroup}>
                   <Text style={styles.fieldLabel}>
-                    TOTAL OPERATING ROOMS
+                    VIEW SUMMARY BY HOSPITAL
                   </Text>
-                  <TextInput
-                    value={hospitalResourcesForm.totalOperatingRooms}
-                    onChangeText={(value) =>
-                      updateHospitalResourcesField(
-                        "totalOperatingRooms",
-                        value,
-                      )
-                    }
-                    style={styles.input}
-                    placeholder="Number of operating rooms"
-                    placeholderTextColor={COLORS.mutedText}
-                    keyboardType="number-pad"
-                    editable={canUpdateOperations}
-                  />
-                </View>
+                  {renderFacilityOperationalSummaryCards("resources")}
 
-                <View style={styles.timelineFieldGroup}>
-                  <Text style={styles.fieldLabel}>
-                    TOTAL ED RESUSCITATION ROOMS
-                  </Text>
-                  <TextInput
-                    value={hospitalResourcesForm.totalResuscitationRooms}
-                    onChangeText={(value) =>
-                      updateHospitalResourcesField(
-                        "totalResuscitationRooms",
-                        value,
-                      )
-                    }
-                    style={styles.input}
-                    placeholder="Number of ED resuscitation rooms"
-                    placeholderTextColor={COLORS.mutedText}
-                    keyboardType="number-pad"
-                    editable={canUpdateOperations}
-                  />
-                </View>
-
-                {renderHospitalYesNoField(
-                  "ALTERNATIVE ICU USE",
-                  "alternativeIcuInUse",
-                )}
-                {renderHospitalRecordedAtField()}
-
-                <TextInput
-                  value={hospitalResourcesForm.notes}
-                  onChangeText={(value) =>
-                    updateHospitalResourcesField("notes", value)
-                  }
-                  style={[styles.input, styles.notesInput]}
-                  placeholder="Optional hospital resource notes"
-                  placeholderTextColor={COLORS.mutedText}
-                  multiline
-                  editable={canUpdateOperations}
-                />
-
-                <Text style={styles.fieldLabel}>SURGERY</Text>
+                  <Text style={styles.fieldLabel}>SURGERY</Text>
                 <Text style={styles.sitrepSectionText}>
                   First surgical intervention:{" "}
                   {formatDateTime(
@@ -7049,6 +7152,65 @@ const styles = StyleSheet.create({
     color: COLORS.green,
     fontSize: 12,
     fontWeight: "800",
+  },
+  summaryPanel: {
+    padding: 13,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E7D4D5",
+    backgroundColor: "#FFF8F8",
+    gap: 9,
+    marginBottom: 12,
+  },
+  summaryPanelHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  summaryPanelTitle: {
+    color: COLORS.maroon,
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  summaryFactRow: {
+    minHeight: 28,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  summaryFactLabel: {
+    flex: 1,
+    color: COLORS.secondaryText,
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  summaryFactValue: {
+    flex: 1,
+    color: COLORS.text,
+    fontSize: 11,
+    fontWeight: "900",
+    textAlign: "right",
+  },
+  facilitySummaryCard: {
+    padding: 13,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.white,
+    marginBottom: 10,
+    gap: 6,
+  },
+  facilitySummaryTitle: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  facilitySummarySubtitle: {
+    color: COLORS.secondaryText,
+    fontSize: 11,
+    lineHeight: 16,
+    marginBottom: 3,
   },
   emptyState: {
     flex: 1,
