@@ -1199,7 +1199,7 @@ export async function getResponderSafetyReport(
 
     const [reportResult, timelineResult] = await Promise.all([
       supabase
-        .from("responder_safety_responses")
+        .from("responder_safety_reports")
         .select("*")
         .eq("incident_id", incidentId)
         .maybeSingle(),
@@ -2122,7 +2122,7 @@ export async function saveResponderSafetyReport(
     };
 
     const { data, error } = await supabase
-      .from("responder_safety_responses")
+      .from("responder_safety_reports")
       .upsert(values, {
         onConflict: "incident_id",
       })

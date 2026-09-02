@@ -4042,13 +4042,13 @@ export async function getIncidentAnalyticsSummary(
         .select("id, verification_status")
         .eq("incident_id", id)
         .is("deleted_at", null),
-      supabase
-        .from("responder_safety_responses")
-        .select(
-          "safety_actions_established, ppe_decision_at, deployed_responders, injured_responders, ill_responders, deceased_responders",
-        )
-        .eq("incident_id", id)
-        .maybeSingle(),
+        supabase
+    .from("responder_safety_reports")
+    .select(
+      "safety_actions_established, ppe_decision_at, deployed_responders, injured_responders, ill_responders, deceased_responders",
+    )
+    .eq("incident_id", id)
+    .maybeSingle(),
       supabase
         .from("responder_safety_responses")
         .select("safety_status, ppe_used_at")
