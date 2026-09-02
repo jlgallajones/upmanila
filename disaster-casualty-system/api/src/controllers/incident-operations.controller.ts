@@ -1199,7 +1199,7 @@ export async function getResponderSafetyReport(
 
     const [reportResult, timelineResult] = await Promise.all([
       supabase
-        .from("responder_safety_reports")
+        .from("responder_safety_responses")
         .select("*")
         .eq("incident_id", incidentId)
         .maybeSingle(),
@@ -1259,7 +1259,7 @@ export async function getResponderSafetyResponse(
 
     const authenticatedUser = getAuthenticatedUser(request);
     const { data, error } = await supabase
-      .from("responder_safety_reports")
+      .from("responder_safety_responses")
       .select("*")
       .eq("incident_id", incidentId)
       .eq("responder_id", authenticatedUser.id)
@@ -2122,7 +2122,7 @@ export async function saveResponderSafetyReport(
     };
 
     const { data, error } = await supabase
-      .from("responder_safety_reports")
+      .from("responder_safety_responses")
       .upsert(values, {
         onConflict: "incident_id",
       })
@@ -2265,7 +2265,7 @@ export async function saveResponderSafetyResponse(
     };
 
     const { data, error } = await supabase
-      .from("responder_safety_reports")
+      .from("responder_safety_responses")
       .upsert(values, {
         onConflict: "incident_id,responder_id",
       })
