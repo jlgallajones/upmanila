@@ -4301,26 +4301,12 @@ export async function getIncidentAnalyticsSummary(
       };
       return values;
     }, {});
-    const safeResponderResponses = responderSafetyResponses.filter(
-      (row) => row.safety_status === "yes",
-    ).length;
-    const unsafeResponderResponses = responderSafetyResponses.filter(
-      (row) => row.safety_status === "no",
-    ).length;
-    const deployedResponders =
-      responderSafetyResponses.length > 0
-        ? responderSafetyResponses.length
-        : responderSafety?.deployed_responders ?? 0;
-    const unsafeResponders =
-      responderSafetyResponses.length > 0
-        ? unsafeResponderResponses
-        : (responderSafety?.injured_responders ?? 0) +
-          (responderSafety?.ill_responders ?? 0) +
-          (responderSafety?.deceased_responders ?? 0);
-    const safeResponders =
-      responderSafetyResponses.length > 0
-        ? safeResponderResponses
-        : Math.max(0, deployedResponders - unsafeResponders);
+const safeResponders = responderSafetyResponses.filter(
+  (row) => row.safety_status === "yes",
+).length;
+const unsafeResponders = responderSafetyResponses.filter(
+  (row) => row.safety_status === "no",
+).length;
     const edCareByCategory = (
       ["immediate", "delayed", "minimal", "expectant"] as const
     ).reduce<Record<string, { count: number; total: number; percentage: number }>>(
