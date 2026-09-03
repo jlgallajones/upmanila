@@ -4869,6 +4869,8 @@ export default function AddCasualtyScreen() {
   const [submissionFeedback, setSubmissionFeedback] =
     useState<SubmissionFeedback | null>(null);
 
+  const [isExitConfirmVisible, setIsExitConfirmVisible,] = useState(false);
+
   const isFieldResponderFlow = isFieldResponderCaptureFlow(
     currentUserRole,
     currentResponderAssignment,
@@ -4923,7 +4925,14 @@ export default function AddCasualtyScreen() {
       ? "Stabilization Area Responder"
       : null;
   const showVictimNumberStickyHeader =
-    (isFieldResponderFlow || isSaResponderFlow) && stepName === "Triage";
+  (
+    isSaResponderFlow &&
+    stepName === "Triage"
+  ) ||
+  (
+    isFieldResponderFlow &&
+    (stepName === "Triage" || stepName === "Status")
+  );
   const stickyVictimNumber = form.victimCode.trim() || "No victim code entered";
   const generatedUserCode = generateUserCodeFromName(currentUserFullName);
   const hasSavedResponderSafetyResponse =
@@ -9808,27 +9817,7 @@ export default function AddCasualtyScreen() {
 }
 
 function confirmExitAddCasualty() {
-  Alert.alert(
-    isEditing
-      ? "Exit Edit Casualty?"
-      : "Exit Add Casualty?",
-    isEditing
-      ? "Any unsaved changes will be lost. Are you sure you want to exit?"
-      : "Any information you entered but have not submitted will be lost. Are you sure you want to exit?",
-    [
-      {
-        text: "Cancel",
-        style: "cancel",
-      },
-      {
-        text: "Exit",
-        style: "destructive",
-        onPress: () => {
-          router.back();
-        },
-      },
-    ],
-  );
+  setIsExitConfirmVisible(true);
 }
 
   function renderResponderSafetyStep() {
@@ -12904,6 +12893,76 @@ function confirmExitAddCasualty() {
         </SafeAreaView>
       </KeyboardAvoidingView>
 
+      <Modal
+  visible={isExitConfirmVisible}
+  transparent
+  animationType="fade"
+  onRequestClose={() =>
+    setIsExitConfirmVisible(false)
+  }
+>
+  <View style={styles.feedbackBackdrop}>
+    <View style={styles.feedbackCard}>
+      <View style={styles.exitConfirmIcon}>
+        <Ionicons
+          name="exit-outline"
+          size={30}
+          color={COLORS.white}
+        />
+      </View>
+
+      <Text style={styles.feedbackTitle}>
+        {isEditing
+          ? "Exit Edit Casualty?"
+          : "Exit Add Casualty?"}
+      </Text>
+
+      <Text style={styles.feedbackMessage}>
+        {isEditing
+          ? "Any unsaved changes will be lost. Are you sure you want to exit?"
+          : "Any information you entered but have not submitted will be lost. Are you sure you want to exit?"}
+      </Text>
+
+      <View style={styles.exitConfirmActions}>
+        <Pressable
+          onPress={() =>
+            setIsExitConfirmVisible(false)
+          }
+          style={({ pressed }) => [
+            styles.exitCancelButton,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Text style={styles.exitCancelButtonText}>
+            Cancel
+          </Text>
+        </Pressable>
+
+        <Pressable
+          onPress={() => {
+            setIsExitConfirmVisible(false);
+            router.back();
+          }}
+          style={({ pressed }) => [
+            styles.exitButton,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Ionicons
+            name="exit-outline"
+            size={18}
+            color={COLORS.white}
+          />
+
+          <Text style={styles.exitButtonText}>
+            Exit
+          </Text>
+        </Pressable>
+      </View>
+    </View>
+  </View>
+</Modal>
+
       <ChoiceSheet
         visible={activeChoiceSheet !== null}
         title={getChoiceSheetTitle()}
@@ -13116,6 +13175,56 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: 0.3,
   },
+  exitConfirmIcon: {
+  width: 56,
+  height: 56,
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: 18,
+  backgroundColor: COLORS.maroon,
+  marginBottom: 14,
+},
+
+exitConfirmActions: {
+  width: "100%",
+  flexDirection: "row",
+  gap: 10,
+  marginTop: 20,
+},
+
+exitCancelButton: {
+  flex: 1,
+  minHeight: 46,
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: 12,
+  borderWidth: 1,
+  borderColor: COLORS.fieldBorder,
+  backgroundColor: COLORS.white,
+},
+
+exitCancelButtonText: {
+  color: COLORS.text,
+  fontSize: 13,
+  fontWeight: "900",
+},
+
+exitButton: {
+  flex: 1,
+  minHeight: 46,
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: 12,
+  backgroundColor: COLORS.maroon,
+  gap: 7,
+},
+
+exitButtonText: {
+  color: COLORS.white,
+  fontSize: 13,
+  fontWeight: "900",
+},
   sheetSearchBar: {
     minHeight: 46,
     flexDirection: "row",

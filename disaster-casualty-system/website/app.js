@@ -1113,7 +1113,36 @@ function analyticsIncidentOptions(incidents, selectedId) {
 }
 
 function renderTimelineVisual(analytics) {
-  const items = analytics?.timelineVisuals || [];
+  const rawItems = analytics?.timelineVisuals || [];
+
+  const items = rawItems
+    .slice()
+    .sort((first, second) => {
+      const firstTime = first.at
+        ? new Date(first.at).getTime()
+        : null;
+
+      const secondTime = second.at
+        ? new Date(second.at).getTime()
+        : null;
+
+      // Both have no recorded time
+      if (firstTime === null && secondTime === null) {
+        return 0;
+      }
+
+      // No recorded time goes to the bottom
+      if (firstTime === null) {
+        return 1;
+      }
+
+      if (secondTime === null) {
+        return -1;
+      }
+
+      // Earliest -> latest
+      return firstTime - secondTime;
+    });
 
   return `
     <section class="panel analytics-wide">
