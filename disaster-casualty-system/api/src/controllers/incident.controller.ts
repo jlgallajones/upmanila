@@ -13,6 +13,7 @@ const responderIncidentViewerRoles = new Set([
   "responder",
   "field_responder",
   "sa_responder",
+  "documenter",
 ]);
 
 type CreateIncidentRequest = {

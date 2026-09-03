@@ -302,6 +302,37 @@ function formatDate(value) {
   }).format(date);
 }
 
+function formatTimelineTime(value) {
+  if (!value) return "Not recorded";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Not recorded";
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function formatTimelineDate(value) {
+  if (!value) return "Not recorded";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Not recorded";
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(date);
+}
+
 function fullCasualtyName(casualty) {
   if (!casualty) return "Unknown casualty";
 
@@ -1067,29 +1098,100 @@ function renderTimelineVisual(analytics) {
       <div class="panel-header">
         <div>
           <h2>Incident Timeline</h2>
-          <p class="panel-subtitle">Key milestones extracted from incident, triage, transport, HCFD, and responder safety records.</p>
+          <p class="panel-subtitle">
+            Key milestones extracted from incident, triage, transport,
+            HCFD, and responder safety records.
+          </p>
         </div>
       </div>
-      <div class="analytics-timeline">
-        ${
-          items
-            .map(
-              (item) => `
-                <div class="analytics-timeline-item ${item.at ? "complete" : ""}">
-                  <span></span>
-                  <div>
-                    <strong>${escapeHtml(item.label)}</strong>
-                    <small>${formatDate(item.at)}</small>
-                    <div class="analytics-timeline-meta">
-                      <em>From previous: ${escapeHtml(formatMinutes(item.elapsedSincePreviousMinutes))}</em>
-                      <em>From DMMP: ${escapeHtml(formatMinutes(item.elapsedSinceActivationMinutes))}</em>
-                    </div>
-                  </div>
-                </div>
-              `,
-            )
-            .join("") || `<div class="empty-state">No timeline values available yet.</div>`
-        }
+
+      <div class="table-wrap">
+        <table class="incident-timeline-table">
+
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Timeline Event</th>
+              <th>Date</th>
+              <th>From Previous</th>
+              <th>From DMMP</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            ${
+              items.length
+                ? items
+                    .map(
+                      (item) => `
+                        <tr class="${
+                          item.at
+                            ? "timeline-recorded"
+                            : "timeline-not-recorded"
+                        }">
+
+                          <!-- TIME -->
+                          <td class="timeline-time-cell">
+                            ${formatTimelineTime(item.at)}
+                          </td>
+
+                          <!-- TITLE -->
+                          <td class="timeline-event-cell">
+                            <div class="timeline-title-cell">
+
+                              <span
+                                class="timeline-status-dot ${
+                                  item.at ? "complete" : ""
+                                }"
+                              ></span>
+
+                              <strong>
+                                ${escapeHtml(item.label)}
+                              </strong>
+
+                            </div>
+                          </td>
+
+                          <!-- DATE -->
+                          <td class="timeline-date-cell">
+                            ${formatTimelineDate(item.at)}
+                          </td>
+
+                          <!-- FROM PREVIOUS -->
+                          <td>
+                            ${escapeHtml(
+                              formatMinutes(
+                                item.elapsedSincePreviousMinutes
+                              )
+                            )}
+                          </td>
+
+                          <!-- FROM DMMP -->
+                          <td>
+                            ${escapeHtml(
+                              formatMinutes(
+                                item.elapsedSinceActivationMinutes
+                              )
+                            )}
+                          </td>
+
+                        </tr>
+                      `,
+                    )
+                    .join("")
+                : `
+                  <tr>
+                    <td colspan="5">
+                      <div class="empty-state">
+                        No timeline values available yet.
+                      </div>
+                    </td>
+                  </tr>
+                `
+            }
+          </tbody>
+
+        </table>
       </div>
     </section>
   `;
@@ -1676,6 +1778,34 @@ function renderIncidentAnalytics() {
     selectedIncidentRecords.filter((record) =>
       ["submitted", "under_review"].includes(record.verification_status),
     ).length;
+  const incidentDateSource =
+  details?.timeline?.data?.disaster_occurred_at ||
+  selectedIncident?.started_at ||
+  selectedIncident?.created_at ||
+  null;
+
+const incidentDateObject = incidentDateSource
+  ? new Date(incidentDateSource)
+  : null;
+
+const incidentDateLabel =
+  incidentDateObject &&
+  !Number.isNaN(incidentDateObject.getTime())
+    ? new Intl.DateTimeFormat("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }).format(incidentDateObject)
+    : "Not recorded";
+
+const incidentLocation = selectedIncident
+  ? formatLocation(
+      selectedIncident.description,
+      selectedIncident.barangay,
+      selectedIncident.municipality,
+      selectedIncident.province,
+    )
+  : "Not recorded";
 
   return `
     <section class="panel">
@@ -1695,12 +1825,76 @@ function renderIncidentAnalytics() {
         </select>
       </label>
     </section>
-    <div class="grid four">
-      ${renderMetric("Selected incident", selectedIncident ? 1 : 0, "emphasis", selectedIncident ? `Status: ${roleLabel(selectedIncident.status)}` : "No incident selected")}
-      ${renderMetric("Casualty records", totalCasualties, "", "For selected incident")}
-      ${renderMetric("Verified records", verifiedRecords, "", "For selected incident")}
-      ${renderMetric("Pending review", pendingRecords, "", "For selected incident")}
+    <section class="panel analytics-incident-summary">
+
+  <!-- INCIDENT INFORMATION -->
+  <div class="analytics-incident-details">
+
+    <div class="analytics-incident-detail">
+      <span>Incident Name</span>
+      <strong>
+        ${escapeHtml(
+          selectedIncident?.incident_name || "Not recorded"
+        )}
+      </strong>
     </div>
+
+    <div class="analytics-incident-detail">
+      <span>Date of Incident</span>
+      <strong>${escapeHtml(incidentDateLabel)}</strong>
+    </div>
+
+    <div class="analytics-incident-detail">
+      <span>Location</span>
+      <strong>${escapeHtml(incidentLocation)}</strong>
+    </div>
+
+  </div>
+
+
+  <!-- SMALL SUMMARY BOXES -->
+  <div class="analytics-compact-stats">
+
+    <div class="analytics-compact-stat">
+      <span>Selected Incident</span>
+
+      <strong>
+        ${selectedIncident ? 1 : 0}
+      </strong>
+
+      <small>
+        ${
+          selectedIncident
+            ? `Status: ${escapeHtml(roleLabel(selectedIncident.status))}`
+            : "No incident selected"
+        }
+      </small>
+    </div>
+
+
+    <div class="analytics-compact-stat">
+      <span>Casualty Records</span>
+      <strong>${totalCasualties}</strong>
+      <small>For selected incident</small>
+    </div>
+
+
+    <div class="analytics-compact-stat">
+      <span>Verified Records</span>
+      <strong>${verifiedRecords}</strong>
+      <small>For selected incident</small>
+    </div>
+
+
+    <div class="analytics-compact-stat">
+      <span>Pending Review</span>
+      <strong>${pendingRecords}</strong>
+      <small>For selected incident</small>
+    </div>
+
+  </div>
+
+</section>
     ${
       !selectedIncident
         ? `<section class="panel" style="margin-top:18px"><div class="empty-state">No incidents available for analytics.</div></section>`

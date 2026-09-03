@@ -37,7 +37,7 @@ running local
 make .env EXPO_PUBLIC_API_URL=http://localhost:5000/api
 npm run dev
 npx expo start
-npx expo start --web
+npx.cmd expo start --web -c
 
 
 

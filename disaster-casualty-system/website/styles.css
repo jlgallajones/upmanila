@@ -1686,66 +1686,246 @@ tbody tr:hover td {
   font-size: 13px;
 }
 
-.analytics-timeline {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+/* =========================================================
+   INCIDENT ANALYTICS - SELECTED INCIDENT SUMMARY
+   ========================================================= */
+
+.analytics-incident-summary {
+  margin-top: 12px;
+  padding: 14px 16px;
 }
 
-.analytics-timeline-item {
-  position: relative;
+
+/* INCIDENT NAME / DATE / LOCATION */
+.analytics-incident-details {
   display: grid;
-  grid-template-columns: 22px minmax(0, 1fr);
+  grid-template-columns: 2fr 1fr 2fr;
   gap: 10px;
-  min-height: 86px;
+}
+
+.analytics-incident-detail {
+  min-width: 0;
+  padding: 10px 12px;
   border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 13px;
+  border-radius: 10px;
   background: #fbfcfe;
 }
 
-.analytics-timeline-item > span {
-  width: 13px;
-  height: 13px;
-  margin-top: 2px;
-  border-radius: 999px;
-  border: 2px solid #cfd7e5;
+.analytics-incident-detail span {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.analytics-incident-detail strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+
+/* SMALL ANALYTICS COUNTERS */
+.analytics-compact-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.analytics-compact-stat {
+  min-width: 0;
+  min-height: 72px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
   background: #fff;
 }
 
-.analytics-timeline-item.complete > span {
-  border-color: #7b1113;
-  background: #f0b429;
-  box-shadow: 0 0 0 4px rgba(240, 180, 41, 0.18);
+.analytics-compact-stat:first-child {
+  border-color: #eadbdd;
+  background: #fffafa;
 }
 
-.analytics-timeline-item strong {
+.analytics-compact-stat span {
   display: block;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.analytics-compact-stat strong {
+  display: block;
+  margin-top: 5px;
   color: var(--ink);
-  font-size: 12px;
-  line-height: 1.35;
+  font-size: 21px;
+  line-height: 1;
+  font-weight: 900;
 }
 
-.analytics-timeline-item small {
+.analytics-compact-stat small {
   display: block;
-  margin-top: 7px;
+  margin-top: 5px;
   color: var(--muted);
   font-size: 11px;
-  font-weight: 800;
 }
 
-.analytics-timeline-meta {
-  display: grid;
-  gap: 3px;
-  margin-top: 8px;
+/* =========================================================
+   INCIDENT ANALYTICS - INCIDENT TIMELINE TABLE
+   ========================================================= */
+
+.incident-timeline-table {
+  width: min(96%, 1380px);
+  min-width: 900px;
+  margin-left: auto;
+  margin-right: auto;
+  table-layout: fixed;
 }
 
-.analytics-timeline-meta em {
-  color: #44546d;
-  font-size: 10px;
-  font-style: normal;
+/* TIME */
+.incident-timeline-table th:nth-child(1),
+.incident-timeline-table td:nth-child(1) {
+  width: 10%;
+}
+
+/* TIMELINE EVENT */
+.incident-timeline-table th:nth-child(2),
+.incident-timeline-table td:nth-child(2) {
+  width: 42%;
+}
+
+/* DATE */
+.incident-timeline-table th:nth-child(3),
+.incident-timeline-table td:nth-child(3) {
+  width: 14%;
+}
+
+/* FROM PREVIOUS */
+.incident-timeline-table th:nth-child(4),
+.incident-timeline-table td:nth-child(4) {
+  width: 17%;
+}
+
+/* FROM DMMP */
+.incident-timeline-table th:nth-child(5),
+.incident-timeline-table td:nth-child(5) {
+  width: 17%;
+}
+
+.incident-timeline-table th {
+  padding-top: 13px;
+  padding-bottom: 13px;
+}
+
+.incident-timeline-table td {
+  padding-top: 14px;
+  padding-bottom: 14px;
+  vertical-align: middle;
+}
+
+
+/* TIME COLUMN */
+.incident-timeline-table .timeline-time-cell {
+  width: 125px;
+  white-space: nowrap;
+  color: var(--ink);
   font-weight: 850;
 }
+
+
+/* TIMELINE EVENT COLUMN */
+.incident-timeline-table .timeline-event-cell {
+  width: 40%;
+  min-width: 340px;
+}
+
+.timeline-title-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.timeline-title-cell strong {
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.35;
+
+  white-space: normal;
+  overflow-wrap: normal;
+  text-wrap: balance;
+}
+
+
+/* DATE COLUMN */
+.incident-timeline-table .timeline-date-cell {
+  width: 150px;
+  white-space: nowrap;
+  color: var(--ink);
+  font-weight: 700;
+}
+
+
+/* FROM PREVIOUS / FROM DMMP */
+.incident-timeline-table .timeline-elapsed-cell {
+  width: 145px;
+  white-space: nowrap;
+  color: #44546d;
+  font-weight: 700;
+}
+
+
+/* STATUS CIRCLE */
+.timeline-status-dot {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+  margin-top: 3px;
+
+  border: 2px solid #cfd7e5;
+  border-radius: 999px;
+  background: #fff;
+}
+
+.timeline-status-dot.complete {
+  border-color: var(--maroon);
+  background: var(--gold);
+  box-shadow: 0 0 0 4px rgba(253, 187, 48, 0.15);
+}
+
+
+/* NOT RECORDED ROW */
+.incident-timeline-table .timeline-not-recorded .timeline-time-cell,
+.incident-timeline-table .timeline-not-recorded .timeline-date-cell,
+.incident-timeline-table .timeline-not-recorded .timeline-elapsed-cell {
+  color: var(--muted);
+  font-weight: 650;
+}
+
+
+/* EVENT NAME SHOULD STAY DARK */
+.incident-timeline-table
+.timeline-not-recorded
+.timeline-title-cell strong {
+  color: var(--ink);
+}
+
+
+/* HOVER */
+.incident-timeline-table tbody tr td {
+  transition: background-color 120ms ease;
+}
+
+.incident-timeline-table tbody tr:hover td {
+  background: #fffafa;
+}
+
 
 .analytics-graph-grid {
   display: grid;

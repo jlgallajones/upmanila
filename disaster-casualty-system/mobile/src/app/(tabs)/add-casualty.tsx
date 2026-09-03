@@ -9666,7 +9666,7 @@ export default function AddCasualtyScreen() {
   }
 
   function goNext() {
-    if (!validateCurrentStep()) {
+    if (!isResponderEditLockedStep && !validateCurrentStep()) {
       return;
     }
 
@@ -12682,6 +12682,7 @@ export default function AddCasualtyScreen() {
                 ? styles.lockedStepContent
                 : undefined
             }
+            pointerEvents={isResponderEditLockedStep ? "none" : "auto"}
           >
             {renderCurrentStep()}
           </View>
