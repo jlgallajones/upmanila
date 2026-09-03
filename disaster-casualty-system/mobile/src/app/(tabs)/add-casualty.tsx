@@ -2647,6 +2647,90 @@ function calculateSmartTriage(
   return breathing === true ? "delayed" : "unknown";
 }
 
+function calculateEsiFinalTriage(
+  answers: Record<string, unknown>,
+): string {
+  const immediateLifeSaving = readAssessmentBoolean(
+    answers,
+    "requiresImmediateLifeSavingIntervention",
+  );
+
+  /*
+   * ESI decision point A:
+   * Immediate life-saving intervention required
+   */
+  if (immediateLifeSaving === true) {
+    return "esi_1";
+  }
+
+  /*
+   * Do not continue until the first question is answered.
+   */
+  if (immediateLifeSaving === null) {
+    return "";
+  }
+
+  const highRisk = readAssessmentBoolean(
+    answers,
+    "highRiskSituation",
+  );
+
+  const painScore = readAssessmentNumber(
+    answers,
+    "painScore",
+  );
+
+  /*
+   * ESI decision point B:
+   * High-risk / should not wait.
+   *
+   * Severe pain is also treated here as an ESI 2 indicator.
+   */
+  if (
+    highRisk === true ||
+    (painScore !== null && painScore >= 7)
+  ) {
+    return "esi_2";
+  }
+
+  /*
+   * We need the high-risk question answered before
+   * proceeding to resources.
+   */
+  if (highRisk === null) {
+    return "";
+  }
+
+  const resourcesNeeded = readAssessmentString(
+    answers,
+    "resourcesNeeded",
+  );
+
+  /*
+   * ESI decision point C
+   */
+  if (resourcesNeeded === "none") {
+    return "esi_5";
+  }
+
+  if (resourcesNeeded === "one") {
+    return "esi_4";
+  }
+
+  if (resourcesNeeded === "multiple") {
+    /*
+     * For now this becomes ESI 3.
+     *
+     * Your current form does not yet collect the danger-zone
+     * vital signs shown in the ESI flowchart, so automatic
+     * reconsideration for ESI 2 cannot be done here yet.
+     */
+    return "esi_3";
+  }
+
+  return "";
+}
+
 function calculateMobileTriageCategory(
   triageSystem: string,
   assessmentAnswers: Record<string, unknown> | undefined,
@@ -2766,8 +2850,29 @@ function getCalculatedFinalTriageAnswer(
   triageSystem: string,
   assessmentAnswers: Record<string, unknown> | undefined,
 ): string {
+  if (!assessmentAnswers) {
+    return "";
+  }
+
+  const normalizedSystem = normalizeTriageSystem(
+    triageSystem,
+  );
+
+  /*
+   * ESI does not use the normal
+   * red/yellow/green/black result.
+   */
+  if (normalizedSystem === "esi") {
+    return calculateEsiFinalTriage(
+      assessmentAnswers,
+    );
+  }
+
   return triageCategoryToFinalAnswer(
-    calculateMobileTriageCategory(triageSystem, assessmentAnswers),
+    calculateMobileTriageCategory(
+      triageSystem,
+      assessmentAnswers,
+    ),
   );
 }
 
@@ -11098,13 +11203,19 @@ export default function AddCasualtyScreen() {
       form.triageSystem,
       buildTriageAssessmentAnswers(form),
     );
+    const isEsiTriage =
+      normalizeTriageSystem(form.triageSystem) === "esi";
+
     const resultSuffix = calculatedFinalTriage
-      ? ` - ${titleCase(
-          triageFinalAnswerToCategory(
-            form.triageSystem,
-            calculatedFinalTriage,
-          ),
-        )}`
+      ? isEsiTriage
+        ? ` - ${calculatedFinalTriage
+            .replace("esi_", "ESI ")}`
+        : ` - ${titleCase(
+            triageFinalAnswerToCategory(
+              form.triageSystem,
+              calculatedFinalTriage,
+            ),
+          )}`
       : "";
 
     if (answeredCount === manualQuestions.length) {
@@ -11185,19 +11296,29 @@ export default function AddCasualtyScreen() {
   }
 
   function renderTriageStep() {
-    const selectedFinalTriage = getCalculatedFinalTriageAnswer(
-      form.triageSystem,
-      buildTriageAssessmentAnswers(form),
-    );
-    const triageAssessmentColorStyle = selectedFinalTriage
-      ? getTriageColorButtonStyle(selectedFinalTriage)
-      : null;
-    const triageAssessmentTextStyle = selectedFinalTriage
-      ? getTriageColorTextStyle(selectedFinalTriage)
-      : null;
-    const triageAssessmentIconColor = selectedFinalTriage
-      ? getTriageAssessmentIconColor(selectedFinalTriage)
-      : COLORS.secondaryText;
+  const selectedFinalTriage = getCalculatedFinalTriageAnswer(
+    form.triageSystem,
+    buildTriageAssessmentAnswers(form),
+  );
+
+  const isEsiTriage =
+    normalizeTriageSystem(form.triageSystem) === "esi";
+
+  const triageAssessmentColorStyle = selectedFinalTriage
+    ? getTriageColorButtonStyle(selectedFinalTriage)
+    : null;
+
+  const triageAssessmentTextStyle = selectedFinalTriage
+    ? isEsiTriage
+      ? { color: COLORS.text }
+      : getTriageColorTextStyle(selectedFinalTriage)
+    : null;
+
+  const triageAssessmentIconColor = selectedFinalTriage
+    ? isEsiTriage
+      ? COLORS.secondaryText
+      : getTriageAssessmentIconColor(selectedFinalTriage)
+    : COLORS.secondaryText;
 
     return (
       <>

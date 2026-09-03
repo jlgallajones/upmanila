@@ -942,41 +942,133 @@ export default function HomeDashboardScreen() {
     }
   }
 
-  async function showOpenFacilityResponsePrompt(incident: Incident) {
-    setQuickChoice(null);
+  function showOpenFacilityFacilityPrompt(incident: Incident) {
+  void resolveHealthcareFacility(
+    incident,
+    "Select Healthcare Facility",
+    "Choose the official hospital to open facility response for.",
+    showOpenFacilityResponsePrompt,
+  );
+}
+
+  async function showOpenFacilityResponsePrompt(
+  incident: Incident,
+  facility: HealthcareFacility,
+) {
+  setQuickChoice(null);
+  setIsSavingQuickAction(true);
+
+  try {
+    const timeline = await getIncidentTimeline(incident.id);
+
+    setQuickTimePrompt({
+      title: "Open Healthcare Facility Response",
+
+      subtitle:
+        `${incident.incident_name}\n${facility.facility_name}`,
+
+      fieldLabel: "OPENING TIME",
+
+      value: formatExistingDateTime(
+        timeline?.dmmp_activated_at,
+      ),
+
+      onSave: async (openedAt) => {
+        await saveFacilityOpenQuickAction(
+          incident,
+          facility,
+          openedAt,
+        );
+      },
+    });
+  } catch (error) {
+    console.error(
+      "Unable to prepare facility response opening:",
+      error,
+    );
+
+    Alert.alert(
+      "Unable to open response",
+      error instanceof Error
+        ? error.message
+        : "Please check your connection and try again.",
+    );
+  } finally {
+    setIsSavingQuickAction(false);
+  }
+}
+
+  async function saveFacilityOpenQuickAction(
+  incident: Incident,
+  facility: HealthcareFacility,
+  openedAt: string,
+) {
+  try {
     setIsSavingQuickAction(true);
 
-    try {
-      const timeline = await getIncidentTimeline(incident.id);
+    /*
+     * Keep the existing incident-wide activation behavior
+     * for compatibility with your current system.
+     */
+    await updateIncidentTimeline(incident.id, {
+      dmmpActivated: true,
+      dmmpActivatedAt: openedAt,
+    });
 
-      setQuickTimePrompt({
-        title: "Open Facility Response",
-        subtitle: incident.incident_name,
-        fieldLabel: "OPENING TIME",
-        value: formatExistingDateTime(timeline?.dmmp_activated_at),
-        onSave: async (openedAt) => {
-          await updateIncidentTimeline(incident.id, {
-            dmmpActivated: true,
-            dmmpActivatedAt: openedAt,
-          });
+    /*
+     * Also record WHICH healthcare facility was opened.
+     */
+    const current =
+      await getDeactivationContinuity(incident.id);
 
-          Alert.alert(
-            "Facility response opened",
-            "The facility response opening time was saved.",
-          );
-        },
-      });
-    } catch (error) {
-      Alert.alert(
-        "Unable to open response",
-        error instanceof Error
-          ? error.message
-          : "Please check your connection and try again.",
-      );
-    } finally {
-      setIsSavingQuickAction(false);
-    }
+    await saveDeactivationContinuity(incident.id, {
+      sceneDemobilizedAt:
+        current.summary.sceneDemobilizedAt ?? null,
+
+      lastFacilityDeactivatedAt:
+        current.summary.lastFacilityDeactivatedAt ?? null,
+
+      emsCoverageDisruption:
+        current.summary.emsCoverageDisruption ?? null,
+
+      facilityCareDisruption:
+        current.summary.facilityCareDisruption ?? null,
+
+      notes: appendFacilityActionNote(
+        current.summary.notes ?? null,
+        "Open Healthcare Facility Response",
+        incident,
+        facility,
+        openedAt,
+      ),
+
+      assessedAt: new Date().toISOString(),
+    });
+
+    setQuickChoice(null);
+
+    Alert.alert(
+      "Facility response opened",
+      `The facility response opening time was recorded for ${facility.facility_name}.`,
+    );
+  } catch (error) {
+    console.error(
+      "Unable to open facility response:",
+      error,
+    );
+
+    Alert.alert(
+      "Unable to open response",
+      error instanceof Error
+        ? error.message
+        : "Please try again.",
+    );
+
+    throw error;
+  } finally {
+    setIsSavingQuickAction(false);
   }
+}
 
   function showFacilityDisruptionFacilityPrompt(incident: Incident) {
     void resolveHealthcareFacility(
@@ -1411,7 +1503,7 @@ export default function HomeDashboardScreen() {
                 void resolveActiveIncident(
                   "Select Incident",
                   "Choose the incident to open facility response for.",
-                  showOpenFacilityResponsePrompt,
+                  showOpenFacilityFacilityPrompt,
                   true,
                 );
               }}
