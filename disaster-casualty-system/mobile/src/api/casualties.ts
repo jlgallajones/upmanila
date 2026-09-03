@@ -58,6 +58,28 @@ export type CasualtyRecord = {
     } | null;
   } | null;
 
+  latest_facility_encounter?: {
+  casualty_incident_id: string;
+  facility_id: string;
+
+  arrived_at: string | null;
+
+  ed_admitted_at: string | null;
+  ed_departed_at: string | null;
+
+  admitted_to_hospital: boolean | null;
+  discharged_home: boolean | null;
+
+  hospital_admitted_at: string | null;
+  hospital_discharged_at: string | null;
+
+  icu_admitted_at: string | null;
+  icu_discharged_at: string | null;
+
+  disposition: string;
+  created_at: string;
+} | null;
+
   casualty: {
     id: string;
     id_number: string | null;

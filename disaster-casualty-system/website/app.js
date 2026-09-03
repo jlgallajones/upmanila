@@ -141,6 +141,22 @@ const adminViews = [
   ["logs", "Action Logs"],
 ];
 
+function getNavInitials(label) {
+  const words = String(label)
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (words.length === 1) {
+    return words[0].charAt(0).toUpperCase();
+  }
+
+  return words
+    .slice(0, 2)
+    .map((word) => word.charAt(0).toUpperCase())
+    .join("");
+}
+
 function readJson(key) {
   try {
     const value = localStorage.getItem(key);
@@ -728,8 +744,13 @@ function renderDashboardShell() {
             .map(
               ([id, label]) => `
                 <button class="nav-button ${state.activeView === id ? "active" : ""}" data-view="${id}" title="${escapeHtml(label)}">
-                  <span class="nav-glyph"></span>
-                  <span>${label}</span>
+                  <span class="nav-glyph">
+                    ${escapeHtml(getNavInitials(label))}
+                  </span>
+
+                  <span>
+                    ${escapeHtml(label)}
+                  </span>
                 </button>
               `,
             )
@@ -847,6 +868,7 @@ function bindView() {
   bindAccountActions();
   bindIncidentManagementActions();
   bindIncidentAnalyticsActions();
+  bindCasualtyRecordIncidents();
   bindOpenCasualtyRecord();
   bindVerificationReviewActions();
   bindScopeLinks();
@@ -2369,14 +2391,23 @@ function renderAdminCasualtyRecords(compact = false) {
   const byIncident = new Map();
 
   for (const item of state.casualties) {
-    const incidentName = item.incident?.incident_name || "Unknown incident";
-    const current = byIncident.get(incidentName) || {
+    const incidentId =
+      item.incident?.id || "unknown-incident";
+
+    const incidentName =
+      item.incident?.incident_name || "Unknown incident";
+
+    const current = byIncident.get(incidentId) || {
+      incidentId,
+      incidentName,
       total: 0,
       pending: 0,
       verified: 0,
+      records: [],
     };
 
     current.total += 1;
+    current.records.push(item);
 
     if (item.verification_status === "verified") {
       current.verified += 1;
@@ -2384,40 +2415,267 @@ function renderAdminCasualtyRecords(compact = false) {
       current.pending += 1;
     }
 
-    byIncident.set(incidentName, current);
+    byIncident.set(incidentId, current);
   }
 
   return `
     <section class="panel">
       <div class="panel-header">
         <div>
-          <h2>Casualty records summary</h2>
-          <p class="panel-subtitle">Summary of available casualty records from mobile submissions.</p>
+          <h2>Casualty Records</h2>
+          <p class="panel-subtitle">
+            Select an incident to view casualty records submitted for that incident.
+          </p>
         </div>
       </div>
+
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Incident</th><th>Total</th><th>Pending</th><th>Verified</th></tr></thead>
+          <thead>
+            <tr>
+              <th>Incident</th>
+              <th>Total</th>
+              <th>Pending</th>
+              <th>Verified</th>
+            </tr>
+          </thead>
+
           <tbody>
             ${
-              Array.from(byIncident.entries())
-                .map(
-                  ([incidentName, counts]) => `
+              Array.from(byIncident.values())
+                .map((group) => {
+                  const incidentKey = escapeHtml(
+                    group.incidentId,
+                  );
+
+                  return `
                     <tr>
-                      <td><strong>${escapeHtml(incidentName)}</strong></td>
-                      <td>${counts.total}</td>
-                      <td><span class="pill orange">${counts.pending}</span></td>
-                      <td><span class="pill green">${counts.verified}</span></td>
+                      <td>
+                        <button
+                          class="record-link records-incident-button"
+                          type="button"
+                          data-records-incident="${incidentKey}"
+                          aria-expanded="false"
+                        >
+                          <span
+                            data-records-incident-arrow="${incidentKey}"
+                          >
+                            ▶
+                          </span>
+
+                          ${escapeHtml(group.incidentName)}
+                        </button>
+                      </td>
+
+                      <td>${group.total}</td>
+
+                      <td>
+                        <span class="pill orange">
+                          ${group.pending}
+                        </span>
+                      </td>
+
+                      <td>
+                        <span class="pill green">
+                          ${group.verified}
+                        </span>
+                      </td>
                     </tr>
-                  `,
-                )
-                .join("") || `<tr><td colspan="4"><div class="empty-state">No casualty records available yet.</div></td></tr>`
+
+                    ${
+                      compact
+                        ? ""
+                        : `
+                          <tr
+                            data-records-incident-details="${incidentKey}"
+                            hidden
+                          >
+                            <td colspan="4">
+                              <div class="incident-casualty-list">
+                                <div class="incident-casualty-list-header">
+                                  <div>
+                                    <strong>
+                                      ${escapeHtml(group.incidentName)}
+                                    </strong>
+
+                                    <span class="panel-subtitle">
+                                      ${group.total} casualty record${
+                                            group.total === 1 ? "" : "s"
+                                          }
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div class="table-wrap">
+                                  <table>
+                                    <thead>
+                                      <tr>
+                                        <th>Casualty</th>
+                                        <th>ID Number</th>
+                                        <th>Status</th>
+                                        <th>Verification</th>
+                                        <th>Encoded By</th>
+                                        <th>Reported</th>
+                                        <th></th>
+                                      </tr>
+                                    </thead>
+
+                                    <tbody>
+                                      ${group.records
+                                        .slice()
+                                        .sort((first, second) =>
+                                          compareText(
+                                            casualtySortLabel(first),
+                                            casualtySortLabel(second),
+                                          ),
+                                        )
+                                        .map(
+                                          (item) => `
+                                            <tr
+                                              class="clickable-row"
+                                              data-open-casualty="${escapeHtml(
+                                                item.id,
+                                              )}"
+                                            >
+                                              <td>
+                                                <strong>
+                                                  ${escapeHtml(
+                                                    fullCasualtyName(
+                                                      item.casualty,
+                                                    ),
+                                                  )}
+                                                </strong>
+                                              </td>
+
+                                              <td>
+                                                ${escapeHtml(
+                                                  item.casualty
+                                                    ?.id_number ||
+                                                    "No ID number",
+                                                )}
+                                              </td>
+
+                                              <td>
+                                                ${escapeHtml(
+                                                  roleLabel(
+                                                    item.current_status,
+                                                  ),
+                                                )}
+                                              </td>
+
+                                              <td>
+                                                <span
+                                                  class="pill ${verificationPillClass(
+                                                    item.verification_status,
+                                                  )}"
+                                                >
+                                                  ${escapeHtml(
+                                                    roleLabel(
+                                                      item.verification_status,
+                                                    ),
+                                                  )}
+                                                </span>
+                                              </td>
+
+                                              <td>
+                                                ${escapeHtml(
+                                                  item.encoder
+                                                    ?.full_name ||
+                                                    "Not recorded",
+                                                )}
+                                              </td>
+
+                                              <td>
+                                                ${formatDate(
+                                                  item.reported_at,
+                                                )}
+                                              </td>
+
+                                              <td>
+                                                <button
+                                                  class="ghost-button mini"
+                                                  type="button"
+                                                  data-open-casualty="${escapeHtml(
+                                                    item.id,
+                                                  )}"
+                                                >
+                                                  Open Record
+                                                </button>
+                                              </td>
+                                            </tr>
+                                          `,
+                                        )
+                                        .join("")}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        `
+                    }
+                  `;
+                })
+                .join("") ||
+              `
+                <tr>
+                  <td colspan="4">
+                    <div class="empty-state">
+                      No casualty records available yet.
+                    </div>
+                  </td>
+                </tr>
+              `
             }
           </tbody>
         </table>
       </div>
     </section>
   `;
+}
+
+function bindCasualtyRecordIncidents() {
+  document
+    .querySelectorAll("[data-records-incident]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        const incidentId =
+          button.dataset.recordsIncident;
+
+        if (!incidentId) {
+          return;
+        }
+
+        const detailRow = document.querySelector(
+          `[data-records-incident-details="${CSS.escape(
+            incidentId,
+          )}"]`,
+        );
+
+        if (!detailRow) {
+          return;
+        }
+
+        const willOpen = detailRow.hidden;
+
+        detailRow.hidden = !willOpen;
+
+        button.setAttribute(
+          "aria-expanded",
+          String(willOpen),
+        );
+
+        const arrow = document.querySelector(
+          `[data-records-incident-arrow="${CSS.escape(
+            incidentId,
+          )}"]`,
+        );
+
+        if (arrow) {
+          arrow.textContent = willOpen ? "▼" : "▶";
+        }
+      });
+    });
 }
 
 function renderAdminVerificationReview() {
@@ -2485,12 +2743,306 @@ function detailItem(label, value) {
   `;
 }
 
-function renderCasualtyRecordModal(item) {
+function extractRecordSectionValue(
+  text,
+  sectionTitle,
+  label,
+) {
+  if (!text) {
+    return null;
+  }
+
+  const lines = String(text).split(/\r?\n/);
+
+  const targetSection =
+    `[${sectionTitle}]`.toLowerCase();
+
+  const targetLabel =
+    `${label}:`.toLowerCase();
+
+  let insideSection = false;
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+
+    if (!line) {
+      continue;
+    }
+
+    if (
+      line.startsWith("[") &&
+      line.endsWith("]")
+    ) {
+      insideSection =
+        line.toLowerCase() === targetSection;
+
+      continue;
+    }
+
+    if (
+      insideSection &&
+      line.toLowerCase().startsWith(targetLabel)
+    ) {
+      const value = line
+        .slice(label.length + 1)
+        .trim();
+
+      return value || null;
+    }
+  }
+
+  return null;
+}
+
+function getCasualtyVictimCode(
+  item,
+  recordDetails,
+) {
+  const possibleNotes = [
+    item?.remarks,
+    item?.latest_triage_assessment?.notes,
+    ...(recordDetails?.triageHistory || [])
+      .map((record) => record.notes),
+  ].filter(Boolean);
+
+  for (const text of possibleNotes) {
+    const saVictimCode =
+      extractRecordSectionValue(
+        text,
+        "SA Responder Details",
+        "Victim code",
+      );
+
+    if (saVictimCode) {
+      return saVictimCode;
+    }
+
+    const fieldResponderVictimCode =
+      extractRecordSectionValue(
+        text,
+        "Field Responder Codes",
+        "Victim code",
+      );
+
+    if (fieldResponderVictimCode) {
+      return fieldResponderVictimCode;
+    }
+  }
+
+  return null;
+}
+
+function formatPatientIdentified(casualty) {
+  switch (casualty?.identification_status) {
+    case "identified":
+      return "Yes";
+
+    case "unidentified":
+      return "No";
+
+    case "partially_identified":
+      return "Partially identified";
+
+    default:
+      return "Not recorded";
+  }
+}
+
+function formatTriageRecordValue(value) {
+  if (value === true) return "Yes";
+  if (value === false) return "No";
+
+  if (value === null || value === undefined || value === "") {
+    return "Not recorded";
+  }
+
+  const text = String(value);
+
+  if (/^esi_\d+$/i.test(text)) {
+    return text.replace(/esi_/i, "ESI ");
+  }
+
+  return roleLabel(text);
+}
+
+function renderTriageAssessmentAnswers(answers) {
+  if (!answers || typeof answers !== "object") {
+    return `
+      <div class="empty-state">
+        No assessment answers recorded.
+      </div>
+    `;
+  }
+
+  const entries = Object.entries(answers);
+
+  if (!entries.length) {
+    return `
+      <div class="empty-state">
+        No assessment answers recorded.
+      </div>
+    `;
+  }
+
+  return `
+    <div class="casualty-detail-grid">
+      ${entries
+        .map(([key, value]) =>
+          detailItem(
+            roleLabel(key),
+            formatTriageRecordValue(value),
+          ),
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function renderTriageHistoryGroup(title, subtitle, records) {
+  return `
+    <section class="record-section">
+      <h3>${escapeHtml(title)}</h3>
+
+      <p class="panel-subtitle">
+        ${escapeHtml(subtitle)}
+      </p>
+
+      ${
+        records.length
+          ? records
+              .map(
+                (record, index) => `
+                  <div
+                    style="
+                      margin-top:14px;
+                      padding:16px;
+                      border:1px solid #e2e7ef;
+                      border-radius:12px;
+                    "
+                  >
+                    <div class="casualty-detail-grid">
+                      ${detailItem(
+                        "Assessment",
+                        `Triage ${index + 1}`,
+                      )}
+
+                      ${detailItem(
+                        "Triage system",
+                        String(
+                          record.triage_system || "Not recorded",
+                        ).toUpperCase(),
+                      )}
+
+                      ${detailItem(
+                        "Triage category",
+                        roleLabel(record.triage_category),
+                      )}
+
+                      ${detailItem(
+                        "Triage time",
+                        formatDate(record.triaged_at),
+                      )}
+
+                      ${detailItem(
+                        "Location",
+                        record.location,
+                      )}
+
+                      ${detailItem(
+                        "Performed by",
+                        record.triaged_by_user?.full_name,
+                      )}
+
+                      ${detailItem(
+                        "Account role",
+                        roleLabel(
+                          record.triaged_by_user?.role,
+                        ),
+                      )}
+
+                      ${detailItem(
+                        "Notes",
+                        record.notes || "No notes",
+                      )}
+                    </div>
+
+                    <div style="margin-top:14px">
+                      <strong>Assessment Answers</strong>
+
+                      <div style="margin-top:10px">
+                        ${renderTriageAssessmentAnswers(
+                          record.assessment_answers,
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                `,
+              )
+              .join("")
+          : `
+            <div class="empty-state" style="margin-top:12px">
+              No record yet.
+            </div>
+          `
+      }
+    </section>
+  `;
+}
+
+function renderCasualtyRecordModal(
+  item,
+  recordDetails = null,
+) {
   const casualty = item.casualty || {};
   const incident = item.incident || {};
   const evacuationCenter = item.evacuation_center || {};
   const healthcareFacility = item.healthcare_facility || {};
   const encoder = item.encoder || {};
+  const triageHistory =
+  recordDetails?.triageHistory || [];
+
+  const fieldResponderTriage =
+    triageHistory.filter(
+      (record) => record.triage_stage === "on_site",
+    );
+
+  const saResponderTriage =
+    triageHistory.filter(
+      (record) => record.triage_stage === "reassessment",
+    );
+
+  const healthcareFacilityTriage =
+    triageHistory.filter(
+      (record) =>
+        record.triage_stage === "facility_arrival",
+    );
+
+    const victimCode =
+  getCasualtyVictimCode(
+    item,
+    recordDetails,
+  );
+
+const newborn =
+  extractRecordSectionValue(
+    item.remarks,
+    "SA Responder Details",
+    "Newborn",
+  );
+
+const pregnant =
+  extractRecordSectionValue(
+    item.remarks,
+    "SA Responder Details",
+    "Pregnant",
+  );
+
+const religion =
+  extractRecordSectionValue(
+    item.remarks,
+    "SA Responder Details",
+    "Religion",
+  );
 
   return `
     <div class="modal-backdrop" data-close-modal>
@@ -2513,14 +3065,99 @@ function renderCasualtyRecordModal(item) {
         <div class="modal-body">
           <section class="record-section">
             <h3>Personal Details</h3>
+
             <div class="casualty-detail-grid">
-              ${detailItem("ID type", casualty.id_type)}
-              ${detailItem("Identification", roleLabel(casualty.identification_status))}
-              ${detailItem("Sex", casualty.sex)}
-              ${detailItem("Age", casualty.estimated_age)}
-              ${detailItem("Date of birth", casualty.date_of_birth)}
-              ${detailItem("Contact number", casualty.contact_number)}
-              ${detailItem("Address", formatLocation(casualty.house_street, casualty.barangay, casualty.municipality, casualty.province, casualty.region))}
+
+              ${detailItem(
+                "Victim Code",
+                victimCode,
+              )}
+
+              ${detailItem(
+                "Patient Identified",
+                formatPatientIdentified(casualty),
+              )}
+
+              ${detailItem(
+                "ID Number",
+                casualty.id_number,
+              )}
+
+              ${detailItem(
+                "Age",
+                casualty.estimated_age,
+              )}
+
+              ${detailItem(
+                "First Name",
+                casualty.first_name,
+              )}
+
+              ${detailItem(
+                "Middle Name",
+                casualty.middle_name,
+              )}
+
+              ${detailItem(
+                "Last Name",
+                casualty.last_name,
+              )}
+
+              ${detailItem(
+                "Sex",
+                casualty.sex,
+              )}
+
+              ${detailItem(
+                "Date of Birth",
+                casualty.date_of_birth,
+              )}
+
+              ${detailItem(
+                "Newborn",
+                newborn,
+              )}
+
+              ${detailItem(
+                "Pregnant",
+                pregnant,
+              )}
+
+              ${detailItem(
+                "Religion",
+                religion,
+              )}
+
+              ${detailItem(
+                "Contact Number",
+                casualty.contact_number,
+              )}
+
+              ${detailItem(
+                "House / Street",
+                casualty.house_street,
+              )}
+
+              ${detailItem(
+                "Barangay",
+                casualty.barangay,
+              )}
+
+              ${detailItem(
+                "Municipality / City",
+                casualty.municipality,
+              )}
+
+              ${detailItem(
+                "Province",
+                casualty.province,
+              )}
+
+              ${detailItem(
+                "Region",
+                casualty.region,
+              )}
+
             </div>
           </section>
 
@@ -2562,6 +3199,48 @@ function renderCasualtyRecordModal(item) {
               ${detailItem("Coordinates", item.latitude && item.longitude ? `${item.latitude}, ${item.longitude}` : "Not recorded")}
             </div>
           </section>
+          ${renderTriageHistoryGroup(
+            "Field Responder",
+            "Primary / on-site triage assessment",
+            fieldResponderTriage,
+          )}
+
+          ${renderTriageHistoryGroup(
+            "Stabilization Area Responder",
+            "Secondary / reassessment triage",
+            saResponderTriage,
+          )}
+
+          ${renderTriageHistoryGroup(
+            "Healthcare Facility",
+            "Tertiary / facility-arrival triage",
+            healthcareFacilityTriage,
+          )}
+          <section class="record-section">
+            <h3>Record History</h3>
+
+            <div class="casualty-detail-grid">
+              ${detailItem(
+                "Status updates",
+                recordDetails?.statusHistory?.length ?? 0,
+              )}
+
+              ${detailItem(
+                "Triage assessments",
+                recordDetails?.triageHistory?.length ?? 0,
+              )}
+
+              ${detailItem(
+                "Transport records",
+                recordDetails?.transportHistory?.length ?? 0,
+              )}
+
+              ${detailItem(
+                "Verification actions",
+                recordDetails?.verificationHistory?.length ?? 0,
+              )}
+            </div>
+          </section>
         </div>
 
         <div class="modal-footer">
@@ -2578,26 +3257,106 @@ function closeRecordModal() {
   document.querySelector(".modal-backdrop")?.remove();
 }
 
-function openCasualtyRecordModal(casualtyId) {
-  const item = state.casualties.find((record) => record.id === casualtyId);
+async function loadCasualtyRecordDetails(casualtyId) {
+  const encodedId = encodeURIComponent(casualtyId);
 
-  if (!item) {
-    setMessage("verificationMessage", "Casualty record could not be found.", "error");
+  const existingRecord = state.casualties.find(
+    (record) => record.id === casualtyId,
+  );
+
+  const [
+    casualtyResult,
+    statusHistoryResult,
+    triageHistoryResult,
+    transportHistoryResult,
+    verificationHistoryResult,
+  ] = await Promise.allSettled([
+    apiRequest(`/casualties/${encodedId}`),
+    apiRequest(`/casualties/${encodedId}/status-history`),
+    apiRequest(`/casualties/${encodedId}/triage-history`),
+    apiRequest(`/casualties/${encodedId}/transport-history`),
+    apiRequest(`/casualties/${encodedId}/verification-history`),
+  ]);
+
+  const casualty =
+    casualtyResult.status === "fulfilled"
+      ? casualtyResult.value.data
+      : existingRecord;
+
+  if (!casualty) {
+    throw new Error("Casualty record could not be found.");
+  }
+
+  return {
+    casualty,
+
+    statusHistory:
+      statusHistoryResult.status === "fulfilled"
+        ? statusHistoryResult.value.data || []
+        : [],
+
+    triageHistory:
+      triageHistoryResult.status === "fulfilled"
+        ? triageHistoryResult.value.data || []
+        : [],
+
+    transportHistory:
+      transportHistoryResult.status === "fulfilled"
+        ? transportHistoryResult.value.data || []
+        : [],
+
+    verificationHistory:
+      verificationHistoryResult.status === "fulfilled"
+        ? verificationHistoryResult.value.data || []
+        : [],
+  };
+}
+
+async function openCasualtyRecordModal(casualtyId) {
+  if (!casualtyId) {
     return;
   }
 
-  closeRecordModal();
-  document.body.insertAdjacentHTML("beforeend", renderCasualtyRecordModal(item));
+  try {
+    const details =
+      await loadCasualtyRecordDetails(casualtyId);
 
-  document.querySelectorAll("[data-close-modal]").forEach((element) => {
-    element.addEventListener("click", (event) => {
-      if (event.target === element || element.matches("button")) {
-        closeRecordModal();
-      }
-    });
-  });
+    closeRecordModal();
 
-  bindVerificationReviewActions();
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      renderCasualtyRecordModal(
+        details.casualty,
+        details,
+      ),
+    );
+
+    document
+      .querySelectorAll("[data-close-modal]")
+      .forEach((element) => {
+        element.addEventListener("click", (event) => {
+          if (
+            event.target === element ||
+            element.matches("button")
+          ) {
+            closeRecordModal();
+          }
+        });
+      });
+
+    bindVerificationReviewActions();
+  } catch (error) {
+    console.error(
+      "Failed to load casualty record details:",
+      error,
+    );
+
+    window.alert(
+      error instanceof Error
+        ? error.message
+        : "Unable to load casualty record.",
+    );
+  }
 }
 
 function bindOpenCasualtyRecord() {

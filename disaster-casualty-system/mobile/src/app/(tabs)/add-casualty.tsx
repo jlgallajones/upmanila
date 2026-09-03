@@ -9236,9 +9236,14 @@ export default function AddCasualtyScreen() {
       }
 
       case "healthcareFacility": {
+        const activeHealthcareFacilities =
+          healthcareFacilities.filter(
+            (facility) => facility.is_active,
+          );
+
         const facilityOptions =
-          healthcareFacilities.length > 0
-            ? healthcareFacilities
+          activeHealthcareFacilities.length > 0
+            ? activeHealthcareFacilities
             : form.healthcareFacilityId && form.healthcareFacility
               ? [
                   {
@@ -9265,12 +9270,25 @@ export default function AddCasualtyScreen() {
           label: formatHealthcareFacilityLabel(facility),
           selected: form.healthcareFacilityId === facility.id,
           onSelect: () => {
-            updateField("healthcareFacilityId", facility.id);
+            updateField(
+              "healthcareFacilityId",
+              facility.id,
+            );
+
             updateField(
               "healthcareFacility",
               formatHealthcareFacilityLabel(facility),
             );
-            updateField("hospitalName", facility.facility_name);
+
+            updateField(
+              "hospitalName",
+              facility.facility_name,
+            );
+
+            updateField(
+              "receivingFacilityText",
+              facility.facility_name,
+            );
           },
         }));
       }
@@ -9783,14 +9801,35 @@ export default function AddCasualtyScreen() {
     void handleSubmit();
   }
 
-  function goBack() {
-    if (currentStep > 0) {
-      setCurrentStep((step) => step - 1);
-      return;
-    }
-
-    router.back();
+  function goPreviousStep() {
+  if (currentStep > 0) {
+    setCurrentStep((step) => step - 1);
   }
+}
+
+function confirmExitAddCasualty() {
+  Alert.alert(
+    isEditing
+      ? "Exit Edit Casualty?"
+      : "Exit Add Casualty?",
+    isEditing
+      ? "Any unsaved changes will be lost. Are you sure you want to exit?"
+      : "Any information you entered but have not submitted will be lost. Are you sure you want to exit?",
+    [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Exit",
+        style: "destructive",
+        onPress: () => {
+          router.back();
+        },
+      },
+    ],
+  );
+}
 
   function renderResponderSafetyStep() {
     const safetyControlsDisabled =
@@ -11559,14 +11598,32 @@ export default function AddCasualtyScreen() {
                 onPress={() => openChoiceSheet("transferPrecaution")}
               />
 
-              <FormField
+              <SelectField
                 label="RECEIVING FACILITY"
-                value={form.receivingFacilityText}
-                placeholder="Type clinic or hospital name"
-                onChangeText={(value) =>
-                  updateField("receivingFacilityText", value)
+                value={form.healthcareFacility}
+                placeholder={
+                  isLoadingHealthcareFacilities
+                    ? "Loading hospitals..."
+                    : "Select receiving hospital"
+                }
+                onPress={() =>
+                  openChoiceSheet("healthcareFacility")
                 }
               />
+
+              {healthcareFacilityError ? (
+                <View style={styles.inlineWarning}>
+                  <Ionicons
+                    name="alert-circle-outline"
+                    size={18}
+                    color={COLORS.maroon}
+                  />
+
+                  <Text style={styles.inlineWarningText}>
+                    {healthcareFacilityError}
+                  </Text>
+                </View>
+              ) : null}
 
               <SelectField
                 label="USED EMS VEHICLE?"
@@ -11626,24 +11683,6 @@ export default function AddCasualtyScreen() {
                     "arrivedFacilityTime",
                     formatDateTimeForInput(new Date()),
                   )
-                }
-              />
-
-              <FormField
-                label="PATIENT RECEIVED BY - PHYSICIAN IN CHARGE"
-                value={form.patientReceivedByPhysician}
-                placeholder="Physician in charge"
-                onChangeText={(value) =>
-                  updateField("patientReceivedByPhysician", value)
-                }
-              />
-
-              <FormField
-                label="PATIENT RECEIVED BY - NURSE IN CHARGE"
-                value={form.patientReceivedByNurse}
-                placeholder="Nurse in charge"
-                onChangeText={(value) =>
-                  updateField("patientReceivedByNurse", value)
                 }
               />
             </>
@@ -12671,7 +12710,7 @@ export default function AddCasualtyScreen() {
           </Text>
         </Pressable>
       </View>
-    );
+    );  
   }
 
   return (
@@ -12688,7 +12727,7 @@ export default function AddCasualtyScreen() {
         <View style={styles.header}>
           <View style={styles.headerTopRow}>
             <Pressable
-              onPress={goBack}
+              onPress={confirmExitAddCasualty}
               style={({ pressed }) => [
                 styles.backButton,
                 pressed && styles.pressed,
@@ -12816,7 +12855,7 @@ export default function AddCasualtyScreen() {
           <View style={styles.footer}>
             {currentStep > 0 ? (
               <Pressable
-                onPress={goBack}
+                onPress={goPreviousStep}
                 style={({ pressed }) => [
                   styles.secondaryButton,
                   pressed && styles.pressed,

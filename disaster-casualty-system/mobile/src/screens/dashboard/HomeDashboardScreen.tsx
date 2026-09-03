@@ -568,6 +568,8 @@ export default function HomeDashboardScreen() {
   const [isGuestMode, setIsGuestMode] = useState(false);
   const [currentUserRole, setCurrentUserRole] =
     useState<string | null>(null);
+  const [currentUserFirstName, setCurrentUserFirstName] =
+    useState("Responder");
   const [
     canOpenIncidentManagement,
     setCanOpenIncidentManagement,
@@ -600,6 +602,11 @@ export default function HomeDashboardScreen() {
         currentUser?.role === "super_admin";
 
       setCurrentUserRole(currentUser?.role ?? null);
+      setCurrentUserFirstName(
+        currentUser?.full_name
+        ?.trim()
+        .split(/\s+/)[0] || "Responder",
+        );
       setCanOpenIncidentManagement(
         hasIncidentManagementAccess,
       );
@@ -1264,7 +1271,7 @@ export default function HomeDashboardScreen() {
               </Text>
 
               <Text style={styles.responderName}>
-                Responder
+                {currentUserFirstName}
               </Text>
 
               <View style={styles.activeRow}>

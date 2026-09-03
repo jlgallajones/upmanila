@@ -93,6 +93,23 @@ const fieldResponderTriageFilters = [
   "Expectant",
 ] as const;
 
+const healthcareDocumenterTriageFilters = [
+  "All",
+  "ESI 1",
+  "ESI 2",
+  "ESI 3",
+  "ESI 4",
+  "ESI 5",
+] as const;
+
+const healthcareDocumenterLocationFilters = [
+  "All",
+  "Emergency Department",
+  "Ward",
+  "ICU",
+  "Discharged",
+] as const;
+
 const incidentFilters = [
   "All Incidents",
   "Active Incidents",
@@ -107,6 +124,11 @@ type FieldResponderReviewFilter =
   (typeof saResponderReviewFilters)[number];
 type FieldResponderTriageFilter =
   (typeof fieldResponderTriageFilters)[number];
+
+type HealthcareDocumenterTriageFilter =
+  (typeof healthcareDocumenterTriageFilters)[number];
+type HealthcareDocumenterLocationFilter =
+  (typeof healthcareDocumenterLocationFilters)[number];
 
 function getFullName(record: CasualtyRecord): string {
   const parts = [
@@ -257,6 +279,107 @@ function isSaResponderView(
   assignment: ResponderAssignment | null,
 ): boolean {
   return role === "sa_responder" || assignment === "sa_responder";
+}
+
+function isHealthcareDocumenterView(
+  role: string | null,
+): boolean {
+  return (
+    role === "documenter" ||
+    role === "medical_personnel"
+  );
+}
+
+function getRecordEsiTriageFilter(
+  record: CasualtyRecord,
+): HealthcareDocumenterTriageFilter | null {
+  const assessment =
+    record.latest_triage_assessment;
+
+  if (!assessment) {
+    return null;
+  }
+
+  if (
+    String(assessment.triage_system || "")
+      .trim()
+      .toLowerCase() !== "esi"
+  ) {
+    return null;
+  }
+
+  const finalTriage =
+    assessment.assessment_answers?.finalTriage;
+
+  if (typeof finalTriage !== "string") {
+    return null;
+  }
+
+  switch (finalTriage.trim().toLowerCase()) {
+    case "esi_1":
+      return "ESI 1";
+
+    case "esi_2":
+      return "ESI 2";
+
+    case "esi_3":
+      return "ESI 3";
+
+    case "esi_4":
+      return "ESI 4";
+
+    case "esi_5":
+      return "ESI 5";
+
+    default:
+      return null;
+  }
+}
+
+function getRecordHealthcareLocation(
+  record: CasualtyRecord,
+  ): HealthcareDocumenterLocationFilter | null {
+    const encounter =
+      record.latest_facility_encounter;
+
+    if (!encounter) {
+      return null;
+    }
+
+  const discharged =
+    encounter.discharged_home === true ||
+    Boolean(encounter.hospital_discharged_at) ||
+    encounter.disposition === "discharged_home";
+
+  if (discharged) {
+    return "Discharged";
+  }
+
+  const currentlyInIcu =
+    Boolean(encounter.icu_admitted_at) &&
+    !encounter.icu_discharged_at;
+
+  if (currentlyInIcu) {
+    return "ICU";
+  }
+
+  const admittedToHospital =
+    encounter.admitted_to_hospital === true ||
+    Boolean(encounter.hospital_admitted_at);
+
+  if (admittedToHospital) {
+    return "Ward";
+  }
+
+  const currentlyInEd =
+    Boolean(encounter.ed_admitted_at) &&
+    !encounter.ed_departed_at;
+
+  if (currentlyInEd) {
+    return "Emergency Department";
+  }
+
+  return null;
 }
 
 function isAdminRecordsRole(role: string | null): boolean {
@@ -742,6 +865,20 @@ export default function RecordsScreen() {
     setActiveTriageFilters,
   ] = useState<FieldResponderTriageFilter[]>(["All"]);
 
+  const [
+    activeHealthcareTriageFilters,
+    setActiveHealthcareTriageFilters,
+  ] = useState<HealthcareDocumenterTriageFilter[]>([
+    "All",
+  ]);
+
+  const [
+  activeHealthcareLocationFilters,
+  setActiveHealthcareLocationFilters,
+] = useState<HealthcareDocumenterLocationFilter[]>([
+  "All",
+]);
+
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] =
@@ -762,8 +899,16 @@ export default function RecordsScreen() {
     currentUserRole,
     currentResponderAssignment,
   );
+
+  const useHealthcareDocumenterFilters =
+  isHealthcareDocumenterView(
+    currentUserRole,
+  );
   const useResponderFunctionFilters =
     useFieldResponderFilters || useSaResponderFilters;
+  const useSpecialRecordFilters =
+  useResponderFunctionFilters ||
+  useHealthcareDocumenterFilters;
   const reviewFilterOptions = useSaResponderFilters
     ? saResponderReviewFilters
     : fieldResponderReviewFilters;
@@ -950,6 +1095,29 @@ export default function RecordsScreen() {
     });
   }
 
+  function toggleHealthcareTriageFilter(
+  filter: HealthcareDocumenterTriageFilter,
+) {
+  setActiveHealthcareTriageFilters((current) => {
+    if (filter === "All") {
+      return ["All"];
+    }
+
+    const withoutAll =
+      current.filter((item) => item !== "All");
+
+    const next = withoutAll.includes(filter)
+      ? withoutAll.filter(
+          (item) => item !== filter,
+        )
+      : [...withoutAll, filter];
+
+    return next.length > 0
+      ? next
+      : ["All"];
+  });
+}
+
   const filteredRecords = useMemo(() => {
     const normalizedSearch = searchQuery.trim().toLowerCase();
 
@@ -960,17 +1128,51 @@ export default function RecordsScreen() {
       const location = getLocation(record).toLowerCase();
       const status = formatStatus(record.current_status);
 
-      const matchesFilter = useResponderFunctionFilters
-        ? (activeReviewFilters.length === 0 ||
-            getRecordReviewFilters(
-              record,
-              useSaResponderFilters,
-            ).some((filter) => activeReviewFilters.includes(filter))) &&
-          (activeTriageFilters.includes("All") ||
-            activeTriageFilters.includes(
-              getRecordTriageFilter(record) as FieldResponderTriageFilter,
-            ))
-        : activeFilter === "All" || status === activeFilter;
+      let matchesFilter =
+  activeFilter === "All" ||
+  status === activeFilter;
+
+if (useHealthcareDocumenterFilters) {
+const esiFilter =
+  getRecordEsiTriageFilter(record);
+
+const healthcareLocation =
+  getRecordHealthcareLocation(record);
+
+const matchesReview =
+  activeReviewFilters.length === 0 ||
+  getRecordReviewFilters(record).some(
+    (filter) =>
+      activeReviewFilters.includes(filter),
+  );
+
+const matchesEsi =
+  activeHealthcareTriageFilters.includes(
+    "All",
+  ) ||
+  (
+    esiFilter !== null &&
+    activeHealthcareTriageFilters.includes(
+      esiFilter,
+    )
+  );
+
+const matchesHealthcareLocation =
+  activeHealthcareLocationFilters.includes(
+    "All",
+  ) ||
+  (
+    healthcareLocation !== null &&
+    activeHealthcareLocationFilters.includes(
+      healthcareLocation,
+    )
+  );
+
+matchesFilter =
+  matchesReview &&
+  matchesEsi &&
+  matchesHealthcareLocation;
+  }
 
       const matchesSearch =
         normalizedSearch.length === 0 ||
@@ -1037,6 +1239,33 @@ export default function RecordsScreen() {
           new Date(first.started_at).getTime(),
       );
   }, [activeIncidentFilter, incidents, searchQuery]);
+
+function toggleHealthcareLocationFilter(
+  filter: HealthcareDocumenterLocationFilter,
+) {
+  setActiveHealthcareLocationFilters(
+    (current) => {
+      if (filter === "All") {
+        return ["All"];
+      }
+
+      const withoutAll =
+        current.filter(
+          (item) => item !== "All",
+        );
+
+      const next = withoutAll.includes(filter)
+        ? withoutAll.filter(
+            (item) => item !== filter,
+          )
+        : [...withoutAll, filter];
+
+      return next.length > 0
+        ? next
+        : ["All"];
+    },
+  );
+}
 
   function handleIncidentInformation(incident: Incident) {
     router.push({
@@ -1360,7 +1589,7 @@ export default function RecordsScreen() {
       </SafeAreaView>
 
       <View style={styles.filterSection}>
-        {useResponderFunctionFilters ? (
+        {useSpecialRecordFilters ? (
           <>
             <Pressable
               onPress={() =>
@@ -1376,9 +1605,11 @@ export default function RecordsScreen() {
                   Filters
                 </Text>
                 <Text style={styles.filterToggleSubtitle}>
-                  {useSaResponderFilters
-                    ? "Stabilization Area Responder"
-                    : "Field Responder"}
+                  {useHealthcareDocumenterFilters
+                    ? "Healthcare Facility Documenter"
+                    : useSaResponderFilters
+                      ? "Stabilization Area Responder"
+                      : "Field Responder"}
                 </Text>
               </View>
 
@@ -1396,6 +1627,9 @@ export default function RecordsScreen() {
             {filtersExpanded ? (
               <View style={styles.fieldResponderFilters}>
                 <View style={styles.filterGroup}>
+                  <Text style={styles.filterGroupTitle}>
+                    Record Status
+                  </Text>
                   {reviewFilterOptions.map((item) => (
                     <FilterCheckbox
                       key={item}
@@ -1407,16 +1641,69 @@ export default function RecordsScreen() {
                 </View>
 
                 <View style={styles.filterGroup}>
-                  {fieldResponderTriageFilters.map((item) => (
-                    <FilterCheckbox
-                      key={item}
-                      label={item}
-                      selected={activeTriageFilters.includes(item)}
-                      onPress={() => toggleTriageFilter(item)}
-                    />
-                  ))}
+                  <Text style={styles.filterGroupTitle}>
+                    Triage
+                  </Text>
+
+                  {useHealthcareDocumenterFilters
+                    ? healthcareDocumenterTriageFilters.map(
+                        (item) => (
+                          <FilterCheckbox
+                            key={item}
+                            label={item}
+                            selected={activeHealthcareTriageFilters.includes(
+                              item,
+                            )}
+                            onPress={() =>
+                              toggleHealthcareTriageFilter(item)
+                            }
+                          />
+                        ),
+                      )
+                    : fieldResponderTriageFilters.map(
+                        (item) => (
+                          <FilterCheckbox
+                            key={item}
+                            label={item}
+                            selected={activeTriageFilters.includes(
+                              item,
+                            )}
+                            onPress={() =>
+                              toggleTriageFilter(item)
+                            }
+                          />
+                        ),
+                      )}
                 </View>
-              </View>
+                  {useHealthcareDocumenterFilters ? (
+  <View
+    style={[
+      styles.filterGroup,
+      styles.hcfdLocationFilterGroup,
+    ]}
+  >
+    <Text style={styles.filterGroupTitle}>
+      Patient Location
+    </Text>
+
+    {healthcareDocumenterLocationFilters.map(
+      (item) => (
+        <FilterCheckbox
+          key={item}
+          label={item}
+          selected={activeHealthcareLocationFilters.includes(
+            item,
+          )}
+          onPress={() =>
+            toggleHealthcareLocationFilter(item)
+          }
+        />
+      ),
+    )}
+  </View>
+) : null}
+                </View>
+              
             ) : null}
           </>
         ) : (
@@ -1654,6 +1941,7 @@ const styles = StyleSheet.create({
 
   fieldResponderFilters: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "flex-start",
     paddingHorizontal: SCREEN_PADDING,
     paddingTop: 2,
@@ -1665,6 +1953,22 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 7,
   },
+
+  hcfdLocationFilterGroup: {
+  flexBasis: "100%",
+  flexGrow: 0,
+  flexShrink: 0,
+  width: "100%",
+  marginTop: 4,
+},
+
+  filterGroupTitle: {
+  color: COLORS.secondaryText,
+  fontSize: 10,
+  fontWeight: "900",
+  textTransform: "uppercase",
+  marginBottom: 3,
+},
 
   checkboxRow: {
     minHeight: 24,

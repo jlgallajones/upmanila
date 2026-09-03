@@ -395,6 +395,28 @@ type LatestTransportRecordSummary = {
   created_at: string;
 };
 
+type LatestFacilityEncounterSummary = {
+  casualty_incident_id: string;
+  facility_id: string;
+
+  arrived_at: string | null;
+
+  ed_admitted_at: string | null;
+  ed_departed_at: string | null;
+
+  admitted_to_hospital: boolean | null;
+  discharged_home: boolean | null;
+
+  hospital_admitted_at: string | null;
+  hospital_discharged_at: string | null;
+
+  icu_admitted_at: string | null;
+  icu_discharged_at: string | null;
+
+  disposition: string;
+  created_at: string;
+};
+
 const casualtyRecordSelect = `
   id,
   client_record_id,
@@ -475,8 +497,14 @@ async function attachLatestSummaries<
 >(records: T[]): Promise<
   Array<
     T & {
-      latest_triage_assessment: LatestTriageAssessmentSummary | null;
-      latest_transport_record: LatestTransportRecordSummary | null;
+      latest_triage_assessment:
+        LatestTriageAssessmentSummary | null;
+
+      latest_transport_record:
+        LatestTransportRecordSummary | null;
+
+      latest_facility_encounter:
+        LatestFacilityEncounterSummary | null;
     }
   >
 > {
@@ -484,22 +512,44 @@ async function attachLatestSummaries<
     return [];
   }
 
-  const recordIds = records.map((record) => record.id);
-  const [triageResult, transportResult] = await Promise.all([
+  const recordIds = records.map(
+    (record) => record.id,
+  );
+
+  const [
+    triageResult,
+    transportResult,
+    facilityEncounterResult,
+  ] = await Promise.all([
     supabase
       .from("casualty_triage_assessments")
       .select(
         "id, casualty_incident_id, triage_system, triage_category, responder_category, calculated_category, triage_stage, triaged_at, location, notes, assessment_answers",
       )
       .in("casualty_incident_id", recordIds)
-      .order("triaged_at", { ascending: false }),
+      .order("triaged_at", {
+        ascending: false,
+      }),
+
     supabase
       .from("casualty_transport_records")
       .select(
         "id, casualty_incident_id, transport_required, transport_mode, ems_unit_type, arrived_scene_at, departed_scene_at, arrived_facility_at, receiving_facility_id, notes, created_at",
       )
       .in("casualty_incident_id", recordIds)
-      .order("created_at", { ascending: false }),
+      .order("created_at", {
+        ascending: false,
+      }),
+
+    supabase
+      .from("facility_encounters")
+      .select(
+        "casualty_incident_id, facility_id, arrived_at, ed_admitted_at, ed_departed_at, admitted_to_hospital, discharged_home, hospital_admitted_at, hospital_discharged_at, icu_admitted_at, icu_discharged_at, disposition, created_at",
+      )
+      .in("casualty_incident_id", recordIds)
+      .order("created_at", {
+        ascending: false,
+      }),
   ]);
 
   if (triageResult.error) {
@@ -514,11 +564,31 @@ async function attachLatestSummaries<
     );
   }
 
-  const latestByRecordId = new Map<string, LatestTriageAssessmentSummary>();
+  if (facilityEncounterResult.error) {
+    throw new Error(
+      `Unable to retrieve latest facility encounters: ${facilityEncounterResult.error.message}`,
+    );
+  }
 
-  for (const assessment of (triageResult.data ?? []) as LatestTriageAssessmentSummary[]) {
-    if (!latestByRecordId.has(assessment.casualty_incident_id)) {
-      latestByRecordId.set(assessment.casualty_incident_id, assessment);
+  const latestByRecordId = new Map<
+    string,
+    LatestTriageAssessmentSummary
+  >();
+
+  for (
+    const assessment of (
+      triageResult.data ?? []
+    ) as LatestTriageAssessmentSummary[]
+  ) {
+    if (
+      !latestByRecordId.has(
+        assessment.casualty_incident_id,
+      )
+    ) {
+      latestByRecordId.set(
+        assessment.casualty_incident_id,
+        assessment,
+      );
     }
   }
 
@@ -527,8 +597,16 @@ async function attachLatestSummaries<
     LatestTransportRecordSummary
   >();
 
-  for (const transport of (transportResult.data ?? []) as LatestTransportRecordSummary[]) {
-    if (!latestTransportByRecordId.has(transport.casualty_incident_id)) {
+  for (
+    const transport of (
+      transportResult.data ?? []
+    ) as LatestTransportRecordSummary[]
+  ) {
+    if (
+      !latestTransportByRecordId.has(
+        transport.casualty_incident_id,
+      )
+    ) {
       latestTransportByRecordId.set(
         transport.casualty_incident_id,
         transport,
@@ -536,11 +614,44 @@ async function attachLatestSummaries<
     }
   }
 
+  const latestFacilityEncounterByRecordId =
+    new Map<
+      string,
+      LatestFacilityEncounterSummary
+    >();
+
+  for (
+    const encounter of (
+      facilityEncounterResult.data ?? []
+    ) as LatestFacilityEncounterSummary[]
+  ) {
+    if (
+      !latestFacilityEncounterByRecordId.has(
+        encounter.casualty_incident_id,
+      )
+    ) {
+      latestFacilityEncounterByRecordId.set(
+        encounter.casualty_incident_id,
+        encounter,
+      );
+    }
+  }
+
   return records.map((record) => ({
     ...record,
-    latest_triage_assessment: latestByRecordId.get(record.id) ?? null,
+
+    latest_triage_assessment:
+      latestByRecordId.get(record.id) ?? null,
+
     latest_transport_record:
-      latestTransportByRecordId.get(record.id) ?? null,
+      latestTransportByRecordId.get(
+        record.id,
+      ) ?? null,
+
+    latest_facility_encounter:
+      latestFacilityEncounterByRecordId.get(
+        record.id,
+      ) ?? null,
   }));
 }
 
