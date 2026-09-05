@@ -12,6 +12,18 @@ function isUnitScopedAdmin(role: string): boolean {
   return unitScopedAdminRoles.has(role);
 }
 
+function getStringParam(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (Array.isArray(value) && typeof value[0] === "string") {
+    return value[0];
+  }
+
+  return undefined;
+}
+
 /**
  * Confirms the logged-in admin is allowed to see/manage this incident's
  * responder safety data, and returns the incident row.
@@ -76,7 +88,7 @@ export async function getIncidentResponderSafetyResponses(
 ): Promise<void> {
   try {
     const user = getAuthenticatedUser(request);
-    const incidentId = request.params.incidentId;
+    const incidentId = getStringParam(request.params.incidentId);
 
     if (!incidentId) {
       response.status(400).json({
@@ -125,8 +137,8 @@ export async function updateResponderSafetyResponseStatus(
 ): Promise<void> {
   try {
     const user = getAuthenticatedUser(request);
-    const incidentId = request.params.incidentId;
-    const responseId = request.params.responseId;
+    const incidentId = getStringParam(request.params.incidentId);
+    const responseId = getStringParam(request.params.responseId);
     const safetyStatus = request.body?.safetyStatus;
 
     if (!incidentId || !responseId) {
