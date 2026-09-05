@@ -2779,6 +2779,100 @@ export async function createCasualtyTriageAssessment(
   }
 }
 
+export async function getCasualtyTreatmentHistory(
+  request: Request<{ id: string }>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { id } = request.params;
+    const user = getAuthenticatedUser(request);
+
+    const hasAccess = await canAccessCasualtyRecord(
+      id,
+      user.id,
+      user.role,
+    );
+
+    if (!hasAccess) {
+      response.status(404).json({
+        success: false,
+        message: "Casualty record not found.",
+      });
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("casualty_treatments")
+      .select(
+        "id, casualty_incident_id, treatment_strategy, treatment_area_name, stabilization_started_at, stabilized_at, treatment_details, notes, performed_by",
+      )
+      .eq("casualty_incident_id", id);
+
+    if (error) {
+      throw new Error(
+        `Unable to retrieve treatment history: ${error.message}`,
+      );
+    }
+
+    const performedByIds = [
+      ...new Set(
+        (data ?? [])
+          .map((item) => item.performed_by)
+          .filter(
+            (performedBy): performedBy is string =>
+              typeof performedBy === "string" &&
+              performedBy.trim().length > 0,
+          ),
+      ),
+    ];
+
+    const usersById = new Map<
+      string,
+      {
+        id: string;
+        full_name: string;
+        email: string;
+        role: string;
+      }
+    >();
+
+    if (performedByIds.length > 0) {
+      const { data: users, error: usersError } =
+        await supabase
+          .from("users")
+          .select("id, full_name, email, role")
+          .in("id", performedByIds);
+
+      if (usersError) {
+        throw new Error(
+          `Unable to retrieve treatment history users: ${usersError.message}`,
+        );
+      }
+
+      for (const user of users ?? []) {
+        usersById.set(user.id, user);
+      }
+    }
+
+    const history = (data ?? []).map((item) => ({
+      ...item,
+
+      performed_by_user: item.performed_by
+        ? usersById.get(item.performed_by) ?? null
+        : null,
+    }));
+
+    response.status(200).json({
+      success: true,
+      count: history.length,
+      data: history,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function getCasualtyTransportHistory(
   request: Request<{ id: string }>,
   response: Response,

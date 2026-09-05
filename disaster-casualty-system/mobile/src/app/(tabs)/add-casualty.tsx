@@ -1751,6 +1751,39 @@ function extractVictimCodeFromTriageNotes(
   return match?.[1]?.trim() ?? "";
 }
 
+function extractFieldResponderVictimCode(
+  record: CasualtyRecord,
+): string {
+  const notes =
+    record.latest_triage_assessment?.notes ?? "";
+
+  if (
+    !notes
+      .toLowerCase()
+      .includes("[field responder codes]")
+  ) {
+    return "";
+  }
+
+  return extractVictimCodeFromTriageNotes(notes);
+}
+
+function extractSaResponderVictimCode(
+  record: CasualtyRecord,
+): string {
+  const remarks = record.remarks ?? "";
+
+  if (
+    !remarks
+      .toLowerCase()
+      .includes("[sa responder details]")
+  ) {
+    return "";
+  }
+
+  return extractVictimCodeFromTriageNotes(remarks);
+}
+
 function formatLinkedCasualtyLabel(
   record: CasualtyRecord,
   victimCode: string,
@@ -4764,6 +4797,14 @@ export default function AddCasualtyScreen() {
   const [fieldResponderRecords, setFieldResponderRecords] = useState<
     CasualtyRecord[]
   >([]);
+  const [ownResponderRecords, setOwnResponderRecords] = useState<
+  CasualtyRecord[]
+  >([]);
+
+const [
+  isLoadingOwnResponderRecords,
+  setIsLoadingOwnResponderRecords,
+] = useState(false);
   const [
     selectedFieldResponderRecordId,
     setSelectedFieldResponderRecordId,
@@ -4954,6 +4995,38 @@ export default function AddCasualtyScreen() {
 
     return getTriageSystemOptionsForStage(triageStage);
   }
+
+  const normalizedVictimCode =
+  form.victimCode.trim().toLowerCase();
+
+const victimCodeAlreadyExists = useMemo(() => {
+  if (
+    isEditing ||
+    !normalizedVictimCode ||
+    !form.incidentId ||
+    (!isFieldResponderFlow && !isSaResponderFlow)
+  ) {
+    return false;
+  }
+
+  return ownResponderRecords.some((record) => {
+    const existingVictimCode = isFieldResponderFlow
+      ? extractFieldResponderVictimCode(record)
+      : extractSaResponderVictimCode(record);
+
+    return (
+      existingVictimCode.trim().toLowerCase() ===
+      normalizedVictimCode
+    );
+  });
+}, [
+  form.incidentId,
+  isEditing,
+  isFieldResponderFlow,
+  isSaResponderFlow,
+  normalizedVictimCode,
+  ownResponderRecords,
+]);
 
   const fieldResponderVictimCodeOptions = useMemo(() => {
     return fieldResponderRecords
@@ -5869,7 +5942,7 @@ export default function AddCasualtyScreen() {
     async function loadFieldResponderRecordOptions() {
       if (
         isEditing ||
-        !isSaResponderFlow ||
+        (!isFieldResponderFlow && !isSaResponderFlow) ||
         !currentUserId ||
         !form.incidentId
       ) {
@@ -5915,7 +5988,13 @@ export default function AddCasualtyScreen() {
     return () => {
       isMounted = false;
     };
-  }, [currentUserId, form.incidentId, isEditing, isSaResponderFlow]);
+  }, [
+    currentUserId,
+    form.incidentId,
+    isEditing,
+    isFieldResponderFlow,
+    isSaResponderFlow,
+  ]);
 
   useEffect(() => {
     let isMounted = true;
@@ -5964,6 +6043,64 @@ export default function AddCasualtyScreen() {
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+  let isMounted = true;
+
+  async function loadOwnResponderRecords() {
+    if (
+      isEditing ||
+      (!isFieldResponderFlow && !isSaResponderFlow) ||
+      !currentUserId ||
+      !form.incidentId
+    ) {
+      if (isMounted) {
+        setOwnResponderRecords([]);
+        setIsLoadingOwnResponderRecords(false);
+      }
+
+      return;
+    }
+
+    try {
+      setIsLoadingOwnResponderRecords(true);
+      setOwnResponderRecords([]);
+
+      const data = await getCasualties({
+        incidentId: form.incidentId,
+      });
+
+      if (isMounted) {
+        setOwnResponderRecords(data);
+      }
+    } catch (error) {
+      console.error(
+        "Failed to load own responder records:",
+        error,
+      );
+
+      if (isMounted) {
+        setOwnResponderRecords([]);
+      }
+    } finally {
+      if (isMounted) {
+        setIsLoadingOwnResponderRecords(false);
+      }
+    }
+  }
+
+  void loadOwnResponderRecords();
+
+  return () => {
+    isMounted = false;
+  };
+}, [
+  currentUserId,
+  form.incidentId,
+  isEditing,
+  isFieldResponderFlow,
+  isSaResponderFlow,
+]);
 
   useEffect(() => {
     let isMounted = true;
@@ -6688,6 +6825,28 @@ export default function AddCasualtyScreen() {
           return false;
         }
 
+        if (
+  isSaResponderFlow &&
+  isLoadingOwnResponderRecords
+) {
+  Alert.alert(
+    "Checking victim code",
+    "Please wait while the app checks this victim code.",
+  );
+  return false;
+}
+
+if (
+  isSaResponderFlow &&
+  victimCodeAlreadyExists
+) {
+  Alert.alert(
+    "Victim code already exists",
+    `Victim code ${form.victimCode.trim()} already exists for this incident under Stabilization Area Responder. Please use a different victim code.`,
+  );
+  return false;
+}
+
         if (form.dateOfBirth.trim()) {
           const dateOfBirth = getValidDateInput(form.dateOfBirth);
 
@@ -6711,6 +6870,28 @@ export default function AddCasualtyScreen() {
         return true;
 
       case "Triage":
+
+      if (
+  isFieldResponderFlow &&
+  isLoadingOwnResponderRecords
+) {
+  Alert.alert(
+    "Checking victim code",
+    "Please wait while the app checks this victim code.",
+  );
+  return false;
+}
+
+if (
+  isFieldResponderFlow &&
+  victimCodeAlreadyExists
+) {
+  Alert.alert(
+    "Victim code already exists",
+    `Victim code ${form.victimCode.trim()} already exists for this incident under Field Responder. Please use a different victim code.`,
+  );
+  return false;
+}
         return (
           validateMinimumTriageAssessmentAnswer() &&
           validateOptionalDateTime(
@@ -9681,6 +9862,24 @@ export default function AddCasualtyScreen() {
         const createdRecordId =
           response.data.casualtyIncident.id;
 
+          if (
+  (isFieldResponderFlow || isSaResponderFlow) &&
+  form.incidentId
+) {
+  try {
+    const refreshedOwnRecords = await getCasualties({
+      incidentId: form.incidentId,
+    });
+
+    setOwnResponderRecords(refreshedOwnRecords);
+  } catch (error) {
+    console.warn(
+      "Unable to refresh own victim-code records:",
+      error,
+    );
+  }
+}
+
         const photoUploadError =
           await uploadSelectedPhoto(createdRecordId);
 
@@ -10479,6 +10678,21 @@ function confirmExitAddCasualty() {
             updateField("victimCode", value)
           }
         />
+
+        {victimCodeAlreadyExists ? (
+  <View style={styles.inlineWarning}>
+    <Ionicons
+      name="alert-circle-outline"
+      size={18}
+      color={COLORS.maroon}
+    />
+    <Text style={styles.inlineWarningText}>
+      Victim code {form.victimCode.trim()} already exists
+      for this incident under Stabilization Area Responder.
+      Please use a different victim code.
+    </Text>
+  </View>
+) : null}
 
         {form.victimCode ? (
           <SelectField
@@ -11360,6 +11574,21 @@ function confirmExitAddCasualty() {
                 updateField("victimCode", value)
               }
             />
+
+            {victimCodeAlreadyExists ? (
+  <View style={styles.inlineWarning}>
+    <Ionicons
+      name="alert-circle-outline"
+      size={18}
+      color={COLORS.maroon}
+    />
+    <Text style={styles.inlineWarningText}>
+      Victim code {form.victimCode.trim()} already exists
+      for this incident under Stabilization Area Responder.
+      Please use a different victim code.
+    </Text>
+  </View>
+) : null}
 
             <FormField
               label="USER CODE"
@@ -12797,15 +13026,30 @@ function confirmExitAddCasualty() {
         ) : null}
 
         {showVictimNumberStickyHeader ? (
-          <View style={styles.victimNumberStickyHeader}>
-            <Text style={styles.victimNumberStickyLabel}>
-              CURRENT VICTIM NUMBER
-            </Text>
-            <Text style={styles.victimNumberStickyValue}>
-              {stickyVictimNumber}
-            </Text>
-          </View>
-        ) : null}
+  <View style={styles.victimNumberStickyHeader}>
+    <View style={styles.victimStickyGroup}>
+      <Text style={styles.victimNumberStickyLabel}>
+        VICTIM NUMBER
+      </Text>
+
+      <Text style={styles.victimNumberStickyValue}>
+        {stickyVictimNumber}
+      </Text>
+    </View>
+
+    <View style={styles.victimUserCodeGroup}>
+      <Text style={styles.victimNumberStickyLabel}>
+        USER CODE
+      </Text>
+
+      <Text style={styles.victimUserCodeValue}>
+        {form.userCode.trim() ||
+          generatedUserCode ||
+          "—"}
+      </Text>
+    </View>
+  </View>
+) : null}
 
         <ScrollView
           contentContainerStyle={styles.formContent}
@@ -13516,12 +13760,33 @@ exitButtonText: {
     marginTop: 2,
   },
   victimNumberStickyHeader: {
-    borderBottomWidth: 1,
-    borderBottomColor: "#E8D4D6",
-    backgroundColor: "#FFF8F8",
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-  },
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "flex-start",
+  borderBottomWidth: 1,
+  borderBottomColor: "#E8D4D6",
+  backgroundColor: "#FFF8F8",
+  paddingHorizontal: 14,
+  paddingVertical: 9,
+  gap: 12,
+},
+victimStickyGroup: {
+  flex: 1,
+  minWidth: 0,
+},
+
+victimUserCodeGroup: {
+  flex: 1,
+  alignItems: "flex-start",
+  justifyContent: "center",
+},
+
+victimUserCodeValue: {
+  color: COLORS.maroon,
+  fontSize: 16,
+  fontWeight: "900",
+  marginTop: 2,
+},
   victimNumberStickyLabel: {
     color: COLORS.secondaryText,
     fontSize: 10,

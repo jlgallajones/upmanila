@@ -843,7 +843,7 @@ function renderCurrentView(errorMessage = "") {
         <h1>${title}</h1>
         <p>${isSuperAdmin() ? "System-wide oversight and administrator controls." : "Create official response references for the mobile app."}</p>
       </div>
-      <button id="refreshButton" class="ghost-button">Refresh</button>
+      
     </header>
     ${errorMessage ? `<div class="status-message error">${escapeHtml(errorMessage)}</div>` : ""}
     ${isSuperAdmin() ? renderSuperAdminView() : renderAdminView()}
@@ -1164,7 +1164,7 @@ function renderTimelineVisual(analytics) {
               <th>Time</th>
               <th>Timeline Event</th>
               <th>Date</th>
-              <th>From Previous</th>
+              
               <th>From DMMP</th>
             </tr>
           </thead>
@@ -1208,14 +1208,7 @@ function renderTimelineVisual(analytics) {
                             ${formatTimelineDate(item.at)}
                           </td>
 
-                          <!-- FROM PREVIOUS -->
-                          <td>
-                            ${escapeHtml(
-                              formatMinutes(
-                                item.elapsedSincePreviousMinutes
-                              )
-                            )}
-                          </td>
+
 
                           <!-- FROM DMMP -->
                           <td>
@@ -2823,6 +2816,32 @@ function extractRecordSectionValue(
   return null;
 }
 
+function extractRecordBaseText(text) {
+  if (!text) {
+    return null;
+  }
+
+  const lines = String(text).split(/\r?\n/);
+  const baseLines = [];
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+
+    if (
+      line.startsWith("[") &&
+      line.endsWith("]")
+    ) {
+      break;
+    }
+
+    if (line) {
+      baseLines.push(line);
+    }
+  }
+
+  return baseLines.join("\n").trim() || null;
+}
+
 function getCasualtyVictimCode(
   item,
   recordDetails,
@@ -2927,7 +2946,90 @@ function renderTriageAssessmentAnswers(answers) {
   `;
 }
 
-function renderTriageHistoryGroup(title, subtitle, records) {
+function renderTriageHistoryContent(records) {
+  return records.length
+    ? records
+        .map(
+          (record, index) => `
+            <div
+              style="
+                margin-top:14px;
+                padding:16px;
+                border:1px solid #e2e7ef;
+                border-radius:12px;
+              "
+            >
+              <div class="casualty-detail-grid">
+                ${detailItem(
+                  "Assessment",
+                  `Triage ${index + 1}`,
+                )}
+
+                ${detailItem(
+                  "Triage system",
+                  String(
+                    record.triage_system || "Not recorded",
+                  ).toUpperCase(),
+                )}
+
+                ${detailItem(
+                  "Triage category",
+                  roleLabel(record.triage_category),
+                )}
+
+                ${detailItem(
+                  "Triage time",
+                  formatDate(record.triaged_at),
+                )}
+
+                ${detailItem(
+                  "Location",
+                  record.location,
+                )}
+
+                ${detailItem(
+                  "Performed by",
+                  record.triaged_by_user?.full_name,
+                )}
+
+                ${detailItem(
+                  "Account role",
+                  roleLabel(
+                    record.triaged_by_user?.role,
+                  ),
+                )}
+
+                ${detailItem(
+                  "Notes",
+                  record.notes || "No notes",
+                )}
+              </div>
+
+              <div style="margin-top:14px">
+                <strong>Assessment Answers</strong>
+
+                <div style="margin-top:10px">
+                  ${renderTriageAssessmentAnswers(
+                    record.assessment_answers,
+                  )}
+                </div>
+              </div>
+            </div>
+          `,
+        )
+        .join("")
+    : `
+      <div class="empty-state" style="margin-top:12px">
+        No record yet.
+      </div>
+    `;
+}
+
+function renderTriageHistoryGroup(
+  title,
+  subtitle,
+  records,
+) {
   return `
     <section class="record-section">
       <h3>${escapeHtml(title)}</h3>
@@ -2936,86 +3038,272 @@ function renderTriageHistoryGroup(title, subtitle, records) {
         ${escapeHtml(subtitle)}
       </p>
 
-      ${
-        records.length
-          ? records
-              .map(
-                (record, index) => `
-                  <div
-                    style="
-                      margin-top:14px;
-                      padding:16px;
-                      border:1px solid #e2e7ef;
-                      border-radius:12px;
-                    "
-                  >
-                    <div class="casualty-detail-grid">
-                      ${detailItem(
-                        "Assessment",
-                        `Triage ${index + 1}`,
-                      )}
-
-                      ${detailItem(
-                        "Triage system",
-                        String(
-                          record.triage_system || "Not recorded",
-                        ).toUpperCase(),
-                      )}
-
-                      ${detailItem(
-                        "Triage category",
-                        roleLabel(record.triage_category),
-                      )}
-
-                      ${detailItem(
-                        "Triage time",
-                        formatDate(record.triaged_at),
-                      )}
-
-                      ${detailItem(
-                        "Location",
-                        record.location,
-                      )}
-
-                      ${detailItem(
-                        "Performed by",
-                        record.triaged_by_user?.full_name,
-                      )}
-
-                      ${detailItem(
-                        "Account role",
-                        roleLabel(
-                          record.triaged_by_user?.role,
-                        ),
-                      )}
-
-                      ${detailItem(
-                        "Notes",
-                        record.notes || "No notes",
-                      )}
-                    </div>
-
-                    <div style="margin-top:14px">
-                      <strong>Assessment Answers</strong>
-
-                      <div style="margin-top:10px">
-                        ${renderTriageAssessmentAnswers(
-                          record.assessment_answers,
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                `,
-              )
-              .join("")
-          : `
-            <div class="empty-state" style="margin-top:12px">
-              No record yet.
-            </div>
-          `
-      }
+      ${renderTriageHistoryContent(records)}
     </section>
   `;
+}
+
+function renderSaTransportHistoryContent(records) {
+  const saRecords = (records || []).filter((record) =>
+    String(record.notes || "")
+      .toLowerCase()
+      .includes("[sa transport / release]"),
+  );
+
+  return saRecords.length
+    ? saRecords
+        .map(
+          (record, index) => `
+            <div
+              style="
+                margin-top:14px;
+                padding:16px;
+                border:1px solid #e2e7ef;
+                border-radius:12px;
+              "
+            >
+              <div class="casualty-detail-grid">
+                ${detailItem(
+                  "Record",
+                  `Transport ${index + 1}`,
+                )}
+
+                ${detailItem(
+                  "Patient For",
+                  extractRecordSectionValue(
+                    record.notes,
+                    "SA Transport / Release",
+                    "Patient for",
+                  ),
+                )}
+
+                ${detailItem(
+                  "Condition Before Transfer",
+                  extractRecordSectionValue(
+                    record.notes,
+                    "SA Transport / Release",
+                    "Condition before transfer",
+                  ),
+                )}
+
+                ${detailItem(
+                  "Medical Contact Before Transfer",
+                  extractRecordSectionValue(
+                    record.notes,
+                    "SA Transport / Release",
+                    "Medical contact if dead before transfer",
+                  ),
+                )}
+
+                ${detailItem(
+                  "Precaution",
+                  extractRecordSectionValue(
+                    record.notes,
+                    "SA Transport / Release",
+                    "Precaution",
+                  ),
+                )}
+
+                ${detailItem(
+                  "Receiving Facility",
+                  record.receiving_facility?.facility_name ||
+                    extractRecordSectionValue(
+                      record.notes,
+                      "SA Transport / Release",
+                      "Receiving facility",
+                    ),
+                )}
+
+                ${detailItem(
+                  "Used EMS Vehicle",
+                  extractRecordSectionValue(
+                    record.notes,
+                    "SA Transport / Release",
+                    "Used EMS vehicle",
+                  ),
+                )}
+
+                ${detailItem(
+                  "Type of EMS Vehicle",
+                  extractRecordSectionValue(
+                    record.notes,
+                    "SA Transport / Release",
+                    "Type of EMS vehicle",
+                  ),
+                )}
+
+                ${detailItem(
+                  "Vehicle Make / Model / Plate",
+                  extractRecordSectionValue(
+                    record.notes,
+                    "SA Transport / Release",
+                    "Vehicle make/model/plate",
+                  ),
+                )}
+
+                ${detailItem(
+                  "Departed Scene Time",
+                  formatDate(record.departed_scene_at),
+                )}
+
+                ${detailItem(
+                  "Arrived Facility Time",
+                  formatDate(record.arrived_facility_at),
+                )}
+
+                ${detailItem(
+                  "Condition Before Release",
+                  extractRecordSectionValue(
+                    record.notes,
+                    "SA Transport / Release",
+                    "Condition before release",
+                  ),
+                )}
+
+                ${detailItem(
+                  "Release of Liability Accepted",
+                  extractRecordSectionValue(
+                    record.notes,
+                    "SA Transport / Release",
+                    "Release of liability accepted",
+                  ),
+                )}
+
+                ${detailItem(
+                  "Transport / Release Notes",
+                  extractRecordBaseText(record.notes),
+                )}
+              </div>
+            </div>
+          `,
+        )
+        .join("")
+    : `
+      <div class="empty-state" style="margin-top:12px">
+        No SAR transport or release record yet.
+      </div>
+    `;
+}
+
+function renderSaTreatmentHistoryContent(
+  records,
+  item,
+) {
+  const saRecords = (records || []).filter(
+    (record) => {
+      const treatmentDetails =
+        record.treatment_details;
+
+      const hasHealthcareDetails =
+        treatmentDetails &&
+        typeof treatmentDetails === "object" &&
+        !Array.isArray(treatmentDetails) &&
+        Object.keys(treatmentDetails).length > 0;
+
+      return !hasHealthcareDetails;
+    },
+  );
+
+  return saRecords.length
+    ? saRecords
+        .map((record, index) => {
+          const fillPatientCareReport =
+            extractRecordSectionValue(
+              record.notes,
+              "Patient Care Report",
+              "Fill in Patient Care Report",
+            );
+
+          const stabilizedTime =
+            record.stabilized_at
+              ? formatDate(record.stabilized_at)
+              : extractRecordSectionValue(
+                  record.notes,
+                  "Patient Care Report",
+                  "Stabilized time",
+                );
+
+          const treatmentNotes =
+            extractRecordBaseText(record.notes);
+
+          return `
+            <div
+              style="
+                margin-top:14px;
+                padding:16px;
+                border:1px solid #e2e7ef;
+                border-radius:12px;
+              "
+            >
+              ${
+                saRecords.length > 1
+                  ? `
+                    <div style="margin-bottom:12px">
+                      <strong>
+                        Treatment ${index + 1}
+                      </strong>
+                    </div>
+                  `
+                  : ""
+              }
+
+              <div class="casualty-detail-grid">
+                ${detailItem(
+                  "Treatment",
+                  roleLabel(
+                    record.treatment_strategy,
+                  ),
+                )}
+
+                ${detailItem(
+                  "Stabilized Time",
+                  stabilizedTime,
+                )}
+
+                ${detailItem(
+                  "Fill in Patient Care Report?",
+                  fillPatientCareReport,
+                )}
+
+                ${detailItem(
+                  "Visible Injury",
+                  item.visible_injury,
+                )}
+
+                ${detailItem(
+                  "Medical Condition",
+                  item.medical_condition,
+                )}
+
+                ${detailItem(
+                  "Assistance Provided",
+                  item.assistance_provided,
+                )}
+
+                ${detailItem(
+                  "Treatment Notes",
+                  treatmentNotes ||
+                    "No treatment notes",
+                )}
+
+                ${detailItem(
+                  "Performed By",
+                  record.performed_by_user
+                    ?.full_name,
+                )}
+              </div>
+            </div>
+          `;
+        })
+        .join("")
+    : `
+      <div
+        class="empty-state"
+        style="margin-top:12px"
+      >
+        No SAR treatment record yet.
+      </div>
+    `;
 }
 
 function renderCasualtyRecordModal(
@@ -3092,153 +3380,292 @@ const religion =
         </div>
 
         <div class="modal-body">
-          <section class="record-section">
-            <h3>Personal Details</h3>
 
-            <div class="casualty-detail-grid">
-
-              ${detailItem(
-                "Victim Code",
-                victimCode,
-              )}
-
-              ${detailItem(
-                "Patient Identified",
-                formatPatientIdentified(casualty),
-              )}
-
-              ${detailItem(
-                "ID Number",
-                casualty.id_number,
-              )}
-
-              ${detailItem(
-                "Age",
-                casualty.estimated_age,
-              )}
-
-              ${detailItem(
-                "First Name",
-                casualty.first_name,
-              )}
-
-              ${detailItem(
-                "Middle Name",
-                casualty.middle_name,
-              )}
-
-              ${detailItem(
-                "Last Name",
-                casualty.last_name,
-              )}
-
-              ${detailItem(
-                "Sex",
-                casualty.sex,
-              )}
-
-              ${detailItem(
-                "Date of Birth",
-                casualty.date_of_birth,
-              )}
-
-              ${detailItem(
-                "Newborn",
-                newborn,
-              )}
-
-              ${detailItem(
-                "Pregnant",
-                pregnant,
-              )}
-
-              ${detailItem(
-                "Religion",
-                religion,
-              )}
-
-              ${detailItem(
-                "Contact Number",
-                casualty.contact_number,
-              )}
-
-              ${detailItem(
-                "House / Street",
-                casualty.house_street,
-              )}
-
-              ${detailItem(
-                "Barangay",
-                casualty.barangay,
-              )}
-
-              ${detailItem(
-                "Municipality / City",
-                casualty.municipality,
-              )}
-
-              ${detailItem(
-                "Province",
-                casualty.province,
-              )}
-
-              ${detailItem(
-                "Region",
-                casualty.region,
-              )}
-
-            </div>
-          </section>
-
-          <section class="record-section">
-            <h3>Incident Details</h3>
-            <div class="casualty-detail-grid">
-              ${detailItem("Incident code", incident.incident_code)}
-              ${detailItem("Incident name", incident.incident_name)}
-              ${detailItem("Hazard", incident.disaster_type)}
-              ${detailItem("Incident status", roleLabel(incident.status))}
-              ${detailItem("Reported at", formatDate(item.reported_at))}
-              ${detailItem("Encoded by", encoder.full_name)}
-              ${detailItem("Encoder unit", encoderUnitName(encoder))}
-              ${detailItem("Encoder role", roleLabel(encoder.role))}
-            </div>
-          </section>
-
-          <section class="record-section">
-            <h3>Care And Location</h3>
-            <div class="casualty-detail-grid">
-              ${detailItem("Current location", item.current_location)}
-              ${detailItem("Hospital name", item.hospital_name)}
-              ${detailItem("Evacuation center", evacuationCenter.center_name)}
-              ${detailItem("Evacuation address", formatLocation(evacuationCenter.address, evacuationCenter.barangay, evacuationCenter.municipality, evacuationCenter.province))}
-              ${detailItem("Healthcare facility", healthcareFacility.facility_name)}
-              ${detailItem("Facility level", roleLabel(healthcareFacility.facility_level))}
-              ${detailItem("Facility address", formatLocation(healthcareFacility.address, healthcareFacility.barangay, healthcareFacility.municipality, healthcareFacility.province))}
-            </div>
-          </section>
-
-          <section class="record-section">
-            <h3>Clinical Notes</h3>
-            <div class="casualty-detail-grid">
-              ${detailItem("Visible injury", item.visible_injury)}
-              ${detailItem("Medical condition", item.medical_condition)}
-              ${detailItem("Assistance needed", item.assistance_needed)}
-              ${detailItem("Assistance provided", item.assistance_provided)}
-              ${detailItem("Remarks", item.remarks || "No remarks")}
-              ${detailItem("Coordinates", item.latitude && item.longitude ? `${item.latitude}, ${item.longitude}` : "Not recorded")}
-            </div>
-          </section>
           ${renderTriageHistoryGroup(
             "Field Responder",
             "Primary / on-site triage assessment",
             fieldResponderTriage,
           )}
 
-          ${renderTriageHistoryGroup(
-            "Stabilization Area Responder",
-            "Secondary / reassessment triage",
-            saResponderTriage,
-          )}
+          <section class="record-section">
+            <h3>Stabilization Area Responder</h3>
+
+            <p class="panel-subtitle">
+              Complete Stabilization Area Responder casualty record
+            </p>
+
+
+            <!-- SAFETY -->
+            <div style="margin-top:18px">
+              <h4 style="margin:0 0 10px">
+                Safety
+              </h4>
+
+              <div class="casualty-detail-grid">
+                ${detailItem(
+                  "Are You Safe?",
+                  extractRecordSectionValue(
+                    item.remarks,
+                    "Responder Safety",
+                    "Are you safe",
+                  ),
+                )}
+
+                ${detailItem(
+                  "Time of PPE Use",
+                  extractRecordSectionValue(
+                    item.remarks,
+                    "Responder Safety",
+                    "Time of PPE Use",
+                  ),
+                )}
+              </div>
+            </div>
+
+
+            <!-- INTRODUCTION -->
+            <div
+              style="
+                margin-top:20px;
+                padding-top:16px;
+                border-top:1px solid #e2e7ef;
+              "
+            >
+              <h4 style="margin:0 0 10px">
+                Introduction
+              </h4>
+
+              <div class="casualty-detail-grid">
+                ${detailItem(
+                  "Witness Present",
+                  extractRecordSectionValue(
+                    item.remarks,
+                    "SA Responder Details",
+                    "Witness present",
+                  ),
+                )}
+
+                ${detailItem(
+                  "Other Witness",
+                  extractRecordSectionValue(
+                    item.remarks,
+                    "SA Responder Details",
+                    "Witness other",
+                  ),
+                )}
+
+                ${detailItem(
+                  "Witness Response",
+                  extractRecordSectionValue(
+                    item.remarks,
+                    "SA Responder Details",
+                    "Witness response",
+                  ),
+                )}
+
+                ${detailItem(
+                  "CPR Type",
+                  extractRecordSectionValue(
+                    item.remarks,
+                    "SA Responder Details",
+                    "CPR type",
+                  ),
+                )}
+              </div>
+            </div>
+
+
+            <!-- PERSONAL INFORMATION -->
+            <div
+              style="
+                margin-top:20px;
+                padding-top:16px;
+                border-top:1px solid #e2e7ef;
+              "
+            >
+              <h4 style="margin:0 0 10px">
+                Personal Information
+              </h4>
+
+              <div class="casualty-detail-grid">
+                ${detailItem("Victim Code", victimCode)}
+
+                ${detailItem(
+                  "Patient Identified",
+                  formatPatientIdentified(casualty),
+                )}
+
+                ${detailItem(
+                  "ID Number",
+                  casualty.id_number,
+                )}
+
+                ${detailItem(
+                  "Age",
+                  casualty.estimated_age,
+                )}
+
+                ${detailItem(
+                  "First Name",
+                  casualty.first_name,
+                )}
+
+                ${detailItem(
+                  "Middle Name",
+                  casualty.middle_name,
+                )}
+
+                ${detailItem(
+                  "Last Name",
+                  casualty.last_name,
+                )}
+
+                ${detailItem(
+                  "Sex",
+                  casualty.sex,
+                )}
+
+                ${detailItem(
+                  "Date of Birth",
+                  casualty.date_of_birth,
+                )}
+
+                ${detailItem("Newborn", newborn)}
+                ${detailItem("Pregnant", pregnant)}
+                ${detailItem("Religion", religion)}
+
+                ${detailItem(
+                  "Contact Number",
+                  casualty.contact_number,
+                )}
+              </div>
+            </div>
+
+
+            <!-- ADDRESS -->
+            <div
+              style="
+                margin-top:20px;
+                padding-top:16px;
+                border-top:1px solid #e2e7ef;
+              "
+            >
+              <h4 style="margin:0 0 10px">
+                Address
+              </h4>
+
+              <div class="casualty-detail-grid">
+                ${detailItem(
+                  "House / Street",
+                  casualty.house_street,
+                )}
+
+                ${detailItem(
+                  "Barangay",
+                  casualty.barangay,
+                )}
+
+                ${detailItem(
+                  "Municipality / City",
+                  casualty.municipality,
+                )}
+
+                ${detailItem(
+                  "Province",
+                  casualty.province,
+                )}
+
+                ${detailItem(
+                  "Region",
+                  casualty.region,
+                )}
+              </div>
+            </div>
+
+
+            <!-- TRIAGE -->
+            <div
+              style="
+                margin-top:20px;
+                padding-top:16px;
+                border-top:1px solid #e2e7ef;
+              "
+            >
+              <h4 style="margin:0 0 4px">
+                Triage
+              </h4>
+
+              <p class="panel-subtitle">
+                Secondary / reassessment triage
+              </p>
+
+              ${renderTriageHistoryContent(
+                saResponderTriage,
+              )}
+            </div>
+
+
+            <!-- TREATMENT -->
+            <div
+              style="
+                margin-top:20px;
+                padding-top:16px;
+                border-top:1px solid #e2e7ef;
+              "
+            >
+              <h4 style="margin:0 0 10px">
+                Treatment
+              </h4>
+
+              ${renderSaTreatmentHistoryContent(
+                recordDetails?.treatmentHistory || [],
+                item,
+              )}
+            </div>
+            
+
+
+            <!-- TRANSPORT / RELEASE -->
+            <div
+              style="
+                margin-top:20px;
+                padding-top:16px;
+                border-top:1px solid #e2e7ef;
+              "
+            >
+              <h4 style="margin:0 0 10px">
+                Transport / Release
+              </h4>
+
+              ${renderSaTransportHistoryContent(
+                recordDetails?.transportHistory || [],
+              )}
+            </div>
+
+
+            <!-- REMARKS -->
+            <div
+              style="
+                margin-top:20px;
+                padding-top:16px;
+                border-top:1px solid #e2e7ef;
+              "
+            >
+              <h4 style="margin:0 0 10px">
+                Remarks
+              </h4>
+
+              <div class="casualty-detail-grid">
+                ${detailItem(
+                  "Remarks",
+                  extractRecordBaseText(item.remarks) ||
+                    "No remarks",
+                )}
+              </div>
+            </div>
+          </section>
+
+
 
           ${renderTriageHistoryGroup(
             "Healthcare Facility",
@@ -3271,12 +3698,6 @@ const religion =
             </div>
           </section>
         </div>
-
-        <div class="modal-footer">
-          <button class="ghost-button" type="button" data-review-action="under_review" data-casualty-id="${escapeHtml(item.id)}">Mark under review</button>
-          <button class="secondary-button" type="button" data-review-action="verified" data-casualty-id="${escapeHtml(item.id)}">Approve record</button>
-          <button class="danger-button" type="button" data-review-action="rejected" data-casualty-id="${escapeHtml(item.id)}">Reject record</button>
-        </div>
       </section>
     </div>
   `;
@@ -3294,15 +3715,17 @@ async function loadCasualtyRecordDetails(casualtyId) {
   );
 
   const [
-    casualtyResult,
-    statusHistoryResult,
-    triageHistoryResult,
-    transportHistoryResult,
-    verificationHistoryResult,
-  ] = await Promise.allSettled([
+  casualtyResult,
+  statusHistoryResult,
+  triageHistoryResult,
+  treatmentHistoryResult,
+  transportHistoryResult,
+  verificationHistoryResult,
+] = await Promise.allSettled([
     apiRequest(`/casualties/${encodedId}`),
     apiRequest(`/casualties/${encodedId}/status-history`),
     apiRequest(`/casualties/${encodedId}/triage-history`),
+    apiRequest(`/casualties/${encodedId}/treatment-history`),
     apiRequest(`/casualties/${encodedId}/transport-history`),
     apiRequest(`/casualties/${encodedId}/verification-history`),
   ]);
@@ -3329,7 +3752,12 @@ async function loadCasualtyRecordDetails(casualtyId) {
         ? triageHistoryResult.value.data || []
         : [],
 
-    transportHistory:
+    treatmentHistory:
+  treatmentHistoryResult.status === "fulfilled"
+    ? treatmentHistoryResult.value.data || []
+    : [],
+
+transportHistory:
       transportHistoryResult.status === "fulfilled"
         ? transportHistoryResult.value.data || []
         : [],

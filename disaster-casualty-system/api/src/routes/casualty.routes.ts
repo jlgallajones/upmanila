@@ -10,6 +10,7 @@ import {
   getCasualtyStatusHistory,
   getCasualtyTriageHistory,
   getCasualtyTransportHistory,
+  getCasualtyTreatmentHistory,
   getCasualtyVerificationActionLogs,
   getCasualtyVerificationHistory,
   updateCasualty,
@@ -76,6 +77,11 @@ casualtyRouter.get(
   "/:id/transport-history",
   requireAuth,
   getCasualtyTransportHistory,
+);
+casualtyRouter.get(
+  "/:id/treatment-history",
+  requireAuth,
+  getCasualtyTreatmentHistory,
 );
 casualtyRouter.post(
   "/:id/transport-history",
