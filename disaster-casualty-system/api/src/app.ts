@@ -101,7 +101,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/incidents", incidentRouter);
 app.use("/api/casualties", casualtyRouter);
 app.use("/api/casualty-incidents", triageRouter);
-app.use("/incidents", responderSafetyResponseRouter);
+app.use("/api/incidents", responderSafetyResponseRouter);
 app.use("/api/attachments", attachmentRouter);
 app.use("/api/evacuation-centers", evacuationCenterRouter);
 app.use("/api/healthcare-facilities", healthcareFacilityRouter);
