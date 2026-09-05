@@ -16,6 +16,7 @@ import { notificationRouter } from "./routes/notification.routes.js";
 import { profileRouter } from "./routes/profile.routes.js";
 import { triageRouter } from "./routes/triage.routes.js";
 import { incidentOperationsRouter } from "./routes/incident-operations.routes.js";
+import { responderSafetyResponseRouter } from "./routes/responder-safety-response.routes.js";
 
 export const app = express();
 
@@ -100,7 +101,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/incidents", incidentRouter);
 app.use("/api/casualties", casualtyRouter);
 app.use("/api/casualty-incidents", triageRouter);
-
+app.use("/incidents", responderSafetyResponseRouter);
 app.use("/api/attachments", attachmentRouter);
 app.use("/api/evacuation-centers", evacuationCenterRouter);
 app.use("/api/healthcare-facilities", healthcareFacilityRouter);
