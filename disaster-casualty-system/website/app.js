@@ -1075,6 +1075,8 @@ function bindIncidentAnalyticsActions() {
     });
   });
 
+  bindResponderSafetyViewActions();
+
   if (
     selectedIncidentId &&
     !state.incidentManagementDetails[selectedIncidentId] &&
@@ -1900,13 +1902,18 @@ function renderAnalyticsGraphSection(title, data, options = {}) {
           <h2>${escapeHtml(title)}</h2>
           ${options.note ? `<p class="panel-subtitle">${escapeHtml(options.note)}</p>` : ""}
         </div>
+        ${
+          options.viewResponders && options.incidentId
+            ? `<button class="ghost-button" type="button" data-view-responders="${escapeHtml(options.incidentId)}">View Responders</button>`
+            : ""
+        }
       </div>
       ${graphBody}
     </section>
   `;
 }
 
-function renderAnalyticsGraphGrid(analytics) {
+function renderAnalyticsGraphGrid(analytics, incidentId) {
   const graphs = analytics?.barGraphs || {};
   const lineGraphs = getAnalyticsLineGraphs(analytics);
   const cumulativeNote = "Cumulative after disaster plan activation: 1 minute, 5 minutes, 10 minutes, 15 minutes, 30 minutes, and 1 hour.";
@@ -1926,7 +1933,7 @@ function renderAnalyticsGraphGrid(analytics) {
       "Stabilization strategies and responder safety responses for the selected incident.",
       `<div class="analytics-graph-grid">
         ${renderAnalyticsGraphSection("Victims Stabilized Using Each Evacuation Strategy", graphs.stabilizationStrategies, { chart: "pie" })}
-        ${renderAnalyticsGraphSection("Safe and Unsafe Responders", graphs.responderSafety, { chart: "pie" })}
+        ${renderAnalyticsGraphSection("Safe and Unsafe Responders", graphs.responderSafety, { chart: "pie", viewResponders: true, incidentId })}
       </div>`,
     )}
     ${renderAnalyticsSection(
@@ -1940,6 +1947,179 @@ function renderAnalyticsGraphGrid(analytics) {
       </div>`,
     )}
   `;
+}
+
+function renderResponderSafetyRow(item) {
+  const responder = item.responder || {};
+  const name = responder.full_name || "Unknown responder";
+  const roleAndFunction = [roleLabel(item.responder_role), roleLabel(item.responder_function)]
+    .filter(Boolean)
+    .join(" - ");
+  const isSafe = item.safety_status === "yes";
+
+  return `
+    <tr>
+      <td>
+        <strong>${escapeHtml(name)}</strong>
+        <div class="table-subtext">${escapeHtml(responder.email || "")}</div>
+      </td>
+      <td>${escapeHtml(roleAndFunction || "Not recorded")}</td>
+      <td>
+        <span class="pill ${isSafe ? "green" : "red"}">${isSafe ? "Safe" : "Unsafe"}</span>
+      </td>
+      <td>${escapeHtml(formatDate(item.recorded_at))}</td>
+      <td>
+        <select data-responder-safety-select="${escapeHtml(item.id)}">
+          <option value="yes" ${isSafe ? "selected" : ""}>Safe</option>
+          <option value="no" ${!isSafe ? "selected" : ""}>Unsafe</option>
+        </select>
+      </td>
+    </tr>
+  `;
+}
+
+function renderResponderSafetyModal(incidentId, responders) {
+  const rows = responders.length
+    ? responders.map(renderResponderSafetyRow).join("")
+    : `<tr><td colspan="5"><div class="empty-state">No responder safety responses recorded for this incident yet.</div></td></tr>`;
+
+  return `
+    <div class="modal-backdrop" data-close-modal>
+      <section class="record-modal" role="dialog" aria-modal="true" aria-labelledby="responderSafetyModalTitle">
+        <div class="modal-header">
+          <div>
+            <span class="eyebrow">Incident Analytics</span>
+            <h2 id="responderSafetyModalTitle">Responders</h2>
+            <p>Review and update each responder's safety status for this incident.</p>
+          </div>
+          <button class="icon-button" type="button" data-close-modal aria-label="Close responders list">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div id="responderSafetyModalMessage" class="status-message" hidden></div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Responder</th>
+                <th>Role / Function</th>
+                <th>Current status</th>
+                <th>Recorded</th>
+                <th>Update status</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+        <div class="modal-footer">
+          <div class="modal-footer-spacer"></div>
+          <button class="ghost-button" type="button" data-close-modal>Close</button>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+async function openResponderSafetyModal(incidentId) {
+  if (!incidentId) return;
+
+  closeRecordModal();
+  document.body.insertAdjacentHTML(
+    "beforeend",
+    renderResponderSafetyModal(incidentId, []),
+  );
+  bindResponderSafetyModalCloseActions();
+  setMessage("responderSafetyModalMessage", "Loading responders...");
+
+  try {
+    const result = await apiRequest(
+      `/incidents/${encodeURIComponent(incidentId)}/responder-safety-responses`,
+    );
+    const responders = result?.data ?? [];
+
+    if (!qs(".modal-backdrop")) return;
+
+    document.querySelector(".modal-backdrop")?.replaceWith(
+      document
+        .createRange()
+        .createContextualFragment(
+          renderResponderSafetyModal(incidentId, responders),
+        ),
+    );
+    bindResponderSafetyModalCloseActions();
+    bindResponderSafetySelects(incidentId);
+  } catch (error) {
+    setMessage(
+      "responderSafetyModalMessage",
+      error.message || "Unable to load responders.",
+      "error",
+    );
+  }
+}
+
+function bindResponderSafetyModalCloseActions() {
+  document.querySelectorAll("[data-close-modal]").forEach((element) => {
+    if (element.dataset.closeBound === "true") return;
+    element.dataset.closeBound = "true";
+
+    element.addEventListener("click", (event) => {
+      if (event.target === element || element.matches("button")) {
+        closeRecordModal();
+      }
+    });
+  });
+}
+
+function bindResponderSafetySelects(incidentId) {
+  document.querySelectorAll("[data-responder-safety-select]").forEach((select) => {
+    select.addEventListener("change", async () => {
+      const responseId = select.dataset.responderSafetySelect;
+      const safetyStatus = select.value;
+      const row = select.closest("tr");
+      select.disabled = true;
+
+      try {
+        await apiRequest(
+          `/incidents/${encodeURIComponent(incidentId)}/responder-safety-responses/${encodeURIComponent(responseId)}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({ safetyStatus }),
+          },
+        );
+
+        if (row) {
+          const statusPill = row.querySelector(".pill");
+          if (statusPill) {
+            const isSafe = safetyStatus === "yes";
+            statusPill.textContent = isSafe ? "Safe" : "Unsafe";
+            statusPill.classList.toggle("green", isSafe);
+            statusPill.classList.toggle("red", !isSafe);
+          }
+        }
+
+        setMessage("responderSafetyModalMessage", "Status updated.", "success");
+
+        delete state.incidentManagementDetails[incidentId];
+      } catch (error) {
+        setMessage(
+          "responderSafetyModalMessage",
+          error.message || "Unable to update responder status.",
+          "error",
+        );
+      } finally {
+        select.disabled = false;
+      }
+    });
+  });
+}
+
+function bindResponderSafetyViewActions() {
+  document.querySelectorAll("[data-view-responders]").forEach((button) => {
+    if (button.dataset.viewResponsersBound === "true") return;
+    button.dataset.viewResponsersBound = "true";
+
+    button.addEventListener("click", () => {
+      openResponderSafetyModal(button.dataset.viewResponders);
+    });
+  });
 }
 
 function renderIncidentAnalytics() {
@@ -2098,7 +2278,7 @@ const incidentLocation = selectedIncident
           : `
             <div style="margin-top:18px">${renderTimelineVisual(analytics)}</div>
             <div style="margin-top:18px">${renderPlainTextAnalytics(analytics)}</div>
-            <div style="margin-top:18px">${renderAnalyticsGraphGrid(analytics)}</div>
+            <div style="margin-top:18px">${renderAnalyticsGraphGrid(analytics, selectedIncidentId)}</div>
           `
     }
     <section class="panel" style="margin-top:18px">
