@@ -3532,6 +3532,30 @@ function renderCasualtyRecordModal(
         record.triage_stage === "facility_arrival",
     );
 
+    const healthcareDocumenterTreatment =
+  (recordDetails?.treatmentHistory || []).find(
+    (record) => {
+      const details = record?.treatment_details;
+
+      return (
+        details &&
+        typeof details === "object" &&
+        !Array.isArray(details) &&
+        Object.prototype.hasOwnProperty.call(
+          details,
+          "dispositionUponHospitalArrival",
+        )
+      );
+    },
+  ) || null;
+
+const healthcareDocumenterDetails =
+  healthcareDocumenterTreatment?.treatment_details ||
+  {};
+
+const healthcareFacilityEncounter =
+  item.latest_facility_encounter || {};
+
     const victimCode =
   getCasualtyVictimCode(
     item,
@@ -3945,12 +3969,79 @@ const religion =
           </section>
 
 
+          <section class="record-section">
+            <h3>Healthcare Facility Documenter</h3>
 
-          ${renderTriageHistoryGroup(
-            "Healthcare Facility",
-            "Tertiary / facility-arrival triage",
-            healthcareFacilityTriage,
-          )}
+            <p class="panel-subtitle">
+              Complete healthcare facility casualty documentation
+            </p>
+
+
+            <!-- PATIENT INFORMATION -->
+            <div
+                style="
+                  margin-top:20px;
+                  padding-top:16px;
+                  border-top:1px solid #e2e7ef;
+                "
+              >
+                <h4 style="margin:0 0 10px">
+                  Patient Information
+                </h4>
+
+                <div class="casualty-detail-grid">
+
+                  ${detailItem(
+                    "First Name",
+                    casualty.first_name,
+                  )}
+
+                  ${detailItem(
+                    "Middle Name",
+                    casualty.middle_name,
+                  )}
+
+                  ${detailItem(
+                    "Last Name",
+                    casualty.last_name,
+                  )}
+
+                  ${detailItem(
+                    "Sex",
+                    casualty.sex,
+                  )}
+
+                  ${detailItem(
+                    "Date of Birth",
+                    casualty.date_of_birth,
+                  )}
+
+                </div>
+              </div>
+
+
+            <!-- TRIAGE -->
+            <div
+              style="
+                margin-top:20px;
+                padding-top:16px;
+                border-top:1px solid #e2e7ef;
+              "
+            >
+              <h4 style="margin:0 0 4px">
+                Triage
+              </h4>
+
+              <p class="panel-subtitle">
+                Tertiary / facility-arrival triage
+              </p>
+
+              ${renderTriageHistoryContent(
+                healthcareFacilityTriage,
+              )}
+            </div>
+          </section>
+          
           <section class="record-section">
             <h3>Record History</h3>
 

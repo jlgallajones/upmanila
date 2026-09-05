@@ -404,14 +404,39 @@ type LatestFacilityEncounterSummary = {
   ed_admitted_at: string | null;
   ed_departed_at: string | null;
 
+  referred_or_transferred: boolean | null;
+  sought_ed_care: boolean | null;
+
   admitted_to_hospital: boolean | null;
   discharged_home: boolean | null;
+
+  ed_resuscitation_started_at: string | null;
+
+  surgical_intervention_started_at: string | null;
+  surgical_intervention_ended_at: string | null;
+
+  operating_room_started_at: string | null;
+
+  xray_required: boolean | null;
+  xray_performed_at: string | null;
+
+  ultrasound_required: boolean | null;
+  ultrasound_performed_at: string | null;
+
+  ct_required: boolean | null;
+  ct_performed_at: string | null;
 
   hospital_admitted_at: string | null;
   hospital_discharged_at: string | null;
 
   icu_admitted_at: string | null;
   icu_discharged_at: string | null;
+
+  mechanical_ventilation_required: boolean | null;
+  ventilation_started_at: string | null;
+  ventilation_ended_at: string | null;
+
+  alternative_icu_used: boolean | null;
 
   disposition: string;
   created_at: string;
@@ -544,8 +569,9 @@ async function attachLatestSummaries<
     supabase
       .from("facility_encounters")
       .select(
-        "casualty_incident_id, facility_id, arrived_at, ed_admitted_at, ed_departed_at, admitted_to_hospital, discharged_home, hospital_admitted_at, hospital_discharged_at, icu_admitted_at, icu_discharged_at, disposition, created_at",
+        "casualty_incident_id, facility_id, arrived_at, ed_admitted_at, ed_departed_at, referred_or_transferred, sought_ed_care, admitted_to_hospital, discharged_home, ed_resuscitation_started_at, surgical_intervention_started_at, surgical_intervention_ended_at, operating_room_started_at, xray_required, xray_performed_at, ultrasound_required, ultrasound_performed_at, ct_required, ct_performed_at, hospital_admitted_at, hospital_discharged_at, icu_admitted_at, icu_discharged_at, mechanical_ventilation_required, ventilation_started_at, ventilation_ended_at, alternative_icu_used, disposition, created_at",
       )
+      
       .in("casualty_incident_id", recordIds)
       .order("created_at", {
         ascending: false,
@@ -2082,16 +2108,19 @@ export async function getCasualtyById(
     }
 
     if (!data) {
-      response.status(404).json({
-        success: false,
-        message: "Casualty record not found.",
-      });
-      return;
+    response.status(404).json({
+      success: false,
+      message: "Casualty record not found.",
+    });
+    return;
     }
+
+    const [recordWithSummaries] =
+      await attachLatestSummaries([data]);
 
     response.status(200).json({
       success: true,
-      data,
+      data: recordWithSummaries,
     });
   } catch (error) {
     next(error);

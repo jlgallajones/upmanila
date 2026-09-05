@@ -1529,6 +1529,7 @@ export default function HomeDashboardScreen() {
                   "Select Incident",
                   "Choose the incident for this facility care update.",
                   showFacilityDisruptionFacilityPrompt,
+                  true,
                 );
               }}
             />
@@ -1546,6 +1547,7 @@ export default function HomeDashboardScreen() {
                   "Select Incident",
                   "Choose the incident to close facility response for.",
                   showCloseFacilityFacilityPrompt,
+                  true,
                 );
               }}
             />

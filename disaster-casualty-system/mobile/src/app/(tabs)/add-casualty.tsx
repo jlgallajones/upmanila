@@ -1445,6 +1445,8 @@ type FormState = {
   operatingRoomUsed: string;
   numberOfOperatingRooms: string;
   admittedToUnit: string;
+  otherAdmittedUnit: string;
+  unitAdmissionTime: string;
   currentlyAdmittedInIcu: string;
   transferredToWard: string;
   inActiveCare: string;
@@ -1591,6 +1593,8 @@ const initialForm: FormState = {
   operatingRoomUsed: "",
   numberOfOperatingRooms: "",
   admittedToUnit: "",
+  otherAdmittedUnit: "",
+  unitAdmissionTime: "",
   currentlyAdmittedInIcu: "",
   transferredToWard: "",
   inActiveCare: "",
@@ -3619,6 +3623,9 @@ function getTreatmentFormSignature(form: FormState): string {
     numberOfOperatingRooms:
       parseOptionalInteger(form.numberOfOperatingRooms) ?? "",
     admittedToUnit: form.admittedToUnit.trim(),
+    otherAdmittedUnit: form.otherAdmittedUnit.trim(),
+    unitAdmissionTime:
+      parseDateTimeInput(form.unitAdmissionTime) ?? "",
     currentlyAdmittedInIcu: normalizeYesNoUnknown(
       form.currentlyAdmittedInIcu,
     ),
@@ -3944,6 +3951,8 @@ function mapRecordToForm(
     operatingRoomUsed: "",
     numberOfOperatingRooms: "",
     admittedToUnit: "",
+    otherAdmittedUnit: "",
+    unitAdmissionTime: "",
     currentlyAdmittedInIcu: "",
     transferredToWard: "",
     inActiveCare: "",
@@ -4170,6 +4179,19 @@ function buildHealthcareDocumenterTreatmentDetails(
     numberOfOperatingRooms:
       parseOptionalInteger(form.numberOfOperatingRooms) ?? null,
     admittedToUnit: form.admittedToUnit || null,
+
+    otherAdmittedUnit:
+      form.admittedToUnit === "Other Unit"
+        ? form.otherAdmittedUnit.trim() || null
+        : null,
+
+    unitAdmissionTime:
+      form.admittedToUnit === "Ward" ||
+      form.admittedToUnit === "Other Unit"
+        ? parseDateTimeInput(form.unitAdmissionTime) ??
+          (form.unitAdmissionTime.trim() || null)
+        : null,
+
     currentlyAdmittedInIcu: normalizeYesNoUnknown(
       form.currentlyAdmittedInIcu,
     ),
@@ -4185,6 +4207,19 @@ function buildHealthcareDocumenterTreatmentNotes(form: FormState): string {
     ["Operating room used", form.operatingRoomUsed],
     ["Number of operating rooms", form.numberOfOperatingRooms],
     ["Admitted to unit", form.admittedToUnit],
+    [
+      "Other admitted unit",
+      form.admittedToUnit === "Other Unit"
+        ? form.otherAdmittedUnit
+        : "",
+    ],
+    [
+      "Unit admission time",
+      form.admittedToUnit === "Ward" ||
+      form.admittedToUnit === "Other Unit"
+        ? form.unitAdmissionTime
+        : "",
+    ],
     ["Currently admitted in ICU", form.currentlyAdmittedInIcu],
     ["Transferred to ward", form.transferredToWard],
     ["In active care", form.inActiveCare],
@@ -6392,18 +6427,68 @@ const victimCodeAlreadyExists = useMemo(() => {
         };
       }
 
-      if (key === "admittedToUnit" && value !== "ICU") {
+      if (key === "admittedToUnit") {
+        const nextUnit = String(value);
+        const unitChanged =
+          current.admittedToUnit !== nextUnit;
+
+        const usesGeneralUnitAdmission =
+          nextUnit === "Ward" ||
+          nextUnit === "Other Unit";
+
         return {
           ...current,
           [key]: value,
-          icuAdmissionTime: "",
-          mechanicalVentilationRequired: "",
-          ventilationStartTime: "",
-          ventilationEndTime: "",
-          alternativeIcuUsed: "",
-          currentlyAdmittedInIcu: "",
-          transferredToWard: "",
-          icuTransferOutTime: "",
+
+          otherAdmittedUnit:
+            nextUnit === "Other Unit" && !unitChanged
+              ? current.otherAdmittedUnit
+              : "",
+
+          unitAdmissionTime:
+            usesGeneralUnitAdmission && !unitChanged
+              ? current.unitAdmissionTime
+              : "",
+
+          icuAdmissionTime:
+            nextUnit === "ICU" && !unitChanged
+              ? current.icuAdmissionTime
+              : "",
+
+          mechanicalVentilationRequired:
+            nextUnit === "ICU" && !unitChanged
+              ? current.mechanicalVentilationRequired
+              : "",
+
+          ventilationStartTime:
+            nextUnit === "ICU" && !unitChanged
+              ? current.ventilationStartTime
+              : "",
+
+          ventilationEndTime:
+            nextUnit === "ICU" && !unitChanged
+              ? current.ventilationEndTime
+              : "",
+
+          alternativeIcuUsed:
+            nextUnit === "ICU" && !unitChanged
+              ? current.alternativeIcuUsed
+              : "",
+
+          currentlyAdmittedInIcu:
+            nextUnit === "ICU" && !unitChanged
+              ? current.currentlyAdmittedInIcu
+              : "",
+
+          transferredToWard:
+            nextUnit === "ICU" && !unitChanged
+              ? current.transferredToWard
+              : "",
+
+          icuTransferOutTime:
+            nextUnit === "ICU" && !unitChanged
+              ? current.icuTransferOutTime
+              : "",
         };
       }
 
@@ -6947,6 +7032,11 @@ if (
           ],
           [form.ctTime, "Invalid CT scan time", "CT scan use time"],
           [
+            form.unitAdmissionTime,
+            "Invalid unit admission time",
+            "unit admission time",
+          ],
+          [
             form.icuAdmissionTime,
             "Invalid ICU admission time",
             "ICU admission time",
@@ -6962,6 +7052,31 @@ if (
             "mechanical ventilation discontinuation time",
           ],
         ];
+
+        if (
+          form.admittedToUnit === "Other Unit" &&
+          !form.otherAdmittedUnit.trim()
+        ) {
+          Alert.alert(
+            "Other unit required",
+            "Enter the unit where the patient was admitted.",
+          );
+          return false;
+        }
+
+        if (
+          (form.admittedToUnit === "Ward" ||
+            form.admittedToUnit === "Other Unit") &&
+          !form.unitAdmissionTime.trim()
+        ) {
+          Alert.alert(
+            "Admission time required",
+            form.admittedToUnit === "Ward"
+              ? "Enter the Ward Admission Time."
+              : "Enter the Other Unit Admission Time.",
+          );
+          return false;
+        }
 
         return dateFields.every(([value, title, label]) =>
           validateOptionalDateTime(value, title, label),
@@ -7799,14 +7914,6 @@ if (
 
       case "Disposition":
         if (form.admittedToUnit === "ICU") {
-          if (!form.currentlyAdmittedInIcu.trim()) {
-            Alert.alert(
-              "ICU status required",
-              "Select whether the patient is currently admitted in ICU.",
-            );
-            return false;
-          }
-
           if (!form.transferredToWard.trim()) {
             Alert.alert(
               "Ward transfer status required",
@@ -10274,6 +10381,10 @@ function confirmExitAddCasualty() {
     const showUltrasoundTime = form.ultrasoundRequired === "Yes";
     const showCtTime = form.ctRequired === "Yes";
     const showIcuFields = form.admittedToUnit === "ICU";
+    const showWardFields = form.admittedToUnit === "Ward";
+    const showOtherUnitFields =
+      form.admittedToUnit === "Other Unit";
+
     const showVentilationTimes =
       showIcuFields && form.mechanicalVentilationRequired === "Yes";
 
@@ -10524,6 +10635,55 @@ function confirmExitAddCasualty() {
             />
           </View>
         ) : null}
+
+                {showWardFields ? (
+          <View style={styles.conditionalChildGroup}>
+            <CurrentTimeField
+              label="WARD ADMISSION TIME"
+              value={form.unitAdmissionTime}
+              placeholder="mm/dd/yyyy hh:mm"
+              buttonLabel="Use current ward time"
+              onChangeText={(value) =>
+                updateField("unitAdmissionTime", value)
+              }
+              onUseCurrent={() =>
+                updateField(
+                  "unitAdmissionTime",
+                  formatDateTimeForInput(new Date()),
+                )
+              }
+            />
+          </View>
+        ) : null}
+
+        {showOtherUnitFields ? (
+          <View style={styles.conditionalChildGroup}>
+            <FormField
+              label="OTHER UNIT"
+              value={form.otherAdmittedUnit}
+              placeholder="Type unit name"
+              onChangeText={(value) =>
+                updateField("otherAdmittedUnit", value)
+              }
+            />
+
+            <CurrentTimeField
+              label="ADMISSION TIME"
+              value={form.unitAdmissionTime}
+              placeholder="mm/dd/yyyy hh:mm"
+              buttonLabel="Use current admission time"
+              onChangeText={(value) =>
+                updateField("unitAdmissionTime", value)
+              }
+              onUseCurrent={() =>
+                updateField(
+                  "unitAdmissionTime",
+                  formatDateTimeForInput(new Date()),
+                )
+              }
+            />
+          </View>
+        ) : null}
       </>
     );
   }
@@ -10538,15 +10698,6 @@ function confirmExitAddCasualty() {
       <>
         {showIcuDisposition ? (
           <>
-            <SelectField
-              label="CURRENTLY ADMITTED IN ICU"
-              value={form.currentlyAdmittedInIcu}
-              placeholder="Yes or No"
-              onPress={() =>
-                openChoiceSheet("currentlyAdmittedInIcu")
-              }
-            />
-
             <SelectField
               label="TRANSFERRED TO WARD"
               value={form.transferredToWard}
