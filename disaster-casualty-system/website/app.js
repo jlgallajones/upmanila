@@ -1,5 +1,13 @@
 const PRODUCTION_API_BASE_URL = "https://dcms-api-ljco.onrender.com/api";
 const LOCAL_API_BASE_URL = "http://localhost:5000/api";
+const SUPABASE_URL =
+  "https://uehlntrridfrxpcocpqv.supabase.co";
+
+const SUPABASE_PUBLISHABLE_KEY =
+  "sb_publishable_aY9UBi090m8dQsY7laosWw_MevYzFlM";
+
+let realtimeClient = null;
+let casualtyRealtimeChannel = null;
 
 function getDefaultApiBaseUrl() {
   if (typeof window === "undefined") {
@@ -174,6 +182,8 @@ function saveSession(data) {
 }
 
 function clearSession() {
+  void stopCasualtyRealtime();
+  
   state.user = null;
   state.accessToken = null;
   localStorage.removeItem("dcms.admin.user");
@@ -604,6 +614,145 @@ async function loadSharedData() {
   recomputeAdminDashboardSummary();
 }
 
+async function getRealtimeClient() {
+  if (realtimeClient) {
+    return realtimeClient;
+  }
+
+  const { createClient } = await import(
+    "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm"
+  );
+
+  realtimeClient = createClient(
+    SUPABASE_URL,
+    SUPABASE_PUBLISHABLE_KEY,
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    },
+  );
+
+  return realtimeClient;
+}
+
+function shouldRenderCasualtyRealtimeUpdate() {
+  return [
+    "home",
+    "records",
+    "verification",
+    "logs",
+    "incident-analytics",
+  ].includes(state.activeView);
+}
+
+async function handleCasualtyRealtimeChange(
+  payload,
+) {
+  console.log(
+    "[DCMS Realtime] Casualty change:",
+    payload.eventType,
+    payload.new?.id ||
+      payload.old?.id ||
+      "unknown",
+  );
+
+  try {
+    /*
+     * Get the fully joined/scoped data through
+     * our existing DCMS backend.
+     */
+    await loadSharedData();
+
+    /*
+     * Only redraw screens affected by casualty
+     * changes. This is NOT a browser refresh.
+     */
+    if (shouldRenderCasualtyRealtimeUpdate()) {
+      renderCurrentView();
+      bindView();
+    }
+  } catch (error) {
+    console.error(
+      "[DCMS Realtime] Unable to sync casualty data:",
+      error,
+    );
+  }
+}
+
+async function startCasualtyRealtime() {
+  if (
+    !state.accessToken ||
+    casualtyRealtimeChannel
+  ) {
+    return;
+  }
+
+  try {
+    const client =
+      await getRealtimeClient();
+
+    /*
+     * Use the user's existing authenticated token
+     * for Realtime authorization.
+     */
+    await client.realtime.setAuth(
+      state.accessToken,
+    );
+
+    casualtyRealtimeChannel = client
+      .channel("dcms-casualty-incidents")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "casualty_incidents",
+        },
+        (payload) => {
+          void handleCasualtyRealtimeChange(
+            payload,
+          );
+        },
+      )
+      .subscribe((status, error) => {
+        console.log(
+          "[DCMS Realtime]",
+          status,
+        );
+
+        if (error) {
+          console.error(
+            "[DCMS Realtime] Subscription error:",
+            error,
+          );
+        }
+      });
+  } catch (error) {
+    console.error(
+      "[DCMS Realtime] Unable to start:",
+      error,
+    );
+  }
+}
+
+async function stopCasualtyRealtime() {
+  if (
+    !realtimeClient ||
+    !casualtyRealtimeChannel
+  ) {
+    return;
+  }
+
+  await realtimeClient.removeChannel(
+    casualtyRealtimeChannel,
+  );
+
+  casualtyRealtimeChannel = null;
+}
+
 function render() {
   const app = document.getElementById("app");
 
@@ -615,6 +764,8 @@ function render() {
 
   app.innerHTML = renderDashboardShell();
   bindShell();
+
+  void startCasualtyRealtime();
   void loadSharedData()
     .then(() => {
       renderCurrentView();
@@ -3562,6 +3713,18 @@ const healthcareFacilityEncounter =
     recordDetails,
   );
 
+const healthcareAdmittedUnit =
+  healthcareDocumenterDetails.admittedToUnit || null;
+
+const healthcareIsIcu =
+  healthcareAdmittedUnit === "ICU";
+
+const healthcareIsWard =
+  healthcareAdmittedUnit === "Ward";
+
+const healthcareIsOtherUnit =
+  healthcareAdmittedUnit === "Other Unit";
+
 const newborn =
   extractRecordSectionValue(
     item.remarks,
@@ -4040,6 +4203,426 @@ const religion =
                 healthcareFacilityTriage,
               )}
             </div>
+            <!-- MANAGEMENT -->
+            <div
+              style="
+                margin-top:20px;
+                padding-top:16px;
+                border-top:1px solid #e2e7ef;
+              "
+            >
+              <h4 style="margin:0 0 10px">
+                Management
+              </h4>
+
+              <div class="casualty-detail-grid">
+
+                ${detailItem(
+                  "Resuscitation Room Used?",
+                  formatTriageRecordValue(
+                    healthcareDocumenterDetails
+                      .resuscitationRoomUsed,
+                  ),
+                )}
+
+                ${
+                  healthcareDocumenterDetails
+                    .resuscitationRoomUsed === true
+                    ? detailItem(
+                        "Time of Resuscitation Room Use",
+                        formatDate(
+                          healthcareFacilityEncounter
+                            .ed_resuscitation_started_at,
+                        ),
+                      )
+                    : ""
+                }
+
+
+                ${detailItem(
+                  "Surgical Intervention?",
+                  formatTriageRecordValue(
+                    healthcareDocumenterDetails
+                      .surgicalInterventionRequired,
+                  ),
+                )}
+
+                ${
+                  healthcareDocumenterDetails
+                    .surgicalInterventionRequired === true
+                    ? `
+                      ${detailItem(
+                        "Surgical Intervention Start Time",
+                        formatDate(
+                          healthcareFacilityEncounter
+                            .surgical_intervention_started_at,
+                        ),
+                      )}
+
+                      ${detailItem(
+                        "Surgical Intervention End Time",
+                        formatDate(
+                          healthcareFacilityEncounter
+                            .surgical_intervention_ended_at,
+                        ),
+                      )}
+
+                      ${detailItem(
+                        "Operating Room Used?",
+                        formatTriageRecordValue(
+                          healthcareDocumenterDetails
+                            .operatingRoomUsed,
+                        ),
+                      )}
+
+                      ${
+                        healthcareDocumenterDetails
+                          .operatingRoomUsed === true
+                          ? `
+                            ${detailItem(
+                              "Number of Operating Rooms",
+                              healthcareDocumenterDetails
+                                .numberOfOperatingRooms,
+                            )}
+
+                            ${detailItem(
+                              "Operating Room Use Time",
+                              formatDate(
+                                healthcareFacilityEncounter
+                                  .operating_room_started_at,
+                              ),
+                            )}
+                          `
+                          : ""
+                      }
+                    `
+                    : ""
+                }
+
+
+                ${detailItem(
+                  "X-Ray Used?",
+                  formatTriageRecordValue(
+                    healthcareFacilityEncounter.xray_required,
+                  ),
+                )}
+
+                ${
+                  healthcareFacilityEncounter.xray_required === true
+                    ? detailItem(
+                        "Time of X-Ray Use",
+                        formatDate(
+                          healthcareFacilityEncounter
+                            .xray_performed_at,
+                        ),
+                      )
+                    : ""
+                }
+
+
+                ${detailItem(
+                  "Ultrasound Used?",
+                  formatTriageRecordValue(
+                    healthcareFacilityEncounter
+                      .ultrasound_required,
+                  ),
+                )}
+
+                ${
+                  healthcareFacilityEncounter
+                    .ultrasound_required === true
+                    ? detailItem(
+                        "Time of Ultrasound Use",
+                        formatDate(
+                          healthcareFacilityEncounter
+                            .ultrasound_performed_at,
+                        ),
+                      )
+                    : ""
+                }
+
+
+                ${detailItem(
+                  "CT Scan Used?",
+                  formatTriageRecordValue(
+                    healthcareFacilityEncounter.ct_required,
+                  ),
+                )}
+
+                ${
+                  healthcareFacilityEncounter.ct_required === true
+                    ? detailItem(
+                        "Time of CT Scan Use",
+                        formatDate(
+                          healthcareFacilityEncounter
+                            .ct_performed_at,
+                        ),
+                      )
+                    : ""
+                }
+
+
+                ${detailItem(
+                  "Admitted to Unit",
+                  healthcareAdmittedUnit,
+                )}
+
+
+                ${
+                  healthcareIsIcu
+                    ? `
+                      ${detailItem(
+                        "ICU Admission Time",
+                        formatDate(
+                          healthcareFacilityEncounter
+                            .icu_admitted_at,
+                        ),
+                      )}
+
+                      ${detailItem(
+                        "Mechanical Ventilation Used?",
+                        formatTriageRecordValue(
+                          healthcareFacilityEncounter
+                            .mechanical_ventilation_required,
+                        ),
+                      )}
+
+                      ${
+                        healthcareFacilityEncounter
+                          .mechanical_ventilation_required === true
+                          ? `
+                            ${detailItem(
+                              "Ventilation Start Time",
+                              formatDate(
+                                healthcareFacilityEncounter
+                                  .ventilation_started_at,
+                              ),
+                            )}
+
+                            ${detailItem(
+                              "Ventilation End Time",
+                              formatDate(
+                                healthcareFacilityEncounter
+                                  .ventilation_ended_at,
+                              ),
+                            )}
+                          `
+                          : ""
+                      }
+
+                      ${detailItem(
+                        "Alternative ICU Used?",
+                        formatTriageRecordValue(
+                          healthcareFacilityEncounter
+                            .alternative_icu_used,
+                        ),
+                      )}
+                    `
+                    : ""
+                }
+
+
+                ${
+                  healthcareIsWard
+                    ? detailItem(
+                        "Ward Admission Time",
+                        formatDate(
+                          healthcareDocumenterDetails
+                            .unitAdmissionTime,
+                        ),
+                      )
+                    : ""
+                }
+
+
+                ${
+                  healthcareIsOtherUnit
+                    ? `
+                      ${detailItem(
+                        "Other Unit",
+                        healthcareDocumenterDetails
+                          .otherAdmittedUnit,
+                      )}
+
+                      ${detailItem(
+                        "Admission Time",
+                        formatDate(
+                          healthcareDocumenterDetails
+                            .unitAdmissionTime,
+                        ),
+                      )}
+                    `
+                    : ""
+                }
+
+                            </div>
+            </div>
+
+
+            <!-- DISPOSITION -->
+            <div
+              style="
+                margin-top:20px;
+                padding-top:16px;
+                border-top:1px solid #e2e7ef;
+              "
+            >
+              <h4 style="margin:0 0 10px">
+                Disposition
+              </h4>
+
+              <div class="casualty-detail-grid">
+
+                ${
+                  healthcareIsIcu
+                    ? `
+                      ${detailItem(
+                        "Transferred to Ward",
+                        formatTriageRecordValue(
+                          healthcareDocumenterDetails
+                            .transferredToWard,
+                        ),
+                      )}
+
+                      ${
+                        healthcareDocumenterDetails
+                          .transferredToWard === true
+                          ? detailItem(
+                              "Time of Transfer to Ward",
+                              formatDate(
+                                healthcareFacilityEncounter
+                                  .icu_discharged_at,
+                              ),
+                            )
+                          : ""
+                      }
+
+                      ${detailItem(
+                        "Discharged from Hospital",
+                        formatTriageRecordValue(
+                          healthcareFacilityEncounter
+                            .discharged_home,
+                        ),
+                      )}
+
+                      ${
+                        healthcareFacilityEncounter
+                          .discharged_home === true
+                          ? detailItem(
+                              "Time of Discharge",
+                              formatDate(
+                                healthcareFacilityEncounter
+                                  .hospital_discharged_at,
+                              ),
+                            )
+                          : ""
+                      }
+                    `
+                    : ""
+                }
+
+
+                ${
+                  (
+                    healthcareIsWard ||
+                    healthcareIsOtherUnit
+                  )
+                    ? `
+                      ${detailItem(
+                        "Active Care?",
+                        formatTriageRecordValue(
+                          healthcareDocumenterDetails
+                            .inActiveCare,
+                        ),
+                      )}
+
+                      ${
+                        healthcareDocumenterDetails
+                          .inActiveCare === false
+                          ? `
+                            ${detailItem(
+                              "Discharged from Hospital",
+                              formatTriageRecordValue(
+                                healthcareFacilityEncounter
+                                  .discharged_home,
+                              ),
+                            )}
+
+                            ${
+                              healthcareFacilityEncounter
+                                .discharged_home === true
+                                ? detailItem(
+                                    "Time of Discharge",
+                                    formatDate(
+                                      healthcareFacilityEncounter
+                                        .hospital_discharged_at,
+                                    ),
+                                  )
+                                : ""
+                            }
+                          `
+                          : ""
+                      }
+                    `
+                    : ""
+                }
+
+
+                ${
+                  healthcareAdmittedUnit === "Not Admitted"
+                    ? `
+                      ${detailItem(
+                        "Discharged from Hospital",
+                        formatTriageRecordValue(
+                          healthcareFacilityEncounter
+                            .discharged_home,
+                        ),
+                      )}
+
+                      ${
+                        healthcareFacilityEncounter
+                          .discharged_home === true
+                          ? detailItem(
+                              "Time of Discharge",
+                              formatDate(
+                                healthcareFacilityEncounter
+                                  .hospital_discharged_at,
+                              ),
+                            )
+                          : ""
+                      }
+                    `
+                    : ""
+                }
+
+
+                ${
+                  healthcareAdmittedUnit === "Unknown" ||
+                  !healthcareAdmittedUnit
+                    ? `
+                      ${detailItem(
+                        "Active Care?",
+                        formatTriageRecordValue(
+                          healthcareDocumenterDetails
+                            .inActiveCare,
+                        ),
+                      )}
+
+                      ${detailItem(
+                        "Discharged from Hospital",
+                        formatTriageRecordValue(
+                          healthcareFacilityEncounter
+                            .discharged_home,
+                        ),
+                      )}
+                    `
+                    : ""
+                }
+
+              </div>
+            </div>
+
+
           </section>
           
           <section class="record-section">

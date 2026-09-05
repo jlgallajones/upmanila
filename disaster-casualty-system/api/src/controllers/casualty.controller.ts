@@ -247,6 +247,40 @@ async function createCasualtyRejectionNotification({
   }
 }
 
+async function createCasualtySubmissionNotification({
+  casualtyIncidentId,
+  recipientUserId,
+  casualtyLabel,
+  incidentName,
+}: {
+  casualtyIncidentId: string;
+  recipientUserId: string;
+  casualtyLabel: string;
+  incidentName: string | null;
+}): Promise<void> {
+  const messageParts = [
+    `You submitted casualty record ${casualtyLabel} successfully.`,
+    incidentName ? `Incident: ${incidentName}.` : null,
+  ].filter(Boolean);
+
+  const { error } = await supabase
+    .from("notifications")
+    .insert({
+      user_id: recipientUserId,
+      title: "Casualty submitted",
+      message: messageParts.join(" "),
+      notification_type: "verification",
+      related_entity_type: "casualty",
+      related_entity_id: casualtyIncidentId,
+    });
+
+  if (error) {
+    console.error(
+      `Unable to create casualty submission notification: ${error.message}`,
+    );
+  }
+}
+
 async function getCasualtyScopeEncoderIds(user: {
   id: string;
   role: string;
@@ -1921,19 +1955,48 @@ export async function createCasualty(
     }
 
     if (casualtyOutcome) {
-      await upsertCasualtyOutcome(
-        transactionResult.casualtyIncident.id,
-        user.id,
-        casualtyOutcome,
-        incidentDetails.currentStatus,
-      );
-    }
+  await upsertCasualtyOutcome(
+    transactionResult.casualtyIncident.id,
+    user.id,
+    casualtyOutcome,
+    incidentDetails.currentStatus,
+  );
+}
 
-    response.status(201).json({
-      success: true,
-      message: "Casualty record submitted successfully.",
-      data: transactionResult,
-    });
+const casualtyNotificationLabel =
+  person.idNumber?.trim() ||
+  [
+    person.firstName,
+    person.middleName,
+    person.lastName,
+  ]
+    .filter(
+      (value): value is string =>
+        typeof value === "string" &&
+        value.trim().length > 0,
+    )
+    .join(" ") ||
+  "the casualty record";
+
+await createCasualtySubmissionNotification({
+  casualtyIncidentId:
+    transactionResult.casualtyIncident.id,
+
+  recipientUserId: user.id,
+
+  casualtyLabel:
+    casualtyNotificationLabel,
+
+  incidentName:
+    transactionResult.incident?.incidentName ??
+    null,
+});
+
+response.status(201).json({
+  success: true,
+  message: "Casualty record submitted successfully.",
+  data: transactionResult,
+});
   } catch (error) {
     next(error);
   }

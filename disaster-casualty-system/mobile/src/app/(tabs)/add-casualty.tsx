@@ -7083,19 +7083,130 @@ if (
         );
       }
 
-      case "Disposition":
-        return (
-          validateOptionalDateTime(
+      case "Disposition": {
+      const isIcu =
+        form.admittedToUnit === "ICU";
+
+      const isWardLike =
+        form.admittedToUnit === "Ward" ||
+        form.admittedToUnit === "Other Unit";
+
+      const isNotAdmitted =
+        form.admittedToUnit === "Not Admitted";
+
+      const isUnknown =
+        form.admittedToUnit === "Unknown";
+
+      if (isIcu) {
+        if (!form.transferredToWard.trim()) {
+          Alert.alert(
+            "Ward transfer status required",
+            "Select whether the patient was transferred to ward.",
+          );
+          return false;
+        }
+
+        if (
+          form.transferredToWard === "Yes" &&
+          !form.icuTransferOutTime.trim()
+        ) {
+          Alert.alert(
+            "Ward transfer time required",
+            "Enter the time of transfer to ward.",
+          );
+          return false;
+        }
+
+        if (
+          form.icuTransferOutTime.trim() &&
+          !getValidDateTimeInput(
             form.icuTransferOutTime,
-            "Invalid ward transfer time",
-            "transfer time",
-          ) &&
-          validateOptionalDateTime(
-            form.hospitalDischargeTime,
-            "Invalid discharge time",
-            "discharge time",
           )
+        ) {
+          Alert.alert(
+            "Invalid ward transfer time",
+            "Enter transfer time using mm/dd/yyyy hh:mm.",
+          );
+          return false;
+        }
+
+        if (
+          form.transferredToWard === "Yes" &&
+          !form.inActiveCare.trim()
+        ) {
+          Alert.alert(
+            "Active care status required",
+            "Select whether the patient is still in active care.",
+          );
+          return false;
+        }
+      }
+
+
+      if (
+        isWardLike &&
+        !form.inActiveCare.trim()
+      ) {
+        Alert.alert(
+          "Active care status required",
+          "Select whether the patient is still in active care.",
         );
+        return false;
+      }
+
+
+      const dischargeRequired =
+        isNotAdmitted ||
+        isUnknown ||
+        (
+          (
+            isWardLike ||
+            (
+              isIcu &&
+              form.transferredToWard === "Yes"
+            )
+          ) &&
+          form.inActiveCare === "No"
+        );
+
+      if (
+        dischargeRequired &&
+        !form.dischargedAfterEd.trim()
+      ) {
+        Alert.alert(
+          "Discharge status required",
+          "Select whether the patient was discharged from hospital.",
+        );
+        return false;
+      }
+
+      if (
+        dischargeRequired &&
+        form.dischargedAfterEd === "Yes" &&
+        !form.hospitalDischargeTime.trim()
+      ) {
+        Alert.alert(
+          "Discharge time required",
+          "Enter the time of hospital discharge.",
+        );
+        return false;
+      }
+
+      if (
+        form.hospitalDischargeTime.trim() &&
+        !getValidDateTimeInput(
+          form.hospitalDischargeTime,
+        )
+      ) {
+        Alert.alert(
+          "Invalid discharge time",
+          "Enter discharge time using mm/dd/yyyy hh:mm.",
+        );
+        return false;
+      }
+
+      return true;
+    }
 
       case "Transport": {
         if (
@@ -10689,80 +10800,135 @@ function confirmExitAddCasualty() {
   }
 
   function renderHealthcareDocumenterDispositionStep() {
-    const showIcuDisposition = form.admittedToUnit === "ICU";
-    const showWardTransferTime =
-      showIcuDisposition && form.transferredToWard === "Yes";
-    const showDischargeTime = form.dischargedAfterEd === "Yes";
+  const isIcu =
+    form.admittedToUnit === "ICU";
 
-    return (
-      <>
-        {showIcuDisposition ? (
-          <>
-            <SelectField
-              label="TRANSFERRED TO WARD"
-              value={form.transferredToWard}
-              placeholder="Yes or No"
-              onPress={() => openChoiceSheet("transferredToWard")}
-            />
+  const isWardLike =
+    form.admittedToUnit === "Ward" ||
+    form.admittedToUnit === "Other Unit";
 
-            {showWardTransferTime ? (
-              <View style={styles.conditionalChildGroup}>
-                <CurrentTimeField
-                  label="TIME OF TRANSFER"
-                  value={form.icuTransferOutTime}
-                  placeholder="mm/dd/yyyy hh:mm"
-                  buttonLabel="Use current transfer time"
-                  onChangeText={(value) =>
-                    updateField("icuTransferOutTime", value)
-                  }
-                  onUseCurrent={() =>
-                    updateField(
-                      "icuTransferOutTime",
-                      formatDateTimeForInput(new Date()),
-                    )
-                  }
-                />
-              </View>
-            ) : null}
-          </>
-        ) : (
+  const isNotAdmitted =
+    form.admittedToUnit === "Not Admitted";
+
+  const isUnknown =
+    form.admittedToUnit === "Unknown";
+
+  const transferredToWard =
+    isIcu && form.transferredToWard === "Yes";
+
+  const showWardTransferTime =
+    transferredToWard;
+
+  const showActiveCare =
+    isWardLike ||
+    transferredToWard ||
+    isUnknown;
+
+  const showDischarge =
+    isNotAdmitted ||
+    isUnknown ||
+    (
+      showActiveCare &&
+      !isUnknown &&
+      form.inActiveCare === "No"
+    );
+
+  const showDischargeTime =
+    showDischarge &&
+    form.dischargedAfterEd === "Yes";
+
+  return (
+    <>
+      {isIcu ? (
+        <>
           <SelectField
-            label="IN ACTIVE CARE"
-            value={form.inActiveCare}
+            label="TRANSFERRED TO WARD"
+            value={form.transferredToWard}
             placeholder="Yes or No"
-            onPress={() => openChoiceSheet("inActiveCare")}
+            onPress={() =>
+              openChoiceSheet("transferredToWard")
+            }
           />
-        )}
 
+          {showWardTransferTime ? (
+            <View style={styles.conditionalChildGroup}>
+              <CurrentTimeField
+                label="TIME OF TRANSFER"
+                value={form.icuTransferOutTime}
+                placeholder="mm/dd/yyyy hh:mm"
+                buttonLabel="Use current transfer time"
+                onChangeText={(value) =>
+                  updateField(
+                    "icuTransferOutTime",
+                    value,
+                  )
+                }
+                onUseCurrent={() =>
+                  updateField(
+                    "icuTransferOutTime",
+                    formatDateTimeForInput(
+                      new Date(),
+                    ),
+                  )
+                }
+              />
+            </View>
+          ) : null}
+        </>
+      ) : null}
+
+
+      {showActiveCare ? (
+        <SelectField
+          label="IN ACTIVE CARE"
+          value={form.inActiveCare}
+          placeholder="Yes or No"
+          onPress={() =>
+            openChoiceSheet("inActiveCare")
+          }
+        />
+      ) : null}
+
+
+      {showDischarge ? (
         <SelectField
           label="DISCHARGED FROM HOSPITAL"
           value={form.dischargedAfterEd}
           placeholder="Yes or No"
-          onPress={() => openChoiceSheet("dischargedAfterEd")}
+          onPress={() =>
+            openChoiceSheet("dischargedAfterEd")
+          }
         />
+      ) : null}
 
-        {showDischargeTime ? (
-          <View style={styles.conditionalChildGroup}>
-            <CurrentTimeField
-              label="TIME OF DISCHARGE"
-              value={form.hospitalDischargeTime}
-              placeholder="mm/dd/yyyy hh:mm"
-              buttonLabel="Use current discharge time"
-              onChangeText={(value) =>
-                updateField("hospitalDischargeTime", value)
-              }
-              onUseCurrent={() =>
-                updateField(
-                  "hospitalDischargeTime",
-                  formatDateTimeForInput(new Date()),
-                )
-              }
-            />
-          </View>
-        ) : null}
-      </>
-    );
-  }
+
+      {showDischargeTime ? (
+        <View style={styles.conditionalChildGroup}>
+          <CurrentTimeField
+            label="TIME OF DISCHARGE"
+            value={form.hospitalDischargeTime}
+            placeholder="mm/dd/yyyy hh:mm"
+            buttonLabel="Use current discharge time"
+            onChangeText={(value) =>
+              updateField(
+                "hospitalDischargeTime",
+                value,
+              )
+            }
+            onUseCurrent={() =>
+              updateField(
+                "hospitalDischargeTime",
+                formatDateTimeForInput(
+                  new Date(),
+                ),
+              )
+            }
+          />
+        </View>
+      ) : null}
+    </>
+  );
+}
 
   function renderSaIntroStep() {
     return (
