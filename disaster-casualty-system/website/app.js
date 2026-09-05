@@ -3043,17 +3043,28 @@ function renderTriageHistoryGroup(
   `;
 }
 
-function renderSaTransportHistoryContent(records) {
-  const saRecords = (records || []).filter((record) =>
-    String(record.notes || "")
-      .toLowerCase()
-      .includes("[sa transport / release]"),
-  );
+function renderFieldResponderTriageContent(records) {
+  return records.length
+    ? records
+        .map((record, index) => {
+          const victimCode =
+            extractRecordSectionValue(
+              record.notes,
+              "Field Responder Codes",
+              "Victim code",
+            );
 
-  return saRecords.length
-    ? saRecords
-        .map(
-          (record, index) => `
+          const userCode =
+            extractRecordSectionValue(
+              record.notes,
+              "Field Responder Codes",
+              "User code",
+            );
+
+          const triageNotes =
+            extractRecordBaseText(record.notes);
+
+          return `
             <div
               style="
                 margin-top:14px;
@@ -3064,122 +3075,309 @@ function renderSaTransportHistoryContent(records) {
             >
               <div class="casualty-detail-grid">
                 ${detailItem(
-                  "Record",
-                  `Transport ${index + 1}`,
+                  "Assessment",
+                  `Triage ${index + 1}`,
                 )}
 
+                ${detailItem(
+                  "Victim Code",
+                  victimCode,
+                )}
+
+                ${detailItem(
+                  "User Code",
+                  userCode,
+                )}
+
+                ${detailItem(
+                  "Triage System",
+                  String(
+                    record.triage_system ||
+                      "Not recorded",
+                  ).toUpperCase(),
+                )}
+
+                ${detailItem(
+                  "Triage Category",
+                  roleLabel(record.triage_category),
+                )}
+
+                ${detailItem(
+                  "Triage Time",
+                  formatDate(record.triaged_at),
+                )}
+
+                ${detailItem(
+                  "Location",
+                  record.location,
+                )}
+
+                ${detailItem(
+                  "Performed By",
+                  record.triaged_by_user?.full_name,
+                )}
+
+                ${detailItem(
+                  "Account Role",
+                  roleLabel(
+                    record.triaged_by_user?.role,
+                  ),
+                )}
+
+                ${detailItem(
+                  "Triage Notes",
+                  triageNotes || "No notes",
+                )}
+              </div>
+
+              <div style="margin-top:14px">
+                <strong>
+                  Assessment Answers
+                </strong>
+
+                <div style="margin-top:10px">
+                  ${renderTriageAssessmentAnswers(
+                    record.assessment_answers,
+                  )}
+                </div>
+              </div>
+            </div>
+          `;
+        })
+        .join("")
+    : `
+      <div
+        class="empty-state"
+        style="margin-top:12px"
+      >
+        No Field Responder triage record yet.
+      </div>
+    `;
+}
+
+function renderSaTransportHistoryContent(records) {
+  const saRecords = (records || []).filter((record) =>
+    String(record.notes || "")
+      .toLowerCase()
+      .includes("[sa transport / release]"),
+  );
+
+  return saRecords.length
+    ? saRecords
+        .map((record, index) => {
+          const patientFor =
+            extractRecordSectionValue(
+              record.notes,
+              "SA Transport / Release",
+              "Patient for",
+            );
+
+          const normalizedPatientFor =
+            String(patientFor || "").toLowerCase();
+
+          const isRelease =
+            normalizedPatientFor === "release";
+
+          const isTransfer =
+            normalizedPatientFor ===
+            "referral or transfer to health facility";
+
+          const conditionBeforeRelease =
+            extractRecordSectionValue(
+              record.notes,
+              "SA Transport / Release",
+              "Condition before release",
+            );
+
+          const conditionBeforeTransfer =
+            extractRecordSectionValue(
+              record.notes,
+              "SA Transport / Release",
+              "Condition before transfer",
+            );
+
+          const usedEmsVehicle =
+            extractRecordSectionValue(
+              record.notes,
+              "SA Transport / Release",
+              "Used EMS vehicle",
+            );
+
+          return `
+            <div
+              style="
+                margin-top:14px;
+                padding:16px;
+                border:1px solid #e2e7ef;
+                border-radius:12px;
+              "
+            >
+              ${
+                saRecords.length > 1
+                  ? `
+                    <div style="margin-bottom:12px">
+                      <strong>
+                        Transport / Release ${index + 1}
+                      </strong>
+                    </div>
+                  `
+                  : ""
+              }
+
+              <div class="casualty-detail-grid">
                 ${detailItem(
                   "Patient For",
-                  extractRecordSectionValue(
-                    record.notes,
-                    "SA Transport / Release",
-                    "Patient for",
-                  ),
+                  patientFor,
                 )}
 
-                ${detailItem(
-                  "Condition Before Transfer",
-                  extractRecordSectionValue(
-                    record.notes,
-                    "SA Transport / Release",
-                    "Condition before transfer",
-                  ),
-                )}
+                ${
+                  isRelease
+                    ? `
+                      ${detailItem(
+                        "Condition Before Release",
+                        conditionBeforeRelease,
+                      )}
 
-                ${detailItem(
-                  "Medical Contact Before Transfer",
-                  extractRecordSectionValue(
-                    record.notes,
-                    "SA Transport / Release",
-                    "Medical contact if dead before transfer",
-                  ),
-                )}
+                      ${
+                        String(
+                          conditionBeforeRelease || "",
+                        ).toLowerCase() === "dead"
+                          ? detailItem(
+                              "Medical Contact",
+                              extractRecordSectionValue(
+                                record.notes,
+                                "SA Transport / Release",
+                                "Medical contact if dead",
+                              ),
+                            )
+                          : ""
+                      }
 
-                ${detailItem(
-                  "Precaution",
-                  extractRecordSectionValue(
-                    record.notes,
-                    "SA Transport / Release",
-                    "Precaution",
-                  ),
-                )}
+                      ${detailItem(
+                        "Departed Scene Time",
+                        formatDate(
+                          record.departed_scene_at,
+                        ),
+                      )}
 
-                ${detailItem(
-                  "Receiving Facility",
-                  record.receiving_facility?.facility_name ||
-                    extractRecordSectionValue(
-                      record.notes,
-                      "SA Transport / Release",
-                      "Receiving facility",
-                    ),
-                )}
+                      ${detailItem(
+                        "Release of Liability Accepted",
+                        extractRecordSectionValue(
+                          record.notes,
+                          "SA Transport / Release",
+                          "Release of liability accepted",
+                        ),
+                      )}
+                    `
+                    : ""
+                }
 
-                ${detailItem(
-                  "Used EMS Vehicle",
-                  extractRecordSectionValue(
-                    record.notes,
-                    "SA Transport / Release",
-                    "Used EMS vehicle",
-                  ),
-                )}
+                ${
+                  isTransfer
+                    ? `
+                      ${detailItem(
+                        "Condition Before Transfer",
+                        conditionBeforeTransfer,
+                      )}
 
-                ${detailItem(
-                  "Type of EMS Vehicle",
-                  extractRecordSectionValue(
-                    record.notes,
-                    "SA Transport / Release",
-                    "Type of EMS vehicle",
-                  ),
-                )}
+                      ${
+                        String(
+                          conditionBeforeTransfer || "",
+                        ).toLowerCase() === "dead"
+                          ? detailItem(
+                              "Medical Contact",
+                              extractRecordSectionValue(
+                                record.notes,
+                                "SA Transport / Release",
+                                "Medical contact if dead before transfer",
+                              ),
+                            )
+                          : ""
+                      }
 
-                ${detailItem(
-                  "Vehicle Make / Model / Plate",
-                  extractRecordSectionValue(
-                    record.notes,
-                    "SA Transport / Release",
-                    "Vehicle make/model/plate",
-                  ),
-                )}
+                      ${detailItem(
+                        "Precaution",
+                        extractRecordSectionValue(
+                          record.notes,
+                          "SA Transport / Release",
+                          "Precaution",
+                        ),
+                      )}
 
-                ${detailItem(
-                  "Departed Scene Time",
-                  formatDate(record.departed_scene_at),
-                )}
+                      ${detailItem(
+                        "Receiving Facility",
+                        record.receiving_facility
+                          ?.facility_name ||
+                          extractRecordSectionValue(
+                            record.notes,
+                            "SA Transport / Release",
+                            "Receiving facility",
+                          ),
+                      )}
 
-                ${detailItem(
-                  "Arrived Facility Time",
-                  formatDate(record.arrived_facility_at),
-                )}
+                      ${detailItem(
+                        "Used EMS Vehicle",
+                        usedEmsVehicle,
+                      )}
 
-                ${detailItem(
-                  "Condition Before Release",
-                  extractRecordSectionValue(
-                    record.notes,
-                    "SA Transport / Release",
-                    "Condition before release",
-                  ),
-                )}
+                      ${
+                        String(
+                          usedEmsVehicle || "",
+                        ).toLowerCase() === "yes"
+                          ? `
+                            ${detailItem(
+                              "Type of EMS Vehicle",
+                              extractRecordSectionValue(
+                                record.notes,
+                                "SA Transport / Release",
+                                "Type of EMS vehicle",
+                              ),
+                            )}
 
-                ${detailItem(
-                  "Release of Liability Accepted",
-                  extractRecordSectionValue(
-                    record.notes,
-                    "SA Transport / Release",
-                    "Release of liability accepted",
-                  ),
-                )}
+                            ${detailItem(
+                              "Vehicle Make / Model / Plate",
+                              extractRecordSectionValue(
+                                record.notes,
+                                "SA Transport / Release",
+                                "Vehicle make/model/plate",
+                              ),
+                            )}
+                          `
+                          : ""
+                      }
+
+                      ${detailItem(
+                        "Departed Scene Time",
+                        formatDate(
+                          record.departed_scene_at,
+                        ),
+                      )}
+
+                      ${detailItem(
+                        "Arrived Facility Time",
+                        formatDate(
+                          record.arrived_facility_at,
+                        ),
+                      )}
+                    `
+                    : ""
+                }
 
                 ${detailItem(
                   "Transport / Release Notes",
-                  extractRecordBaseText(record.notes),
+                  extractRecordBaseText(record.notes) ||
+                    "No transport / release notes",
                 )}
               </div>
             </div>
-          `,
-        )
+          `;
+        })
         .join("")
     : `
-      <div class="empty-state" style="margin-top:12px">
+      <div
+        class="empty-state"
+        style="margin-top:12px"
+      >
         No SAR transport or release record yet.
       </div>
     `;
@@ -3381,11 +3579,92 @@ const religion =
 
         <div class="modal-body">
 
-          ${renderTriageHistoryGroup(
-            "Field Responder",
-            "Primary / on-site triage assessment",
-            fieldResponderTriage,
-          )}
+          <section class="record-section">
+            <h3>Field Responder</h3>
+
+            <p class="panel-subtitle">
+              Complete Field Responder casualty record
+            </p>
+
+
+            <!-- SAFETY -->
+            <div style="margin-top:18px">
+              <h4 style="margin:0 0 10px">
+                Safety
+              </h4>
+
+              <div class="casualty-detail-grid">
+                ${detailItem(
+                  "Are You Safe?",
+                  extractRecordSectionValue(
+                    item.remarks,
+                    "Responder Safety",
+                    "Are you safe",
+                  ),
+                )}
+
+                ${detailItem(
+                  "Time of PPE Use",
+                  extractRecordSectionValue(
+                    item.remarks,
+                    "Responder Safety",
+                    "Time of PPE Use",
+                  ),
+                )}
+              </div>
+            </div>
+
+
+            <!-- TRIAGE -->
+            <div
+              style="
+                margin-top:20px;
+                padding-top:16px;
+                border-top:1px solid #e2e7ef;
+              "
+            >
+              <h4 style="margin:0 0 4px">
+                Triage
+              </h4>
+
+              <p class="panel-subtitle">
+                Primary / on-site triage assessment
+              </p>
+
+              ${renderFieldResponderTriageContent(
+                fieldResponderTriage,
+              )}
+            </div>
+
+
+            <!-- STATUS -->
+            <div
+              style="
+                margin-top:20px;
+                padding-top:16px;
+                border-top:1px solid #e2e7ef;
+              "
+            >
+              <h4 style="margin:0 0 10px">
+                Status
+              </h4>
+
+              <div class="casualty-detail-grid">
+                ${detailItem(
+                  "Notes",
+                  extractRecordBaseText(item.remarks) ||
+                    "No notes",
+                )}
+
+                ${detailItem(
+                  "Victim Code Marking",
+                  fieldResponderTriage.length
+                    ? "Confirmed before submission"
+                    : "Not recorded",
+                )}
+              </div>
+            </div>
+          </section>
 
           <section class="record-section">
             <h3>Stabilization Area Responder</h3>

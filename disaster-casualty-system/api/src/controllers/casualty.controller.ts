@@ -1796,6 +1796,74 @@ export async function createCasualty(
       );
     }
 
+    if (triageAssessment) {
+  const assessmentAnswers =
+    triageAssessment.assessmentAnswers;
+
+  const hasAssessmentAnswers =
+    assessmentAnswers !== undefined &&
+    Object.keys(assessmentAnswers).length > 0;
+
+  const responderCategory =
+    triageAssessment.triageCategory as TriageCategory;
+
+  let calculatedCategory: TriageCategory | null =
+    null;
+
+  let algorithmVersion: string | null = null;
+  let isOverTriage = false;
+  let isUnderTriage = false;
+
+  if (hasAssessmentAnswers) {
+    calculatedCategory =
+      calculateTriageCategory(
+        triageAssessment.triageSystem as TriageSystem,
+        assessmentAnswers,
+      );
+
+    algorithmVersion =
+      `${triageAssessment.triageSystem}-v1`;
+
+    const comparison =
+      compareTriageCategories(
+        responderCategory,
+        calculatedCategory,
+      );
+
+    isOverTriage = comparison.isOverTriage;
+    isUnderTriage = comparison.isUnderTriage;
+  }
+
+  const { error: triageSyncError } =
+    await supabase
+      .from("casualty_triage_assessments")
+      .update({
+        responder_category: responderCategory,
+        calculated_category: calculatedCategory,
+        assessment_answers:
+          assessmentAnswers ?? null,
+        algorithm_version: algorithmVersion,
+        is_over_triage: isOverTriage,
+        is_under_triage: isUnderTriage,
+      })
+      .eq(
+        "casualty_incident_id",
+        transactionResult.casualtyIncident.id,
+      )
+      .eq("triaged_by", user.id)
+      .eq(
+        "triage_stage",
+        triageAssessment.triageStage ??
+          "on_site",
+      );
+
+  if (triageSyncError) {
+    throw new Error(
+      `Unable to synchronize triage assessment details: ${triageSyncError.message}`,
+    );
+  }
+}
+
     if (treatmentRecord) {
       await insertTreatmentRecord(
         transactionResult.casualtyIncident.id,
