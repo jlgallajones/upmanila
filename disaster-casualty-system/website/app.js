@@ -7,7 +7,10 @@ const SUPABASE_PUBLISHABLE_KEY =
   "sb_publishable_aY9UBi090m8dQsY7laosWw_MevYzFlM";
 
 let realtimeClient = null;
-let casualtyRealtimeChannel = null;
+let dashboardRealtimeChannel = null;
+let dashboardRealtimeRefreshTimer = null;
+let dashboardRealtimeRefreshInFlight = false;
+let dashboardRealtimeRefreshQueued = false;
 
 function getDefaultApiBaseUrl() {
   if (typeof window === "undefined") {
@@ -74,6 +77,33 @@ const state = {
   dashboard: null,
   recentActivity: [],
 };
+
+const dashboardRealtimeTables = [
+  "casualties",
+  "casualty_incidents",
+  "casualty_triage_assessments",
+  "casualty_transport_records",
+  "casualty_treatments",
+  "casualty_status_history",
+  "casualty_verification_history",
+  "casualty_outcomes",
+  "facility_encounters",
+  "clinical_procedures",
+  "icu_encounters",
+  "incidents",
+  "incident_response_timelines",
+  "dmmp_staff_call_downs",
+  "medical_coordination_assessments",
+  "responder_safety_reports",
+  "responder_safety_responses",
+  "continuity_of_care_assessments",
+  "facility_resource_snapshots",
+  "ems_vehicle_arrivals",
+  "evacuation_centers",
+  "healthcare_facilities",
+  "users",
+  "sitreps",
+];
 
 const hazardTypes = [
   "Volcanic Eruption",
@@ -182,7 +212,7 @@ function saveSession(data) {
 }
 
 function clearSession() {
-  void stopCasualtyRealtime();
+  void stopDashboardRealtime();
   
   state.user = null;
   state.accessToken = null;
@@ -638,54 +668,87 @@ async function getRealtimeClient() {
   return realtimeClient;
 }
 
-function shouldRenderCasualtyRealtimeUpdate() {
-  return [
-    "home",
-    "records",
-    "verification",
-    "logs",
-    "incident-analytics",
-  ].includes(state.activeView);
+function getRealtimeDetailIncidentIds() {
+  return Array.from(
+    new Set(
+      [
+        state.expandedIncidentId,
+        state.analyticsIncidentId,
+        state.activeIncidentSectionModal?.incidentId,
+      ].filter(Boolean),
+    ),
+  );
 }
 
-async function handleCasualtyRealtimeChange(
-  payload,
-) {
+function isEditingIncidentSection() {
+  return Boolean(state.activeIncidentSectionModal?.editMode);
+}
+
+function queueDashboardRealtimeRefresh(payload) {
   console.log(
-    "[DCMS Realtime] Casualty change:",
+    "[DCMS Realtime] Dashboard change:",
+    payload.table,
     payload.eventType,
     payload.new?.id ||
       payload.old?.id ||
       "unknown",
   );
 
+  window.clearTimeout(dashboardRealtimeRefreshTimer);
+  dashboardRealtimeRefreshTimer = window.setTimeout(() => {
+    void handleDashboardRealtimeChange();
+  }, 450);
+}
+
+async function handleDashboardRealtimeChange() {
+  if (dashboardRealtimeRefreshInFlight) {
+    dashboardRealtimeRefreshQueued = true;
+    return;
+  }
+
+  dashboardRealtimeRefreshInFlight = true;
+
   try {
-    /*
-     * Get the fully joined/scoped data through
-     * our existing DCMS backend.
-     */
+    const detailIncidentIds = getRealtimeDetailIncidentIds();
+
     await loadSharedData();
 
-    /*
-     * Only redraw screens affected by casualty
-     * changes. This is NOT a browser refresh.
-     */
-    if (shouldRenderCasualtyRealtimeUpdate()) {
+    state.incidentManagementDetails = {};
+
+    if (!isEditingIncidentSection()) {
+      await Promise.all(
+        detailIncidentIds.map((incidentId) =>
+          loadIncidentManagementDetails(incidentId, { renderLoading: false }),
+        ),
+      );
+
       renderCurrentView();
       bindView();
     }
   } catch (error) {
     console.error(
-      "[DCMS Realtime] Unable to sync casualty data:",
+      "[DCMS Realtime] Unable to sync dashboard data:",
       error,
     );
+  } finally {
+    dashboardRealtimeRefreshInFlight = false;
+
+    if (dashboardRealtimeRefreshQueued) {
+      dashboardRealtimeRefreshQueued = false;
+      queueDashboardRealtimeRefresh({
+        table: "queued",
+        eventType: "REFRESH",
+        new: null,
+        old: null,
+      });
+    }
   }
 }
 
-async function startCasualtyRealtime() {
+async function startDashboardRealtime() {
   if (
     !state.accessToken ||
-    casualtyRealtimeChannel
+    dashboardRealtimeChannel
   ) {
     return;
   }
@@ -702,21 +765,18 @@ async function startCasualtyRealtime() {
       state.accessToken,
     );
 
-    casualtyRealtimeChannel = client
-      .channel("dcms-casualty-incidents")
-      .on(
+    dashboardRealtimeChannel = dashboardRealtimeTables
+      .reduce((channel, table) => channel.on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
-          table: "casualty_incidents",
+          table,
         },
         (payload) => {
-          void handleCasualtyRealtimeChange(
-            payload,
-          );
+          queueDashboardRealtimeRefresh({ ...payload, table });
         },
-      )
+      ), client.channel("dcms-dashboard"))
       .subscribe((status, error) => {
         console.log(
           "[DCMS Realtime]",
@@ -738,19 +798,23 @@ async function startCasualtyRealtime() {
   }
 }
 
-async function stopCasualtyRealtime() {
+async function stopDashboardRealtime() {
   if (
     !realtimeClient ||
-    !casualtyRealtimeChannel
+    !dashboardRealtimeChannel
   ) {
     return;
   }
 
   await realtimeClient.removeChannel(
-    casualtyRealtimeChannel,
+    dashboardRealtimeChannel,
   );
 
-  casualtyRealtimeChannel = null;
+  dashboardRealtimeChannel = null;
+  window.clearTimeout(dashboardRealtimeRefreshTimer);
+  dashboardRealtimeRefreshTimer = null;
+  dashboardRealtimeRefreshInFlight = false;
+  dashboardRealtimeRefreshQueued = false;
 }
 
 function render() {
@@ -765,7 +829,7 @@ function render() {
   app.innerHTML = renderDashboardShell();
   bindShell();
 
-  void startCasualtyRealtime();
+  void startDashboardRealtime();
   void loadSharedData()
     .then(() => {
       renderCurrentView();
@@ -5129,10 +5193,15 @@ const incidentManagementSections = [
   ["edit-incident", "Edit Incident", true],
 ];
 
-async function loadIncidentManagementDetails(incidentId) {
+async function loadIncidentManagementDetails(incidentId, options = {}) {
+  const { renderLoading = true } = options;
+
   state.loadingIncidentManagementId = incidentId;
-  renderCurrentView();
-  bindView();
+
+  if (renderLoading) {
+    renderCurrentView();
+    bindView();
+  }
 
   const endpoints = {
     analytics: `/incidents/${encodeURIComponent(incidentId)}/analytics`,
@@ -5168,7 +5237,9 @@ async function loadIncidentManagementDetails(incidentId) {
     }
     return details;
   }, {});
-  state.loadingIncidentManagementId = null;
+  if (state.loadingIncidentManagementId === incidentId) {
+    state.loadingIncidentManagementId = null;
+  }
 }
 
 function renderIncidentManagement() {
