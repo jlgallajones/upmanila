@@ -11,6 +11,8 @@ let dashboardRealtimeChannel = null;
 let dashboardRealtimeRefreshTimer = null;
 let dashboardRealtimeRefreshInFlight = false;
 let dashboardRealtimeRefreshQueued = false;
+let analyticsLiveRefreshTimer = null;
+let analyticsLiveRefreshInFlight = false;
 
 function getDefaultApiBaseUrl() {
   if (typeof window === "undefined") {
@@ -213,6 +215,7 @@ function saveSession(data) {
 
 function clearSession() {
   void stopDashboardRealtime();
+  stopAnalyticsLiveRefresh();
   
   state.user = null;
   state.accessToken = null;
@@ -669,11 +672,17 @@ async function getRealtimeClient() {
 }
 
 function getRealtimeDetailIncidentIds() {
+  const selectedAnalyticsIncidentId =
+    state.activeView === "incident-analytics"
+      ? getSelectedAnalyticsIncidentId()
+      : null;
+
   return Array.from(
     new Set(
       [
         state.expandedIncidentId,
         state.analyticsIncidentId,
+        selectedAnalyticsIncidentId,
         state.activeIncidentSectionModal?.incidentId,
       ].filter(Boolean),
     ),
@@ -709,9 +718,16 @@ async function handleDashboardRealtimeChange() {
   dashboardRealtimeRefreshInFlight = true;
 
   try {
-    const detailIncidentIds = getRealtimeDetailIncidentIds();
+    const detailIncidentIdsBeforeLoad = getRealtimeDetailIncidentIds();
 
     await loadSharedData();
+
+    const detailIncidentIds = Array.from(
+      new Set([
+        ...detailIncidentIdsBeforeLoad,
+        ...getRealtimeDetailIncidentIds(),
+      ]),
+    );
 
     state.incidentManagementDetails = {};
 
@@ -1087,6 +1103,7 @@ function bindView() {
   bindOpenCasualtyRecord();
   bindVerificationReviewActions();
   bindScopeLinks();
+  syncAnalyticsLiveRefresh();
 }
 
 function bindScopeLinks() {
@@ -1098,15 +1115,86 @@ function bindScopeLinks() {
   });
 }
 
-function bindIncidentAnalyticsActions() {
-  if (state.activeView !== "incident-analytics") return;
+function getAnalyticsIncidents() {
+  return state.allIncidents.length ? state.allIncidents : state.incidents;
+}
 
-  const incidents = state.allIncidents.length ? state.allIncidents : state.incidents;
-  const selectedIncident =
+function getSelectedAnalyticsIncident() {
+  const incidents = getAnalyticsIncidents();
+
+  return (
     incidents.find((incident) => incident.id === state.analyticsIncidentId) ||
     incidents.find((incident) => incident.status === "active") ||
     incidents[0] ||
-    null;
+    null
+  );
+}
+
+function getSelectedAnalyticsIncidentId() {
+  return getSelectedAnalyticsIncident()?.id ?? "";
+}
+
+function stopAnalyticsLiveRefresh() {
+  if (!analyticsLiveRefreshTimer) return;
+
+  window.clearInterval(analyticsLiveRefreshTimer);
+  analyticsLiveRefreshTimer = null;
+  analyticsLiveRefreshInFlight = false;
+}
+
+function syncAnalyticsLiveRefresh() {
+  if (
+    state.activeView !== "incident-analytics" ||
+    !state.accessToken
+  ) {
+    stopAnalyticsLiveRefresh();
+    return;
+  }
+
+  if (analyticsLiveRefreshTimer) return;
+
+  analyticsLiveRefreshTimer = window.setInterval(() => {
+    void refreshActiveAnalytics();
+  }, 5000);
+}
+
+async function refreshActiveAnalytics() {
+  if (
+    state.activeView !== "incident-analytics" ||
+    analyticsLiveRefreshInFlight ||
+    isEditingIncidentSection()
+  ) {
+    return;
+  }
+
+  const incidentId = getSelectedAnalyticsIncidentId();
+  if (!incidentId) return;
+
+  analyticsLiveRefreshInFlight = true;
+
+  try {
+    await loadSharedData();
+    delete state.incidentManagementDetails[incidentId];
+    await loadIncidentManagementDetails(incidentId, { renderLoading: false });
+
+    if (state.activeView === "incident-analytics") {
+      renderCurrentView();
+      bindView();
+    }
+  } catch (error) {
+    console.error(
+      "[DCMS Realtime] Unable to refresh incident analytics:",
+      error,
+    );
+  } finally {
+    analyticsLiveRefreshInFlight = false;
+  }
+}
+
+function bindIncidentAnalyticsActions() {
+  if (state.activeView !== "incident-analytics") return;
+
+  const selectedIncident = getSelectedAnalyticsIncident();
   const selectedIncidentId = selectedIncident?.id ?? "";
   const select = qs("#analyticsIncidentSelect");
 
@@ -2187,12 +2275,8 @@ function bindResponderSafetyViewActions() {
 }
 
 function renderIncidentAnalytics() {
-  const incidents = state.allIncidents.length ? state.allIncidents : state.incidents;
-  const selectedIncident =
-    incidents.find((incident) => incident.id === state.analyticsIncidentId) ||
-    incidents.find((incident) => incident.status === "active") ||
-    incidents[0] ||
-    null;
+  const incidents = getAnalyticsIncidents();
+  const selectedIncident = getSelectedAnalyticsIncident();
   const selectedIncidentId = selectedIncident?.id ?? "";
   const details = selectedIncidentId
     ? state.incidentManagementDetails[selectedIncidentId]
