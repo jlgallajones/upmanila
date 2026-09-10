@@ -7,6 +7,7 @@ import {
   getManagedAccounts,
   getUnitUsers,
   login,
+  previewOperationalDataReset,
   registerAdmin,
   registerUnitUser,
   resetOperationalData,
@@ -21,6 +22,12 @@ export const authRouter = Router();
 authRouter.post("/login", login);
 authRouter.post("/refresh", refreshSession);
 authRouter.patch("/me", requireAuth, updateCurrentUser);
+authRouter.get(
+  "/reset-operational-data/preview",
+  requireAuth,
+  requireRole(["super_admin", "admin", "administrator"]),
+  previewOperationalDataReset,
+);
 authRouter.post(
   "/reset-operational-data",
   requireAuth,

@@ -450,6 +450,56 @@ button {
   cursor: pointer;
 }
 
+.bulk-preview-slot:empty {
+  display: none;
+}
+
+.bulk-preview-card {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.bulk-preview-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.bulk-preview-header h4 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.bulk-preview-header p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.bulk-preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.bulk-preview-table th:first-child,
+.bulk-preview-table td:first-child {
+  width: 72px;
+}
+
+.bulk-preview-table th:nth-child(2),
+.bulk-preview-table td:nth-child(2) {
+  width: 110px;
+}
+
 .status-message {
   margin-top: 12px;
   padding: 11px 12px;
@@ -469,6 +519,12 @@ button {
   color: var(--green);
   background: #effaf3;
   border-color: #bfe9cd;
+}
+
+.status-message.loading {
+  color: var(--blue);
+  background: #edf5ff;
+  border-color: #c6ddf5;
 }
 
 .dashboard-dialog-backdrop {
@@ -1061,6 +1117,46 @@ button {
   border: 1px solid #f0c5c5;
   border-radius: 12px;
   background: #fff7f7;
+}
+
+.profile-reset-panel.system-reset {
+  border-color: #efb1b4;
+  background: linear-gradient(180deg, #fff7f7, #fff);
+}
+
+.profile-reset-panel.admin-reset {
+  border-color: #f1d397;
+  background: linear-gradient(180deg, #fffaf0, #fff);
+}
+
+.reset-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.reset-scope-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 9px;
+  border-radius: 999px;
+  color: var(--maroon);
+  background: rgba(123, 17, 19, 0.08);
+  border: 1px solid rgba(123, 17, 19, 0.16);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.reset-safety-list {
+  margin: 8px 0 14px;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .main {
@@ -2739,9 +2835,14 @@ tbody tr:hover td {
 
   .incident-management-toggle,
   .analytics-legend,
+  .bulk-preview-header,
   .section-card-header {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .bulk-preview-actions {
+    justify-content: flex-start;
   }
 
   .analytics-legend {

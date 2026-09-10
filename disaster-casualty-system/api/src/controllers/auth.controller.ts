@@ -54,6 +54,7 @@ type UpdateCurrentUserRequest = {
 
 type ResetOperationalDataRequest = {
   confirmation?: string;
+  currentPassword?: string;
 };
 
 type BulkRegisterAdminRequest = {
@@ -1453,6 +1454,97 @@ async function deleteByColumn(
   return count ?? 0;
 }
 
+async function countByColumn(
+  tableName: string,
+  columnName: string,
+  ids: string[],
+): Promise<number> {
+  if (ids.length === 0) {
+    return 0;
+  }
+
+  const { error, count } = await supabase
+    .from(tableName)
+    .select("id", { count: "exact", head: true })
+    .in(columnName, ids);
+
+  if (error) {
+    throw new Error(
+      `Unable to count ${tableName}: ${error.message}`,
+    );
+  }
+
+  return count ?? 0;
+}
+
+const casualtyChildTables = [
+  "attachments",
+  "casualty_triage_assessments",
+  "casualty_transport_records",
+  "casualty_treatments",
+  "facility_encounters",
+  "casualty_outcomes",
+  "casualty_status_history",
+  "casualty_verification_history",
+];
+
+const incidentChildTables = [
+  "sitreps",
+  "responder_safety_responses",
+  "responder_safety_reports",
+  "medical_coordination_assessments",
+  "continuity_of_care_assessments",
+  "facility_resource_snapshots",
+  "dmmp_staff_call_downs",
+  "incident_response_timelines",
+  "evacuation_centers",
+];
+
+async function countOperationalData(scope: {
+  incidentIds: string[];
+  casualtyIncidentIds: string[];
+  casualtyIds: string[];
+}): Promise<Record<string, number>> {
+  const counts: Record<string, number> = {};
+
+  for (const tableName of casualtyChildTables) {
+    counts[tableName] = await countByColumn(
+      tableName,
+      "casualty_incident_id",
+      scope.casualtyIncidentIds,
+    );
+  }
+
+  counts.attachment_files = counts.attachments ?? 0;
+
+  counts.casualty_notifications = await countByColumn(
+    "notifications",
+    "related_entity_id",
+    scope.casualtyIncidentIds,
+  );
+
+  counts.casualty_incidents = scope.casualtyIncidentIds.length;
+  counts.casualties = scope.casualtyIds.length;
+
+  for (const tableName of incidentChildTables) {
+    counts[tableName] = await countByColumn(
+      tableName,
+      "incident_id",
+      scope.incidentIds,
+    );
+  }
+
+  counts.incident_notifications = await countByColumn(
+    "notifications",
+    "related_entity_id",
+    scope.incidentIds,
+  );
+
+  counts.incidents = scope.incidentIds.length;
+
+  return counts;
+}
+
 async function clearOperationalData(scope: {
   incidentIds: string[];
   casualtyIncidentIds: string[];
@@ -1493,16 +1585,7 @@ async function clearOperationalData(scope: {
     }
   }
 
-  const casualtyChildTables = [
-    "attachments",
-    "casualty_triage_assessments",
-    "casualty_transport_records",
-    "casualty_treatments",
-    "facility_encounters",
-    "casualty_outcomes",
-    "casualty_status_history",
-    "casualty_verification_history",
-  ];
+  counts.attachment_files = paths.length;
 
   for (const tableName of casualtyChildTables) {
     counts[tableName] = await deleteByColumn(
@@ -1529,18 +1612,6 @@ async function clearOperationalData(scope: {
     "id",
     scope.casualtyIds,
   );
-
-  const incidentChildTables = [
-    "sitreps",
-    "responder_safety_responses",
-    "responder_safety_reports",
-    "medical_coordination_assessments",
-    "continuity_of_care_assessments",
-    "facility_resource_snapshots",
-    "dmmp_staff_call_downs",
-    "incident_response_timelines",
-    "evacuation_centers",
-  ];
 
   for (const tableName of incidentChildTables) {
     counts[tableName] = await deleteByColumn(
@@ -1576,10 +1647,10 @@ export async function resetOperationalData(
 ): Promise<void> {
   try {
     const currentUser = (request as Request & {
-      user?: { id?: string; role?: string };
+      user?: { id?: string; role?: string; email?: string };
     }).user;
 
-    if (!currentUser?.id || !currentUser.role) {
+    if (!currentUser?.id || !currentUser.role || !currentUser.email) {
       response.status(401).json({
         success: false,
         message: "Authentication token is required.",
@@ -1591,6 +1662,28 @@ export async function resetOperationalData(
       response.status(400).json({
         success: false,
         message: `Type ${operationalResetConfirmation} to confirm reset.`,
+      });
+      return;
+    }
+
+    if (!request.body.currentPassword) {
+      response.status(400).json({
+        success: false,
+        message: "Current password is required to reset records.",
+      });
+      return;
+    }
+
+    const { error: passwordError } =
+      await supabaseAuth.auth.signInWithPassword({
+        email: currentUser.email,
+        password: request.body.currentPassword,
+      });
+
+    if (passwordError) {
+      response.status(403).json({
+        success: false,
+        message: "Current password is incorrect.",
       });
       return;
     }
@@ -1625,6 +1718,45 @@ export async function resetOperationalData(
         : "Your admin unit operational records and incidents were reset. Accounts were kept.",
       data: {
         scope: isSuperAdmin ? "system" : "admin",
+        counts,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function previewOperationalDataReset(
+  request: Request,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const currentUser = (request as Request & {
+      user?: { id?: string; role?: string };
+    }).user;
+
+    if (!currentUser?.id || !currentUser.role) {
+      response.status(401).json({
+        success: false,
+        message: "Authentication token is required.",
+      });
+      return;
+    }
+
+    const isSuperAdmin = currentUser.role === "super_admin";
+    const scope = isSuperAdmin
+      ? await getSystemOperationalScope()
+      : await getAdminOperationalScope(currentUser.id);
+    const counts = await countOperationalData(scope);
+
+    response.status(200).json({
+      success: true,
+      message: "Reset preview generated.",
+      data: {
+        scope: isSuperAdmin ? "system" : "admin",
+        accountsKept: true,
+        attachmentFilesIncluded: true,
         counts,
       },
     });

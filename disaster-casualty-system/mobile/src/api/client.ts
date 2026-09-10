@@ -7,6 +7,11 @@ import {
   saveCurrentUser,
   saveSessionTokens,
 } from "../auth/session";
+import {
+  getUserFriendlyMessage,
+  logUiError,
+  uiMessages,
+} from "../utils/uiMessages";
 
 const apiUrl = process.env.EXPO_PUBLIC_API_URL;
 
@@ -131,16 +136,28 @@ api.interceptors.response.use(
       }
     }
 
-    if (
-      shouldRefresh
-    ) {
+    if (shouldRefresh) {
       await clearSession();
     }
 
+    logUiError("API request failed", {
+      url: originalRequest?.url,
+      method: originalRequest?.method,
+      status,
+      response: error?.response?.data,
+      message: error instanceof Error ? error.message : String(error),
+    });
+
     if (typeof message === "string" && message.trim().length > 0) {
-      return Promise.reject(new Error(message));
+      return Promise.reject(
+        new Error(getUserFriendlyMessage(message)),
+      );
     }
 
-    return Promise.reject(error);
+    return Promise.reject(
+      new Error(
+        getUserFriendlyMessage(error, uiMessages.error.network),
+      ),
+    );
   },
 );

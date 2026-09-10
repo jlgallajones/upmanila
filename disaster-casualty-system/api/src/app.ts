@@ -11,6 +11,7 @@ import { authRouter } from "./routes/auth.routes.js";
 import { casualtyRouter } from "./routes/casualty.routes.js";
 import { dashboardRouter } from "./routes/dashboard.routes.js";
 import { evacuationCenterRouter } from "./routes/evacuation-center.routes.js";
+import { exportRouter } from "./routes/export.routes.js";
 import { healthcareFacilityRouter } from "./routes/healthcare-facility.routes.js";
 import { incidentRouter } from "./routes/incident.routes.js";
 import { notificationRouter } from "./routes/notification.routes.js";
@@ -100,6 +101,7 @@ app.get("/api/health", (_request: Request, response: Response) => {
 
 app.use("/api/auth", authRouter);
 app.use("/api/audit-logs", auditLogRouter);
+app.use("/api/exports", exportRouter);
 app.use("/api/incidents", incidentRouter);
 app.use("/api/casualties", casualtyRouter);
 app.use("/api/casualty-incidents", triageRouter);

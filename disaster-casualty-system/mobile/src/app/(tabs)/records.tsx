@@ -36,6 +36,12 @@ import {
   getResponderAssignment,
   type ResponderAssignment,
 } from "../../auth/responderAssignment";
+import {
+  getQueuedCasualtySubmissions,
+  retryQueuedCasualtySubmission,
+  syncQueuedCasualtySubmissions,
+  type QueuedCasualtySubmission,
+} from "../../offline/casualtyQueue";
 
 const COLORS = {
   maroon: "#7B1113",
@@ -144,6 +150,45 @@ function getFullName(record: CasualtyRecord): string {
   return parts.length > 0
     ? parts.join(" ")
     : "Unidentified Casualty";
+}
+
+function getQueuedCasualtyName(
+  item: QueuedCasualtySubmission,
+): string {
+  const person = item.payload.person;
+  const parts = [
+    person.firstName,
+    person.middleName,
+    person.lastName,
+  ].filter(
+    (part): part is string =>
+      typeof part === "string" && part.trim().length > 0,
+  );
+
+  return parts.length > 0
+    ? parts.join(" ")
+    : "Unidentified Casualty";
+}
+
+function getQueuedCasualtyLocation(
+  item: QueuedCasualtySubmission,
+): string {
+  const person = item.payload.person;
+  const details = item.payload.incidentDetails;
+  const parts = [
+    person.barangay,
+    person.municipality,
+    person.province,
+  ].filter(
+    (part): part is string =>
+      typeof part === "string" && part.trim().length > 0,
+  );
+
+  if (parts.length > 0) {
+    return parts.join(", ");
+  }
+
+  return details.currentLocation?.trim() || "Location unavailable";
 }
 
 function getInitials(name: string): string {
@@ -636,6 +681,165 @@ function CasualtyCard({
   );
 }
 
+function QueuedCasualtyCard({
+  item,
+  isRetrying,
+  onRetry,
+}: {
+  item: QueuedCasualtySubmission;
+  isRetrying: boolean;
+  onRetry: () => void;
+}) {
+  const fullName = getQueuedCasualtyName(item);
+  const location = getQueuedCasualtyLocation(item);
+  const statusStyle =
+    item.status === "failed"
+      ? {
+          backgroundColor: COLORS.paleRed,
+          color: COLORS.red,
+          label: "FAILED",
+          icon: "alert-circle-outline" as const,
+        }
+      : item.status === "syncing" || isRetrying
+        ? {
+            backgroundColor: COLORS.paleBlue,
+            color: COLORS.blue,
+            label: "SYNCING",
+            icon: "sync-outline" as const,
+          }
+        : {
+            backgroundColor: COLORS.paleOrange,
+            color: COLORS.orange,
+            label: "PENDING",
+            icon: "cloud-upload-outline" as const,
+          };
+  const attachmentCount = item.attachments?.length ?? 0;
+
+  return (
+    <View style={styles.recordCard}>
+      <View style={styles.recordTopRow}>
+        <View
+          style={[
+            styles.avatar,
+            {
+              backgroundColor: statusStyle.backgroundColor,
+            },
+          ]}
+        >
+          <Ionicons
+            name={statusStyle.icon}
+            size={19}
+            color={statusStyle.color}
+          />
+        </View>
+
+        <View style={styles.recordMain}>
+          <Text style={styles.recordName} numberOfLines={1}>
+            {fullName}
+          </Text>
+
+          <Text style={styles.recordMeta} numberOfLines={1}>
+            {item.payload.clientRecordId}
+          </Text>
+        </View>
+
+        <View
+          style={[
+            styles.statusBadge,
+            {
+              backgroundColor: statusStyle.backgroundColor,
+            },
+          ]}
+        >
+          <Text
+            style={[
+              styles.statusText,
+              {
+                color: statusStyle.color,
+              },
+            ]}
+          >
+            {statusStyle.label}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.divider} />
+
+      <View style={styles.recordBottomRow}>
+        <View style={styles.locationRow}>
+          <Ionicons
+            name="location-outline"
+            size={14}
+            color={COLORS.secondaryText}
+          />
+
+          <Text
+            style={styles.locationText}
+            numberOfLines={1}
+          >
+            {location}
+          </Text>
+        </View>
+
+        <View style={styles.syncRow}>
+          <View
+            style={[
+              styles.syncDot,
+              {
+                backgroundColor:
+                  item.status === "failed"
+                    ? COLORS.red
+                    : COLORS.pending,
+              },
+            ]}
+          />
+
+          <Text style={styles.syncText}>
+            {item.status === "failed"
+              ? "Failed"
+              : item.status === "syncing" || isRetrying
+                ? "Syncing"
+                : "Queued"}
+          </Text>
+
+          <Text style={styles.timeText}>
+            {"\u00B7"} {formatTime(item.createdAt)}
+          </Text>
+        </View>
+      </View>
+
+      {attachmentCount > 0 ? (
+        <Text style={styles.queuedAttachmentText}>
+          {attachmentCount} attachment
+          {attachmentCount === 1 ? "" : "s"} stored for sync.
+        </Text>
+      ) : null}
+
+      {item.lastError ? (
+        <Text style={styles.queuedErrorText}>
+          {item.lastError}
+        </Text>
+      ) : null}
+
+      {item.status === "failed" ? (
+        <Pressable
+          disabled={isRetrying}
+          onPress={onRetry}
+          style={({ pressed }) => [
+            styles.queuedRetryButton,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Text style={styles.queuedRetryButtonText}>
+            {isRetrying ? "Retrying..." : "Retry sync"}
+          </Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
 function IncidentRecordCard({
   incident,
   casualtyCount,
@@ -889,6 +1093,9 @@ function FilterCheckbox({
 
 export default function RecordsScreen() {
   const [records, setRecords] = useState<CasualtyRecord[]>([]);
+  const [queuedSubmissions, setQueuedSubmissions] = useState<
+    QueuedCasualtySubmission[]
+  >([]);
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [incidentDateRangeStart, setIncidentDateRangeStart] =
@@ -967,10 +1174,22 @@ export default function RecordsScreen() {
     useState<string | null>(null);
   const [exportingIncidentId, setExportingIncidentId] =
     useState<string | null>(null);
+  const [syncingQueueId, setSyncingQueueId] =
+    useState<string | null>(null);
+  const [isRetryingAllQueued, setIsRetryingAllQueued] =
+    useState(false);
+  const [queueMessage, setQueueMessage] =
+    useState<string | null>(null);
+
+  const loadQueuedSubmissions = useCallback(async () => {
+    const queue = await getQueuedCasualtySubmissions();
+    setQueuedSubmissions(queue);
+  }, []);
 
   const loadRecords = useCallback(async () => {
     try {
       setErrorMessage(null);
+      await loadQueuedSubmissions();
 
       const [token, user, responderAssignment] = await Promise.all([
         getAccessToken(),
@@ -1026,7 +1245,7 @@ export default function RecordsScreen() {
           : "Unable to load casualty records.",
       );
     }
-  }, []);
+  }, [loadQueuedSubmissions]);
 
   useFocusEffect(
     useCallback(() => {
@@ -1035,6 +1254,7 @@ export default function RecordsScreen() {
     async function initialize() {
       try {
         setIsLoading(true);
+        await loadQueuedSubmissions();
 
         const [token, user, responderAssignment] = await Promise.all([
           getAccessToken(),
@@ -1111,7 +1331,7 @@ export default function RecordsScreen() {
     return () => {
       isMounted = false;
     };
-    }, []),
+    }, [loadQueuedSubmissions]),
   );
 
   useEffect(() => {
@@ -1132,6 +1352,85 @@ export default function RecordsScreen() {
       setIsRefreshing(false);
     }
   }, [loadRecords]);
+
+  const handleRetryQueuedSubmission = useCallback(
+    async (queueId: string) => {
+      try {
+        setSyncingQueueId(queueId);
+        setQueueMessage(null);
+
+        const result =
+          await retryQueuedCasualtySubmission(queueId);
+
+        await loadQueuedSubmissions();
+        await loadRecords();
+
+        if (result.synced > 0) {
+          setQueueMessage(
+            "Queued casualty synced successfully.",
+          );
+          return;
+        }
+
+        setQueueMessage(
+          result.issues[0]?.reason ||
+            "Unable to sync this casualty. Check your connection and try again.",
+        );
+      } catch (error) {
+        console.error("Failed to retry queued casualty:", error);
+        setQueueMessage(
+          error instanceof Error
+            ? error.message
+            : "Unable to reach the API. Check your connection and try again.",
+        );
+        await loadQueuedSubmissions();
+      } finally {
+        setSyncingQueueId(null);
+      }
+    },
+    [loadQueuedSubmissions, loadRecords],
+  );
+
+  const handleRetryAllQueuedSubmissions = useCallback(async () => {
+    try {
+      setIsRetryingAllQueued(true);
+      setQueueMessage(null);
+
+      const result = await syncQueuedCasualtySubmissions();
+
+      await loadQueuedSubmissions();
+      await loadRecords();
+
+      if (result.synced > 0 && result.remaining === 0) {
+        setQueueMessage(
+          `Synced ${result.synced} queued casualty record${result.synced === 1 ? "" : "s"}.`,
+        );
+        return;
+      }
+
+      if (result.synced > 0) {
+        setQueueMessage(
+          `Synced ${result.synced} record${result.synced === 1 ? "" : "s"}. ${result.remaining} still need attention.`,
+        );
+        return;
+      }
+
+      setQueueMessage(
+        result.issues[0]?.reason ||
+          "No queued records synced. Check your connection and try again.",
+      );
+    } catch (error) {
+      console.error("Failed to retry queued casualties:", error);
+      setQueueMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to reach the API. Check your connection and try again.",
+      );
+      await loadQueuedSubmissions();
+    } finally {
+      setIsRetryingAllQueued(false);
+    }
+  }, [loadQueuedSubmissions, loadRecords]);
 
   function toggleReviewFilter(filter: FieldResponderReviewFilter) {
     setActiveReviewFilters((current) =>
@@ -1254,6 +1553,39 @@ matchesFilter =
   ]);
 
   const isAdminRecordsView = isAdminRecordsRole(currentUserRole);
+
+  const filteredQueuedSubmissions = useMemo(() => {
+    if (isAdminRecordsView) {
+      return [];
+    }
+
+    const normalizedSearch = searchQuery.trim().toLowerCase();
+
+    return queuedSubmissions.filter((item) => {
+      if (normalizedSearch.length === 0) {
+        return true;
+      }
+
+      const searchableText = [
+        getQueuedCasualtyName(item),
+        item.payload.clientRecordId,
+        item.payload.person.idNumber,
+        item.payload.offlineIncidentName,
+        getQueuedCasualtyLocation(item),
+        item.status,
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return searchableText.includes(normalizedSearch);
+    });
+  }, [isAdminRecordsView, queuedSubmissions, searchQuery]);
+
+  const failedQueuedCount = queuedSubmissions.filter(
+    (item) => item.status === "failed",
+  ).length;
+  const pendingQueuedCount =
+    queuedSubmissions.length - failedQueuedCount;
 
   const casualtyCountByIncidentId = useMemo(() => {
     return records.reduce<Record<string, number>>((counts, record) => {
@@ -1936,7 +2268,11 @@ function toggleHealthcareLocationFilter(
           </Text>
 
           <Text style={styles.headerSubtitle}>
-            {records.length} entries · {formattedDate}
+            {records.length} synced
+            {queuedSubmissions.length > 0
+              ? ` \u00B7 ${queuedSubmissions.length} queued`
+              : ""}{" "}
+            {"\u00B7"} {formattedDate}
           </Text>
 
           <View style={styles.searchBar}>
@@ -2160,6 +2496,77 @@ function toggleHealthcareLocationFilter(
               Retry
             </Text>
           </Pressable>
+        </View>
+      ) : null}
+
+      {!isAdminRecordsView && queuedSubmissions.length > 0 ? (
+        <View style={styles.offlineQueuePanel}>
+          <View style={styles.offlineQueueHeader}>
+            <View style={styles.offlineQueueTitleGroup}>
+              <Text style={styles.offlineQueueTitle}>
+                Offline Sync Queue
+              </Text>
+              <Text style={styles.offlineQueueSubtitle}>
+                {pendingQueuedCount} pending {"\u00B7"}{" "}
+                {failedQueuedCount} failed
+              </Text>
+            </View>
+
+            <Pressable
+              disabled={isRetryingAllQueued}
+              onPress={() => {
+                void handleRetryAllQueuedSubmissions();
+              }}
+              style={({ pressed }) => [
+                styles.offlineQueueRetryAll,
+                isRetryingAllQueued &&
+                  styles.offlineQueueRetryAllDisabled,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={styles.offlineQueueRetryAllText}>
+                {isRetryingAllQueued ? "Syncing..." : "Retry all"}
+              </Text>
+            </Pressable>
+          </View>
+
+          <Text style={styles.offlineQueueMessage}>
+            These casualty records are saved on this device and will appear
+            in the dashboard after they sync.
+          </Text>
+
+          {queueMessage ? (
+            <Text
+              style={[
+                styles.offlineQueueMessage,
+                styles.offlineQueueStatusMessage,
+              ]}
+            >
+              {queueMessage}
+            </Text>
+          ) : null}
+
+          {filteredQueuedSubmissions.length > 0 ? (
+            <View style={styles.offlineQueueList}>
+              {filteredQueuedSubmissions.map((item) => (
+                <QueuedCasualtyCard
+                  key={item.id}
+                  item={item}
+                  isRetrying={
+                    syncingQueueId === item.id ||
+                    isRetryingAllQueued
+                  }
+                  onRetry={() => {
+                    void handleRetryQueuedSubmission(item.id);
+                  }}
+                />
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.offlineQueueMessage}>
+              No queued records match the current search.
+            </Text>
+          )}
         </View>
       ) : null}
 
@@ -2621,6 +3028,78 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
+  offlineQueuePanel: {
+    marginHorizontal: SCREEN_PADDING,
+    marginTop: 12,
+    marginBottom: 2,
+    padding: 13,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: "#F2D7A6",
+    backgroundColor: "#FFF9EE",
+  },
+
+  offlineQueueHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+
+  offlineQueueTitleGroup: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  offlineQueueTitle: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: "900",
+  },
+
+  offlineQueueSubtitle: {
+    color: COLORS.secondaryText,
+    fontSize: 10,
+    marginTop: 4,
+    fontWeight: "800",
+  },
+
+  offlineQueueRetryAll: {
+    minHeight: 34,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 11,
+    paddingHorizontal: 12,
+    backgroundColor: COLORS.maroon,
+  },
+
+  offlineQueueRetryAllDisabled: {
+    opacity: 0.68,
+  },
+
+  offlineQueueRetryAllText: {
+    color: COLORS.white,
+    fontSize: 11,
+    fontWeight: "900",
+  },
+
+  offlineQueueMessage: {
+    color: COLORS.secondaryText,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 9,
+  },
+
+  offlineQueueStatusMessage: {
+    color: COLORS.maroon,
+    fontWeight: "800",
+  },
+
+  offlineQueueList: {
+    gap: 9,
+    marginTop: 11,
+  },
+
   list: {
     flex: 1,
   },
@@ -2868,6 +3347,39 @@ const styles = StyleSheet.create({
     color: COLORS.secondaryText,
     fontSize: 9,
     marginLeft: 5,
+  },
+
+  queuedAttachmentText: {
+    color: COLORS.blue,
+    fontSize: 10,
+    lineHeight: 15,
+    marginTop: 9,
+    fontWeight: "800",
+  },
+
+  queuedErrorText: {
+    color: COLORS.red,
+    fontSize: 10,
+    lineHeight: 15,
+    marginTop: 7,
+    fontWeight: "700",
+  },
+
+  queuedRetryButton: {
+    alignSelf: "flex-start",
+    minHeight: 34,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 11,
+    paddingHorizontal: 13,
+    marginTop: 10,
+    backgroundColor: COLORS.paleRed,
+  },
+
+  queuedRetryButtonText: {
+    color: COLORS.red,
+    fontSize: 11,
+    fontWeight: "900",
   },
 
   floatingButton: {

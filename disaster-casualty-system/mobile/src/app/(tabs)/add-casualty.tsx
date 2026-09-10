@@ -74,6 +74,7 @@ import {
   isNetworkSubmissionError,
   getQueuedCasualtySubmissions,
   queueCasualtySubmission,
+  type QueuedCasualtyAttachment,
   type QueuedCasualtyPayload,
 } from "../../offline/casualtyQueue";
 
@@ -9375,6 +9376,34 @@ if (
     }
   }
 
+  async function getQueuedPhotoAttachments(): Promise<
+    QueuedCasualtyAttachment[]
+  > {
+    if (!selectedPhoto) {
+      return [];
+    }
+
+    const base64Data =
+      selectedPhoto.base64Data ??
+      (await FileSystem.readAsStringAsync(
+        selectedPhoto.uri,
+        {
+          encoding: FileSystem.EncodingType.Base64,
+        },
+      ));
+
+    return [
+      {
+        id: generateUuid(),
+        fileName: selectedPhoto.fileName,
+        fileType: "photo",
+        mimeType: selectedPhoto.mimeType,
+        base64Data,
+        fileSizeBytes: selectedPhoto.fileSize,
+      },
+    ];
+  }
+
   function getChoiceSheetTitle(): string {
     switch (activeChoiceSheet) {
       case "sex":
@@ -10148,12 +10177,19 @@ if (
         facilityEncounter: facilityEncounterPayload,
         casualtyOutcome: casualtyOutcomePayload,
       };
+      const queueCurrentCasualtySubmission = async () => {
+        const attachments = await getQueuedPhotoAttachments();
+
+        await queueCasualtySubmission(queuedPayload, {
+          attachments,
+        });
+      };
 
       if (!currentUserId) {
         try {
           setIsSubmitting(true);
 
-          await queueCasualtySubmission(queuedPayload);
+          await queueCurrentCasualtySubmission();
 
           if (shouldResetPendingDepartureForm) {
             resetForNextCasualty();
@@ -10252,7 +10288,7 @@ if (
         console.error("Failed to submit casualty:", error);
 
         if (isNetworkSubmissionError(error)) {
-          await queueCasualtySubmission(queuedPayload);
+          await queueCurrentCasualtySubmission();
 
           if (shouldResetPendingDepartureForm) {
             resetForNextCasualty();
@@ -10268,7 +10304,7 @@ if (
         }
 
         if (isAuthenticationTokenError(error)) {
-          await queueCasualtySubmission(queuedPayload);
+          await queueCurrentCasualtySubmission();
 
           if (shouldResetPendingDepartureForm) {
             resetForNextCasualty();

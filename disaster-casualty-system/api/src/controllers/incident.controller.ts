@@ -5049,10 +5049,11 @@ export async function exportIncidentCasualtiesCsv(
 ): Promise<void> {
   try {
     const { id } = request.params;
+    const user = getAuthenticatedUser(request);
 
     const { data: incident, error: incidentError } = await supabase
       .from("incidents")
-      .select("id, incident_code")
+      .select("id, incident_code, created_by")
       .eq("id", id)
       .maybeSingle();
 
@@ -5066,6 +5067,14 @@ export async function exportIncidentCasualtiesCsv(
       response.status(404).json({
         success: false,
         message: "Incident not found.",
+      });
+      return;
+    }
+
+    if (user.role !== "super_admin" && incident.created_by !== user.id) {
+      response.status(403).json({
+        success: false,
+        message: "You can only export incidents created by your account.",
       });
       return;
     }

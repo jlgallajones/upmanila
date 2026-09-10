@@ -24,25 +24,25 @@ Use this checklist to track system polish, reliability, and presentation-readine
 
 ## 3. Reset And Delete Safety
 
-- [ ] Show affected record counts before reset.
-- [ ] Separate system-wide reset from admin-scoped reset visually.
-- [ ] Require typed confirmation before reset.
-- [ ] Consider requiring password confirmation before reset.
-- [ ] Keep accounts during reset.
-- [ ] Confirm attachment files are removed when related records are reset.
-- [ ] Add audit log entries for reset operations.
-- [ ] Add clear post-reset summary of deleted records.
+- [x] Show affected record counts before reset.
+- [x] Separate system-wide reset from admin-scoped reset visually.
+- [x] Require typed confirmation before reset.
+- [x] Consider requiring password confirmation before reset.
+- [x] Keep accounts during reset.
+- [x] Confirm attachment files are removed when related records are reset.
+- [x] Add audit log entries for reset operations.
+- [x] Add clear post-reset summary of deleted records.
 
 ## 4. Bulk Upload Preview
 
-- [ ] Add preview table after uploading CSV/Excel files.
-- [ ] Mark valid rows before import.
-- [ ] Mark duplicate rows before import.
-- [ ] Mark invalid rows before import.
-- [ ] Show row-level error reasons.
-- [ ] Let users cancel before saving imported rows.
-- [ ] Import only after explicit confirmation.
-- [ ] Allow downloading failed rows as a correction file.
+- [x] Add preview table after uploading CSV/Excel files.
+- [x] Mark valid rows before import.
+- [x] Mark duplicate rows before import.
+- [x] Mark invalid rows before import.
+- [x] Show row-level error reasons.
+- [x] Let users cancel before saving imported rows.
+- [x] Import only after explicit confirmation.
+- [x] Allow downloading failed rows as a correction file.
 
 ## 5. Test Coverage
 
@@ -57,33 +57,33 @@ Use this checklist to track system polish, reliability, and presentation-readine
 
 ## 6. Mobile Offline And Retry Behavior
 
-- [ ] Show a pending sync badge for locally queued casualty records.
-- [ ] Show a failed sync state with a retry button.
-- [ ] Preserve local drafts if submit fails.
-- [ ] Add clear sync status per casualty record.
-- [ ] Add offline-safe attachment handling.
-- [ ] Add user-facing messaging when API is unreachable.
-- [ ] Add retry-all queued records action.
+- [x] Show a pending sync badge for locally queued casualty records.
+- [x] Show a failed sync state with a retry button.
+- [x] Preserve local drafts if submit fails.
+- [x] Add clear sync status per casualty record.
+- [x] Add offline-safe attachment handling.
+- [x] Add user-facing messaging when API is unreachable.
+- [x] Add retry-all queued records action.
 - [ ] Test airplane mode and weak connection workflows.
 
 ## 7. UI Message Standardization
 
-- [ ] Standardize loading messages across mobile and web.
-- [ ] Standardize success messages across mobile and web.
-- [ ] Standardize error messages across mobile and web.
-- [ ] Replace technical errors with user-friendly messages where appropriate.
-- [ ] Keep detailed technical errors in console/API logs.
-- [ ] Use the same message patterns for forms, modals, and bulk imports.
-- [ ] Ensure success messages remain visible long enough to read.
-- [ ] Review all pages for inconsistent button labels.
+- [x] Standardize loading messages across mobile and web.
+- [x] Standardize success messages across mobile and web.
+- [x] Standardize error messages across mobile and web.
+- [x] Replace technical errors with user-friendly messages where appropriate.
+- [x] Keep detailed technical errors in console/API logs.
+- [x] Use the same message patterns for forms, modals, and bulk imports.
+- [x] Ensure success messages remain visible long enough to read.
+- [x] Review all pages for inconsistent button labels.
 
 ## 8. Data Export And Backup
 
-- [ ] Add export for casualty records per incident.
-- [ ] Add export for responders/documenters.
-- [ ] Add export for healthcare facilities.
-- [ ] Add export for evacuation centers.
-- [ ] Add full incident package export.
-- [ ] Include attachments or attachment references in exports.
-- [ ] Add super admin system backup export.
-- [ ] Add clear export permissions by role.
+- [x] Add export for casualty records per incident.
+- [x] Add export for responders/documenters.
+- [x] Add export for healthcare facilities.
+- [x] Add export for evacuation centers.
+- [x] Add full incident package export.
+- [x] Include attachments or attachment references in exports.
+- [x] Add super admin system backup export.
+- [x] Add clear export permissions by role.

@@ -18,6 +18,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { login } from "../../api/auth";
 import { saveSession } from "../../auth/session";
 import EmergencyShield from "../../components/common/EmergencyShield";
+import {
+  getUserFriendlyMessage,
+  logUiError,
+} from "../../utils/uiMessages";
 
 const COLORS = {
   maroon: "#7B1113",
@@ -52,27 +56,20 @@ export default function LoginScreen() {
       normalizedMessage.includes("invalid email or password") ||
       normalizedMessage.includes("invalid login credentials")
     ) {
-      return "Invalid login credentials. Please reset the password in Supabase Authentication and try again.";
+      return "Invalid email or password. Please check your credentials and try again.";
     }
 
     if (normalizedMessage.includes("email is not confirmed")) {
-      return "Email is not confirmed in Supabase Auth. Please confirm this account before logging in.";
+      return "This account is not ready for login yet. Please contact an administrator.";
     }
 
     if (normalizedMessage.includes("inactive")) {
-      return "This account exists but is inactive. Please set is_active to true in the users table.";
+      return "This account is inactive. Please contact an administrator.";
     }
 
-    if (
-      normalizedMessage.includes("network error") ||
-      normalizedMessage.includes("timeout")
-    ) {
-      return "Unable to reach the server. Please check the API URL, ngrok tunnel, or internet connection.";
-    }
-
-    return (
-      message ||
-      "Unable to sign in. Please check your credentials and try again."
+    return getUserFriendlyMessage(
+      error,
+      "Unable to sign in. Please check your credentials and try again.",
     );
   }
 
@@ -105,6 +102,7 @@ export default function LoginScreen() {
 
       router.replace("/home");
     } catch (error) {
+      logUiError("Login failed", error);
       const message = getLoginErrorMessage(error);
       setLoginError(message);
       Alert.alert(

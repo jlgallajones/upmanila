@@ -86,6 +86,7 @@ const state = {
   auditLogs: [],
   dashboard: null,
   recentActivity: [],
+  bulkImportPreviews: {},
 };
 
 const dashboardRealtimeTables = [
@@ -390,30 +391,51 @@ function recomputeAdminDashboardSummary() {
 }
 
 async function apiRequest(path, options = {}) {
-  const response = await fetch(`${state.apiBaseUrl}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(state.accessToken ? { Authorization: `Bearer ${state.accessToken}` } : {}),
-      ...(options.headers || {}),
-    },
-  });
+  let response;
+
+  try {
+    response = await fetch(`${state.apiBaseUrl}${path}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(state.accessToken ? { Authorization: `Bearer ${state.accessToken}` } : {}),
+        ...(options.headers || {}),
+      },
+    });
+  } catch (error) {
+    logUiError(`Request failed before response: ${path}`, error);
+    throw new Error(
+      getErrorMessage(
+        error,
+        "Unable to reach the server. Please check your connection and try again.",
+      ),
+    );
+  }
+
   const contentType = response.headers.get("content-type") || "";
 
   if (!response.ok) {
     let message = `Request failed with status ${response.status}.`;
+    let detail = null;
 
     if (contentType.includes("application/json")) {
       const body = await response.json();
       message = body.message || message;
+      detail = body;
     }
+
+    logUiError(`API request failed: ${path}`, {
+      status: response.status,
+      detail,
+      message,
+    });
 
     if (response.status === 401) {
       clearSession();
       render();
     }
 
-    throw new Error(message);
+    throw new Error(getUserFriendlyMessage(message));
   }
 
   if (contentType.includes("application/json")) {
@@ -689,6 +711,68 @@ function sanitizeFileName(value) {
     .replace(/^-|-$/g, "");
 }
 
+function getUserFriendlyMessage(
+  message,
+  fallback = "Something went wrong. Please try again.",
+) {
+  const rawMessage = String(message || "").trim();
+  const normalizedMessage = rawMessage.toLowerCase();
+
+  if (!rawMessage) return fallback;
+
+  if (
+    normalizedMessage.includes("network") ||
+    normalizedMessage.includes("failed to fetch") ||
+    normalizedMessage.includes("timeout")
+  ) {
+    return "Unable to reach the server. Please check your connection and try again.";
+  }
+
+  if (
+    normalizedMessage.includes("jwt") ||
+    normalizedMessage.includes("invalid or expired") ||
+    normalizedMessage.includes("authentication token") ||
+    normalizedMessage.includes("unauthorized")
+  ) {
+    return "Your session has expired. Please sign in again.";
+  }
+
+  if (
+    normalizedMessage.includes("duplicate key") ||
+    normalizedMessage.includes("already exists")
+  ) {
+    return "A matching record already exists. Please review the entry and try again.";
+  }
+
+  if (
+    normalizedMessage.includes("supabase") ||
+    normalizedMessage.includes("violates") ||
+    normalizedMessage.includes("foreign key") ||
+    normalizedMessage.includes("null value") ||
+    normalizedMessage.includes("database") ||
+    normalizedMessage.includes("syntaxerror") ||
+    normalizedMessage.includes("request failed with status 500")
+  ) {
+    return fallback;
+  }
+
+  return rawMessage;
+}
+
+function getErrorMessage(
+  error,
+  fallback = "Something went wrong. Please try again.",
+) {
+  return getUserFriendlyMessage(
+    error instanceof Error ? error.message : error,
+    fallback,
+  );
+}
+
+function logUiError(context, error) {
+  console.error(`[DCMS UI] ${context}`, error);
+}
+
 async function downloadApiFile(path, fileName) {
   const blob = await apiRequest(path);
   const downloadUrl = URL.createObjectURL(blob);
@@ -702,29 +786,67 @@ async function downloadApiFile(path, fileName) {
   URL.revokeObjectURL(downloadUrl);
 }
 
+function renderDataExportPanel(title, subtitle, actions) {
+  return `
+    <section class="panel export-panel">
+      <div class="panel-header">
+        <div>
+          <h2>${escapeHtml(title)}</h2>
+          <p class="panel-subtitle">${escapeHtml(subtitle)}</p>
+        </div>
+      </div>
+      <div class="button-row">
+        ${actions
+          .map(
+            (action) => `
+              <button
+                class="${escapeHtml(action.className || "ghost-button")}"
+                type="button"
+                data-export-download="${escapeHtml(action.path)}"
+                data-export-file="${escapeHtml(action.fileName)}"
+              >
+                ${escapeHtml(action.label)}
+              </button>
+            `,
+          )
+          .join("")}
+      </div>
+      <div id="exportMessage" class="status-message" hidden></div>
+    </section>
+  `;
+}
+
 function setMessage(id, message, type = "") {
   const element = document.getElementById(id);
   if (!element) return;
-  element.className = `status-message ${type}`;
-  element.textContent = message;
-  element.hidden = !message;
+  const normalizedType = type || (message ? "loading" : "");
+  const displayMessage =
+    normalizedType === "error"
+      ? getUserFriendlyMessage(message)
+      : message;
+
+  element.className = `status-message ${normalizedType}`;
+  element.textContent = displayMessage;
+  element.hidden = !displayMessage;
 }
 
 function showDashboardToast(message, type = "success") {
   document.querySelector(".dashboard-toast")?.remove();
+  const displayMessage =
+    type === "error" ? getUserFriendlyMessage(message) : message;
 
   document.body.insertAdjacentHTML(
     "beforeend",
     `
       <div class="dashboard-toast ${escapeHtml(type)}" role="status">
-        ${escapeHtml(message)}
+        ${escapeHtml(displayMessage)}
       </div>
     `,
   );
 
   window.setTimeout(() => {
     document.querySelector(".dashboard-toast")?.remove();
-  }, 3200);
+  }, type === "error" ? 8000 : 6000);
 }
 
 function showDashboardConfirm({
@@ -814,6 +936,54 @@ function showDashboardConfirm({
   });
 }
 
+function showDashboardNotice({
+  title,
+  message,
+  eyebrow = "Notice",
+  confirmLabel = "Done",
+}) {
+  document.querySelector(".dashboard-dialog-backdrop")?.remove();
+
+  return new Promise((resolve) => {
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      `
+        <div class="dashboard-dialog-backdrop" data-dashboard-dialog>
+          <section class="dashboard-dialog" role="dialog" aria-modal="true" aria-labelledby="dashboardNoticeTitle">
+            <div>
+              <span class="eyebrow">${escapeHtml(eyebrow)}</span>
+              <h2 id="dashboardNoticeTitle">${escapeHtml(title)}</h2>
+              <p>${escapeHtml(message)}</p>
+            </div>
+            <div class="dashboard-dialog-actions">
+              <button class="primary-button" type="button" data-dashboard-notice-close>
+                ${escapeHtml(confirmLabel)}
+              </button>
+            </div>
+          </section>
+        </div>
+      `,
+    );
+
+    const close = () => {
+      document.querySelector(".dashboard-dialog-backdrop")?.remove();
+      resolve();
+    };
+
+    document
+      .querySelector("[data-dashboard-notice-close]")
+      ?.addEventListener("click", close);
+
+    document
+      .querySelector("[data-dashboard-dialog]")
+      ?.addEventListener("click", (event) => {
+        if (event.target === event.currentTarget) {
+          close();
+        }
+      });
+  });
+}
+
 function showDashboardTextPrompt({
   title,
   message,
@@ -823,6 +993,8 @@ function showDashboardTextPrompt({
   cancelLabel = "Cancel",
   required = false,
   requiredMessage = "This field is required.",
+  multiline = true,
+  inputType = "text",
 }) {
   document.querySelector(".dashboard-dialog-backdrop")?.remove();
 
@@ -839,7 +1011,11 @@ function showDashboardTextPrompt({
             </div>
             <label class="dashboard-dialog-field">
               <span>${escapeHtml(label)}</span>
-              <textarea data-dashboard-prompt-input placeholder="${escapeHtml(placeholder)}"></textarea>
+              ${
+                multiline
+                  ? `<textarea data-dashboard-prompt-input placeholder="${escapeHtml(placeholder)}"></textarea>`
+                  : `<input type="${escapeHtml(inputType)}" data-dashboard-prompt-input placeholder="${escapeHtml(placeholder)}" />`
+              }
             </label>
             <p class="dashboard-dialog-error" data-dashboard-prompt-error hidden>${escapeHtml(requiredMessage)}</p>
             <div class="dashboard-dialog-actions">
@@ -890,6 +1066,80 @@ function showDashboardTextPrompt({
         }
       });
   });
+}
+
+const resetCountLabels = [
+  ["incidents", "incidents"],
+  ["casualty_incidents", "casualty records"],
+  ["casualties", "casualty identities"],
+  ["attachments", "attachment records"],
+  ["attachment_files", "attachment files"],
+  ["sitreps", "SitReps"],
+  ["responder_safety_responses", "responder safety responses"],
+  ["responder_safety_reports", "responder safety reports"],
+  ["medical_coordination_assessments", "medical coordination entries"],
+  ["continuity_of_care_assessments", "continuity of care entries"],
+  ["facility_resource_snapshots", "hospital resource snapshots"],
+  ["dmmp_staff_call_downs", "DMMP staff call-downs"],
+  ["incident_response_timelines", "incident timeline entries"],
+  ["evacuation_centers", "evacuation centers"],
+  ["casualty_triage_assessments", "triage assessments"],
+  ["casualty_transport_records", "transport records"],
+  ["casualty_treatments", "treatment records"],
+  ["facility_encounters", "facility encounters"],
+  ["casualty_outcomes", "casualty outcomes"],
+  ["casualty_status_history", "status history entries"],
+  ["casualty_verification_history", "verification history entries"],
+  ["casualty_notifications", "casualty notifications"],
+  ["incident_notifications", "incident notifications"],
+];
+
+function getResetCountLines(counts = {}) {
+  return resetCountLabels
+    .map(([key, label]) => [label, Number(counts[key] || 0)])
+    .filter(([, value]) => value > 0)
+    .map(([label, value]) => `${value} ${label}`);
+}
+
+function getResetTotalCount(counts = {}) {
+  return resetCountLabels.reduce(
+    (total, [key]) => total + Number(counts[key] || 0),
+    0,
+  );
+}
+
+function getResetPreviewMessage(previewData, isSuperAdmin) {
+  const counts = previewData?.counts || {};
+  const lines = getResetCountLines(counts);
+  const scope = isSuperAdmin
+    ? "SYSTEM-WIDE RESET: this will clear operational records and incidents across every admin account."
+    : "ADMIN-SCOPED RESET: this will clear operational records and incidents connected to your admin account and its created users.";
+  const countSummary =
+    lines.length > 0
+      ? `Affected data: ${lines.slice(0, 8).join(", ")}${
+          lines.length > 8 ? ", and more related entries" : ""
+        }.`
+      : "Affected data: no operational records were found for this scope.";
+
+  return `${scope} ${countSummary} Accounts will be kept. Attachment database records and stored attachment files are included.`;
+}
+
+function getResetCompletionMessage(resetData) {
+  const counts = resetData?.counts || {};
+  const lines = getResetCountLines(counts);
+  const total = getResetTotalCount(counts);
+  const scope =
+    resetData?.scope === "system" ? "System-wide reset" : "Admin-scoped reset";
+
+  if (lines.length === 0) {
+    return `${scope} completed. No operational records were deleted. Accounts were kept.`;
+  }
+
+  return `${scope} completed. Deleted ${total} total entries: ${lines
+    .slice(0, 8)
+    .join(", ")}${
+    lines.length > 8 ? ", and more related entries" : ""
+  }. Accounts were kept.`;
 }
 
 async function loadSharedData() {
@@ -1442,8 +1692,11 @@ function renderProfileModal() {
   const user = state.user || {};
   const isSystemReset = user.role === "super_admin";
   const resetCopy = isSystemReset
-    ? "Reset all operational records and incidents across the system. Accounts are kept."
-    : "Reset operational records and incidents scoped to your admin account. Accounts are kept.";
+    ? "System-wide reset clears operational records and incidents across every admin account."
+    : "Admin-scoped reset clears operational records and incidents connected to your admin account and users you created.";
+  const resetScopeLabel = isSystemReset
+    ? "System-wide reset"
+    : "Admin-scoped reset";
 
   return `
     <div class="modal-backdrop" data-close-modal>
@@ -1500,9 +1753,18 @@ function renderProfileModal() {
             <div id="profileMessage" class="status-message" hidden></div>
           </form>
 
-          <section class="record-section profile-reset-panel">
-            <h3>Reset Records</h3>
+          <section class="record-section profile-reset-panel ${isSystemReset ? "system-reset" : "admin-reset"}">
+            <div class="reset-panel-heading">
+              <h3>Reset Records</h3>
+              <span class="reset-scope-badge">${escapeHtml(resetScopeLabel)}</span>
+            </div>
             <p class="panel-subtitle">${escapeHtml(resetCopy)}</p>
+            <ul class="reset-safety-list">
+              <li>Accounts and login access are kept.</li>
+              <li>Record counts are shown before reset.</li>
+              <li>Attachment records and stored files are removed with related casualty records.</li>
+              <li>Typed confirmation and current password are required.</li>
+            </ul>
             <button class="danger-button" type="button" id="resetOperationalDataButton">
               Reset records and incidents
             </button>
@@ -1595,14 +1857,35 @@ function bindProfileModalActions() {
   if (resetButton) {
     resetButton.addEventListener("click", async () => {
       const isSuperAdmin = state.user?.role === "super_admin";
+      let previewData = null;
+
+      try {
+        resetButton.disabled = true;
+        resetButton.textContent = "Checking records...";
+
+        const preview = await apiRequest("/auth/reset-operational-data/preview");
+        previewData = preview.data || {};
+      } catch (error) {
+        resetButton.disabled = false;
+        resetButton.textContent = "Reset records and incidents";
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Unable to preview reset records.";
+        setMessage("profileMessage", message, "error");
+        showDashboardToast(message, "error");
+        return;
+      }
+
+      resetButton.disabled = false;
+      resetButton.textContent = "Reset records and incidents";
+
       const confirmed = await showDashboardConfirm({
         title: isSuperAdmin
-          ? "Reset all operational records?"
-          : "Reset your operational records?",
-        message: isSuperAdmin
-          ? "This clears all records and incidents across the system, including casualty records, facility entries, SitReps, and analytics source data. Accounts are kept."
-          : "This clears records and incidents owned by your admin account, including casualty records, facility entries, SitReps, and analytics source data. Accounts are kept.",
-        confirmLabel: "Reset records",
+          ? "Reset all system records?"
+          : "Reset your admin-unit records?",
+        message: getResetPreviewMessage(previewData, isSuperAdmin),
+        confirmLabel: "Continue",
         cancelLabel: "Keep records",
         danger: true,
         requireText: "RESET RECORDS",
@@ -1613,24 +1896,47 @@ function bindProfileModalActions() {
         return;
       }
 
+      const currentPassword = await showDashboardTextPrompt({
+        title: "Confirm password",
+        message:
+          "Enter your current account password before deleting operational records.",
+        label: "Current password",
+        placeholder: "Current password",
+        confirmLabel: "Reset records",
+        cancelLabel: "Cancel reset",
+        required: true,
+        requiredMessage: "Current password is required.",
+        multiline: false,
+        inputType: "password",
+      });
+
+      if (!currentPassword) {
+        return;
+      }
+
       try {
         resetButton.disabled = true;
         resetButton.textContent = "Resetting...";
 
-        await apiRequest("/auth/reset-operational-data", {
+        const response = await apiRequest("/auth/reset-operational-data", {
           method: "POST",
           body: JSON.stringify({
             confirmation: "RESET RECORDS",
+            currentPassword,
           }),
         });
 
         await loadSharedData();
         closeRecordModal();
         renderDashboardShellIntoExisting();
-        showDashboardToast(
-          "Operational records and incidents were reset. Accounts were kept.",
-          "success",
-        );
+        const summary = getResetCompletionMessage(response.data);
+        showDashboardToast(summary, "success");
+        await showDashboardNotice({
+          title: "Reset complete",
+          message: summary,
+          eyebrow: "Reset Summary",
+          confirmLabel: "Done",
+        });
       } catch (error) {
         resetButton.disabled = false;
         resetButton.textContent = "Reset records and incidents";
@@ -1729,8 +2035,38 @@ function bindView() {
   bindCasualtyRecordFilters();
   bindPasswordVisibilityToggles();
   bindBulkImportActions();
+  bindExportDownloadActions();
   syncAnalyticsLiveRefresh();
   syncAuditLogsLiveRefresh();
+}
+
+function bindExportDownloadActions() {
+  document.querySelectorAll("[data-export-download]").forEach((button) => {
+    if (button.dataset.exportBound === "true") return;
+    button.dataset.exportBound = "true";
+
+    button.addEventListener("click", async () => {
+      const path = button.dataset.exportDownload;
+      const fileName = button.dataset.exportFile || "dcms-export.csv";
+
+      if (!path) return;
+
+      try {
+        button.disabled = true;
+        setMessage("exportMessage", "Preparing export...");
+        await downloadApiFile(path, fileName);
+        setMessage("exportMessage", "Export downloaded.", "success");
+        showDashboardToast("Export downloaded.", "success");
+      } catch (error) {
+        logUiError("Unable to download export", error);
+        const message = getErrorMessage(error, "Unable to download export.");
+        setMessage("exportMessage", message, "error");
+        showDashboardToast(message, "error");
+      } finally {
+        button.disabled = false;
+      }
+    });
+  });
 }
 
 function bindScopeLinks() {
@@ -2096,6 +2432,35 @@ function renderSuperAdminHome() {
       ${renderMetric("Active incidents", state.dashboard?.activeIncidents ?? 0, "emphasis")}
       ${renderMetric("Encoded today", state.dashboard?.encodedToday ?? 0)}
       ${renderMetric("Pending review", state.dashboard?.pendingRecords ?? 0)}
+    </div>
+    <div style="margin-top:16px">
+      ${renderDataExportPanel(
+        "System exports",
+        "Download scoped operational datasets. System backup is available only to super admin accounts.",
+        [
+          {
+            label: "Export responders/documenters CSV",
+            path: "/exports/responders-documenters.csv",
+            fileName: "dcms-responders-documenters.csv",
+          },
+          {
+            label: "Export healthcare facilities CSV",
+            path: "/exports/healthcare-facilities.csv",
+            fileName: "dcms-healthcare-facilities.csv",
+          },
+          {
+            label: "Export evacuation centers CSV",
+            path: "/exports/evacuation-centers.csv",
+            fileName: "dcms-evacuation-centers.csv",
+          },
+          {
+            label: "Download system backup JSON",
+            path: "/exports/system-backup.json",
+            fileName: "dcms-system-backup.json",
+            className: "secondary-button",
+          },
+        ],
+      )}
     </div>
     <div class="grid two" style="margin-top:16px">
       ${renderIncidentSummaryTable()}
@@ -3517,6 +3882,9 @@ function renderBulkImportPanel(type, title, subtitle) {
         </label>
       </div>
       <div id="${escapeHtml(config.messageId)}" class="status-message" hidden></div>
+      <div id="${escapeHtml(type)}BulkPreview" class="bulk-preview-slot">
+        ${renderBulkImportPreview(type)}
+      </div>
     </section>
   `;
 }
@@ -3529,6 +3897,370 @@ function csvEscape(value) {
   }
 
   return text;
+}
+
+function normalizeImportKey(value) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function normalizeCompositeImportKey(values) {
+  return values.map(normalizeImportKey).join("|");
+}
+
+function isImportEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+}
+
+function isValidLatitude(value) {
+  return (
+    value === undefined ||
+    (Number.isFinite(value) && value >= -90 && value <= 90)
+  );
+}
+
+function isValidLongitude(value) {
+  return (
+    value === undefined ||
+    (Number.isFinite(value) && value >= -180 && value <= 180)
+  );
+}
+
+function isValidWholeNumber(value) {
+  return (
+    value === undefined ||
+    (Number.isInteger(value) && value >= 0)
+  );
+}
+
+function getImportIncident(row) {
+  const incidentId = normalizeImportKey(row.incidentId);
+  const incidentCode = normalizeImportKey(row.incidentCode);
+  const incidentName = normalizeImportKey(row.incidentName);
+
+  return state.allIncidents.find((incident) => {
+    return (
+      (incidentId && normalizeImportKey(incident.id) === incidentId) ||
+      (incidentCode && normalizeImportKey(incident.incident_code) === incidentCode) ||
+      (incidentName && normalizeImportKey(incident.incident_name) === incidentName)
+    );
+  });
+}
+
+async function getExistingBulkImportKeys(type) {
+  if (type === "adminAccounts") {
+    try {
+      const response = await apiRequest("/auth/accounts");
+      return new Set(
+        (response.data || [])
+          .map((account) => normalizeImportKey(account.email))
+          .filter(Boolean),
+      );
+    } catch {
+      return new Set();
+    }
+  }
+
+  if (type === "unitAccounts") {
+    return new Set(
+      state.unitUsers
+        .map((account) => normalizeImportKey(account.email))
+        .filter(Boolean),
+    );
+  }
+
+  if (type === "healthcareFacilities") {
+    return new Set(
+      state.healthcareFacilities
+        .map((facility) =>
+          normalizeCompositeImportKey([
+            facility.facility_name,
+            facility.municipality,
+            facility.province,
+          ]),
+        )
+        .filter((key) => key !== "||"),
+    );
+  }
+
+  if (type === "evacuationCenters") {
+    try {
+      const response = await apiRequest("/evacuation-centers");
+      return new Set(
+        (response.data || [])
+          .map((center) =>
+            normalizeCompositeImportKey([
+              center.incident_id,
+              center.center_name,
+            ]),
+          )
+          .filter((key) => key !== "|"),
+      );
+    } catch {
+      return new Set();
+    }
+  }
+
+  return new Set();
+}
+
+function getBulkImportRowKey(type, row) {
+  if (type === "adminAccounts" || type === "unitAccounts") {
+    return normalizeImportKey(row.email);
+  }
+
+  if (type === "healthcareFacilities") {
+    return normalizeCompositeImportKey([
+      row.facilityName,
+      row.municipality,
+      row.province,
+    ]);
+  }
+
+  if (type === "evacuationCenters") {
+    const incident = getImportIncident(row);
+    const incidentKey =
+      incident?.id ||
+      row.incidentId ||
+      row.incidentCode ||
+      row.incidentName;
+
+    return normalizeCompositeImportKey([incidentKey, row.centerName]);
+  }
+
+  return "";
+}
+
+function validateBulkImportRow(type, row) {
+  const reasons = [];
+
+  if (type === "adminAccounts") {
+    if (!row.fullName) reasons.push("fullName is required.");
+    if (!row.email) reasons.push("email is required.");
+    if (row.email && !isImportEmail(row.email)) reasons.push("email is invalid.");
+    if (!row.password) reasons.push("password is required.");
+    if (row.password && row.password.length < 6) {
+      reasons.push("password must be at least 6 characters.");
+    }
+    if (!["administrator", "super_admin"].includes(row.role)) {
+      reasons.push("role must be administrator or super_admin.");
+    }
+  } else if (type === "unitAccounts") {
+    if (!row.fullName) reasons.push("fullName is required.");
+    if (!row.email) reasons.push("email is required.");
+    if (row.email && !isImportEmail(row.email)) reasons.push("email is invalid.");
+    if (!row.password) reasons.push("password is required.");
+    if (row.password && row.password.length < 6) {
+      reasons.push("password must be at least 6 characters.");
+    }
+    if (!["responder", "documenter"].includes(row.role)) {
+      reasons.push("role must be responder or documenter.");
+    }
+  } else if (type === "healthcareFacilities") {
+    if (!row.facilityName) reasons.push("facilityName is required.");
+    if (
+      row.facilityLevel &&
+      !["primary", "secondary", "tertiary", "specialized", "unknown"].includes(
+        row.facilityLevel,
+      )
+    ) {
+      reasons.push("facilityLevel is invalid.");
+    }
+    if (!isValidLatitude(row.latitude)) reasons.push("latitude must be from -90 to 90.");
+    if (!isValidLongitude(row.longitude)) reasons.push("longitude must be from -180 to 180.");
+  } else if (type === "evacuationCenters") {
+    if (!row.incidentId && !row.incidentCode && !row.incidentName) {
+      reasons.push("incidentId, incidentCode, or incidentName is required.");
+    }
+    if ((row.incidentId || row.incidentCode || row.incidentName) && !getImportIncident(row)) {
+      reasons.push("incident could not be found in visible incidents.");
+    }
+    if (!row.centerName) reasons.push("centerName is required.");
+    if (!isValidWholeNumber(row.capacity)) {
+      reasons.push("capacity must be a whole number greater than or equal to 0.");
+    }
+    if (!isValidLatitude(row.latitude)) reasons.push("latitude must be from -90 to 90.");
+    if (!isValidLongitude(row.longitude)) reasons.push("longitude must be from -180 to 180.");
+  }
+
+  return reasons;
+}
+
+async function buildBulkImportPreview(type, rows, fileName) {
+  const existingKeys = await getExistingBulkImportKeys(type);
+  const seenKeys = new Map();
+  const items = rows.map((row, index) => {
+    const rowNumber = index + 2;
+    const reasons = validateBulkImportRow(type, row);
+    const key = getBulkImportRowKey(type, row);
+
+    if (key && key.replace(/\|/g, "")) {
+      if (seenKeys.has(key)) {
+        reasons.push(`duplicate of row ${seenKeys.get(key)} in this file.`);
+      } else {
+        seenKeys.set(key, rowNumber);
+      }
+
+      if (existingKeys.has(key)) {
+        reasons.push("duplicate of an existing record.");
+      }
+    }
+
+    const status = reasons.length > 0
+      ? reasons.some((reason) => reason.includes("duplicate"))
+        ? "duplicate"
+        : "invalid"
+      : "valid";
+
+    return {
+      rowNumber,
+      row,
+      status,
+      reasons,
+    };
+  });
+  const validRows = items.filter((item) => item.status === "valid");
+  const duplicateRows = items.filter((item) => item.status === "duplicate");
+  const invalidRows = items.filter((item) => item.status === "invalid");
+
+  return {
+    type,
+    fileName,
+    rows,
+    items,
+    validRows,
+    duplicateRows,
+    invalidRows,
+    failedRows: [...duplicateRows, ...invalidRows],
+    imported: false,
+    importSummary: null,
+  };
+}
+
+function getBulkPreviewStatusClass(status) {
+  if (status === "valid") return "green";
+  if (status === "duplicate") return "orange";
+  return "red";
+}
+
+function getBulkPreviewStatusLabel(status) {
+  if (status === "valid") return "Valid";
+  if (status === "duplicate") return "Duplicate";
+  return "Invalid";
+}
+
+function getBulkPreviewPrimaryValue(type, row) {
+  if (type === "adminAccounts" || type === "unitAccounts") {
+    return row.email || row.fullName || "Blank row";
+  }
+
+  if (type === "healthcareFacilities") {
+    return row.facilityName || "Unnamed facility";
+  }
+
+  if (type === "evacuationCenters") {
+    return row.centerName || "Unnamed evacuation center";
+  }
+
+  return "Import row";
+}
+
+function renderBulkImportPreview(type) {
+  const preview = state.bulkImportPreviews[type];
+
+  if (!preview) {
+    return "";
+  }
+
+  const rows = preview.items.slice(0, 12).map((item) => `
+    <tr>
+      <td>${escapeHtml(item.rowNumber)}</td>
+      <td><span class="pill ${getBulkPreviewStatusClass(item.status)}">${escapeHtml(getBulkPreviewStatusLabel(item.status))}</span></td>
+      <td><strong>${escapeHtml(getBulkPreviewPrimaryValue(type, item.row))}</strong></td>
+      <td>${escapeHtml(item.reasons.join(" ") || "Ready to import.")}</td>
+    </tr>
+  `).join("");
+  const hiddenCount = Math.max(preview.items.length - 12, 0);
+  const failedCount = preview.failedRows.length;
+
+  return `
+    <div class="bulk-preview-card">
+      <div class="bulk-preview-header">
+        <div>
+          <h4>${escapeHtml(preview.fileName || "Import preview")}</h4>
+          <p>
+            ${preview.validRows.length} valid, ${preview.duplicateRows.length} duplicate, ${preview.invalidRows.length} invalid.
+            ${preview.imported && preview.importSummary ? escapeHtml(renderBulkImportSummary(preview.importSummary)) : ""}
+          </p>
+        </div>
+        <div class="bulk-preview-actions">
+          ${
+            failedCount
+              ? `<button class="ghost-button mini" type="button" data-download-bulk-failed="${escapeHtml(type)}">Download correction CSV</button>`
+              : ""
+          }
+          <button class="ghost-button mini" type="button" data-cancel-bulk-preview="${escapeHtml(type)}">Cancel</button>
+          ${
+            preview.imported
+              ? ""
+              : `<button class="primary-button mini" type="button" data-confirm-bulk-import="${escapeHtml(type)}" ${preview.validRows.length ? "" : "disabled"}>
+                  Import ${escapeHtml(String(preview.validRows.length))} valid row${preview.validRows.length === 1 ? "" : "s"}
+                </button>`
+          }
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="bulk-preview-table">
+          <thead>
+            <tr>
+              <th>Row</th>
+              <th>Status</th>
+              <th>Record</th>
+              <th>Reason</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+            ${
+              hiddenCount
+                ? `<tr><td colspan="4"><div class="empty-state">${escapeHtml(String(hiddenCount))} more rows hidden from preview. Download the correction file for all blocked rows.</div></td></tr>`
+                : ""
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function downloadBulkImportCorrectionFile(type) {
+  const config = bulkImportConfigs[type];
+  const preview = state.bulkImportPreviews[type];
+
+  if (!config || !preview || preview.failedRows.length === 0) {
+    return;
+  }
+
+  const csv = [
+    [...config.headers, "rowNumber", "status", "reason"].map(csvEscape).join(","),
+    ...preview.failedRows.map((item) =>
+      [
+        ...config.headers.map((header) => item.row[header] ?? ""),
+        item.rowNumber,
+        getBulkPreviewStatusLabel(item.status),
+        item.reasons.join(" "),
+      ].map(csvEscape).join(","),
+    ),
+  ].join("\r\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const downloadUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = downloadUrl;
+  link.download = sanitizeFileName(`${type}-corrections.csv`);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(downloadUrl);
 }
 
 function downloadCsvTemplate(type) {
@@ -3767,6 +4499,119 @@ function bindBulkImportActions() {
     });
   });
 
+  document.querySelectorAll("[data-cancel-bulk-preview]").forEach((button) => {
+    if (button.dataset.cancelBound === "true") return;
+    button.dataset.cancelBound = "true";
+
+    button.addEventListener("click", () => {
+      const type = button.dataset.cancelBulkPreview;
+      const config = bulkImportConfigs[type];
+
+      if (!config) return;
+
+      delete state.bulkImportPreviews[type];
+      renderCurrentView();
+      bindView();
+      setMessage(config.messageId, "Bulk import cancelled.", "success");
+    });
+  });
+
+  document.querySelectorAll("[data-download-bulk-failed]").forEach((button) => {
+    if (button.dataset.failedBound === "true") return;
+    button.dataset.failedBound = "true";
+
+    button.addEventListener("click", () => {
+      downloadBulkImportCorrectionFile(button.dataset.downloadBulkFailed);
+    });
+  });
+
+  document.querySelectorAll("[data-confirm-bulk-import]").forEach((button) => {
+    if (button.dataset.confirmBound === "true") return;
+    button.dataset.confirmBound = "true";
+
+    button.addEventListener("click", async () => {
+      const type = button.dataset.confirmBulkImport;
+      const config = bulkImportConfigs[type];
+      const preview = state.bulkImportPreviews[type];
+
+      if (!config || !preview || preview.validRows.length === 0) {
+        return;
+      }
+
+      const confirmed = await showDashboardConfirm({
+        title: "Import valid rows?",
+        message: `This will save ${preview.validRows.length} valid row${preview.validRows.length === 1 ? "" : "s"}. Duplicate and invalid rows will not be saved.`,
+        confirmLabel: "Import rows",
+        cancelLabel: "Review again",
+      });
+
+      if (!confirmed) {
+        return;
+      }
+
+      try {
+        button.disabled = true;
+        button.textContent = "Importing...";
+        setMessage(config.messageId, `Importing ${preview.validRows.length} valid rows...`);
+
+        const response = await apiRequest(config.endpoint, {
+          method: "POST",
+          body: JSON.stringify({
+            rows: preview.validRows.map((item) => item.row),
+          }),
+        });
+        const apiResults = response.data?.results || [];
+        const apiFailedRows = apiResults
+          .filter((result) => !result.success)
+          .map((result, index) => {
+            const validIndex = Math.max(Number(result.rowNumber || index + 2) - 2, 0);
+            const validItem = preview.validRows[validIndex] || preview.validRows[index];
+
+            return {
+              ...(validItem || {
+                rowNumber: result.rowNumber || index + 2,
+                row: {},
+              }),
+              status: result.skipped ? "duplicate" : "invalid",
+              reasons: [result.message || "Import failed."],
+            };
+          });
+
+        state.bulkImportPreviews[type] = {
+          ...preview,
+          imported: true,
+          importSummary: response.data,
+          failedRows: [
+            ...preview.failedRows,
+            ...apiFailedRows,
+          ],
+        };
+
+        await loadSharedData();
+        renderCurrentView();
+        bindView();
+        setMessage(
+          config.messageId,
+          renderBulkImportSummary(response.data),
+          response.data?.failed ||
+            response.data?.skipped ||
+            state.bulkImportPreviews[type].failedRows.length
+            ? "error"
+            : "success",
+        );
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Unable to import file.";
+
+        setMessage(config.messageId, message, "error");
+        button.disabled = false;
+        button.textContent = `Import ${preview.validRows.length} valid row${preview.validRows.length === 1 ? "" : "s"}`;
+      }
+    });
+  });
+
   document.querySelectorAll("[data-bulk-import]").forEach((input) => {
     if (input.dataset.importBound === "true") return;
     input.dataset.importBound = "true";
@@ -3789,20 +4634,19 @@ function bindBulkImportActions() {
           throw new Error("The selected file has no import rows.");
         }
 
-        setMessage(config.messageId, `Importing ${rows.length} rows...`);
-
-        const response = await apiRequest(config.endpoint, {
-          method: "POST",
-          body: JSON.stringify({ rows }),
-        });
-
-        await loadSharedData();
+        state.bulkImportPreviews[type] = await buildBulkImportPreview(
+          type,
+          rows,
+          file.name,
+        );
         renderCurrentView();
         bindView();
         setMessage(
           config.messageId,
-          renderBulkImportSummary(response.data),
-          response.data?.failed ? "error" : "success",
+          `Preview ready. ${state.bulkImportPreviews[type].validRows.length} row${state.bulkImportPreviews[type].validRows.length === 1 ? "" : "s"} can be imported.`,
+          state.bulkImportPreviews[type].failedRows.length
+            ? "error"
+            : "success",
         );
       } catch (error) {
         setMessage(
@@ -3913,6 +4757,16 @@ function renderAdminUnitRegistration() {
         "Bulk upload responder/documenter accounts",
         "Upload a CSV or Excel file to create multiple responder and healthcare documenter accounts.",
       )}
+      <div style="margin-top:12px">
+        <button
+          class="ghost-button mini"
+          type="button"
+          data-export-download="/exports/responders-documenters.csv"
+          data-export-file="dcms-responders-documenters.csv"
+        >
+          Export responders/documenters CSV
+        </button>
+      </div>
     </section>
     <div style="margin-top:16px">${renderAdminAccountList()}</div>
   `;
@@ -7785,6 +8639,8 @@ function renderSitrepAndCloseSection(incident) {
         <button class="secondary-button" type="button" data-generate-sitrep="${escapeHtml(incident.id)}">Generate & Download PDF</button>
         <button class="ghost-button" type="button" data-download-sitrep="pdf" data-incident-id="${escapeHtml(incident.id)}">Download Latest PDF</button>
         <button class="ghost-button" type="button" data-download-sitrep="csv" data-incident-id="${escapeHtml(incident.id)}">Download Latest CSV</button>
+        <button class="ghost-button" type="button" data-export-download="/incidents/${escapeHtml(incident.id)}/export/casualties.csv" data-export-file="${escapeHtml(incident.incident_code || incident.id)}-casualties.csv">Download Casualty CSV</button>
+        <button class="ghost-button" type="button" data-export-download="/exports/incidents/${escapeHtml(incident.id)}/package.json" data-export-file="${escapeHtml(incident.incident_code || incident.id)}-incident-package.json">Download Incident Package</button>
         <button class="danger-button" type="button" data-close-incident="${escapeHtml(incident.id)}" ${incident.status !== "active" ? "disabled" : ""}>Close Incident</button>
       </div>
       <div id="incidentActionMessage" class="status-message" hidden></div>
@@ -8291,8 +9147,20 @@ function bindCreateIncidentForm() {
 function renderEvacuationCreator() {
   return `
     <section class="panel">
-      <h2>Add evacuation center</h2>
-      <p class="panel-subtitle">Evacuation centers are assigned to an active incident.</p>
+      <div class="panel-header">
+        <div>
+          <h2>Add evacuation center</h2>
+          <p class="panel-subtitle">Evacuation centers are assigned to an active incident.</p>
+        </div>
+        <button
+          class="ghost-button mini"
+          type="button"
+          data-export-download="/exports/evacuation-centers.csv"
+          data-export-file="dcms-evacuation-centers.csv"
+        >
+          Export CSV
+        </button>
+      </div>
       <form id="evacuationForm" class="form-grid" style="margin-top:14px">
         <div class="form-section-title">Center assignment</div>
         <label class="field"><span>Incident</span><select name="incidentId" required>${incidentOptions()}</select></label>
@@ -8357,8 +9225,20 @@ function bindCreateEvacuationForm() {
 function renderFacilityCreator() {
   return `
     <section class="panel">
-      <h2>Add healthcare facility</h2>
-      <p class="panel-subtitle">Facilities created here become selectable from transport and hospital care workflows.</p>
+      <div class="panel-header">
+        <div>
+          <h2>Add healthcare facility</h2>
+          <p class="panel-subtitle">Facilities created here become selectable from transport and hospital care workflows.</p>
+        </div>
+        <button
+          class="ghost-button mini"
+          type="button"
+          data-export-download="/exports/healthcare-facilities.csv"
+          data-export-file="dcms-healthcare-facilities.csv"
+        >
+          Export CSV
+        </button>
+      </div>
       <form id="facilityForm" class="form-grid" style="margin-top:14px">
         <div class="form-section-title">Facility profile</div>
         <div class="form-grid two">
