@@ -1993,6 +1993,21 @@ await createCasualtySubmissionNotification({
     null,
 });
 
+await recordAuditLog({
+  actor: user,
+  action: "casualty.created",
+  entityType: "casualty_incident",
+  entityId: transactionResult.casualtyIncident.id,
+  entityLabel: casualtyNotificationLabel,
+  metadata: {
+    incidentId: transactionResult.incident?.id ?? incidentId,
+    incidentCode: transactionResult.incident?.incidentCode ?? null,
+    incidentName: transactionResult.incident?.incidentName ?? null,
+    currentStatus: incidentDetails.currentStatus,
+    severity,
+  },
+});
+
 response.status(201).json({
   success: true,
   message: "Casualty record submitted successfully.",

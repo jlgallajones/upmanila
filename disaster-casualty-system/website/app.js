@@ -6670,6 +6670,7 @@ function formatAuditAction(action) {
     "account.updated": "Account updated",
     "account.deleted": "Account deleted",
     "account.deactivated": "Account deactivated",
+    "casualty.created": "Casualty added",
     "casualty.verified": "Casualty verified",
     "casualty.rejected": "Casualty rejected",
     "casualty.deleted": "Casualty deleted",
