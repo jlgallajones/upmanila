@@ -443,6 +443,75 @@ button {
   border-color: #bfe9cd;
 }
 
+.dashboard-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.58);
+  backdrop-filter: blur(3px);
+}
+
+.dashboard-dialog {
+  width: min(460px, 100%);
+  display: grid;
+  gap: 18px;
+  padding: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.68);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.32);
+}
+
+.dashboard-dialog h2 {
+  margin: 8px 0 0;
+  color: var(--ink);
+  font-size: 22px;
+}
+
+.dashboard-dialog p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.dashboard-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.dashboard-toast {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 95;
+  max-width: min(390px, calc(100vw - 44px));
+  padding: 13px 15px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  background: #fff;
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.18);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.dashboard-toast.success {
+  color: var(--green);
+  background: #effaf3;
+  border-color: #bfe9cd;
+}
+
+.dashboard-toast.error {
+  color: var(--red);
+  background: #fff4f4;
+  border-color: #f0c5c5;
+}
+
 .app-shell {
   min-height: 100vh;
   display: grid;

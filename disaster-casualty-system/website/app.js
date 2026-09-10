@@ -706,6 +706,79 @@ function setMessage(id, message, type = "") {
   element.hidden = !message;
 }
 
+function showDashboardToast(message, type = "success") {
+  document.querySelector(".dashboard-toast")?.remove();
+
+  document.body.insertAdjacentHTML(
+    "beforeend",
+    `
+      <div class="dashboard-toast ${escapeHtml(type)}" role="status">
+        ${escapeHtml(message)}
+      </div>
+    `,
+  );
+
+  window.setTimeout(() => {
+    document.querySelector(".dashboard-toast")?.remove();
+  }, 3200);
+}
+
+function showDashboardConfirm({
+  title,
+  message,
+  confirmLabel = "Confirm",
+  cancelLabel = "Cancel",
+  danger = false,
+}) {
+  document.querySelector(".dashboard-dialog-backdrop")?.remove();
+
+  return new Promise((resolve) => {
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      `
+        <div class="dashboard-dialog-backdrop" data-dashboard-dialog>
+          <section class="dashboard-dialog" role="dialog" aria-modal="true" aria-labelledby="dashboardConfirmTitle">
+            <div>
+              <span class="eyebrow">${danger ? "Destructive Action" : "Confirmation"}</span>
+              <h2 id="dashboardConfirmTitle">${escapeHtml(title)}</h2>
+              <p>${escapeHtml(message)}</p>
+            </div>
+            <div class="dashboard-dialog-actions">
+              <button class="ghost-button" type="button" data-dashboard-confirm="false">
+                ${escapeHtml(cancelLabel)}
+              </button>
+              <button class="${danger ? "danger-button" : "primary-button"}" type="button" data-dashboard-confirm="true">
+                ${escapeHtml(confirmLabel)}
+              </button>
+            </div>
+          </section>
+        </div>
+      `,
+    );
+
+    const close = (result) => {
+      document.querySelector(".dashboard-dialog-backdrop")?.remove();
+      resolve(result);
+    };
+
+    document
+      .querySelectorAll("[data-dashboard-confirm]")
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          close(button.dataset.dashboardConfirm === "true");
+        });
+      });
+
+    document
+      .querySelector("[data-dashboard-dialog]")
+      ?.addEventListener("click", (event) => {
+        if (event.target === event.currentTarget) {
+          close(false);
+        }
+      });
+  });
+}
+
 async function loadSharedData() {
   if (!state.accessToken) return;
 
@@ -5921,9 +5994,14 @@ function bindDeleteCasualtyActions() {
         return;
       }
 
-      const confirmed = window.confirm(
-        "Delete this casualty record? It will disappear from web and mobile records.",
-      );
+      const confirmed = await showDashboardConfirm({
+        title: "Delete casualty record?",
+        message:
+          "This record will disappear from the web dashboard and mobile app records.",
+        confirmLabel: "Delete record",
+        cancelLabel: "Keep record",
+        danger: true,
+      });
 
       if (!confirmed) {
         return;
@@ -5940,13 +6018,26 @@ function bindDeleteCasualtyActions() {
         await loadSharedData();
         renderCurrentView();
         bindView();
+        setMessage(
+          "verificationMessage",
+          "Casualty record deleted successfully.",
+          "success",
+        );
+        showDashboardToast(
+          "Casualty record deleted successfully.",
+          "success",
+        );
       } catch (error) {
         button.disabled = false;
         button.textContent = "Delete";
-        window.alert(
+        const message =
           error instanceof Error
             ? error.message
-            : "Unable to delete casualty record.",
+            : "Unable to delete casualty record.";
+        setMessage("verificationMessage", message, "error");
+        showDashboardToast(
+          message,
+          "error",
         );
       }
     });
