@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   router,
   useFocusEffect,
@@ -122,6 +123,8 @@ const HEALTHCARE_DOCUMENTER_STEPS = [
   "Management",
   "Disposition",
 ] as const;
+
+const incidentCacheKey = "dcms.cachedIncidents";
 
 const ALL_STEPS = [
   ...DEFAULT_STEPS,
@@ -3831,6 +3834,39 @@ function generateUuid(): string {
   );
 }
 
+async function cacheIncidents(incidents: Incident[]): Promise<void> {
+  await AsyncStorage.setItem(
+    incidentCacheKey,
+    JSON.stringify({
+      cachedAt: new Date().toISOString(),
+      incidents,
+    }),
+  );
+}
+
+async function readCachedIncidents(): Promise<Incident[]> {
+  const stored = await AsyncStorage.getItem(incidentCacheKey);
+
+  if (!stored) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(stored) as {
+      incidents?: Incident[];
+    };
+
+    return Array.isArray(parsed.incidents)
+      ? parsed.incidents.filter(
+          (incident): incident is Incident =>
+            Boolean(incident?.id && incident?.incident_name),
+        )
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 function mapRecordToForm(
   record: CasualtyRecord,
   latestTriage?: CasualtyTriageHistoryItem,
@@ -4831,6 +4867,8 @@ export default function AddCasualtyScreen() {
     useState(false);
   const [incidentError, setIncidentError] =
     useState<string | null>(null);
+  const [isUsingCachedIncidents, setIsUsingCachedIncidents] =
+    useState(false);
   const [fieldResponderRecords, setFieldResponderRecords] = useState<
     CasualtyRecord[]
   >([]);
@@ -5818,6 +5856,7 @@ const victimCodeAlreadyExists = useMemo(() => {
         if (isMounted) {
           setIncidents([]);
           setIncidentError(null);
+          setIsUsingCachedIncidents(false);
           setIsLoadingIncidents(false);
         }
         return;
@@ -5831,16 +5870,29 @@ const victimCodeAlreadyExists = useMemo(() => {
 
         if (isMounted) {
           setIncidents(data);
+          setIsUsingCachedIncidents(false);
         }
+
+        await cacheIncidents(data);
       } catch (error) {
         console.error("Failed to load incidents:", error);
 
+        const cachedIncidents = await readCachedIncidents();
+
         if (isMounted) {
-          setIncidentError(
-            error instanceof Error
-              ? error.message
-              : "Unable to load disaster incidents.",
-          );
+          if (cachedIncidents.length > 0) {
+            setIncidents(cachedIncidents);
+            setIsUsingCachedIncidents(true);
+            setIncidentError(
+              "You are offline. Showing the last saved incident list.",
+            );
+          } else {
+            setIncidents([]);
+            setIsUsingCachedIncidents(false);
+            setIncidentError(
+              "Unable to load disaster incidents. Connect to the internet once so the app can save the active incident list for offline use.",
+            );
+          }
         }
       } finally {
         if (isMounted) {
@@ -10426,6 +10478,8 @@ function confirmExitAddCasualty() {
               placeholder={
                 isLoadingIncidents
                   ? "Loading active incidents..."
+                  : isUsingCachedIncidents
+                    ? "Select saved incident"
                   : "Select active incident"
               }
               onPress={() => openChoiceSheet("incident")}
@@ -10556,6 +10610,8 @@ function confirmExitAddCasualty() {
           placeholder={
             isLoadingIncidents
               ? "Loading active incidents..."
+              : isUsingCachedIncidents
+                ? "Select saved incident"
               : "Select active incident"
           }
           onPress={() => openChoiceSheet("incident")}
@@ -11111,6 +11167,8 @@ function confirmExitAddCasualty() {
           placeholder={
             isLoadingIncidents
               ? "Loading active incidents..."
+              : isUsingCachedIncidents
+                ? "Select saved incident"
               : "Select active incident"
           }
           onPress={() => openChoiceSheet("incident")}
@@ -11500,6 +11558,8 @@ function confirmExitAddCasualty() {
               ? "Optional while offline"
               : isLoadingIncidents
               ? "Loading active incidents..."
+              : isUsingCachedIncidents
+              ? "Select saved incident"
               : "Select active incident"
           }
           onPress={() => openChoiceSheet("incident")}
