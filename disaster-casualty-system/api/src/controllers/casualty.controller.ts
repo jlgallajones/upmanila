@@ -2755,6 +2755,91 @@ export async function updateCasualtyVerification(
   }
 }
 
+export async function deleteCasualtyRecord(
+  request: Request<{ id: string }>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { id } = request.params;
+    const user = getAuthenticatedUser(request);
+
+    const hasAccess = await canAccessCasualtyRecord(
+      id,
+      user.id,
+      user.role,
+    );
+
+    if (!hasAccess) {
+      response.status(404).json({
+        success: false,
+        message: "Casualty record not found.",
+      });
+      return;
+    }
+
+    const { data: existingRecord, error: existingError } =
+      await supabase
+        .from("casualty_incidents")
+        .select("id, verification_status")
+        .eq("id", id)
+        .is("deleted_at", null)
+        .maybeSingle();
+
+    if (existingError) {
+      throw new Error(
+        `Unable to retrieve casualty record: ${existingError.message}`,
+      );
+    }
+
+    if (!existingRecord) {
+      response.status(404).json({
+        success: false,
+        message: "Casualty record not found.",
+      });
+      return;
+    }
+
+    const deletedAt = new Date().toISOString();
+
+    const { error: deleteError } = await supabase
+      .from("casualty_incidents")
+      .update({
+        deleted_at: deletedAt,
+        updated_at: deletedAt,
+      })
+      .eq("id", id);
+
+    if (deleteError) {
+      throw new Error(
+        `Unable to delete casualty record: ${deleteError.message}`,
+      );
+    }
+
+    await supabase
+      .from("casualty_verification_history")
+      .insert({
+        casualty_incident_id: id,
+        old_status: existingRecord.verification_status,
+        new_status: "rejected",
+        reviewed_by: user.id,
+        review_notes:
+          "Casualty record deleted from the web dashboard.",
+      });
+
+    response.status(200).json({
+      success: true,
+      message: "Casualty record deleted successfully.",
+      data: {
+        id,
+        deletedAt,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function getCasualtyTriageHistory(
   request: Request<{ id: string }>,
   response: Response,

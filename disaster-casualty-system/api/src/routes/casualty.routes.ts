@@ -4,6 +4,7 @@ import {
   createCasualtyTriageAssessment,
   createCasualtyTransportRecord,
   createCasualty,
+  deleteCasualtyRecord,
   getCasualties,
   getCasualtyById,
   getNextCasualtyIdSequence,
@@ -119,4 +120,14 @@ casualtyRouter.put(
     "medical_personnel",
   ]),
   updateCasualty,
+);
+casualtyRouter.delete(
+  "/:id",
+  requireAuth,
+  requireRole([
+    "super_admin",
+    "admin",
+    "administrator",
+  ]),
+  deleteCasualtyRecord,
 );

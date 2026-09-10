@@ -66,15 +66,33 @@ export type CasualtyRecord = {
 
   ed_admitted_at: string | null;
   ed_departed_at: string | null;
+  ed_resuscitation_started_at?: string | null;
 
+  referred_or_transferred?: boolean | null;
+  sought_ed_care?: boolean | null;
   admitted_to_hospital: boolean | null;
   discharged_home: boolean | null;
 
   hospital_admitted_at: string | null;
   hospital_discharged_at: string | null;
 
+  surgical_intervention_started_at?: string | null;
+  surgical_intervention_ended_at?: string | null;
+  operating_room_started_at?: string | null;
+
+  xray_required?: boolean | null;
+  xray_performed_at?: string | null;
+  ultrasound_required?: boolean | null;
+  ultrasound_performed_at?: string | null;
+  ct_required?: boolean | null;
+  ct_performed_at?: string | null;
+
   icu_admitted_at: string | null;
   icu_discharged_at: string | null;
+  mechanical_ventilation_required?: boolean | null;
+  ventilation_started_at?: string | null;
+  ventilation_ended_at?: string | null;
+  alternative_icu_used?: boolean | null;
 
   disposition: string;
   created_at: string;
@@ -224,6 +242,24 @@ export type CasualtyTransportHistoryItem = {
   } | null;
 };
 
+export type CasualtyTreatmentHistoryItem = {
+  id: string;
+  casualty_incident_id: string;
+  treatment_strategy: string;
+  treatment_area_name: string | null;
+  stabilization_started_at: string | null;
+  stabilized_at: string | null;
+  treatment_details: Record<string, unknown> | null;
+  notes: string | null;
+  performed_by: string | null;
+  performed_by_user: {
+    id: string;
+    full_name: string;
+    email: string;
+    role: string;
+  } | null;
+};
+
 export type CasualtyVerificationHistoryItem = {
   id: string;
   casualty_incident_id: string;
@@ -283,6 +319,12 @@ type CasualtyTransportHistoryResponse = {
   success: boolean;
   count: number;
   data: CasualtyTransportHistoryItem[];
+};
+
+type CasualtyTreatmentHistoryResponse = {
+  success: boolean;
+  count: number;
+  data: CasualtyTreatmentHistoryItem[];
 };
 
 type CasualtyVerificationHistoryResponse = {
@@ -502,6 +544,16 @@ export async function getCasualtyTransportHistory(
 ): Promise<CasualtyTransportHistoryItem[]> {
   const response = await api.get<CasualtyTransportHistoryResponse>(
     `/casualties/${encodeURIComponent(id)}/transport-history`,
+  );
+
+  return response.data.data;
+}
+
+export async function getCasualtyTreatmentHistory(
+  id: string,
+): Promise<CasualtyTreatmentHistoryItem[]> {
+  const response = await api.get<CasualtyTreatmentHistoryResponse>(
+    `/casualties/${encodeURIComponent(id)}/treatment-history`,
   );
 
   return response.data.data;

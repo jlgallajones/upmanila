@@ -7,7 +7,9 @@ import {
   login,
   registerAdmin,
   registerUnitUser,
+  resetOperationalData,
   refreshSession,
+  updateCurrentUser,
   updateUnitUser,
 } from "../controllers/auth.controller.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
@@ -16,6 +18,13 @@ export const authRouter = Router();
 
 authRouter.post("/login", login);
 authRouter.post("/refresh", refreshSession);
+authRouter.patch("/me", requireAuth, updateCurrentUser);
+authRouter.post(
+  "/reset-operational-data",
+  requireAuth,
+  requireRole(["super_admin", "admin", "administrator"]),
+  resetOperationalData,
+);
 authRouter.post(
   "/register-admin",
   requireAuth,

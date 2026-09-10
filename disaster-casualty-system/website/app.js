@@ -65,7 +65,12 @@ const state = {
   user: readJson("dcms.admin.user"),
   accessToken: localStorage.getItem("dcms.admin.accessToken"),
   sidebarCollapsed: localStorage.getItem("dcms.admin.sidebarCollapsed") === "true",
-  activeView: "home",
+  activeView: localStorage.getItem("dcms.admin.activeView") || "home",
+  incidentSearchQuery: "",
+  incidentDateFilter: "",
+  casualtyRecordVerificationFilter: "all",
+  casualtyRecordDateFilter: "",
+  verificationReviewIncidentFilter: "all",
   incidents: [],
   allIncidents: [],
   expandedIncidentId: null,
@@ -181,6 +186,32 @@ const adminViews = [
   ["logs", "Action Logs"],
 ];
 
+function getViewsForRole(role) {
+  return role === "super_admin" ? superAdminViews : adminViews;
+}
+
+function isViewAllowedForRole(view, role) {
+  return getViewsForRole(role).some(([id]) => id === view);
+}
+
+function getStoredActiveViewForRole(role) {
+  const stored = localStorage.getItem("dcms.admin.activeView");
+  return isViewAllowedForRole(stored, role) ? stored : "home";
+}
+
+function setActiveView(view) {
+  const nextView = isViewAllowedForRole(view, state.user?.role)
+    ? view
+    : "home";
+
+  state.activeView = nextView;
+  localStorage.setItem("dcms.admin.activeView", nextView);
+}
+
+if (state.user) {
+  state.activeView = getStoredActiveViewForRole(state.user.role);
+}
+
 function getNavInitials(label) {
   const words = String(label)
     .trim()
@@ -213,14 +244,21 @@ function saveSession(data) {
   localStorage.setItem("dcms.admin.accessToken", data.accessToken || "");
 }
 
+function saveCurrentUser(user) {
+  state.user = user;
+  localStorage.setItem("dcms.admin.user", JSON.stringify(user));
+}
+
 function clearSession() {
   void stopDashboardRealtime();
   stopAnalyticsLiveRefresh();
   
   state.user = null;
   state.accessToken = null;
+  state.activeView = "home";
   localStorage.removeItem("dcms.admin.user");
   localStorage.removeItem("dcms.admin.accessToken");
+  localStorage.removeItem("dcms.admin.activeView");
 }
 
 function roleLabel(role) {
@@ -286,6 +324,39 @@ function filterRecentActivityForCurrentAdmin(activity, encoderIds, casualtyIds) 
       encoderIds.has(item?.encoder?.id) ||
       casualtyIds.has(item?.id),
   );
+}
+
+function filterIncidentsBySearchAndDate(incidents) {
+  const query = state.incidentSearchQuery.trim().toLowerCase();
+  const date = state.incidentDateFilter.trim();
+
+  if (!query && !date) {
+    return incidents;
+  }
+
+  return incidents.filter((incident) => {
+    const searchable = [
+      incident.incident_name,
+      incident.incident_code,
+      incident.disaster_type,
+      incident.description,
+      incident.barangay,
+      incident.municipality,
+      incident.province,
+      incident.status,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    const incidentDate = formatDateFilterValue(
+      incident.started_at || incident.created_at,
+    );
+
+    return (
+      (!query || searchable.includes(query)) &&
+      (!date || incidentDate === date)
+    );
+  });
 }
 
 function recomputeAdminDashboardSummary() {
@@ -359,6 +430,20 @@ function formatDate(value) {
     hour: "numeric",
     minute: "2-digit",
   }).format(date);
+}
+
+function formatDateFilterValue(value) {
+  if (!value) return "";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "";
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
 }
 
 function formatTimelineTime(value) {
@@ -437,6 +522,70 @@ function compareVerificationRecords(first, second) {
     compareText(encoderUnitName(first?.encoder), encoderUnitName(second?.encoder)) ||
     compareText(first?.incident?.incident_name || "Unknown incident", second?.incident?.incident_name || "Unknown incident") ||
     compareText(casualtySortLabel(first), casualtySortLabel(second))
+  );
+}
+
+function casualtyRecordDateValue(record) {
+  return record?.reported_at || record?.created_at || record?.updated_at || null;
+}
+
+function casualtyRecordTimestamp(record) {
+  const date = new Date(casualtyRecordDateValue(record) || "");
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+}
+
+function compareCasualtyRecordsByLatest(first, second) {
+  return casualtyRecordTimestamp(second) - casualtyRecordTimestamp(first);
+}
+
+function filterCasualtyRecordsForTable(records) {
+  const verificationStatus = state.casualtyRecordVerificationFilter;
+  const date = state.casualtyRecordDateFilter.trim();
+
+  return records.filter((record) => {
+    const matchesStatus =
+      verificationStatus === "all" ||
+      record.verification_status === verificationStatus;
+    const matchesDate =
+      !date ||
+      formatDateFilterValue(casualtyRecordDateValue(record)) === date;
+
+    return matchesStatus && matchesDate;
+  });
+}
+
+function verificationReviewIncidentId(record) {
+  return record?.incident?.id || "unknown-incident";
+}
+
+function verificationReviewIncidentName(record) {
+  return record?.incident?.incident_name || "Unknown incident";
+}
+
+function getVerificationReviewIncidentOptions(records) {
+  const incidents = new Map();
+
+  for (const record of records) {
+    incidents.set(
+      verificationReviewIncidentId(record),
+      verificationReviewIncidentName(record),
+    );
+  }
+
+  return Array.from(incidents.entries()).sort((first, second) =>
+    compareText(first[1], second[1]),
+  );
+}
+
+function filterVerificationReviewItems(records) {
+  const incidentId = state.verificationReviewIncidentFilter;
+
+  if (!incidentId || incidentId === "all") {
+    return records;
+  }
+
+  return records.filter(
+    (record) => verificationReviewIncidentId(record) === incidentId,
   );
 }
 
@@ -938,7 +1087,7 @@ function bindLogin() {
       }
 
       saveSession(response.data);
-      state.activeView = response.data.user.role === "super_admin" ? "home" : "home";
+      setActiveView("home");
       render();
     } catch (error) {
       setMessage("loginMessage", error.message, "error");
@@ -989,25 +1138,18 @@ function renderDashboardShell() {
         </nav>
 
         <div class="sidebar-footer">
-          <div class="user-chip">
+          <button class="user-chip" type="button" id="profileButton" title="Open profile">
             <div class="user-avatar">${escapeHtml(state.user.full_name?.slice(0, 1) || "A")}</div>
             <div class="user-chip-text">
             <strong>${escapeHtml(state.user.full_name)}</strong>
             <span>${roleLabel(state.user.role)}</span>
             </div>
-          </div>
+          </button>
           <button id="logoutButton" class="danger-button">Logout</button>
         </div>
       </aside>
 
       <main class="main">
-        <div class="workspace-band">
-          <div>
-            <span class="workspace-eyebrow">${isSuperAdmin() ? "System Command" : "Incident Administration"}</span>
-            <strong>${isSuperAdmin() ? "Oversight Console" : "Official Records Console"}</strong>
-          </div>
-          <span class="live-indicator">Live API</span>
-        </div>
         <div id="viewRoot"></div>
       </main>
     </div>
@@ -1021,12 +1163,12 @@ function bindShell() {
       "dcms.admin.sidebarCollapsed",
       String(state.sidebarCollapsed),
     );
-    renderDashboardShellIntoExisting();
+    applySidebarCollapsedState();
   });
 
   document.querySelectorAll(".nav-button").forEach((button) => {
     button.addEventListener("click", () => {
-      state.activeView = button.dataset.view;
+      setActiveView(button.dataset.view);
       document.querySelectorAll(".nav-button").forEach((item) =>
         item.classList.toggle("active", item.dataset.view === state.activeView),
       );
@@ -1035,10 +1177,232 @@ function bindShell() {
     });
   });
 
+  qs("#profileButton")?.addEventListener("click", () => {
+    openProfileModal();
+  });
+
   qs("#logoutButton").addEventListener("click", () => {
     clearSession();
     render();
   });
+}
+
+function renderProfileModal() {
+  const user = state.user || {};
+  const isSystemReset = user.role === "super_admin";
+  const resetCopy = isSystemReset
+    ? "Reset all operational records and incidents across the system. Accounts are kept."
+    : "Reset operational records and incidents scoped to your admin account. Accounts are kept.";
+
+  return `
+    <div class="modal-backdrop" data-close-modal>
+      <section class="record-modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="profileModalTitle">
+        <div class="modal-header">
+          <div>
+            <span class="eyebrow">Account Profile</span>
+            <h2 id="profileModalTitle">${escapeHtml(user.full_name || "Profile")}</h2>
+            <p>${escapeHtml(user.email || "")} · ${escapeHtml(roleLabel(user.role))}</p>
+          </div>
+          <button class="icon-button" type="button" data-close-modal aria-label="Close profile">&times;</button>
+        </div>
+
+        <div class="modal-body">
+          <form id="profileForm" class="form-grid">
+            <div class="form-grid two">
+              <label class="field">
+                <span>Full name</span>
+                <input name="fullName" required value="${escapeHtml(user.full_name || "")}" />
+              </label>
+              <label class="field">
+                <span>Email</span>
+                <input name="email" type="email" required value="${escapeHtml(user.email || "")}" />
+              </label>
+            </div>
+
+            <div class="form-grid two">
+              <label class="field">
+                <span>Phone number</span>
+                <input name="phoneNumber" value="${escapeHtml(user.phone_number || "")}" />
+              </label>
+              <label class="field">
+                <span>New password</span>
+                <input name="password" type="password" minlength="6" placeholder="Leave blank to keep current password" />
+              </label>
+            </div>
+
+            <div class="form-grid two">
+              <label class="field">
+                <span>Assigned municipality</span>
+                <input name="assignedMunicipality" value="${escapeHtml(user.assigned_municipality || "")}" />
+              </label>
+              <label class="field">
+                <span>Assigned barangay</span>
+                <input name="assignedBarangay" value="${escapeHtml(user.assigned_barangay || "")}" />
+              </label>
+            </div>
+
+            <label class="field">
+              <span>Confirm new password</span>
+              <input name="confirmPassword" type="password" minlength="6" placeholder="Repeat new password" />
+            </label>
+
+            <div id="profileMessage" class="status-message" hidden></div>
+          </form>
+
+          <section class="record-section profile-reset-panel">
+            <h3>Reset Records</h3>
+            <p class="panel-subtitle">${escapeHtml(resetCopy)}</p>
+            <button class="danger-button" type="button" id="resetOperationalDataButton">
+              Reset records and incidents
+            </button>
+          </section>
+        </div>
+
+        <div class="modal-footer">
+          <button class="ghost-button" type="button" data-close-modal>Cancel</button>
+          <button class="primary-button" type="submit" form="profileForm">Save profile</button>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function openProfileModal() {
+  closeRecordModal();
+
+  document.body.insertAdjacentHTML(
+    "beforeend",
+    renderProfileModal(),
+  );
+
+  document
+    .querySelectorAll("[data-close-modal]")
+    .forEach((element) => {
+      element.addEventListener("click", (event) => {
+        if (
+          event.target === element ||
+          element.matches("button")
+        ) {
+          closeRecordModal();
+        }
+      });
+    });
+
+  bindProfileModalActions();
+}
+
+function bindProfileModalActions() {
+  const form = qs("#profileForm");
+  const resetButton = qs("#resetOperationalDataButton");
+
+  if (form) {
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      const password = form.elements.password.value;
+      const confirmPassword = form.elements.confirmPassword.value;
+
+      if (password && password !== confirmPassword) {
+        setMessage(
+          "profileMessage",
+          "New password and confirmation do not match.",
+          "error",
+        );
+        return;
+      }
+
+      try {
+        const response = await apiRequest("/auth/me", {
+          method: "PATCH",
+          body: JSON.stringify({
+            fullName: form.elements.fullName.value,
+            email: form.elements.email.value,
+            phoneNumber: form.elements.phoneNumber.value,
+            assignedMunicipality:
+              form.elements.assignedMunicipality.value,
+            assignedBarangay: form.elements.assignedBarangay.value,
+            ...(password ? { password } : {}),
+          }),
+        });
+
+        saveCurrentUser(response.data);
+        closeRecordModal();
+        renderDashboardShellIntoExisting();
+        window.alert("Profile updated successfully.");
+      } catch (error) {
+        setMessage(
+          "profileMessage",
+          error instanceof Error
+            ? error.message
+            : "Unable to update profile.",
+          "error",
+        );
+      }
+    });
+  }
+
+  if (resetButton) {
+    resetButton.addEventListener("click", async () => {
+      const phrase = window.prompt(
+        "This will clear records and incidents but keep accounts. Type RESET RECORDS to continue.",
+      );
+
+      if (phrase !== "RESET RECORDS") {
+        return;
+      }
+
+      const confirmed = window.confirm(
+        state.user?.role === "super_admin"
+          ? "Reset ALL operational records and incidents across the system?"
+          : "Reset operational records and incidents for your admin account?",
+      );
+
+      if (!confirmed) {
+        return;
+      }
+
+      try {
+        resetButton.disabled = true;
+        resetButton.textContent = "Resetting...";
+
+        await apiRequest("/auth/reset-operational-data", {
+          method: "POST",
+          body: JSON.stringify({
+            confirmation: phrase,
+          }),
+        });
+
+        await loadSharedData();
+        closeRecordModal();
+        renderDashboardShellIntoExisting();
+        window.alert(
+          "Operational records and incidents were reset. Accounts were kept.",
+        );
+      } catch (error) {
+        resetButton.disabled = false;
+        resetButton.textContent = "Reset records and incidents";
+        setMessage(
+          "profileMessage",
+          error instanceof Error
+            ? error.message
+            : "Unable to reset records.",
+          "error",
+        );
+      }
+    });
+  }
+}
+
+function applySidebarCollapsedState() {
+  const shell = document.querySelector(".app-shell");
+  const toggle = qs("#sidebarToggle");
+  if (!shell || !toggle) return;
+
+  shell.classList.toggle("sidebar-collapsed", state.sidebarCollapsed);
+  const label = state.sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar";
+  toggle.setAttribute("aria-label", label);
+  toggle.setAttribute("title", label);
+  toggle.innerHTML = state.sidebarCollapsed ? "&gt;" : "&lt;";
 }
 
 function renderCurrentView(errorMessage = "") {
@@ -1102,16 +1466,164 @@ function bindView() {
   bindCasualtyRecordIncidents();
   bindOpenCasualtyRecord();
   bindVerificationReviewActions();
+  bindDeleteCasualtyActions();
+  bindVerificationReviewFilters();
   bindScopeLinks();
+  bindIncidentSearchFilters();
+  bindCasualtyRecordFilters();
+  bindPasswordVisibilityToggles();
   syncAnalyticsLiveRefresh();
 }
 
 function bindScopeLinks() {
   document.querySelectorAll("[data-view-link]").forEach((button) => {
     button.addEventListener("click", () => {
-      state.activeView = button.dataset.viewLink || "home";
+      setActiveView(button.dataset.viewLink || "home");
       renderDashboardShellIntoExisting();
     });
+  });
+}
+
+function renderIncidentSearchFilters(resultCount, totalCount) {
+  return `
+    <div class="form-grid two" style="margin-top:16px">
+      <label class="field">
+        <span>Search incidents</span>
+        <input
+          id="incidentSearchInput"
+          value="${escapeHtml(state.incidentSearchQuery)}"
+          placeholder="Search incident, hazard, location, or status"
+          autocomplete="off"
+        />
+      </label>
+      <label class="field">
+        <span>Filter by date</span>
+        <input
+          id="incidentDateFilterInput"
+          type="date"
+          value="${escapeHtml(state.incidentDateFilter)}"
+        />
+      </label>
+    </div>
+    <p class="panel-subtitle" style="margin-top:10px">
+      Showing ${resultCount} of ${totalCount} incidents.
+    </p>
+  `;
+}
+
+function bindIncidentSearchFilters() {
+  const searchInput = qs("#incidentSearchInput");
+  const dateInput = qs("#incidentDateFilterInput");
+
+  if (searchInput) {
+    searchInput.addEventListener("input", () => {
+      state.incidentSearchQuery = searchInput.value;
+      renderCurrentView();
+      bindView();
+      qs("#incidentSearchInput")?.focus();
+    });
+  }
+
+  if (dateInput) {
+    dateInput.addEventListener("input", () => {
+      state.incidentDateFilter = dateInput.value;
+      renderCurrentView();
+      bindView();
+    });
+  }
+}
+
+function renderCasualtyRecordFilters(resultCount, totalCount) {
+  const statusOptions = [
+    ["all", "All verification statuses"],
+    ["submitted", "Submitted"],
+    ["verified", "Verified"],
+    ["rejected", "Rejected"],
+  ];
+
+  return `
+    <div class="form-grid two" style="margin-top:16px">
+      <label class="field">
+        <span>Filter by verification</span>
+        <select id="casualtyRecordVerificationFilter">
+          ${statusOptions
+            .map(
+              ([value, label]) =>
+                `<option value="${escapeHtml(value)}" ${state.casualtyRecordVerificationFilter === value ? "selected" : ""}>${escapeHtml(label)}</option>`,
+            )
+            .join("")}
+        </select>
+      </label>
+      <label class="field">
+        <span>Filter by reported date</span>
+        <input
+          id="casualtyRecordDateFilter"
+          type="date"
+          value="${escapeHtml(state.casualtyRecordDateFilter)}"
+        />
+      </label>
+    </div>
+    <p class="panel-subtitle" style="margin-top:10px">
+      Showing ${resultCount} of ${totalCount} casualty records, sorted latest to past.
+    </p>
+  `;
+}
+
+function bindCasualtyRecordFilters() {
+  const statusInput = qs("#casualtyRecordVerificationFilter");
+  const dateInput = qs("#casualtyRecordDateFilter");
+
+  if (statusInput) {
+    statusInput.addEventListener("change", () => {
+      state.casualtyRecordVerificationFilter = statusInput.value;
+      renderCurrentView();
+      bindView();
+    });
+  }
+
+  if (dateInput) {
+    dateInput.addEventListener("input", () => {
+      state.casualtyRecordDateFilter = dateInput.value;
+      renderCurrentView();
+      bindView();
+    });
+  }
+}
+
+function renderVerificationReviewFilters(filteredCount, totalCount, options) {
+  return `
+    <div class="form-grid two" style="margin-top:16px">
+      <label class="field">
+        <span>Filter by incident</span>
+        <select id="verificationReviewIncidentFilter">
+          <option value="all" ${state.verificationReviewIncidentFilter === "all" ? "selected" : ""}>All incidents</option>
+          ${options
+            .map(
+              ([id, name]) => `
+                <option value="${escapeHtml(id)}" ${state.verificationReviewIncidentFilter === id ? "selected" : ""}>
+                  ${escapeHtml(name)}
+                </option>
+              `,
+            )
+            .join("")}
+        </select>
+      </label>
+    </div>
+    <p class="panel-subtitle" style="margin-top:10px">
+      Showing ${filteredCount} of ${totalCount} pending verification items, sorted latest to past.
+    </p>
+  `;
+}
+
+function bindVerificationReviewFilters() {
+  const incidentInput = qs("#verificationReviewIncidentFilter");
+
+  if (!incidentInput) return;
+
+  incidentInput.addEventListener("change", () => {
+    state.verificationReviewIncidentFilter = incidentInput.value;
+    renderCurrentView();
+    bindView();
   });
 }
 
@@ -2429,15 +2941,6 @@ const incidentLocation = selectedIncident
             <div style="margin-top:18px">${renderAnalyticsGraphGrid(analytics, selectedIncidentId)}</div>
           `
     }
-    <section class="panel" style="margin-top:18px">
-      <div class="panel-header">
-        <div>
-          <h2>Visible incident list</h2>
-          <p class="panel-subtitle">Scoped to ${isSuperAdmin() ? "all units" : "the logged-in admin account"}.</p>
-        </div>
-      </div>
-      ${renderAnalyticsBars(Object.fromEntries(incidents.map((incident) => [incident.incident_name, casualtyCounts.get(incident.id) || 0])))}
-    </section>
   `;
 }
 
@@ -2550,6 +3053,63 @@ function renderIncidentSummaryTable() {
   `;
 }
 
+function renderPasswordField({
+  name = "password",
+  label = "Password",
+  placeholder = "",
+  autocomplete = "new-password",
+  required = false,
+  minlength = 6,
+} = {}) {
+  return `
+    <label class="field">
+      <span>${escapeHtml(label)}</span>
+      <div class="password-input-wrap">
+        <input
+          name="${escapeHtml(name)}"
+          type="password"
+          ${required ? "required" : ""}
+          ${minlength ? `minlength="${escapeHtml(minlength)}"` : ""}
+          autocomplete="${escapeHtml(autocomplete)}"
+          ${placeholder ? `placeholder="${escapeHtml(placeholder)}"` : ""}
+        />
+        <button
+          class="password-toggle"
+          type="button"
+          data-toggle-password
+          aria-label="Show password"
+        >
+          Show
+        </button>
+      </div>
+    </label>
+  `;
+}
+
+function bindPasswordVisibilityToggles() {
+  document.querySelectorAll("[data-toggle-password]").forEach((button) => {
+    if (button.dataset.passwordToggleBound === "true") return;
+    button.dataset.passwordToggleBound = "true";
+
+    button.addEventListener("click", () => {
+      const wrapper = button.closest(".password-input-wrap");
+      const input = wrapper?.querySelector("input");
+
+      if (!input) {
+        return;
+      }
+
+      const shouldShow = input.type === "password";
+      input.type = shouldShow ? "text" : "password";
+      button.textContent = shouldShow ? "Hide" : "Show";
+      button.setAttribute(
+        "aria-label",
+        shouldShow ? "Hide password" : "Show password",
+      );
+    });
+  });
+}
+
 function renderRegistrationShell() {
   return `
     <section class="panel">
@@ -2559,7 +3119,10 @@ function renderRegistrationShell() {
         <div class="form-grid two">
           <label class="field"><span>Full name</span><input name="fullName" required placeholder="Account holder full name" /></label>
           <label class="field"><span>Email</span><input name="email" type="email" required placeholder="user@example.com" /></label>
-          <label class="field"><span>Temporary password</span><input name="password" type="password" required minlength="6" /></label>
+          ${renderPasswordField({
+            label: "Temporary password",
+            required: true,
+          })}
           <label class="field"><span>Role</span><select name="role"><option value="administrator">Administrator</option><option value="super_admin">Super Admin</option></select></label>
           <label class="field"><span>Phone number</span><input name="phoneNumber" /></label>
           <label class="field"><span>Assigned municipality</span><input name="assignedMunicipality" /></label>
@@ -2613,7 +3176,10 @@ function renderAdminUnitRegistration() {
         <div class="form-grid two">
           <label class="field"><span>Full name</span><input name="fullName" required placeholder="Responder full name" /></label>
           <label class="field"><span>Email</span><input name="email" type="email" required placeholder="responder@example.com" /></label>
-          <label class="field"><span>Temporary password</span><input name="password" type="password" required minlength="6" /></label>
+          ${renderPasswordField({
+            label: "Temporary password",
+            required: true,
+          })}
           <label class="field">
             <span>Account role</span>
             <select name="role">
@@ -2890,8 +3456,9 @@ function bindAccountDeleteAction(userId) {
 
 function renderAdminCasualtyRecords(compact = false) {
   const byIncident = new Map();
+  const filteredCasualties = filterCasualtyRecordsForTable(state.casualties);
 
-  for (const item of state.casualties) {
+  for (const item of filteredCasualties) {
     const incidentId =
       item.incident?.id || "unknown-incident";
 
@@ -2904,11 +3471,16 @@ function renderAdminCasualtyRecords(compact = false) {
       total: 0,
       pending: 0,
       verified: 0,
+      latestReportedAt: 0,
       records: [],
     };
 
     current.total += 1;
     current.records.push(item);
+    current.latestReportedAt = Math.max(
+      current.latestReportedAt,
+      casualtyRecordTimestamp(item),
+    );
 
     if (item.verification_status === "verified") {
       current.verified += 1;
@@ -2930,6 +3502,8 @@ function renderAdminCasualtyRecords(compact = false) {
         </div>
       </div>
 
+      ${compact ? "" : renderCasualtyRecordFilters(filteredCasualties.length, state.casualties.length)}
+
       <div class="table-wrap">
         <table>
           <thead>
@@ -2944,6 +3518,11 @@ function renderAdminCasualtyRecords(compact = false) {
           <tbody>
             ${
               Array.from(byIncident.values())
+                .sort(
+                  (first, second) =>
+                    second.latestReportedAt - first.latestReportedAt ||
+                    compareText(first.incidentName, second.incidentName),
+                )
                 .map((group) => {
                   const incidentKey = escapeHtml(
                     group.incidentId,
@@ -3024,12 +3603,7 @@ function renderAdminCasualtyRecords(compact = false) {
                                     <tbody>
                                       ${group.records
                                         .slice()
-                                        .sort((first, second) =>
-                                          compareText(
-                                            casualtySortLabel(first),
-                                            casualtySortLabel(second),
-                                          ),
-                                        )
+                                        .sort(compareCasualtyRecordsByLatest)
                                         .map(
                                           (item) => `
                                             <tr
@@ -3088,7 +3662,7 @@ function renderAdminCasualtyRecords(compact = false) {
 
                                               <td>
                                                 ${formatDate(
-                                                  item.reported_at,
+                                                  casualtyRecordDateValue(item),
                                                 )}
                                               </td>
 
@@ -3122,7 +3696,7 @@ function renderAdminCasualtyRecords(compact = false) {
                 <tr>
                   <td colspan="4">
                     <div class="empty-state">
-                      No casualty records available yet.
+                      ${state.casualties.length === 0 ? "No casualty records available yet." : "No casualty records match the current filters."}
                     </div>
                   </td>
                 </tr>
@@ -3180,11 +3754,13 @@ function bindCasualtyRecordIncidents() {
 }
 
 function renderAdminVerificationReview() {
-  const reviewItems = state.casualties
+  const allReviewItems = state.casualties
     .filter((item) =>
       ["submitted", "under_review"].includes(item.verification_status),
     )
-    .sort(compareVerificationRecords);
+    .sort(compareCasualtyRecordsByLatest);
+  const incidentOptions = getVerificationReviewIncidentOptions(allReviewItems);
+  const reviewItems = filterVerificationReviewItems(allReviewItems);
 
   return `
     <section class="panel">
@@ -3194,6 +3770,11 @@ function renderAdminVerificationReview() {
           <p class="panel-subtitle">Casualty entries awaiting review from responder accounts in this admin unit.</p>
         </div>
       </div>
+      ${renderVerificationReviewFilters(
+        reviewItems.length,
+        allReviewItems.length,
+        incidentOptions,
+      )}
       <div class="table-wrap">
         <table>
           <thead><tr><th>Unit</th><th>Incident</th><th>Casualty</th><th>Status</th><th>Verification</th><th>Reported</th><th>Actions</th></tr></thead>
@@ -3213,19 +3794,20 @@ function renderAdminVerificationReview() {
                       </td>
                       <td>${escapeHtml(item.current_status)}</td>
                       <td><span class="pill ${verificationPillClass(item.verification_status)}">${escapeHtml(roleLabel(item.verification_status))}</span></td>
-                      <td>${formatDate(item.reported_at)}</td>
+                      <td>${formatDate(casualtyRecordDateValue(item))}</td>
                       <td>
                         <div class="table-actions">
                           <button class="ghost-button mini" data-open-casualty="${escapeHtml(item.id)}">Open record</button>
                           <button class="ghost-button mini" data-review-action="under_review" data-casualty-id="${escapeHtml(item.id)}">Review</button>
                           <button class="secondary-button mini" data-review-action="verified" data-casualty-id="${escapeHtml(item.id)}">Approve</button>
                           <button class="danger-button mini" data-review-action="rejected" data-casualty-id="${escapeHtml(item.id)}">Reject</button>
+                          <button class="danger-button mini" data-delete-casualty="${escapeHtml(item.id)}">Delete</button>
                         </div>
                       </td>
                     </tr>
                   `,
                 )
-                .join("") || `<tr><td colspan="7"><div class="empty-state">No pending verification items.</div></td></tr>`
+                .join("") || `<tr><td colspan="7"><div class="empty-state">${allReviewItems.length === 0 ? "No pending verification items." : "No pending verification items match the selected incident."}</div></td></tr>`
             }
           </tbody>
         </table>
@@ -3242,6 +3824,155 @@ function detailItem(label, value) {
       <strong>${escapeHtml(value ?? "Not recorded")}</strong>
     </div>
   `;
+}
+
+function isImageAttachment(attachment) {
+  return String(attachment?.mime_type || "")
+    .toLowerCase()
+    .startsWith("image/");
+}
+
+function renderAttachmentCard(attachment, index) {
+  const fileName =
+    attachment?.file_name || `Attachment ${index + 1}`;
+  const signedUrl = attachment?.signed_url || "";
+  const mimeType = attachment?.mime_type || "";
+  const uploadedAt = formatDate(attachment?.created_at);
+  const uploader =
+    attachment?.uploader?.full_name ||
+    attachment?.uploader?.email ||
+    "Unknown uploader";
+  const isImage = isImageAttachment(attachment);
+
+  return `
+    <button
+      class="attachment-card"
+      type="button"
+      data-open-attachment-preview
+      data-attachment-url="${escapeHtml(signedUrl)}"
+      data-attachment-name="${escapeHtml(fileName)}"
+      data-attachment-mime="${escapeHtml(mimeType)}"
+      ${signedUrl ? "" : "disabled"}
+    >
+      <span class="attachment-preview">
+        ${
+          isImage && signedUrl
+            ? `<img src="${escapeHtml(signedUrl)}" alt="${escapeHtml(fileName)}" loading="lazy" />`
+            : `<span class="attachment-file-icon">${escapeHtml((attachment?.file_type || "file").toUpperCase())}</span>`
+        }
+      </span>
+      <span class="attachment-meta">
+        <strong>${escapeHtml(fileName)}</strong>
+        <small>${escapeHtml(uploadedAt)} · ${escapeHtml(uploader)}</small>
+      </span>
+    </button>
+  `;
+}
+
+function renderAttachmentSection(recordDetails) {
+  const attachments = recordDetails?.attachments || [];
+
+  return `
+    <section class="record-section">
+      <h3>Attachments</h3>
+      ${
+        attachments.length > 0
+          ? `
+            <div class="attachment-grid">
+              ${attachments
+                .map((attachment, index) =>
+                  renderAttachmentCard(attachment, index),
+                )
+                .join("")}
+            </div>
+          `
+          : `
+            <div class="empty-state">
+              No attachments uploaded for this casualty record.
+            </div>
+          `
+      }
+    </section>
+  `;
+}
+
+function openAttachmentPreview(url, fileName, mimeType) {
+  if (!url) {
+    return;
+  }
+
+  document
+    .querySelector(".attachment-preview-backdrop")
+    ?.remove();
+
+  const isImage = String(mimeType || "")
+    .toLowerCase()
+    .startsWith("image/");
+
+  document.body.insertAdjacentHTML(
+    "beforeend",
+    `
+      <div class="attachment-preview-backdrop" data-close-attachment-preview>
+        <section class="attachment-preview-modal" role="dialog" aria-modal="true" aria-labelledby="attachmentPreviewTitle">
+          <div class="modal-header">
+            <div>
+              <span class="eyebrow">Attachment Preview</span>
+              <h2 id="attachmentPreviewTitle">${escapeHtml(fileName || "Attachment")}</h2>
+            </div>
+            <button class="icon-button" type="button" data-close-attachment-preview aria-label="Close attachment preview">&times;</button>
+          </div>
+
+          <div class="attachment-preview-body">
+            ${
+              isImage
+                ? `<img class="attachment-preview-image" src="${escapeHtml(url)}" alt="${escapeHtml(fileName || "Attachment")}" />`
+                : `<iframe class="attachment-preview-frame" src="${escapeHtml(url)}" title="${escapeHtml(fileName || "Attachment")}"></iframe>`
+            }
+          </div>
+
+          <div class="modal-footer">
+            <a class="secondary-button" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">
+              Open full size
+            </a>
+            <button class="ghost-button" type="button" data-close-attachment-preview>Close</button>
+          </div>
+        </section>
+      </div>
+    `,
+  );
+
+  document
+    .querySelectorAll("[data-close-attachment-preview]")
+    .forEach((element) => {
+      element.addEventListener("click", (event) => {
+        if (
+          event.target === element ||
+          element.matches("button")
+        ) {
+          document
+            .querySelector(".attachment-preview-backdrop")
+            ?.remove();
+        }
+      });
+    });
+}
+
+function bindAttachmentPreviewActions() {
+  document
+    .querySelectorAll("[data-open-attachment-preview]")
+    .forEach((button) => {
+      if (button.dataset.previewBound === "true") return;
+      button.dataset.previewBound = "true";
+
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        openAttachmentPreview(
+          button.dataset.attachmentUrl,
+          button.dataset.attachmentName,
+          button.dataset.attachmentMime,
+        );
+      });
+    });
 }
 
 function extractRecordSectionValue(
@@ -4976,8 +5707,15 @@ const religion =
                 "Verification actions",
                 recordDetails?.verificationHistory?.length ?? 0,
               )}
+
+              ${detailItem(
+                "Attachments",
+                recordDetails?.attachments?.length ?? 0,
+              )}
             </div>
           </section>
+
+          ${renderAttachmentSection(recordDetails)}
         </div>
       </section>
     </div>
@@ -5002,6 +5740,7 @@ async function loadCasualtyRecordDetails(casualtyId) {
   treatmentHistoryResult,
   transportHistoryResult,
   verificationHistoryResult,
+  attachmentResult,
 ] = await Promise.allSettled([
     apiRequest(`/casualties/${encodedId}`),
     apiRequest(`/casualties/${encodedId}/status-history`),
@@ -5009,6 +5748,7 @@ async function loadCasualtyRecordDetails(casualtyId) {
     apiRequest(`/casualties/${encodedId}/treatment-history`),
     apiRequest(`/casualties/${encodedId}/transport-history`),
     apiRequest(`/casualties/${encodedId}/verification-history`),
+    apiRequest(`/attachments?casualtyIncidentId=${encodedId}`),
   ]);
 
   const casualty =
@@ -5047,6 +5787,11 @@ transportHistory:
       verificationHistoryResult.status === "fulfilled"
         ? verificationHistoryResult.value.data || []
         : [],
+
+    attachments:
+      attachmentResult.status === "fulfilled"
+        ? attachmentResult.value.data || []
+        : [],
   };
 }
 
@@ -5083,6 +5828,7 @@ async function openCasualtyRecordModal(casualtyId) {
       });
 
     bindVerificationReviewActions();
+    bindAttachmentPreviewActions();
   } catch (error) {
     console.error(
       "Failed to load casualty record details:",
@@ -5103,7 +5849,12 @@ function bindOpenCasualtyRecord() {
     element.dataset.openBound = "true";
 
     element.addEventListener("click", (event) => {
-      if (event.target.closest("[data-review-action]")) return;
+      if (
+        event.target.closest("[data-review-action]") ||
+        event.target.closest("[data-delete-casualty]")
+      ) {
+        return;
+      }
       event.stopPropagation();
       openCasualtyRecordModal(element.dataset.openCasualty);
     });
@@ -5156,6 +5907,52 @@ function bindVerificationReviewActions() {
   });
 }
 
+function bindDeleteCasualtyActions() {
+  document.querySelectorAll("[data-delete-casualty]").forEach((button) => {
+    if (button.dataset.deleteBound === "true") return;
+    button.dataset.deleteBound = "true";
+
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+
+      const casualtyId = button.dataset.deleteCasualty;
+
+      if (!casualtyId) {
+        return;
+      }
+
+      const confirmed = window.confirm(
+        "Delete this casualty record? It will disappear from web and mobile records.",
+      );
+
+      if (!confirmed) {
+        return;
+      }
+
+      try {
+        button.disabled = true;
+        button.textContent = "Deleting...";
+
+        await apiRequest(`/casualties/${encodeURIComponent(casualtyId)}`, {
+          method: "DELETE",
+        });
+
+        await loadSharedData();
+        renderCurrentView();
+        bindView();
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = "Delete";
+        window.alert(
+          error instanceof Error
+            ? error.message
+            : "Unable to delete casualty record.",
+        );
+      }
+    });
+  });
+}
+
 function renderAdminActionLogs() {
   return `
     <section class="panel api-note">
@@ -5167,6 +5964,8 @@ function renderAdminActionLogs() {
 }
 
 function renderIncidentHistory() {
+  const incidents = filterIncidentsBySearchAndDate(state.incidents);
+
   return `
     <section class="panel">
       <div class="panel-header">
@@ -5175,11 +5974,12 @@ function renderIncidentHistory() {
           <p class="panel-subtitle">All official incidents created by admin users.</p>
         </div>
       </div>
+      ${renderIncidentSearchFilters(incidents.length, state.incidents.length)}
       <div class="table-wrap">
         <table>
           <thead><tr><th>Code</th><th>Name</th><th>Hazard</th><th>Location</th><th>Status</th><th>Started</th></tr></thead>
           <tbody>
-            ${state.incidents
+            ${incidents
               .map(
                 (incident) => `
                   <tr>
@@ -5192,7 +5992,7 @@ function renderIncidentHistory() {
                   </tr>
                 `,
               )
-              .join("")}
+              .join("") || `<tr><td colspan="6"><div class="empty-state">No incidents match the current search filters.</div></td></tr>`}
           </tbody>
         </table>
       </div>
@@ -5327,7 +6127,8 @@ async function loadIncidentManagementDetails(incidentId, options = {}) {
 }
 
 function renderIncidentManagement() {
-  const incidents = state.allIncidents.length ? state.allIncidents : state.incidents;
+  const sourceIncidents = state.allIncidents.length ? state.allIncidents : state.incidents;
+  const incidents = filterIncidentsBySearchAndDate(sourceIncidents);
 
   return `
     <section class="panel">
@@ -5336,8 +6137,9 @@ function renderIncidentManagement() {
           <h2>Incident Management</h2>
           <p class="panel-subtitle">Manage every incident record, including active, closed, archived, and draft incidents.</p>
         </div>
-        <span class="pill blue">${incidents.length} incidents</span>
+        <span class="pill blue">${sourceIncidents.length} incidents</span>
       </div>
+      ${renderIncidentSearchFilters(incidents.length, sourceIncidents.length)}
       <div class="incident-management-list">
         ${
           incidents

@@ -1503,6 +1503,7 @@ type SelectedPhoto = {
   fileName: string;
   mimeType: string;
   fileSize?: number;
+  base64Data?: string;
 };
 
 type EvacuationCenterLabelSource = Pick<
@@ -4940,6 +4941,10 @@ const [
     useState(true);
   const [selectedPhoto, setSelectedPhoto] =
     useState<SelectedPhoto | null>(null);
+  const [
+    isPhotoSourceSheetVisible,
+    setIsPhotoSourceSheetVisible,
+  ] = useState(false);
   const [isCapturingLocation, setIsCapturingLocation] =
     useState(false);
   const [submissionFeedback, setSubmissionFeedback] =
@@ -9116,7 +9121,153 @@ if (
     await setPhotoFromPickerResult(result);
   }
 
+  async function capturePhotoWithWebCamera() {
+    if (
+      typeof document === "undefined" ||
+      typeof navigator === "undefined" ||
+      !navigator.mediaDevices?.getUserMedia
+    ) {
+      Alert.alert(
+        "Camera unavailable",
+        "This browser does not support direct camera capture. Please use Import photo instead.",
+      );
+      return;
+    }
+
+    let stream: MediaStream | null = null;
+
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: {
+            ideal: "environment",
+          },
+        },
+        audio: false,
+      });
+
+      await new Promise<void>((resolve) => {
+        const overlay = document.createElement("div");
+        overlay.style.position = "fixed";
+        overlay.style.inset = "0";
+        overlay.style.zIndex = "2147483647";
+        overlay.style.display = "flex";
+        overlay.style.flexDirection = "column";
+        overlay.style.alignItems = "center";
+        overlay.style.justifyContent = "center";
+        overlay.style.gap = "14px";
+        overlay.style.padding = "18px";
+        overlay.style.background = "rgba(15, 23, 42, 0.92)";
+
+        const video = document.createElement("video");
+        video.autoplay = true;
+        video.muted = true;
+        video.playsInline = true;
+        video.srcObject = stream;
+        video.style.width = "min(100%, 520px)";
+        video.style.maxHeight = "72vh";
+        video.style.objectFit = "cover";
+        video.style.borderRadius = "18px";
+        video.style.background = "#000";
+
+        const actionRow = document.createElement("div");
+        actionRow.style.display = "flex";
+        actionRow.style.gap = "10px";
+        actionRow.style.width = "min(100%, 520px)";
+
+        const makeButton = (
+          label: string,
+          background: string,
+          color = "#ffffff",
+        ) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.textContent = label;
+          button.style.flex = "1";
+          button.style.minHeight = "46px";
+          button.style.border = "0";
+          button.style.borderRadius = "12px";
+          button.style.background = background;
+          button.style.color = color;
+          button.style.fontWeight = "800";
+          button.style.fontFamily = "system-ui, sans-serif";
+          return button;
+        };
+
+        const cancelButton = makeButton("Cancel", "#ffffff", "#7B1113");
+        const captureButton = makeButton("Capture photo", "#7B1113");
+
+        function cleanup() {
+          stream?.getTracks().forEach((track) => track.stop());
+          overlay.remove();
+          resolve();
+        }
+
+        cancelButton.onclick = cleanup;
+
+        captureButton.onclick = () => {
+          const canvas = document.createElement("canvas");
+          canvas.width = video.videoWidth || 1280;
+          canvas.height = video.videoHeight || 720;
+
+          const context = canvas.getContext("2d");
+
+          if (!context) {
+            cleanup();
+            Alert.alert(
+              "Unable to capture photo",
+              "The camera preview could not be captured. Please try again.",
+            );
+            return;
+          }
+
+          context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+          const base64Data = dataUrl.split(",")[1] ?? "";
+          const fallbackName = `casualty-photo-${Date.now()}.jpg`;
+
+          setSelectedPhoto({
+            uri: dataUrl,
+            fileName: fallbackName,
+            mimeType: "image/jpeg",
+            fileSize: Math.round((base64Data.length * 3) / 4),
+            base64Data,
+          });
+
+          cleanup();
+        };
+
+        actionRow.append(cancelButton, captureButton);
+        overlay.append(video, actionRow);
+        document.body.appendChild(overlay);
+
+        void video.play().catch(() => {
+          cleanup();
+          Alert.alert(
+            "Unable to start camera",
+            "Please allow camera access and try again.",
+          );
+        });
+      });
+    } catch (error) {
+      stream?.getTracks().forEach((track) => track.stop());
+
+      Alert.alert(
+        "Camera permission needed",
+        error instanceof Error
+          ? error.message
+          : "Allow camera access to capture a casualty photo.",
+      );
+    }
+  }
+
   async function takePhotoWithCamera() {
+    if (Platform.OS === "web") {
+      await capturePhotoWithWebCamera();
+      return;
+    }
+
     const permission = await ImagePicker.requestCameraPermissionsAsync();
 
     if (!permission.granted) {
@@ -9137,24 +9288,7 @@ if (
   }
 
   function handlePickPhoto() {
-    Alert.alert("Add casualty photo", "Choose a photo source.", [
-      {
-        text: "Camera",
-        onPress: () => {
-          void takePhotoWithCamera();
-        },
-      },
-      {
-        text: "Photo Library",
-        onPress: () => {
-          void pickPhotoFromLibrary();
-        },
-      },
-      {
-        text: "Cancel",
-        style: "cancel",
-      },
-    ]);
+    setIsPhotoSourceSheetVisible(true);
   }
 
   async function handleUseCurrentLocation() {
@@ -9213,12 +9347,14 @@ if (
     }
 
     try {
-      const base64Data = await FileSystem.readAsStringAsync(
-        selectedPhoto.uri,
-        {
-          encoding: FileSystem.EncodingType.Base64,
-        },
-      );
+      const base64Data =
+        selectedPhoto.base64Data ??
+        (await FileSystem.readAsStringAsync(
+          selectedPhoto.uri,
+          {
+            encoding: FileSystem.EncodingType.Base64,
+          },
+        ));
 
       await uploadAttachment({
         casualtyIncidentId,
@@ -13532,6 +13668,34 @@ function confirmExitAddCasualty() {
         searchable={isActiveChoiceSheetSearchable()}
         onSearchChange={setChoiceSearchQuery}
         onClose={() => setActiveChoiceSheet(null)}
+      />
+
+      <ChoiceSheet
+        visible={isPhotoSourceSheetVisible}
+        title="Add casualty photo"
+        options={[
+          {
+            label: "Capture photo",
+            key: "capture-photo",
+            selected: false,
+            onSelect: () => {
+              setIsPhotoSourceSheetVisible(false);
+              void takePhotoWithCamera();
+            },
+          },
+          {
+            label: "Import photo",
+            key: "import-photo",
+            selected: false,
+            onSelect: () => {
+              setIsPhotoSourceSheetVisible(false);
+              void pickPhotoFromLibrary();
+            },
+          },
+        ]}
+        searchQuery=""
+        onSearchChange={() => {}}
+        onClose={() => setIsPhotoSourceSheetVisible(false)}
       />
 
       {renderTriageAssessmentSheet()}

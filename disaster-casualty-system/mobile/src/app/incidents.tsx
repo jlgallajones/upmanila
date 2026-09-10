@@ -207,6 +207,32 @@ function formatDate(value: string): string {
   }).format(date);
 }
 
+function formatDateFilterValue(value: string | null | undefined): string {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function formatDateObjectForFilter(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
 function formatDateTime(value: string | null | undefined): string {
   if (!value) {
     return "Not set";
@@ -1237,6 +1263,16 @@ function IncidentCard({
 export default function IncidentsPage() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [query, setQuery] = useState("");
+  const [incidentDateRangeStart, setIncidentDateRangeStart] =
+    useState("");
+  const [incidentDateRangeEnd, setIncidentDateRangeEnd] =
+    useState("");
+  const [isDateFilterPickerVisible, setIsDateFilterPickerVisible] =
+    useState(false);
+  const [dateFilterPickerMonth, setDateFilterPickerMonth] =
+    useState(() => new Date());
+  const [dateFilterSelectionMode, setDateFilterSelectionMode] =
+    useState<"start" | "end">("start");
   const [currentUserId, setCurrentUserId] = useState<string | null>(
     null,
   );
@@ -1506,8 +1542,18 @@ export default function IncidentsPage() {
 
   const filteredIncidents = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
+    const normalizedStart = incidentDateRangeStart.trim();
+    const normalizedEnd = incidentDateRangeEnd.trim();
+    const rangeStart =
+      normalizedStart && normalizedEnd && normalizedStart > normalizedEnd
+        ? normalizedEnd
+        : normalizedStart;
+    const rangeEnd =
+      normalizedStart && normalizedEnd && normalizedStart > normalizedEnd
+        ? normalizedStart
+        : normalizedEnd;
 
-    if (!normalizedQuery) {
+    if (!normalizedQuery && !rangeStart && !rangeEnd) {
       return incidents;
     }
 
@@ -1523,10 +1569,15 @@ export default function IncidentsPage() {
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
+      const incidentDate = formatDateFilterValue(incident.started_at);
 
-      return searchable.includes(normalizedQuery);
+      return (
+        (!normalizedQuery || searchable.includes(normalizedQuery)) &&
+        (!rangeStart || incidentDate >= rangeStart) &&
+        (!rangeEnd || incidentDate <= rangeEnd)
+      );
     });
-  }, [incidents, query]);
+  }, [incidentDateRangeEnd, incidentDateRangeStart, incidents, query]);
 
   const filteredHazardTypes = useMemo(() => {
     const normalizedQuery = hazardTypeSearchQuery.trim().toLowerCase();
@@ -1539,6 +1590,74 @@ export default function IncidentsPage() {
       type.toLowerCase().includes(normalizedQuery),
     );
   }, [hazardTypeSearchQuery]);
+
+  const dateFilterMonthDays = useMemo(() => {
+    const year = dateFilterPickerMonth.getFullYear();
+    const month = dateFilterPickerMonth.getMonth();
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    return [
+      ...Array.from({ length: firstDay }, () => null),
+      ...Array.from({ length: daysInMonth }, (_, index) => index + 1),
+    ];
+  }, [dateFilterPickerMonth]);
+
+  const dateFilterMonthLabel = useMemo(
+    () =>
+      new Intl.DateTimeFormat("en-US", {
+        month: "long",
+        year: "numeric",
+      }).format(dateFilterPickerMonth),
+    [dateFilterPickerMonth],
+  );
+
+  function openDateFilterPicker() {
+    const selectedDate = incidentDateRangeStart
+      ? new Date(`${incidentDateRangeStart}T00:00:00`)
+      : new Date();
+
+    setDateFilterPickerMonth(
+      Number.isNaN(selectedDate.getTime())
+        ? new Date()
+        : selectedDate,
+    );
+    setDateFilterSelectionMode(
+      incidentDateRangeStart && !incidentDateRangeEnd ? "end" : "start",
+    );
+    setIsDateFilterPickerVisible(true);
+  }
+
+  function changeDateFilterMonth(offset: number) {
+    setDateFilterPickerMonth(
+      (current) =>
+        new Date(
+          current.getFullYear(),
+          current.getMonth() + offset,
+          1,
+        ),
+    );
+  }
+
+  function selectDateFilterDay(day: number) {
+    const selectedDate = new Date(
+      dateFilterPickerMonth.getFullYear(),
+      dateFilterPickerMonth.getMonth(),
+      day,
+    );
+    const selectedValue = formatDateObjectForFilter(selectedDate);
+
+    if (dateFilterSelectionMode === "start") {
+      setIncidentDateRangeStart(selectedValue);
+      if (incidentDateRangeEnd && selectedValue > incidentDateRangeEnd) {
+        setIncidentDateRangeEnd("");
+      }
+      setDateFilterSelectionMode("end");
+      return;
+    }
+
+    setIncidentDateRangeEnd(selectedValue);
+  }
 
   async function handleRefresh() {
     try {
@@ -3868,6 +3987,56 @@ export default function IncidentsPage() {
               autoCorrect={false}
             />
           </View>
+
+          <View style={styles.searchBar}>
+            <Ionicons
+              name="calendar-outline"
+              size={18}
+              color="rgba(255,255,255,0.72)"
+            />
+            <Pressable
+              onPress={openDateFilterPicker}
+              style={({ pressed }) => [
+                styles.dateFilterButton,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.dateFilterButtonText,
+                  !incidentDateRangeStart &&
+                    !incidentDateRangeEnd &&
+                    styles.dateFilterPlaceholderText,
+                ]}
+              >
+                {incidentDateRangeStart && incidentDateRangeEnd
+                  ? `${incidentDateRangeStart} to ${incidentDateRangeEnd}`
+                  : incidentDateRangeStart
+                    ? `From ${incidentDateRangeStart}`
+                    : incidentDateRangeEnd
+                      ? `Until ${incidentDateRangeEnd}`
+                      : "Filter by date range"}
+              </Text>
+            </Pressable>
+            {incidentDateRangeStart || incidentDateRangeEnd ? (
+              <Pressable
+                onPress={() => {
+                  setIncidentDateRangeStart("");
+                  setIncidentDateRangeEnd("");
+                }}
+                style={({ pressed }) => [
+                  styles.dateFilterClearButton,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Ionicons
+                  name="close"
+                  size={16}
+                  color={COLORS.white}
+                />
+              </Pressable>
+            ) : null}
+          </View>
         </View>
       </SafeAreaView>
 
@@ -3972,6 +4141,192 @@ export default function IncidentsPage() {
           </View>
         }
       />
+
+      <Modal
+        visible={isDateFilterPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsDateFilterPickerVisible(false)}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => setIsDateFilterPickerVisible(false)}
+        >
+          <Pressable style={styles.datePickerSheet}>
+            <View style={styles.sheetHandle} />
+
+            <View style={styles.datePickerHeader}>
+              <Pressable
+                onPress={() => changeDateFilterMonth(-1)}
+                style={({ pressed }) => [
+                  styles.datePickerNavButton,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Ionicons
+                  name="chevron-back"
+                  size={19}
+                  color={COLORS.maroon}
+                />
+              </Pressable>
+
+              <Text style={styles.datePickerTitle}>
+                {dateFilterMonthLabel}
+              </Text>
+
+              <Pressable
+                onPress={() => changeDateFilterMonth(1)}
+                style={({ pressed }) => [
+                  styles.datePickerNavButton,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Ionicons
+                  name="chevron-forward"
+                  size={19}
+                  color={COLORS.maroon}
+                />
+              </Pressable>
+            </View>
+
+            <View style={styles.datePickerModeRow}>
+              {[
+                ["start", incidentDateRangeStart || "From date"],
+                ["end", incidentDateRangeEnd || "To date"],
+              ].map(([mode, label]) => {
+                const isActive = dateFilterSelectionMode === mode;
+
+                return (
+                  <Pressable
+                    key={mode}
+                    onPress={() =>
+                      setDateFilterSelectionMode(mode as "start" | "end")
+                    }
+                    style={({ pressed }) => [
+                      styles.datePickerModeButton,
+                      isActive && styles.datePickerModeButtonActive,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.datePickerModeButtonText,
+                        isActive &&
+                          styles.datePickerModeButtonTextActive,
+                      ]}
+                    >
+                      {label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <View style={styles.datePickerWeekRow}>
+              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
+                (day) => (
+                  <Text key={day} style={styles.datePickerWeekday}>
+                    {day}
+                  </Text>
+                ),
+              )}
+            </View>
+
+            <View style={styles.datePickerGrid}>
+              {dateFilterMonthDays.map((day, index) => {
+                const dateValue =
+                  day === null
+                    ? ""
+                    : formatDateObjectForFilter(
+                        new Date(
+                          dateFilterPickerMonth.getFullYear(),
+                          dateFilterPickerMonth.getMonth(),
+                          day,
+                        ),
+                      );
+                const isSelected =
+                  Boolean(dateValue) &&
+                  (dateValue === incidentDateRangeStart ||
+                    dateValue === incidentDateRangeEnd);
+                const rangeStart =
+                  incidentDateRangeStart &&
+                  incidentDateRangeEnd &&
+                  incidentDateRangeStart > incidentDateRangeEnd
+                    ? incidentDateRangeEnd
+                    : incidentDateRangeStart;
+                const rangeEnd =
+                  incidentDateRangeStart &&
+                  incidentDateRangeEnd &&
+                  incidentDateRangeStart > incidentDateRangeEnd
+                    ? incidentDateRangeStart
+                    : incidentDateRangeEnd;
+                const isInRange =
+                  Boolean(dateValue && rangeStart && rangeEnd) &&
+                  dateValue > rangeStart &&
+                  dateValue < rangeEnd;
+
+                return day === null ? (
+                  <View
+                    key={`blank-${index}`}
+                    style={styles.datePickerDaySpacer}
+                  />
+                ) : (
+                  <Pressable
+                    key={dateValue}
+                    onPress={() => selectDateFilterDay(day)}
+                    style={({ pressed }) => [
+                      styles.datePickerDay,
+                      isInRange && styles.datePickerDayInRange,
+                      isSelected && styles.datePickerDaySelected,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.datePickerDayText,
+                        isSelected &&
+                          styles.datePickerDayTextSelected,
+                      ]}
+                    >
+                      {day}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <View style={styles.datePickerActions}>
+              <Pressable
+                onPress={() => {
+                  setIncidentDateRangeStart("");
+                  setIncidentDateRangeEnd("");
+                  setIsDateFilterPickerVisible(false);
+                }}
+                style={({ pressed }) => [
+                  styles.datePickerGhostButton,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.datePickerGhostButtonText}>
+                  Clear
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => setIsDateFilterPickerVisible(false)}
+                style={({ pressed }) => [
+                  styles.datePickerDoneButton,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.datePickerDoneButtonText}>
+                  Done
+                </Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal
         visible={isCreateModalVisible}
@@ -6939,6 +7294,152 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: 14,
     paddingLeft: 9,
+  },
+  dateFilterButton: {
+    flex: 1,
+    minHeight: 46,
+    justifyContent: "center",
+    paddingLeft: 9,
+  },
+  dateFilterButtonText: {
+    color: COLORS.white,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  dateFilterPlaceholderText: {
+    color: "rgba(255,255,255,0.65)",
+    fontWeight: "600",
+  },
+  dateFilterClearButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.16)",
+  },
+  datePickerSheet: {
+    width: "100%",
+    maxWidth: 390,
+    borderRadius: 24,
+    padding: 18,
+    backgroundColor: COLORS.white,
+  },
+  datePickerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 8,
+    marginBottom: 14,
+  },
+  datePickerNavButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FCE6E7",
+  },
+  datePickerTitle: {
+    color: COLORS.text,
+    fontSize: 17,
+    fontWeight: "900",
+  },
+  datePickerModeRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 14,
+  },
+  datePickerModeButton: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 8,
+    backgroundColor: "#EEF1F5",
+  },
+  datePickerModeButtonActive: {
+    backgroundColor: COLORS.maroon,
+  },
+  datePickerModeButtonText: {
+    color: COLORS.secondaryText,
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  datePickerModeButtonTextActive: {
+    color: COLORS.white,
+  },
+  datePickerWeekRow: {
+    flexDirection: "row",
+    marginBottom: 8,
+  },
+  datePickerWeekday: {
+    flex: 1,
+    textAlign: "center",
+    color: COLORS.secondaryText,
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  datePickerGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  datePickerDaySpacer: {
+    width: "12.57%",
+    aspectRatio: 1,
+  },
+  datePickerDay: {
+    width: "12.57%",
+    aspectRatio: 1,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#EEF1F5",
+  },
+  datePickerDaySelected: {
+    backgroundColor: COLORS.maroon,
+  },
+  datePickerDayInRange: {
+    backgroundColor: "#FCE6E7",
+  },
+  datePickerDayText: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  datePickerDayTextSelected: {
+    color: COLORS.white,
+  },
+  datePickerActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 18,
+  },
+  datePickerGhostButton: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#EEF1F5",
+  },
+  datePickerGhostButtonText: {
+    color: COLORS.secondaryText,
+    fontWeight: "900",
+  },
+  datePickerDoneButton: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.maroon,
+  },
+  datePickerDoneButtonText: {
+    color: COLORS.white,
+    fontWeight: "900",
   },
   errorBanner: {
     flexDirection: "row",

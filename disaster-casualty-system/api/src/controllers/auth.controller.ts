@@ -42,6 +42,19 @@ type UpdateUnitUserRequest = {
   isActive?: boolean;
 };
 
+type UpdateCurrentUserRequest = {
+  fullName?: string;
+  email?: string;
+  password?: string;
+  phoneNumber?: string;
+  assignedMunicipality?: string;
+  assignedBarangay?: string;
+};
+
+type ResetOperationalDataRequest = {
+  confirmation?: string;
+};
+
 const userSelect = `
   id,
   full_name,
@@ -71,6 +84,8 @@ const unitUserSelect = `
   updated_at,
   last_seen_at
 `;
+
+const operationalResetConfirmation = "RESET RECORDS";
 
 const managedAccountSelect = `
   id,
@@ -705,6 +720,430 @@ export async function getUnitUsers(
       success: true,
       count: unitUsers.length,
       data: unitUsers,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateCurrentUser(
+  request: Request<
+    Record<string, never>,
+    unknown,
+    UpdateCurrentUserRequest
+  >,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const currentUser = (request as Request & {
+      user?: { id?: string };
+    }).user;
+
+    if (!currentUser?.id) {
+      response.status(401).json({
+        success: false,
+        message: "Authentication token is required.",
+      });
+      return;
+    }
+
+    const fullName = request.body.fullName?.trim();
+    const email = request.body.email?.trim().toLowerCase();
+    const password = request.body.password;
+
+    if (password !== undefined && password.length > 0 && password.length < 6) {
+      response.status(400).json({
+        success: false,
+        message: "Password must be at least 6 characters.",
+      });
+      return;
+    }
+
+    if (email || password || fullName) {
+      const { error: authError } =
+        await supabaseAuth.auth.admin.updateUserById(
+          currentUser.id,
+          {
+            ...(email ? { email, email_confirm: true } : {}),
+            ...(password ? { password } : {}),
+            ...(fullName ? { user_metadata: { full_name: fullName } } : {}),
+          },
+        );
+
+      if (authError) {
+        throw new Error(
+          `Unable to update Supabase Auth user: ${authError.message}`,
+        );
+      }
+    }
+
+    const { data: updatedUser, error: updateError } = await supabase
+      .from("users")
+      .update({
+        ...(fullName ? { full_name: fullName } : {}),
+        ...(email ? { email } : {}),
+        phone_number: request.body.phoneNumber?.trim() || null,
+        assigned_municipality:
+          request.body.assignedMunicipality?.trim() || null,
+        assigned_barangay: request.body.assignedBarangay?.trim() || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", currentUser.id)
+      .select(userSelect)
+      .single();
+
+    if (updateError || !updatedUser) {
+      throw new Error(
+        `Unable to update profile: ${
+          updateError?.message ?? "No profile returned."
+        }`,
+      );
+    }
+
+    response.status(200).json({
+      success: true,
+      message: "Profile updated successfully.",
+      data: updatedUser,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getAdminOperationalScope(userId: string): Promise<{
+  incidentIds: string[];
+  casualtyIncidentIds: string[];
+  casualtyIds: string[];
+}> {
+  const { data: unitUsers, error: unitUsersError } = await supabase
+    .from("users")
+    .select("id")
+    .eq("created_by", userId);
+
+  if (unitUsersError) {
+    throw new Error(
+      `Unable to retrieve admin-created accounts: ${unitUsersError.message}`,
+    );
+  }
+
+  const encoderIds = [
+    userId,
+    ...((unitUsers ?? [])
+      .map((account) => account.id)
+      .filter(
+        (id): id is string =>
+          typeof id === "string" && id.trim().length > 0,
+      )),
+  ];
+
+  const { data: incidents, error: incidentsError } = await supabase
+    .from("incidents")
+    .select("id")
+    .eq("created_by", userId);
+
+  if (incidentsError) {
+    throw new Error(
+      `Unable to retrieve admin incidents: ${incidentsError.message}`,
+    );
+  }
+
+  const incidentIds = (incidents ?? [])
+    .map((incident) => incident.id)
+    .filter(
+      (id): id is string =>
+        typeof id === "string" && id.trim().length > 0,
+    );
+
+  const casualtyRowsById = new Map<
+    string,
+    { id: string; casualty_id: string | null }
+  >();
+
+  if (encoderIds.length > 0) {
+    const { data, error } = await supabase
+      .from("casualty_incidents")
+      .select("id, casualty_id")
+      .in("encoded_by", encoderIds);
+
+    if (error) {
+      throw new Error(
+        `Unable to retrieve admin casualty records: ${error.message}`,
+      );
+    }
+
+    for (const row of data ?? []) {
+      casualtyRowsById.set(row.id, row);
+    }
+  }
+
+  if (incidentIds.length > 0) {
+    const { data, error } = await supabase
+      .from("casualty_incidents")
+      .select("id, casualty_id")
+      .in("incident_id", incidentIds);
+
+    if (error) {
+      throw new Error(
+        `Unable to retrieve incident casualty records: ${error.message}`,
+      );
+    }
+
+    for (const row of data ?? []) {
+      casualtyRowsById.set(row.id, row);
+    }
+  }
+
+  const casualtyIncidentIds = Array.from(casualtyRowsById.keys());
+  const casualtyIds = [
+    ...new Set(
+      Array.from(casualtyRowsById.values())
+        .map((row) => row.casualty_id)
+        .filter(
+          (id): id is string =>
+            typeof id === "string" && id.trim().length > 0,
+        ),
+    ),
+  ];
+
+  return {
+    incidentIds,
+    casualtyIncidentIds,
+    casualtyIds,
+  };
+}
+
+async function getSystemOperationalScope(): Promise<{
+  incidentIds: string[];
+  casualtyIncidentIds: string[];
+  casualtyIds: string[];
+}> {
+  const [incidentsResult, casualtiesResult] =
+    await Promise.all([
+      supabase.from("incidents").select("id"),
+      supabase
+        .from("casualty_incidents")
+        .select("id, casualty_id"),
+    ]);
+
+  if (incidentsResult.error) {
+    throw new Error(
+      `Unable to retrieve incidents: ${incidentsResult.error.message}`,
+    );
+  }
+
+  if (casualtiesResult.error) {
+    throw new Error(
+      `Unable to retrieve casualty records: ${casualtiesResult.error.message}`,
+    );
+  }
+
+  return {
+    incidentIds: (incidentsResult.data ?? [])
+      .map((incident) => incident.id)
+      .filter(
+        (id): id is string =>
+          typeof id === "string" && id.trim().length > 0,
+      ),
+    casualtyIncidentIds: (casualtiesResult.data ?? [])
+      .map((record) => record.id)
+      .filter(
+        (id): id is string =>
+          typeof id === "string" && id.trim().length > 0,
+      ),
+    casualtyIds: [
+      ...new Set(
+        (casualtiesResult.data ?? [])
+          .map((record) => record.casualty_id)
+          .filter(
+            (id): id is string =>
+              typeof id === "string" && id.trim().length > 0,
+          ),
+      ),
+    ],
+  };
+}
+
+async function deleteByColumn(
+  tableName: string,
+  columnName: string,
+  ids: string[],
+): Promise<number> {
+  if (ids.length === 0) {
+    return 0;
+  }
+
+  const { error, count } = await supabase
+    .from(tableName)
+    .delete({ count: "exact" })
+    .in(columnName, ids);
+
+  if (error) {
+    throw new Error(
+      `Unable to clear ${tableName}: ${error.message}`,
+    );
+  }
+
+  return count ?? 0;
+}
+
+async function clearOperationalData(scope: {
+  incidentIds: string[];
+  casualtyIncidentIds: string[];
+  casualtyIds: string[];
+}): Promise<Record<string, number>> {
+  const counts: Record<string, number> = {};
+
+  const attachmentPaths =
+    scope.casualtyIncidentIds.length > 0
+      ? await supabase
+          .from("attachments")
+          .select("storage_path")
+          .in("casualty_incident_id", scope.casualtyIncidentIds)
+      : { data: [], error: null };
+
+  if (attachmentPaths.error) {
+    throw new Error(
+      `Unable to retrieve attachment storage paths: ${attachmentPaths.error.message}`,
+    );
+  }
+
+  const paths = (attachmentPaths.data ?? [])
+    .map((attachment) => attachment.storage_path)
+    .filter(
+      (path): path is string =>
+        typeof path === "string" && path.trim().length > 0,
+    );
+
+  if (paths.length > 0) {
+    const { error } = await supabase.storage
+      .from(process.env.SUPABASE_ATTACHMENTS_BUCKET ?? "attachments")
+      .remove(paths);
+
+    if (error) {
+      throw new Error(
+        `Unable to remove attachment files: ${error.message}`,
+      );
+    }
+  }
+
+  const casualtyChildTables = [
+    "attachments",
+    "casualty_triage_assessments",
+    "casualty_transport_records",
+    "casualty_treatments",
+    "facility_encounters",
+    "casualty_outcomes",
+    "casualty_status_history",
+    "casualty_verification_history",
+  ];
+
+  for (const tableName of casualtyChildTables) {
+    counts[tableName] = await deleteByColumn(
+      tableName,
+      "casualty_incident_id",
+      scope.casualtyIncidentIds,
+    );
+  }
+
+  counts.casualty_notifications = await deleteByColumn(
+    "notifications",
+    "related_entity_id",
+    scope.casualtyIncidentIds,
+  );
+
+  counts.casualty_incidents = await deleteByColumn(
+    "casualty_incidents",
+    "id",
+    scope.casualtyIncidentIds,
+  );
+
+  counts.casualties = await deleteByColumn(
+    "casualties",
+    "id",
+    scope.casualtyIds,
+  );
+
+  const incidentChildTables = [
+    "sitreps",
+    "responder_safety_responses",
+    "responder_safety_reports",
+    "medical_coordination_assessments",
+    "continuity_of_care_assessments",
+    "facility_resource_snapshots",
+    "dmmp_staff_call_downs",
+    "incident_response_timelines",
+    "evacuation_centers",
+  ];
+
+  for (const tableName of incidentChildTables) {
+    counts[tableName] = await deleteByColumn(
+      tableName,
+      "incident_id",
+      scope.incidentIds,
+    );
+  }
+
+  counts.incident_notifications = await deleteByColumn(
+    "notifications",
+    "related_entity_id",
+    scope.incidentIds,
+  );
+
+  counts.incidents = await deleteByColumn(
+    "incidents",
+    "id",
+    scope.incidentIds,
+  );
+
+  return counts;
+}
+
+export async function resetOperationalData(
+  request: Request<
+    Record<string, never>,
+    unknown,
+    ResetOperationalDataRequest
+  >,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const currentUser = (request as Request & {
+      user?: { id?: string; role?: string };
+    }).user;
+
+    if (!currentUser?.id || !currentUser.role) {
+      response.status(401).json({
+        success: false,
+        message: "Authentication token is required.",
+      });
+      return;
+    }
+
+    if (request.body.confirmation !== operationalResetConfirmation) {
+      response.status(400).json({
+        success: false,
+        message: `Type ${operationalResetConfirmation} to confirm reset.`,
+      });
+      return;
+    }
+
+    const isSuperAdmin = currentUser.role === "super_admin";
+    const scope = isSuperAdmin
+      ? await getSystemOperationalScope()
+      : await getAdminOperationalScope(currentUser.id);
+    const counts = await clearOperationalData(scope);
+
+    response.status(200).json({
+      success: true,
+      message: isSuperAdmin
+        ? "All operational records and incidents were reset. Accounts were kept."
+        : "Your admin unit operational records and incidents were reset. Accounts were kept.",
+      data: {
+        scope: isSuperAdmin ? "system" : "admin",
+        counts,
+      },
     });
   } catch (error) {
     next(error);
