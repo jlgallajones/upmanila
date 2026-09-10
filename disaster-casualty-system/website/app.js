@@ -6747,7 +6747,7 @@ function renderAuditLogsTable() {
       <div class="panel-header">
         <div>
           <h2>Action Logs</h2>
-          <p class="panel-subtitle">${isSuperAdmin() ? "System-wide audit trail." : "Audit trail scoped to your admin unit and your own actions."}</p>
+          <p class="panel-subtitle">${isSuperAdmin() ? "Audit trail for admin accounts only." : "Audit trail scoped to your admin unit, including responders and documenters you created."}</p>
         </div>
       </div>
       <div class="table-wrap">

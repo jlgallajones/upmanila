@@ -24,6 +24,13 @@ const auditLogViewerRoles = new Set([
   "encoder",
 ]);
 
+const adminActorRoles = [
+  "super_admin",
+  "admin",
+  "administrator",
+  "encoder",
+];
+
 export async function getAuditLogs(
   request: Request,
   response: Response,
@@ -51,7 +58,9 @@ export async function getAuditLogs(
       .order("created_at", { ascending: false })
       .limit(limit);
 
-    if (user.role !== "super_admin") {
+    if (user.role === "super_admin") {
+      query = query.in("actor_role", adminActorRoles);
+    } else {
       query = query.or(
         `scope_admin_id.eq.${user.id},actor_id.eq.${user.id}`,
       );
