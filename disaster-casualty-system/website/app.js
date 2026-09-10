@@ -13,6 +13,8 @@ let dashboardRealtimeRefreshInFlight = false;
 let dashboardRealtimeRefreshQueued = false;
 let analyticsLiveRefreshTimer = null;
 let analyticsLiveRefreshInFlight = false;
+let auditLogsLiveRefreshTimer = null;
+let auditLogsLiveRefreshInFlight = false;
 
 function getDefaultApiBaseUrl() {
   if (typeof window === "undefined") {
@@ -1102,6 +1104,60 @@ async function handleDashboardRealtimeChange() {
   }
 }
 
+function getAuditLogsSignature(logs = state.auditLogs) {
+  return (logs || [])
+    .map((log) => `${log.id}:${log.created_at}`)
+    .join("|");
+}
+
+async function refreshAuditLogsLive() {
+  if (
+    state.activeView !== "logs" ||
+    !state.accessToken ||
+    auditLogsLiveRefreshInFlight
+  ) {
+    return;
+  }
+
+  auditLogsLiveRefreshInFlight = true;
+
+  try {
+    const previousSignature = getAuditLogsSignature();
+    const response = await apiRequest("/audit-logs?limit=100");
+    const nextLogs = response.data || [];
+    const nextSignature = getAuditLogsSignature(nextLogs);
+
+    if (nextSignature !== previousSignature) {
+      state.auditLogs = nextLogs;
+      renderCurrentView();
+      bindView();
+    }
+  } catch (error) {
+    console.error(
+      "[DCMS Audit Logs] Unable to refresh logs:",
+      error,
+    );
+  } finally {
+    auditLogsLiveRefreshInFlight = false;
+  }
+}
+
+function syncAuditLogsLiveRefresh() {
+  window.clearInterval(auditLogsLiveRefreshTimer);
+  auditLogsLiveRefreshTimer = null;
+
+  if (
+    state.activeView !== "logs" ||
+    !state.accessToken
+  ) {
+    return;
+  }
+
+  auditLogsLiveRefreshTimer = window.setInterval(() => {
+    void refreshAuditLogsLive();
+  }, 3500);
+}
+
 async function startDashboardRealtime() {
   if (
     !state.accessToken ||
@@ -1172,6 +1228,9 @@ async function stopDashboardRealtime() {
   dashboardRealtimeRefreshTimer = null;
   dashboardRealtimeRefreshInFlight = false;
   dashboardRealtimeRefreshQueued = false;
+  window.clearInterval(auditLogsLiveRefreshTimer);
+  auditLogsLiveRefreshTimer = null;
+  auditLogsLiveRefreshInFlight = false;
 }
 
 function render() {
@@ -1671,6 +1730,7 @@ function bindView() {
   bindPasswordVisibilityToggles();
   bindBulkImportActions();
   syncAnalyticsLiveRefresh();
+  syncAuditLogsLiveRefresh();
 }
 
 function bindScopeLinks() {

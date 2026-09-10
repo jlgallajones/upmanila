@@ -35,3 +35,15 @@ CREATE INDEX IF NOT EXISTS audit_logs_scope_admin_id_idx
 
 CREATE INDEX IF NOT EXISTS audit_logs_entity_idx
   ON public.audit_logs (entity_type, entity_id);
+
+ALTER TABLE public.audit_logs REPLICA IDENTITY FULL;
+
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.audit_logs;
+EXCEPTION
+  WHEN duplicate_object THEN
+    NULL;
+  WHEN undefined_object THEN
+    NULL;
+END $$;
