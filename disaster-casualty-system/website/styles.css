@@ -506,10 +506,59 @@ button {
   line-height: 1.5;
 }
 
+.dashboard-dialog-field {
+  display: grid;
+  gap: 7px;
+}
+
+.dashboard-dialog-field span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.dashboard-dialog-field input,
+.dashboard-dialog-field textarea {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 11px 12px;
+  color: var(--ink);
+  background: #f8fafc;
+  outline: none;
+}
+
+.dashboard-dialog-field textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.dashboard-dialog-field input:focus,
+.dashboard-dialog-field textarea:focus {
+  border-color: var(--maroon);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(123, 17, 19, 0.08);
+}
+
+.dashboard-dialog-error {
+  margin: -6px 0 0;
+  color: var(--red);
+  font-size: 12px;
+  font-weight: 850;
+}
+
 .dashboard-dialog-actions {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+.dashboard-dialog-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+  transform: none;
 }
 
 .dashboard-toast {

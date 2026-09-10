@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 
 import { supabase } from "../config/supabase.js";
 import { getAuthenticatedUser } from "../middleware/auth.js";
+import { recordAuditLog } from "../services/audit-log.service.js";
 import { calculateTriageCategory } from "../services/triage/calculate-triage.js";
 import { compareTriageCategories } from "../services/triage/compare-triage.js";
 import type {
@@ -2713,19 +2714,41 @@ export async function updateCasualtyVerification(
       );
     }
 
+    const casualtyForAudit = getRelationRecord(existingRecord.casualty);
+    const incidentForAudit = getRelationRecord(existingRecord.incident);
+    const casualtyAuditLabel = buildCasualtyNotificationLabel(
+      casualtyForAudit,
+    );
+
+    await recordAuditLog({
+      actor: user,
+      action:
+        status === "verified"
+          ? "casualty.verified"
+          : status === "rejected"
+          ? "casualty.rejected"
+          : "casualty.verification_updated",
+      entityType: "casualty_incident",
+      entityId: id,
+      entityLabel: casualtyAuditLabel,
+      metadata: {
+        oldStatus: existingRecord.verification_status,
+        newStatus: status,
+        incidentName: getTextField(incidentForAudit, "incident_name"),
+        notes: notes?.trim() || null,
+      },
+    });
+
     if (
       status === "rejected" &&
       existingRecord.encoded_by &&
       existingRecord.encoded_by !== user.id
     ) {
-      const casualty = getRelationRecord(existingRecord.casualty);
-      const incident = getRelationRecord(existingRecord.incident);
-
       await createCasualtyRejectionNotification({
         casualtyIncidentId: id,
         recipientUserId: existingRecord.encoded_by,
-        casualtyLabel: buildCasualtyNotificationLabel(casualty),
-        incidentName: getTextField(incident, "incident_name"),
+        casualtyLabel: casualtyAuditLabel,
+        incidentName: getTextField(incidentForAudit, "incident_name"),
         reviewNotes: notes ?? null,
       });
     }
@@ -2826,6 +2849,18 @@ export async function deleteCasualtyRecord(
         review_notes:
           "Casualty record deleted from the web dashboard.",
       });
+
+    await recordAuditLog({
+      actor: user,
+      action: "casualty.deleted",
+      entityType: "casualty_incident",
+      entityId: id,
+      entityLabel: id,
+      metadata: {
+        oldStatus: existingRecord.verification_status,
+        deletedAt,
+      },
+    });
 
     response.status(200).json({
       success: true,
@@ -3822,6 +3857,18 @@ export async function updateCasualty(
           `Unable to record resubmission history: ${verificationHistoryError.message}`,
         );
       }
+
+      await recordAuditLog({
+        actor: user,
+        action: "casualty.resubmitted",
+        entityType: "casualty_incident",
+        entityId: id,
+        entityLabel: id,
+        metadata: {
+          oldStatus: existingRecord.verification_status,
+          newStatus: "submitted",
+        },
+      });
     }
 
     const { data: updatedRecord, error: updatedError } =

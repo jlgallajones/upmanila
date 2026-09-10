@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 
 import { supabase } from "../config/supabase.js";
 import { getAuthenticatedUser } from "../middleware/auth.js";
+import { recordAuditLog } from "../services/audit-log.service.js";
 
 type FacilityLevel =
   | "primary"
@@ -335,6 +336,20 @@ export async function createHealthcareFacility(
       );
     }
 
+    await recordAuditLog({
+      actor: user,
+      action: "healthcare_facility.created",
+      entityType: "healthcare_facility",
+      entityId: facility.id,
+      entityLabel: facility.facility_name,
+      metadata: {
+        facilityLevel: facility.facility_level,
+        municipality: facility.municipality,
+        province: facility.province,
+        source: "manual",
+      },
+    });
+
     response.status(201).json({
       success: true,
       message: "Healthcare facility created successfully.",
@@ -525,6 +540,20 @@ export async function bulkCreateHealthcareFacilities(
 
     const created = results.filter((result) => result.success).length;
     const skipped = results.filter((result) => "skipped" in result).length;
+    const failed = results.length - created - skipped;
+
+    await recordAuditLog({
+      actor: user,
+      action: "bulk_import.healthcare_facilities",
+      entityType: "healthcare_facility",
+      entityLabel: "Bulk healthcare facility import",
+      metadata: {
+        created,
+        skipped,
+        failed,
+        total: results.length,
+      },
+    });
 
     response.status(200).json({
       success: true,
@@ -532,7 +561,7 @@ export async function bulkCreateHealthcareFacilities(
       data: {
         created,
         skipped,
-        failed: results.length - created - skipped,
+        failed,
         results,
       },
     });

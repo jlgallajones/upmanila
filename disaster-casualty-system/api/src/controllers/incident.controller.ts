@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 
 import { supabase } from "../config/supabase.js";
 import { getAuthenticatedUser } from "../middleware/auth.js";
+import { recordAuditLog } from "../services/audit-log.service.js";
 import {
   addTimelineElapsedMetrics,
   buildCumulativeIntervalRows,
@@ -1476,6 +1477,21 @@ export async function createIncident(
       );
     }
 
+    await recordAuditLog({
+      actor: user,
+      action: "incident.created",
+      entityType: "incident",
+      entityId: incident.id,
+      entityLabel: incident.incident_name,
+      metadata: {
+        incidentCode: incident.incident_code,
+        disasterType: incident.disaster_type,
+        status: incident.status,
+      },
+      scopeAdminId:
+        user.role === "super_admin" ? null : incident.created_by,
+    });
+
     response.status(201).json({
       success: true,
       message: "Incident created successfully.",
@@ -1641,6 +1657,23 @@ export async function updateIncident(
       );
     }
 
+    await recordAuditLog({
+      actor: user,
+      action: "incident.updated",
+      entityType: "incident",
+      entityId: updatedIncident.id,
+      entityLabel: updatedIncident.incident_name,
+      metadata: {
+        incidentCode: updatedIncident.incident_code,
+        updatedFields: Object.keys(updates).filter(
+          (field) => field !== "updated_at",
+        ),
+        status: updatedIncident.status,
+      },
+      scopeAdminId:
+        user.role === "super_admin" ? null : updatedIncident.created_by,
+    });
+
     response.status(200).json({
       success: true,
       message: "Incident updated successfully.",
@@ -1703,6 +1736,20 @@ export async function closeIncident(
       });
       return;
     }
+
+    await recordAuditLog({
+      actor: user,
+      action: "incident.closed",
+      entityType: "incident",
+      entityId: incident.id,
+      entityLabel: incident.incident_name,
+      metadata: {
+        incidentCode: incident.incident_code,
+        endedAt: incident.ended_at,
+      },
+      scopeAdminId:
+        user.role === "super_admin" ? null : incident.created_by,
+    });
 
     response.status(200).json({
       success: true,

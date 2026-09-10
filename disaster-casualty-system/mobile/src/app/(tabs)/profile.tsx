@@ -5,6 +5,7 @@ import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Platform,
   Pressable,
   RefreshControl,
@@ -269,6 +270,11 @@ export default function ProfileScreen() {
   const [isLoggingOut, setIsLoggingOut] =
     useState(false);
 
+  const [
+    isLogoutConfirmVisible,
+    setIsLogoutConfirmVisible,
+  ] = useState(false);
+
   const [errorMessage, setErrorMessage] =
     useState<string | null>(null);
 
@@ -343,6 +349,7 @@ export default function ProfileScreen() {
   async function performLogout() {
     try {
       setIsLoggingOut(true);
+      setIsLogoutConfirmVisible(false);
 
       await clearSession();
 
@@ -358,17 +365,7 @@ export default function ProfileScreen() {
 
   function handleLogout() {
     if (Platform.OS === "web") {
-      const shouldLogout =
-        typeof window === "undefined"
-          ? true
-          : window.confirm(
-              "Are you sure you want to log out from DCMS?",
-            );
-
-      if (shouldLogout) {
-        void performLogout();
-      }
-
+      setIsLogoutConfirmVisible(true);
       return;
     }
 
@@ -566,6 +563,63 @@ export default function ProfileScreen() {
         barStyle="light-content"
         backgroundColor={COLORS.maroon}
       />
+
+      <Modal
+        animationType="fade"
+        transparent
+        visible={isLogoutConfirmVisible}
+        onRequestClose={() =>
+          setIsLogoutConfirmVisible(false)
+        }
+      >
+        <View style={styles.confirmBackdrop}>
+          <View style={styles.confirmCard}>
+            <Text style={styles.confirmEyebrow}>
+              Confirmation
+            </Text>
+
+            <Text style={styles.confirmTitle}>
+              Log out?
+            </Text>
+
+            <Text style={styles.confirmMessage}>
+              Are you sure you want to log out from DCMS?
+            </Text>
+
+            <View style={styles.confirmActions}>
+              <Pressable
+                disabled={isLoggingOut}
+                onPress={() =>
+                  setIsLogoutConfirmVisible(false)
+                }
+                style={({ pressed }) => [
+                  styles.confirmCancelButton,
+                  pressed && styles.confirmButtonPressed,
+                ]}
+              >
+                <Text style={styles.confirmCancelText}>
+                  Cancel
+                </Text>
+              </Pressable>
+
+              <Pressable
+                disabled={isLoggingOut}
+                onPress={() => void performLogout()}
+                style={({ pressed }) => [
+                  styles.confirmDangerButton,
+                  pressed && styles.confirmButtonPressed,
+                  isLoggingOut &&
+                    styles.confirmButtonDisabled,
+                ]}
+              >
+                <Text style={styles.confirmDangerText}>
+                  {isLoggingOut ? "Logging out..." : "Log out"}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <SafeAreaView
         edges={["top"]}
@@ -925,6 +979,99 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+
+  confirmBackdrop: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 22,
+    backgroundColor: "rgba(15, 23, 42, 0.52)",
+  },
+
+  confirmCard: {
+    width: "100%",
+    maxWidth: 420,
+    borderRadius: 20,
+    padding: 22,
+    backgroundColor: COLORS.white,
+    shadowColor: "#111827",
+    shadowOpacity: 0.24,
+    shadowRadius: 28,
+    shadowOffset: {
+      width: 0,
+      height: 16,
+    },
+    elevation: 18,
+  },
+
+  confirmEyebrow: {
+    color: COLORS.maroon,
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+
+  confirmTitle: {
+    marginTop: 8,
+    color: COLORS.text,
+    fontSize: 22,
+    fontWeight: "900",
+  },
+
+  confirmMessage: {
+    marginTop: 8,
+    color: COLORS.secondaryText,
+    fontSize: 14,
+    lineHeight: 21,
+  },
+
+  confirmActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 10,
+    marginTop: 20,
+  },
+
+  confirmCancelButton: {
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    backgroundColor: COLORS.white,
+  },
+
+  confirmDangerButton: {
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    backgroundColor: COLORS.red,
+  },
+
+  confirmButtonPressed: {
+    opacity: 0.82,
+  },
+
+  confirmButtonDisabled: {
+    opacity: 0.55,
+  },
+
+  confirmCancelText: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+
+  confirmDangerText: {
+    color: COLORS.white,
+    fontSize: 14,
+    fontWeight: "900",
   },
 
   headerSafeArea: {

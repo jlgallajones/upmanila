@@ -5,6 +5,7 @@ import express, {
   type Response,
 } from "express";
 
+import { auditLogRouter } from "./routes/audit-log.routes.js";
 import { attachmentRouter } from "./routes/attachment.routes.js";
 import { authRouter } from "./routes/auth.routes.js";
 import { casualtyRouter } from "./routes/casualty.routes.js";
@@ -98,6 +99,7 @@ app.get("/api/health", (_request: Request, response: Response) => {
 });
 
 app.use("/api/auth", authRouter);
+app.use("/api/audit-logs", auditLogRouter);
 app.use("/api/incidents", incidentRouter);
 app.use("/api/casualties", casualtyRouter);
 app.use("/api/casualty-incidents", triageRouter);

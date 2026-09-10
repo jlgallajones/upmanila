@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 
 import { supabase } from "../config/supabase.js";
 import { getAuthenticatedUser } from "../middleware/auth.js";
+import { recordAuditLog } from "../services/audit-log.service.js";
 
 type CreateEvacuationCenterRequest = {
   incidentId: string;
@@ -345,6 +346,21 @@ export async function createEvacuationCenter(
       );
     }
 
+    await recordAuditLog({
+      actor: user,
+      action: "evacuation_center.created",
+      entityType: "evacuation_center",
+      entityId: center.id,
+      entityLabel: center.center_name,
+      metadata: {
+        incidentId: center.incident_id,
+        capacity: center.capacity,
+        municipality: center.municipality,
+        province: center.province,
+        source: "manual",
+      },
+    });
+
     response.status(201).json({
       success: true,
       message: "Evacuation center created successfully.",
@@ -566,6 +582,20 @@ export async function bulkCreateEvacuationCenters(
 
     const created = results.filter((result) => result.success).length;
     const skipped = results.filter((result) => "skipped" in result).length;
+    const failed = results.length - created - skipped;
+
+    await recordAuditLog({
+      actor: user,
+      action: "bulk_import.evacuation_centers",
+      entityType: "evacuation_center",
+      entityLabel: "Bulk evacuation center import",
+      metadata: {
+        created,
+        skipped,
+        failed,
+        total: results.length,
+      },
+    });
 
     response.status(200).json({
       success: true,
@@ -573,7 +603,7 @@ export async function bulkCreateEvacuationCenters(
       data: {
         created,
         skipped,
-        failed: results.length - created - skipped,
+        failed,
         results,
       },
     });

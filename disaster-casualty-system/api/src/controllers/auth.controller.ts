@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 
 import { supabase, supabaseAuth } from "../config/supabase.js";
+import { recordAuditLog } from "../services/audit-log.service.js";
 
 type LoginRequest = {
   email: string;
@@ -393,6 +394,14 @@ export async function registerAdmin(
       return;
     }
 
+    if (!currentUser.id) {
+      response.status(401).json({
+        success: false,
+        message: "Authentication token is required.",
+      });
+      return;
+    }
+
     const fullName = request.body.fullName?.trim();
     const email = request.body.email?.trim().toLowerCase();
     const password = request.body.password;
@@ -471,6 +480,23 @@ export async function registerAdmin(
       );
     }
 
+    await recordAuditLog({
+      actor: {
+        id: currentUser.id,
+        role: currentUser.role,
+      },
+      action: "account.created",
+      entityType: "user",
+      entityId: user.id,
+      entityLabel: user.full_name ?? email,
+      metadata: {
+        accountRole: user.role,
+        email: user.email,
+        source: "manual",
+      },
+      scopeAdminId: role === "super_admin" ? null : user.id,
+    });
+
     response.status(201).json({
       success: true,
       message: "Account created successfully.",
@@ -492,13 +518,21 @@ export async function bulkRegisterAdmins(
 ): Promise<void> {
   try {
     const currentUser = (request as Request & {
-      user?: { role?: string };
+      user?: { role?: string; id?: string };
     }).user;
 
     if (currentUser?.role !== "super_admin") {
       response.status(403).json({
         success: false,
         message: "Only super admin accounts can register command accounts.",
+      });
+      return;
+    }
+
+    if (!currentUser.id) {
+      response.status(401).json({
+        success: false,
+        message: "Authentication token is required.",
       });
       return;
     }
@@ -617,13 +651,31 @@ export async function bulkRegisterAdmins(
     }
 
     const created = results.filter((result) => result.success).length;
+    const failed = results.length - created;
+
+    await recordAuditLog({
+      actor: {
+        id: currentUser.id,
+        role: currentUser.role ?? "super_admin",
+      },
+      action: "bulk_import.admin_accounts",
+      entityType: "user",
+      entityLabel: "Bulk admin account import",
+      metadata: {
+        created,
+        skipped: 0,
+        failed,
+        total: results.length,
+      },
+      scopeAdminId: null,
+    });
 
     response.status(200).json({
       success: true,
       message: `Bulk admin account import finished. ${created} of ${results.length} rows created.`,
       data: {
         created,
-        failed: results.length - created,
+        failed,
         results,
       },
     });
@@ -837,6 +889,22 @@ export async function registerUnitUser(
       );
     }
 
+    await recordAuditLog({
+      actor: {
+        id: currentUser.id,
+        role: currentUser.role ?? "admin",
+      },
+      action: "account.created",
+      entityType: "user",
+      entityId: user.id,
+      entityLabel: user.full_name ?? email,
+      metadata: {
+        accountRole: user.role,
+        email: user.email,
+        source: "manual",
+      },
+    });
+
     response.status(201).json({
       success: true,
       message: "Unit user account created successfully.",
@@ -1030,13 +1098,30 @@ export async function bulkRegisterUnitUsers(
     }
 
     const created = results.filter((result) => result.success).length;
+    const failed = results.length - created;
+
+    await recordAuditLog({
+      actor: {
+        id: currentUser.id,
+        role: currentUser.role ?? "admin",
+      },
+      action: "bulk_import.unit_accounts",
+      entityType: "user",
+      entityLabel: "Bulk unit account import",
+      metadata: {
+        created,
+        skipped: 0,
+        failed,
+        total: results.length,
+      },
+    });
 
     response.status(200).json({
       success: true,
       message: `Bulk unit account import finished. ${created} of ${results.length} rows created.`,
       data: {
         created,
-        failed: results.length - created,
+        failed,
         results,
       },
     });
@@ -1165,6 +1250,22 @@ export async function updateCurrentUser(
         }`,
       );
     }
+
+    await recordAuditLog({
+      actor: {
+        id: currentUser.id,
+        role: updatedUser.role,
+      },
+      action: "account.updated",
+      entityType: "user",
+      entityId: updatedUser.id,
+      entityLabel: updatedUser.full_name ?? updatedUser.email,
+      metadata: {
+        emailChanged: Boolean(email),
+        passwordChanged: Boolean(password),
+        selfService: true,
+      },
+    });
 
     response.status(200).json({
       success: true,
@@ -1500,6 +1601,23 @@ export async function resetOperationalData(
       : await getAdminOperationalScope(currentUser.id);
     const counts = await clearOperationalData(scope);
 
+    await recordAuditLog({
+      actor: {
+        id: currentUser.id,
+        role: currentUser.role,
+      },
+      action: "operational_data.reset",
+      entityType: "system",
+      entityLabel: isSuperAdmin
+        ? "System operational data"
+        : "Admin operational data",
+      metadata: {
+        scope: isSuperAdmin ? "system" : "admin",
+        counts,
+      },
+      scopeAdminId: isSuperAdmin ? null : currentUser.id,
+    });
+
     response.status(200).json({
       success: true,
       message: isSuperAdmin
@@ -1650,6 +1768,29 @@ export async function updateUnitUser(
       );
     }
 
+    await recordAuditLog({
+      actor: {
+        id: currentUser.id,
+        role: currentUser.role ?? "admin",
+      },
+      action: "account.updated",
+      entityType: "user",
+      entityId: updatedUser.id,
+      entityLabel: updatedUser.full_name ?? updatedUser.email,
+      metadata: {
+        accountRole: updatedUser.role,
+        email: updatedUser.email,
+        activeChanged:
+          typeof request.body.isActive === "boolean" &&
+          request.body.isActive !== existingUser.is_active,
+        isActive: updatedUser.is_active,
+      },
+      scopeAdminId:
+        currentUser.role === "super_admin"
+          ? updatedUser.created_by ?? null
+          : currentUser.id,
+    });
+
     response.status(200).json({
       success: true,
       message: "Unit user account updated successfully.",
@@ -1746,6 +1887,27 @@ export async function deleteUnitUser(
       .eq("id", id);
 
     if (!profileDeleteError) {
+      await recordAuditLog({
+        actor: {
+          id: currentUser.id,
+          role: currentUser.role ?? "admin",
+        },
+        action: "account.deleted",
+        entityType: "user",
+        entityId: id,
+        entityLabel: existingUser.full_name ?? existingUser.email,
+        metadata: {
+          accountRole: existingUser.role,
+          email: existingUser.email,
+          deleted: true,
+          deactivated: false,
+        },
+        scopeAdminId:
+          currentUser.role === "super_admin"
+            ? existingUser.created_by ?? null
+            : currentUser.id,
+      });
+
       response.status(200).json({
         success: true,
         message: "Unit user account deleted successfully.",
@@ -1771,6 +1933,27 @@ export async function deleteUnitUser(
         `Auth user was deleted, but profile deactivation failed: ${deactivateError.message}`,
       );
     }
+
+    await recordAuditLog({
+      actor: {
+        id: currentUser.id,
+        role: currentUser.role ?? "admin",
+      },
+      action: "account.deactivated",
+      entityType: "user",
+      entityId: id,
+      entityLabel: existingUser.full_name ?? existingUser.email,
+      metadata: {
+        accountRole: existingUser.role,
+        email: existingUser.email,
+        deleted: false,
+        deactivated: true,
+      },
+      scopeAdminId:
+        currentUser.role === "super_admin"
+          ? existingUser.created_by ?? null
+          : currentUser.id,
+    });
 
     response.status(200).json({
       success: true,

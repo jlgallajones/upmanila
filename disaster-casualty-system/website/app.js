@@ -81,6 +81,7 @@ const state = {
   casualties: [],
   healthcareFacilities: [],
   unitUsers: [],
+  auditLogs: [],
   dashboard: null,
   recentActivity: [],
 };
@@ -108,6 +109,7 @@ const dashboardRealtimeTables = [
   "ems_vehicle_arrivals",
   "evacuation_centers",
   "healthcare_facilities",
+  "audit_logs",
   "users",
   "sitreps",
 ];
@@ -729,10 +731,16 @@ function showDashboardConfirm({
   confirmLabel = "Confirm",
   cancelLabel = "Cancel",
   danger = false,
+  requireText = "",
+  inputLabel = "",
+  inputPlaceholder = "",
 }) {
   document.querySelector(".dashboard-dialog-backdrop")?.remove();
 
   return new Promise((resolve) => {
+    const requiredText = String(requireText || "");
+    const needsTypedConfirmation = Boolean(requiredText);
+
     document.body.insertAdjacentHTML(
       "beforeend",
       `
@@ -743,11 +751,26 @@ function showDashboardConfirm({
               <h2 id="dashboardConfirmTitle">${escapeHtml(title)}</h2>
               <p>${escapeHtml(message)}</p>
             </div>
+            ${
+              needsTypedConfirmation
+                ? `
+                  <label class="dashboard-dialog-field">
+                    <span>${escapeHtml(inputLabel || `Type ${requiredText} to continue`)}</span>
+                    <input
+                      type="text"
+                      data-dashboard-confirm-input
+                      autocomplete="off"
+                      placeholder="${escapeHtml(inputPlaceholder || requiredText)}"
+                    />
+                  </label>
+                `
+                : ""
+            }
             <div class="dashboard-dialog-actions">
               <button class="ghost-button" type="button" data-dashboard-confirm="false">
                 ${escapeHtml(cancelLabel)}
               </button>
-              <button class="${danger ? "danger-button" : "primary-button"}" type="button" data-dashboard-confirm="true">
+              <button class="${danger ? "danger-button" : "primary-button"}" type="button" data-dashboard-confirm="true" ${needsTypedConfirmation ? "disabled" : ""}>
                 ${escapeHtml(confirmLabel)}
               </button>
             </div>
@@ -760,6 +783,16 @@ function showDashboardConfirm({
       document.querySelector(".dashboard-dialog-backdrop")?.remove();
       resolve(result);
     };
+
+    const input = document.querySelector("[data-dashboard-confirm-input]");
+    const confirmButton = document.querySelector('[data-dashboard-confirm="true"]');
+
+    if (input && confirmButton) {
+      input.addEventListener("input", () => {
+        confirmButton.disabled = input.value.trim() !== requiredText;
+      });
+      input.focus();
+    }
 
     document
       .querySelectorAll("[data-dashboard-confirm]")
@@ -779,6 +812,84 @@ function showDashboardConfirm({
   });
 }
 
+function showDashboardTextPrompt({
+  title,
+  message,
+  label,
+  placeholder = "",
+  confirmLabel = "Submit",
+  cancelLabel = "Cancel",
+  required = false,
+  requiredMessage = "This field is required.",
+}) {
+  document.querySelector(".dashboard-dialog-backdrop")?.remove();
+
+  return new Promise((resolve) => {
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      `
+        <div class="dashboard-dialog-backdrop" data-dashboard-dialog>
+          <section class="dashboard-dialog" role="dialog" aria-modal="true" aria-labelledby="dashboardPromptTitle">
+            <div>
+              <span class="eyebrow">Required Details</span>
+              <h2 id="dashboardPromptTitle">${escapeHtml(title)}</h2>
+              <p>${escapeHtml(message)}</p>
+            </div>
+            <label class="dashboard-dialog-field">
+              <span>${escapeHtml(label)}</span>
+              <textarea data-dashboard-prompt-input placeholder="${escapeHtml(placeholder)}"></textarea>
+            </label>
+            <p class="dashboard-dialog-error" data-dashboard-prompt-error hidden>${escapeHtml(requiredMessage)}</p>
+            <div class="dashboard-dialog-actions">
+              <button class="ghost-button" type="button" data-dashboard-prompt="cancel">
+                ${escapeHtml(cancelLabel)}
+              </button>
+              <button class="primary-button" type="button" data-dashboard-prompt="submit">
+                ${escapeHtml(confirmLabel)}
+              </button>
+            </div>
+          </section>
+        </div>
+      `,
+    );
+
+    const close = (result) => {
+      document.querySelector(".dashboard-dialog-backdrop")?.remove();
+      resolve(result);
+    };
+
+    const input = document.querySelector("[data-dashboard-prompt-input]");
+    const error = document.querySelector("[data-dashboard-prompt-error]");
+    input?.focus();
+
+    document
+      .querySelector('[data-dashboard-prompt="cancel"]')
+      ?.addEventListener("click", () => close(null));
+
+    document
+      .querySelector('[data-dashboard-prompt="submit"]')
+      ?.addEventListener("click", () => {
+        const value = input?.value.trim() || "";
+
+        if (required && !value) {
+          if (error) error.hidden = false;
+          input?.focus();
+          return;
+        }
+
+        close(value);
+      });
+
+    document
+      .querySelector("[data-dashboard-dialog]")
+      ?.addEventListener("click", (event) => {
+        if (event.target === event.currentTarget) {
+          close(null);
+        }
+      });
+  });
+}
+
 async function loadSharedData() {
   if (!state.accessToken) return;
 
@@ -789,6 +900,7 @@ async function loadSharedData() {
     casualties,
     healthcareFacilities,
     unitUsers,
+    auditLogs,
     recent,
   ] =
     await Promise.allSettled([
@@ -798,6 +910,7 @@ async function loadSharedData() {
       apiRequest("/casualties"),
       apiRequest("/healthcare-facilities"),
       apiRequest("/auth/unit-users"),
+      apiRequest("/audit-logs?limit=100"),
       apiRequest("/dashboard/recent-activity?limit=12"),
     ]);
 
@@ -810,6 +923,7 @@ async function loadSharedData() {
   let loadedCasualties = state.casualties;
   let loadedHealthcareFacilities = state.healthcareFacilities;
   let loadedUnitUsers = state.unitUsers;
+  let loadedAuditLogs = state.auditLogs;
   let loadedRecentActivity = state.recentActivity;
 
   if (incidents.status === "fulfilled") {
@@ -832,6 +946,10 @@ async function loadSharedData() {
 
   if (unitUsers.status === "fulfilled") {
     loadedUnitUsers = unitUsers.value.data || [];
+  }
+
+  if (auditLogs.status === "fulfilled") {
+    loadedAuditLogs = auditLogs.value.data || [];
   }
 
   if (recent.status === "fulfilled") {
@@ -864,6 +982,7 @@ async function loadSharedData() {
   state.casualties = loadedCasualties;
   state.healthcareFacilities = loadedHealthcareFacilities;
   state.unitUsers = loadedUnitUsers;
+  state.auditLogs = loadedAuditLogs;
   state.recentActivity = loadedRecentActivity;
 
   recomputeAdminDashboardSummary();
@@ -1401,7 +1520,7 @@ function bindProfileModalActions() {
         saveCurrentUser(response.data);
         closeRecordModal();
         renderDashboardShellIntoExisting();
-        window.alert("Profile updated successfully.");
+        showDashboardToast("Profile updated successfully.", "success");
       } catch (error) {
         setMessage(
           "profileMessage",
@@ -1416,19 +1535,20 @@ function bindProfileModalActions() {
 
   if (resetButton) {
     resetButton.addEventListener("click", async () => {
-      const phrase = window.prompt(
-        "This will clear records and incidents but keep accounts. Type RESET RECORDS to continue.",
-      );
-
-      if (phrase !== "RESET RECORDS") {
-        return;
-      }
-
-      const confirmed = window.confirm(
-        state.user?.role === "super_admin"
-          ? "Reset ALL operational records and incidents across the system?"
-          : "Reset operational records and incidents for your admin account?",
-      );
+      const isSuperAdmin = state.user?.role === "super_admin";
+      const confirmed = await showDashboardConfirm({
+        title: isSuperAdmin
+          ? "Reset all operational records?"
+          : "Reset your operational records?",
+        message: isSuperAdmin
+          ? "This clears all records and incidents across the system, including casualty records, facility entries, SitReps, and analytics source data. Accounts are kept."
+          : "This clears records and incidents owned by your admin account, including casualty records, facility entries, SitReps, and analytics source data. Accounts are kept.",
+        confirmLabel: "Reset records",
+        cancelLabel: "Keep records",
+        danger: true,
+        requireText: "RESET RECORDS",
+        inputLabel: "Type RESET RECORDS to confirm",
+      });
 
       if (!confirmed) {
         return;
@@ -1441,26 +1561,30 @@ function bindProfileModalActions() {
         await apiRequest("/auth/reset-operational-data", {
           method: "POST",
           body: JSON.stringify({
-            confirmation: phrase,
+            confirmation: "RESET RECORDS",
           }),
         });
 
         await loadSharedData();
         closeRecordModal();
         renderDashboardShellIntoExisting();
-        window.alert(
+        showDashboardToast(
           "Operational records and incidents were reset. Accounts were kept.",
+          "success",
         );
       } catch (error) {
         resetButton.disabled = false;
         resetButton.textContent = "Reset records and incidents";
-        setMessage(
-          "profileMessage",
+        const message =
           error instanceof Error
             ? error.message
-            : "Unable to reset records.",
+            : "Unable to reset records.";
+        setMessage(
+          "profileMessage",
+          message,
           "error",
         );
+        showDashboardToast(message, "error");
       }
     });
   }
@@ -3959,9 +4083,13 @@ function bindAccountDeleteAction(userId) {
   button.addEventListener("click", async () => {
     const user = state.unitUsers.find((item) => item.id === userId);
     const label = user ? `${user.full_name} (${user.email})` : "this account";
-    const confirmed = window.confirm(
-      `Delete ${label}? This removes their login access. If records already reference this profile, it will be kept as inactive for history.`,
-    );
+    const confirmed = await showDashboardConfirm({
+      title: "Delete account?",
+      message: `Delete ${label}? This removes their login access. If records already reference this profile, it will be kept as inactive for history.`,
+      confirmLabel: "Delete account",
+      cancelLabel: "Keep account",
+      danger: true,
+    });
 
     if (!confirmed) return;
 
@@ -3982,9 +4110,18 @@ function bindAccountDeleteAction(userId) {
         response.message || "Account deleted successfully.",
         "success",
       );
+      showDashboardToast(
+        response.message || "Account deleted successfully.",
+        "success",
+      );
     } catch (error) {
       button.disabled = false;
-      setMessage("accountEditMessage", error.message, "error");
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to delete account.";
+      setMessage("accountEditMessage", message, "error");
+      showDashboardToast(message, "error");
     }
   });
 }
@@ -6370,10 +6507,11 @@ async function openCasualtyRecordModal(casualtyId) {
       error,
     );
 
-    window.alert(
+    showDashboardToast(
       error instanceof Error
         ? error.message
         : "Unable to load casualty record.",
+      "error",
     );
   }
 }
@@ -6411,7 +6549,17 @@ function bindVerificationReviewActions() {
       let notes = "";
 
       if (status === "rejected") {
-        notes = window.prompt("Enter rejection notes for this casualty entry:")?.trim() || "";
+        notes = await showDashboardTextPrompt({
+          title: "Reject casualty record",
+          message:
+            "Add the reason this casualty record is being returned to the responder.",
+          label: "Rejection notes",
+          placeholder: "Example: Missing triage details or incorrect victim code",
+          confirmLabel: "Reject record",
+          cancelLabel: "Cancel",
+          required: true,
+          requiredMessage: "Rejection notes are required.",
+        }) || "";
 
         if (!notes) {
           setMessage("verificationMessage", "Rejection notes are required.", "error");
@@ -6435,8 +6583,14 @@ function bindVerificationReviewActions() {
         renderCurrentView();
         bindView();
         setMessage("verificationMessage", "Verification status updated.", "success");
+        showDashboardToast("Verification status updated.", "success");
       } catch (error) {
-        setMessage("verificationMessage", error.message, "error");
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Unable to update verification status.";
+        setMessage("verificationMessage", message, "error");
+        showDashboardToast(message, "error");
       }
     });
   });
@@ -6507,12 +6661,133 @@ function bindDeleteCasualtyActions() {
 }
 
 function renderAdminActionLogs() {
+  return renderActionLogsShell();
+}
+
+function formatAuditAction(action) {
+  const labels = {
+    "account.created": "Account created",
+    "account.updated": "Account updated",
+    "account.deleted": "Account deleted",
+    "account.deactivated": "Account deactivated",
+    "casualty.verified": "Casualty verified",
+    "casualty.rejected": "Casualty rejected",
+    "casualty.deleted": "Casualty deleted",
+    "casualty.resubmitted": "Casualty resubmitted",
+    "casualty.verification_updated": "Verification updated",
+    "incident.created": "Incident created",
+    "incident.updated": "Incident updated",
+    "incident.closed": "Incident closed",
+    "operational_data.reset": "Records reset",
+    "healthcare_facility.created": "Healthcare facility created",
+    "evacuation_center.created": "Evacuation center created",
+    "bulk_import.admin_accounts": "Bulk admin account import",
+    "bulk_import.unit_accounts": "Bulk unit account import",
+    "bulk_import.healthcare_facilities": "Bulk healthcare facility import",
+    "bulk_import.evacuation_centers": "Bulk evacuation center import",
+  };
+
+  return labels[action] || String(action || "Unknown action")
+    .replace(/[._-]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatAuditEntityType(entityType) {
+  return String(entityType || "record")
+    .replace(/[._-]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatAuditDetails(log) {
+  const metadata = log?.metadata || {};
+  const parts = [];
+
+  if (
+    typeof metadata.created === "number" ||
+    typeof metadata.skipped === "number" ||
+    typeof metadata.failed === "number"
+  ) {
+    parts.push(
+      `Created ${metadata.created ?? 0}`,
+      `Skipped ${metadata.skipped ?? 0}`,
+      `Failed ${metadata.failed ?? 0}`,
+    );
+  }
+
+  if (metadata.oldStatus || metadata.newStatus) {
+    parts.push(
+      `${metadata.oldStatus || "none"} -> ${metadata.newStatus || "none"}`,
+    );
+  }
+
+  if (Array.isArray(metadata.updatedFields) && metadata.updatedFields.length) {
+    parts.push(`Fields: ${metadata.updatedFields.join(", ")}`);
+  }
+
+  if (metadata.incidentCode) {
+    parts.push(`Incident ${metadata.incidentCode}`);
+  }
+
+  if (metadata.accountRole) {
+    parts.push(`Role: ${metadata.accountRole}`);
+  }
+
+  if (metadata.scope) {
+    parts.push(`Scope: ${metadata.scope}`);
+  }
+
+  return parts.length ? parts.join(" | ") : "No extra details";
+}
+
+function renderAuditLogsTable() {
+  const logs = state.auditLogs || [];
+
   return `
-    <section class="panel api-note">
-      <h2>Action logs by created users</h2>
-      <p class="panel-subtitle">This requires persistent audit logging with creator/admin-unit ownership. Recent activity is shown as a temporary operational trail.</p>
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Action Logs</h2>
+          <p class="panel-subtitle">${isSuperAdmin() ? "System-wide audit trail." : "Audit trail scoped to your admin unit and your own actions."}</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Action</th>
+              <th>Record</th>
+              <th>Actor</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${
+              logs
+                .map(
+                  (log) => `
+                    <tr>
+                      <td>${formatDate(log.created_at)}</td>
+                      <td><span class="pill blue">${escapeHtml(formatAuditAction(log.action))}</span></td>
+                      <td>
+                        <strong>${escapeHtml(log.entity_label || "Unknown record")}</strong><br />
+                        <span class="panel-subtitle">${escapeHtml(formatAuditEntityType(log.entity_type))}</span>
+                      </td>
+                      <td>
+                        <strong>${escapeHtml(log.actor_full_name || "Unknown user")}</strong><br />
+                        <span class="panel-subtitle">${escapeHtml(log.actor_role || "Unknown role")}</span>
+                      </td>
+                      <td>${escapeHtml(formatAuditDetails(log))}</td>
+                    </tr>
+                  `,
+                )
+                .join("") ||
+              `<tr><td colspan="5"><div class="empty-state">No audit logs yet.</div></td></tr>`
+            }
+          </tbody>
+        </table>
+      </div>
     </section>
-    <div style="margin-top:16px">${renderRecentActivity()}</div>
   `;
 }
 
@@ -6554,13 +6829,7 @@ function renderIncidentHistory() {
 }
 
 function renderActionLogsShell() {
-  return `
-    <section class="panel api-note">
-      <h2>Action logs</h2>
-      <p class="panel-subtitle">The dashboard needs a backend audit_logs table/endpoint for full user action tracking. For now, recent casualty activity is shown below as the available operational history.</p>
-    </section>
-    <div style="margin-top:16px">${renderRecentActivity()}</div>
-  `;
+  return renderAuditLogsTable();
 }
 
 function renderRecentActivity() {
@@ -7551,15 +7820,32 @@ function bindIncidentManagementActions() {
     button.addEventListener("click", async () => {
       const staffId = button.dataset.deleteDmmpStaff;
 
-      if (!staffId || !confirm("Delete this DMMP staff record?")) return;
+      if (!staffId) return;
+
+      const confirmed = await showDashboardConfirm({
+        title: "Delete DMMP staff record?",
+        message:
+          "This removes the staff call-down record from this incident. This cannot be undone from the dashboard.",
+        confirmLabel: "Delete record",
+        cancelLabel: "Keep record",
+        danger: true,
+      });
+
+      if (!confirmed) return;
 
       try {
         await apiRequest(`/dmmp-staff/${encodeURIComponent(staffId)}`, {
           method: "DELETE",
         });
         await reloadExpandedIncident("DMMP staff record deleted.");
+        showDashboardToast("DMMP staff record deleted.", "success");
       } catch (error) {
-        setMessage("incidentManagementMessage", error.message, "error");
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Unable to delete DMMP staff record.";
+        setMessage("incidentManagementMessage", message, "error");
+        showDashboardToast(message, "error");
       }
     });
   });
@@ -7626,7 +7912,18 @@ function bindIncidentManagementActions() {
     button.addEventListener("click", async () => {
       const incidentId = button.dataset.closeIncident;
 
-      if (!incidentId || !confirm("Close this incident? This will mark it as closed.")) return;
+      if (!incidentId) return;
+
+      const confirmed = await showDashboardConfirm({
+        title: "Close incident?",
+        message:
+          "This marks the incident as closed and removes it from active incident workflows. Historical records remain available.",
+        confirmLabel: "Close incident",
+        cancelLabel: "Keep active",
+        danger: true,
+      });
+
+      if (!confirmed) return;
 
       try {
         setMessage("incidentActionMessage", "Closing incident...");
@@ -7639,8 +7936,14 @@ function bindIncidentManagementActions() {
         renderCurrentView();
         bindView();
         setMessage("incidentManagementMessage", "Incident closed.", "success");
+        showDashboardToast("Incident closed.", "success");
       } catch (error) {
-        setMessage("incidentActionMessage", error.message, "error");
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Unable to close incident.";
+        setMessage("incidentActionMessage", message, "error");
+        showDashboardToast(message, "error");
       }
     });
   });
