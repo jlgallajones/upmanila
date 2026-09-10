@@ -141,6 +141,32 @@ function isAlreadySynchronizedError(error: unknown): boolean {
     .includes("already been synchronized");
 }
 
+function isDuplicateIdNumberError(error: unknown): boolean {
+  const message = getErrorMessage(error).toLowerCase();
+
+  return (
+    message.includes("id number") &&
+    message.includes("already")
+  );
+}
+
+function isSystemGeneratedIdNumber(
+  idNumber: string | null | undefined,
+): boolean {
+  return (
+    /^CAS:\d{6}:[A-Z0-9]+?\d{3,}$/i.test(idNumber ?? "") ||
+    /^CAS-\d{8}-/i.test(idNumber ?? "") ||
+    /^CAS-UNIT-/i.test(idNumber ?? "") ||
+    /^CAS-SYNC-/i.test(idNumber ?? "")
+  );
+}
+
+function generateQueuedSyncIdNumber(): string {
+  const randomPart = Math.random().toString(36).slice(2, 8).toUpperCase();
+
+  return `CAS-SYNC-${Date.now()}-${randomPart}`;
+}
+
 export async function queueCasualtySubmission(
   payload: QueuedCasualtyPayload,
   options: { attachments?: QueuedCasualtyAttachment[] } = {},
@@ -221,6 +247,7 @@ async function markQueueItemSyncing(
 
 async function syncQueueItem(
   item: QueuedCasualtySubmission,
+  options: { allowGeneratedIdRetry?: boolean } = {},
 ): Promise<{
   synced: boolean;
   item?: QueuedCasualtySubmission;
@@ -275,6 +302,27 @@ async function syncQueueItem(
       return {
         synced: true,
       };
+    }
+
+    if (
+      options.allowGeneratedIdRetry !== false &&
+      isDuplicateIdNumberError(error) &&
+      isSystemGeneratedIdNumber(item.payload.person.idNumber)
+    ) {
+      const nextItem: QueuedCasualtySubmission = {
+        ...item,
+        payload: {
+          ...item.payload,
+          person: {
+            ...item.payload.person,
+            idNumber: generateQueuedSyncIdNumber(),
+          },
+        },
+      };
+
+      return syncQueueItem(nextItem, {
+        allowGeneratedIdRetry: false,
+      });
     }
 
     const reason = getErrorMessage(error);

@@ -212,6 +212,12 @@ This document summarizes the main issues encountered during development of the D
 
 **Solution:** Add Casualty now allows a first-time offline placeholder path when no incident list is available. The casualty can be saved locally in the offline queue without an incident ID, with an optional temporary offline incident name. Records now marks those queued casualties as needing an incident, lets the user assign an active incident after reconnecting, and then retry sync.
 
+## 36. Offline Sync Reported False Duplicate Record
+
+**Problem:** A first-time offline casualty could save locally, but after assigning an incident and retrying sync online, the mobile app showed “A matching record already exists” even when the user did not see a matching casualty record. The message was too generic and could be triggered by the backend duplicate `id_number` guard, especially when a generated offline casualty ID collided with an existing generated ID.
+
+**Solution:** Mobile error handling now preserves the specific casualty ID-number duplicate message instead of converting it to a generic matching-record message. Offline queue sync now detects duplicate generated casualty IDs and retries once with a safe `CAS-SYNC-*` ID. Manually entered ID numbers are not silently changed.
+
 ## Priority Improvement Areas
 
 These are the improvements that matter most based on the bugs encountered so far. They are ordered by risk to data privacy, data integrity, field usability, and presentation readiness.

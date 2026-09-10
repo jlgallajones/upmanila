@@ -15,6 +15,8 @@ export const uiMessages = {
     network:
       "Unable to reach the server. Please check your connection and try again.",
     sessionExpired: "Your session has expired. Please sign in again.",
+    duplicateIdNumber:
+      "This casualty ID number is already in use. Please generate or enter a different ID number.",
     duplicate:
       "A matching record already exists. Please review the entry and try again.",
   },
@@ -47,6 +49,13 @@ export function getUserFriendlyMessage(
     normalizedMessage.includes("unauthorized")
   ) {
     return uiMessages.error.sessionExpired;
+  }
+
+  if (
+    normalizedMessage.includes("id number") &&
+    normalizedMessage.includes("already exists")
+  ) {
+    return uiMessages.error.duplicateIdNumber;
   }
 
   if (
