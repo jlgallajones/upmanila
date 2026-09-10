@@ -55,6 +55,14 @@ type ResetOperationalDataRequest = {
   confirmation?: string;
 };
 
+type BulkRegisterAdminRequest = {
+  rows?: RegisterAdminRequest[];
+};
+
+type BulkRegisterUnitUserRequest = {
+  rows?: RegisterUnitUserRequest[];
+};
+
 const userSelect = `
   id,
   full_name,
@@ -86,6 +94,14 @@ const unitUserSelect = `
 `;
 
 const operationalResetConfirmation = "RESET RECORDS";
+
+function rowError(rowNumber: number, message: string) {
+  return {
+    rowNumber,
+    success: false,
+    message,
+  };
+}
 
 const managedAccountSelect = `
   id,
@@ -465,6 +481,157 @@ export async function registerAdmin(
   }
 }
 
+export async function bulkRegisterAdmins(
+  request: Request<
+    Record<string, never>,
+    unknown,
+    BulkRegisterAdminRequest
+  >,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const currentUser = (request as Request & {
+      user?: { role?: string };
+    }).user;
+
+    if (currentUser?.role !== "super_admin") {
+      response.status(403).json({
+        success: false,
+        message: "Only super admin accounts can register command accounts.",
+      });
+      return;
+    }
+
+    const rows = Array.isArray(request.body.rows)
+      ? request.body.rows.slice(0, 200)
+      : [];
+    const results = [];
+
+    for (const [index, row] of rows.entries()) {
+      const rowNumber = index + 2;
+
+      try {
+        const fullName = row.fullName?.trim();
+        const email = row.email?.trim().toLowerCase();
+        const password = row.password;
+        const role = row.role;
+
+        if (!fullName || !email || !password || !role) {
+          results.push(
+            rowError(
+              rowNumber,
+              "fullName, email, password, and role are required.",
+            ),
+          );
+          continue;
+        }
+
+        if (!["administrator", "super_admin"].includes(role)) {
+          results.push(
+            rowError(
+              rowNumber,
+              "Only administrator and super_admin roles can be created here.",
+            ),
+          );
+          continue;
+        }
+
+        if (password.length < 6) {
+          results.push(
+            rowError(rowNumber, "Password must be at least 6 characters."),
+          );
+          continue;
+        }
+
+        const { data: authData, error: authError } =
+          await supabaseAuth.auth.admin.createUser({
+            email,
+            password,
+            email_confirm: true,
+            user_metadata: {
+              full_name: fullName,
+            },
+          });
+
+        if (authError || !authData.user) {
+          results.push(
+            rowError(
+              rowNumber,
+              `Unable to create auth user: ${
+                authError?.message ?? "No user returned."
+              }`,
+            ),
+          );
+          continue;
+        }
+
+        const { data: user, error: userError } = await supabase
+          .from("users")
+          .upsert(
+            {
+              id: authData.user.id,
+              full_name: fullName,
+              email,
+              phone_number: row.phoneNumber?.trim() || null,
+              role,
+              reporting_context: "command_admin",
+              assigned_municipality:
+                row.assignedMunicipality?.trim() || null,
+              assigned_barangay: row.assignedBarangay?.trim() || null,
+              is_active: true,
+            },
+            {
+              onConflict: "id",
+            },
+          )
+          .select(userSelect)
+          .single();
+
+        if (userError || !user) {
+          results.push(
+            rowError(
+              rowNumber,
+              `Profile creation failed: ${
+                userError?.message ?? "No profile returned."
+              }`,
+            ),
+          );
+          continue;
+        }
+
+        results.push({
+          rowNumber,
+          success: true,
+          message: "Account created.",
+          data: user,
+        });
+      } catch (error) {
+        results.push(
+          rowError(
+            rowNumber,
+            error instanceof Error ? error.message : "Unable to create row.",
+          ),
+        );
+      }
+    }
+
+    const created = results.filter((result) => result.success).length;
+
+    response.status(200).json({
+      success: true,
+      message: `Bulk admin account import finished. ${created} of ${results.length} rows created.`,
+      data: {
+        created,
+        failed: results.length - created,
+        results,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function getManagedAccounts(
   request: Request,
   response: Response,
@@ -674,6 +841,204 @@ export async function registerUnitUser(
       success: true,
       message: "Unit user account created successfully.",
       data: user,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function bulkRegisterUnitUsers(
+  request: Request<
+    Record<string, never>,
+    unknown,
+    BulkRegisterUnitUserRequest
+  >,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const currentUser = (request as Request & {
+      user?: { role?: string; id?: string };
+    }).user;
+
+    if (!currentUser?.id) {
+      response.status(401).json({
+        success: false,
+        message: "Authentication token is required.",
+      });
+      return;
+    }
+
+    if (
+      !["super_admin", "admin", "administrator", "encoder"].includes(
+        currentUser.role ?? "",
+      )
+    ) {
+      response.status(403).json({
+        success: false,
+        message: "Your account is not allowed to register unit users.",
+      });
+      return;
+    }
+
+    const { data: creator, error: creatorError } = await supabase
+      .from("users")
+      .select(
+        "id, role, assigned_municipality, assigned_barangay, is_active",
+      )
+      .eq("id", currentUser.id)
+      .single();
+
+    if (creatorError || !creator) {
+      response.status(404).json({
+        success: false,
+        message: "Creator account not found.",
+      });
+      return;
+    }
+
+    if (!creator.is_active) {
+      response.status(403).json({
+        success: false,
+        message: "The creator account is inactive.",
+      });
+      return;
+    }
+
+    const rows = Array.isArray(request.body.rows)
+      ? request.body.rows.slice(0, 200)
+      : [];
+    const results = [];
+
+    for (const [index, row] of rows.entries()) {
+      const rowNumber = index + 2;
+
+      try {
+        const fullName = row.fullName?.trim();
+        const email = row.email?.trim().toLowerCase();
+        const password = row.password;
+        const requestedRole = row.role;
+
+        if (!fullName || !email || !password || !requestedRole) {
+          results.push(
+            rowError(
+              rowNumber,
+              "fullName, email, password, and role are required.",
+            ),
+          );
+          continue;
+        }
+
+        if (!["responder", "documenter"].includes(requestedRole)) {
+          results.push(
+            rowError(
+              rowNumber,
+              "Admins can only create responder or documenter accounts.",
+            ),
+          );
+          continue;
+        }
+
+        if (password.length < 6) {
+          results.push(
+            rowError(rowNumber, "Password must be at least 6 characters."),
+          );
+          continue;
+        }
+
+        const { role, reportingContext } =
+          getUnitUserContext(requestedRole);
+        const assignedMunicipality =
+          row.assignedMunicipality?.trim() ||
+          creator.assigned_municipality ||
+          null;
+        const assignedBarangay =
+          row.assignedBarangay?.trim() ||
+          creator.assigned_barangay ||
+          null;
+
+        const { data: authData, error: authError } =
+          await supabaseAuth.auth.admin.createUser({
+            email,
+            password,
+            email_confirm: true,
+            user_metadata: {
+              full_name: fullName,
+            },
+          });
+
+        if (authError || !authData.user) {
+          results.push(
+            rowError(
+              rowNumber,
+              `Unable to create auth user: ${
+                authError?.message ?? "No user returned."
+              }`,
+            ),
+          );
+          continue;
+        }
+
+        const { data: user, error: userError } = await supabase
+          .from("users")
+          .upsert(
+            {
+              id: authData.user.id,
+              full_name: fullName,
+              email,
+              phone_number: row.phoneNumber?.trim() || null,
+              role,
+              reporting_context: reportingContext,
+              assigned_municipality: assignedMunicipality,
+              assigned_barangay: assignedBarangay,
+              created_by: currentUser.id,
+              is_active: true,
+            },
+            {
+              onConflict: "id",
+            },
+          )
+          .select(unitUserSelect)
+          .single();
+
+        if (userError || !user) {
+          results.push(
+            rowError(
+              rowNumber,
+              `Profile creation failed: ${
+                userError?.message ?? "No profile returned."
+              }`,
+            ),
+          );
+          continue;
+        }
+
+        results.push({
+          rowNumber,
+          success: true,
+          message: "Unit user created.",
+          data: user,
+        });
+      } catch (error) {
+        results.push(
+          rowError(
+            rowNumber,
+            error instanceof Error ? error.message : "Unable to create row.",
+          ),
+        );
+      }
+    }
+
+    const created = results.filter((result) => result.success).length;
+
+    response.status(200).json({
+      success: true,
+      message: `Bulk unit account import finished. ${created} of ${results.length} rows created.`,
+      data: {
+        created,
+        failed: results.length - created,
+        results,
+      },
     });
   } catch (error) {
     next(error);

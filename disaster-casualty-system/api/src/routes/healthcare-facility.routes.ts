@@ -1,6 +1,7 @@
 import { Router } from "express";
 
 import {
+  bulkCreateHealthcareFacilities,
   createHealthcareFacility,
   getHealthcareFacilities,
 } from "../controllers/healthcare-facility.controller.js";
@@ -14,5 +15,11 @@ healthcareFacilityRouter.post(
   requireAuth,
   requireRole(["super_admin", "admin", "administrator", "encoder"]),
   createHealthcareFacility,
+);
+healthcareFacilityRouter.post(
+  "/bulk",
+  requireAuth,
+  requireRole(["super_admin", "admin", "administrator", "encoder"]),
+  bulkCreateHealthcareFacilities,
 );
 

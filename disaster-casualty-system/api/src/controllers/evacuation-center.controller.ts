@@ -5,6 +5,8 @@ import { getAuthenticatedUser } from "../middleware/auth.js";
 
 type CreateEvacuationCenterRequest = {
   incidentId: string;
+  incidentCode?: string;
+  incidentName?: string;
   centerName: string;
   address?: string;
   barangay?: string;
@@ -15,6 +17,10 @@ type CreateEvacuationCenterRequest = {
   contactNumber?: string;
   latitude?: number;
   longitude?: number;
+};
+
+type BulkEvacuationCenterRequest = {
+  rows?: CreateEvacuationCenterRequest[];
 };
 
 const evacuationCenterManagerRoles = new Set([
@@ -41,6 +47,14 @@ const evacuationCenterSelect = `
   created_at,
   updated_at
 `;
+
+function rowError(rowNumber: number, message: string) {
+  return {
+    rowNumber,
+    success: false,
+    message,
+  };
+}
 
 async function getVisibleIncidentIdsForReferenceData(user: {
   id: string;
@@ -335,6 +349,233 @@ export async function createEvacuationCenter(
       success: true,
       message: "Evacuation center created successfully.",
       data: center,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function bulkCreateEvacuationCenters(
+  request: Request<
+    Record<string, never>,
+    unknown,
+    BulkEvacuationCenterRequest
+  >,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const user = getAuthenticatedUser(request);
+    const { data: creator, error: creatorError } = await supabase
+      .from("users")
+      .select("id, role, is_active")
+      .eq("id", user.id)
+      .single();
+
+    if (creatorError || !creator) {
+      response.status(404).json({
+        success: false,
+        message: "Creator account not found.",
+      });
+      return;
+    }
+
+    if (!creator.is_active) {
+      response.status(403).json({
+        success: false,
+        message: "The creator account is inactive.",
+      });
+      return;
+    }
+
+    if (!evacuationCenterManagerRoles.has(creator.role)) {
+      response.status(403).json({
+        success: false,
+        message:
+          "Your account is not allowed to create evacuation centers.",
+      });
+      return;
+    }
+
+    const rows = Array.isArray(request.body.rows)
+      ? request.body.rows.slice(0, 300)
+      : [];
+    const results = [];
+
+    for (const [index, row] of rows.entries()) {
+      const rowNumber = index + 2;
+
+      try {
+        const normalizedName = row.centerName?.trim();
+        const incidentLookup =
+          row.incidentId?.trim() ||
+          row.incidentCode?.trim() ||
+          row.incidentName?.trim();
+
+        if (!incidentLookup || !normalizedName) {
+          results.push(
+            rowError(
+              rowNumber,
+              "incidentId, incidentCode, or incidentName and centerName are required.",
+            ),
+          );
+          continue;
+        }
+
+        if (
+          row.capacity !== undefined &&
+          (!Number.isInteger(row.capacity) || row.capacity < 0)
+        ) {
+          results.push(
+            rowError(rowNumber, "Capacity must be a positive whole number."),
+          );
+          continue;
+        }
+
+        if (
+          row.latitude !== undefined &&
+          (row.latitude < -90 || row.latitude > 90)
+        ) {
+          results.push(rowError(rowNumber, "Latitude must be from -90 to 90."));
+          continue;
+        }
+
+        if (
+          row.longitude !== undefined &&
+          (row.longitude < -180 || row.longitude > 180)
+        ) {
+          results.push(
+            rowError(rowNumber, "Longitude must be from -180 to 180."),
+          );
+          continue;
+        }
+
+        let incidentQuery = supabase
+          .from("incidents")
+          .select("id, incident_code, incident_name, created_by")
+          .limit(1);
+
+        if (row.incidentId?.trim()) {
+          incidentQuery = incidentQuery.eq("id", row.incidentId.trim());
+        } else if (row.incidentCode?.trim()) {
+          incidentQuery = incidentQuery.ilike(
+            "incident_code",
+            row.incidentCode.trim(),
+          );
+        } else {
+          incidentQuery = incidentQuery.ilike(
+            "incident_name",
+            row.incidentName?.trim() || "",
+          );
+        }
+
+        const { data: incident, error: incidentError } =
+          await incidentQuery.maybeSingle();
+
+        if (incidentError || !incident) {
+          results.push(rowError(rowNumber, "Incident not found."));
+          continue;
+        }
+
+        if (user.role !== "super_admin" && incident.created_by !== user.id) {
+          results.push(
+            rowError(
+              rowNumber,
+              "You can only create evacuation centers for incidents created by your account.",
+            ),
+          );
+          continue;
+        }
+
+        const { data: existingCenter, error: existingError } =
+          await supabase
+            .from("evacuation_centers")
+            .select(evacuationCenterSelect)
+            .eq("incident_id", incident.id)
+            .ilike("center_name", normalizedName)
+            .eq("is_active", true)
+            .maybeSingle();
+
+        if (existingError) {
+          results.push(
+            rowError(
+              rowNumber,
+              `Unable to check existing evacuation center: ${existingError.message}`,
+            ),
+          );
+          continue;
+        }
+
+        if (existingCenter) {
+          results.push({
+            rowNumber,
+            success: false,
+            skipped: true,
+            message: "Existing evacuation center skipped.",
+            data: existingCenter,
+          });
+          continue;
+        }
+
+        const { data: center, error } = await supabase
+          .from("evacuation_centers")
+          .insert({
+            incident_id: incident.id,
+            center_name: normalizedName,
+            address: row.address?.trim() || null,
+            barangay: row.barangay?.trim() || null,
+            municipality: row.municipality?.trim() || null,
+            province: row.province?.trim() || null,
+            capacity: row.capacity ?? null,
+            contact_person: row.contactPerson?.trim() || null,
+            contact_number: row.contactNumber?.trim() || null,
+            latitude: row.latitude ?? null,
+            longitude: row.longitude ?? null,
+            is_active: true,
+          })
+          .select(evacuationCenterSelect)
+          .single();
+
+        if (error || !center) {
+          results.push(
+            rowError(
+              rowNumber,
+              `Unable to create evacuation center: ${
+                error?.message ?? "Unknown database error"
+              }`,
+            ),
+          );
+          continue;
+        }
+
+        results.push({
+          rowNumber,
+          success: true,
+          message: "Evacuation center created.",
+          data: center,
+        });
+      } catch (error) {
+        results.push(
+          rowError(
+            rowNumber,
+            error instanceof Error ? error.message : "Unable to create row.",
+          ),
+        );
+      }
+    }
+
+    const created = results.filter((result) => result.success).length;
+    const skipped = results.filter((result) => "skipped" in result).length;
+
+    response.status(200).json({
+      success: true,
+      message: `Bulk evacuation center import finished. ${created} of ${results.length} rows created.`,
+      data: {
+        created,
+        skipped,
+        failed: results.length - created - skipped,
+        results,
+      },
     });
   } catch (error) {
     next(error);

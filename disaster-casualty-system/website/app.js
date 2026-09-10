@@ -1545,6 +1545,7 @@ function bindView() {
   bindIncidentSearchFilters();
   bindCasualtyRecordFilters();
   bindPasswordVisibilityToggles();
+  bindBulkImportActions();
   syncAnalyticsLiveRefresh();
 }
 
@@ -3183,6 +3184,457 @@ function bindPasswordVisibilityToggles() {
   });
 }
 
+const bulkImportConfigs = {
+  adminAccounts: {
+    endpoint: "/auth/bulk-register-admins",
+    fileName: "admin-accounts-template.csv",
+    messageId: "adminBulkImportMessage",
+    headers: [
+      "fullName",
+      "email",
+      "password",
+      "role",
+      "phoneNumber",
+      "assignedMunicipality",
+      "assignedBarangay",
+    ],
+    sampleRows: [
+      [
+        "Juan Dela Cruz",
+        "admin@example.com",
+        "Temporary123",
+        "administrator",
+        "09171234567",
+        "Manila",
+        "Ermita",
+      ],
+    ],
+  },
+  unitAccounts: {
+    endpoint: "/auth/bulk-register-unit-users",
+    fileName: "unit-accounts-template.csv",
+    messageId: "unitBulkImportMessage",
+    headers: [
+      "fullName",
+      "email",
+      "password",
+      "role",
+      "phoneNumber",
+      "assignedMunicipality",
+      "assignedBarangay",
+    ],
+    sampleRows: [
+      [
+        "Responder One",
+        "responder@example.com",
+        "Temporary123",
+        "responder",
+        "09171234567",
+        state.user?.assigned_municipality || "Manila",
+        state.user?.assigned_barangay || "Ermita",
+      ],
+      [
+        "HCFD One",
+        "hcfd@example.com",
+        "Temporary123",
+        "documenter",
+        "09171234568",
+        state.user?.assigned_municipality || "Manila",
+        state.user?.assigned_barangay || "Ermita",
+      ],
+    ],
+  },
+  healthcareFacilities: {
+    endpoint: "/healthcare-facilities/bulk",
+    fileName: "healthcare-facilities-template.csv",
+    messageId: "facilityBulkImportMessage",
+    headers: [
+      "facilityName",
+      "facilityLevel",
+      "address",
+      "barangay",
+      "municipality",
+      "province",
+      "contactPerson",
+      "contactNumber",
+      "latitude",
+      "longitude",
+    ],
+    sampleRows: [
+      [
+        "Sample General Hospital",
+        "tertiary",
+        "123 Hospital Road",
+        "Ermita",
+        "Manila",
+        "Metro Manila",
+        "Maria Santos",
+        "09171234567",
+        "",
+        "",
+      ],
+    ],
+  },
+  evacuationCenters: {
+    endpoint: "/evacuation-centers/bulk",
+    fileName: "evacuation-centers-template.csv",
+    messageId: "evacuationBulkImportMessage",
+    headers: [
+      "incidentId",
+      "incidentCode",
+      "incidentName",
+      "centerName",
+      "capacity",
+      "address",
+      "barangay",
+      "municipality",
+      "province",
+      "contactPerson",
+      "contactNumber",
+      "latitude",
+      "longitude",
+    ],
+    sampleRows: [
+      [
+        state.incidents[0]?.id || "",
+        state.incidents[0]?.incident_code || "",
+        state.incidents[0]?.incident_name || "Incident Name",
+        "Sample Evacuation Center",
+        "150",
+        "Covered Court",
+        "Ermita",
+        "Manila",
+        "Metro Manila",
+        "Juan Santos",
+        "09171234567",
+        "",
+        "",
+      ],
+    ],
+  },
+};
+
+function renderBulkImportPanel(type, title, subtitle) {
+  const config = bulkImportConfigs[type];
+
+  return `
+    <section class="bulk-import-panel">
+      <div>
+        <h3>${escapeHtml(title)}</h3>
+        <p class="panel-subtitle">${escapeHtml(subtitle)}</p>
+      </div>
+      <div class="bulk-import-actions">
+        <button class="ghost-button mini" type="button" data-download-template="${escapeHtml(type)}">
+          Download CSV template
+        </button>
+        <label class="secondary-button mini bulk-file-button">
+          Upload Excel/CSV
+          <input type="file" accept=".csv,.xlsx,.xls" data-bulk-import="${escapeHtml(type)}" hidden />
+        </label>
+      </div>
+      <div id="${escapeHtml(config.messageId)}" class="status-message" hidden></div>
+    </section>
+  `;
+}
+
+function csvEscape(value) {
+  const text = String(value ?? "");
+
+  if (/[",\r\n]/.test(text)) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+
+  return text;
+}
+
+function downloadCsvTemplate(type) {
+  const config = bulkImportConfigs[type];
+  if (!config) return;
+
+  const csv = [
+    config.headers.map(csvEscape).join(","),
+    ...config.sampleRows.map((row) => row.map(csvEscape).join(",")),
+  ].join("\r\n");
+  const blob = new Blob([csv], {
+    type: "text/csv;charset=utf-8",
+  });
+  const downloadUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = downloadUrl;
+  link.download = config.fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(downloadUrl);
+}
+
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let value = "";
+  let quoted = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const next = text[index + 1];
+
+    if (quoted) {
+      if (char === '"' && next === '"') {
+        value += '"';
+        index += 1;
+      } else if (char === '"') {
+        quoted = false;
+      } else {
+        value += char;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      quoted = true;
+    } else if (char === ",") {
+      row.push(value);
+      value = "";
+    } else if (char === "\n") {
+      row.push(value);
+      rows.push(row);
+      row = [];
+      value = "";
+    } else if (char !== "\r") {
+      value += char;
+    }
+  }
+
+  row.push(value);
+  rows.push(row);
+
+  const headers = (rows.shift() || []).map((header) =>
+    String(header).trim(),
+  );
+
+  return rows
+    .filter((item) =>
+      item.some((cell) => String(cell ?? "").trim().length > 0),
+    )
+    .map((item) =>
+      Object.fromEntries(
+        headers.map((header, index) => [
+          header,
+          item[index] ?? "",
+        ]),
+      ),
+    );
+}
+
+function normalizeHeader(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+const bulkHeaderAliases = {
+  fullname: "fullName",
+  name: "fullName",
+  email: "email",
+  password: "password",
+  temporarypassword: "password",
+  role: "role",
+  phonenumber: "phoneNumber",
+  contactnumber: "contactNumber",
+  assignedmunicipality: "assignedMunicipality",
+  assignedbarangay: "assignedBarangay",
+  facilityname: "facilityName",
+  facilitylevel: "facilityLevel",
+  level: "facilityLevel",
+  address: "address",
+  barangay: "barangay",
+  municipality: "municipality",
+  province: "province",
+  contactperson: "contactPerson",
+  latitude: "latitude",
+  longitude: "longitude",
+  incidentid: "incidentId",
+  incidentcode: "incidentCode",
+  incidentname: "incidentName",
+  centername: "centerName",
+  evacuationcenter: "centerName",
+  evacuationcentername: "centerName",
+  capacity: "capacity",
+};
+
+function normalizeBulkRows(rows) {
+  return rows.map((row) => {
+    const normalized = {};
+
+    for (const [key, rawValue] of Object.entries(row)) {
+      const mappedKey = bulkHeaderAliases[normalizeHeader(key)];
+
+      if (!mappedKey) {
+        continue;
+      }
+
+      const value =
+        rawValue === null || rawValue === undefined
+          ? ""
+          : String(rawValue).trim();
+
+      if (mappedKey === "role") {
+        const normalizedRole = value
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "_")
+          .replace(/^_|_$/g, "");
+
+        if (normalizedRole.includes("documenter")) {
+          normalized[mappedKey] = "documenter";
+        } else if (normalizedRole.includes("responder")) {
+          normalized[mappedKey] = "responder";
+        } else if (normalizedRole === "super_admin") {
+          normalized[mappedKey] = "super_admin";
+        } else if (
+          normalizedRole === "admin" ||
+          normalizedRole === "administrator"
+        ) {
+          normalized[mappedKey] = "administrator";
+        } else {
+          normalized[mappedKey] = value;
+        }
+      } else if (mappedKey === "facilityLevel") {
+        normalized[mappedKey] = value
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "_")
+          .replace(/^_|_$/g, "");
+      } else if (["capacity"].includes(mappedKey)) {
+        normalized[mappedKey] = value ? Number(value) : undefined;
+      } else if (["latitude", "longitude"].includes(mappedKey)) {
+        normalized[mappedKey] = value ? Number(value) : undefined;
+      } else {
+        normalized[mappedKey] = value;
+      }
+    }
+
+    return normalized;
+  });
+}
+
+async function loadSheetJs() {
+  if (window.XLSX) {
+    return window.XLSX;
+  }
+
+  await new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src =
+      "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";
+    script.onload = resolve;
+    script.onerror = () =>
+      reject(new Error("Unable to load Excel parser."));
+    document.head.appendChild(script);
+  });
+
+  return window.XLSX;
+}
+
+async function parseBulkImportFile(file) {
+  const extension = file.name.split(".").pop()?.toLowerCase();
+
+  if (extension === "csv") {
+    return normalizeBulkRows(parseCsv(await file.text()));
+  }
+
+  const XLSX = await loadSheetJs();
+  const workbook = XLSX.read(await file.arrayBuffer(), {
+    type: "array",
+  });
+  const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(firstSheet, {
+    defval: "",
+  });
+
+  return normalizeBulkRows(rows);
+}
+
+function renderBulkImportSummary(data) {
+  const results = data?.results || [];
+  const failed = results
+    .filter((result) => !result.success && !result.skipped)
+    .slice(0, 5)
+    .map((result) => `Row ${result.rowNumber}: ${result.message}`)
+    .join(" | ");
+
+  return [
+    `Created: ${data?.created ?? 0}`,
+    `Skipped: ${data?.skipped ?? 0}`,
+    `Failed: ${data?.failed ?? 0}`,
+    failed,
+  ]
+    .filter(Boolean)
+    .join(". ");
+}
+
+function bindBulkImportActions() {
+  document.querySelectorAll("[data-download-template]").forEach((button) => {
+    if (button.dataset.templateBound === "true") return;
+    button.dataset.templateBound = "true";
+
+    button.addEventListener("click", () => {
+      downloadCsvTemplate(button.dataset.downloadTemplate);
+    });
+  });
+
+  document.querySelectorAll("[data-bulk-import]").forEach((input) => {
+    if (input.dataset.importBound === "true") return;
+    input.dataset.importBound = "true";
+
+    input.addEventListener("change", async () => {
+      const type = input.dataset.bulkImport;
+      const config = bulkImportConfigs[type];
+      const file = input.files?.[0];
+
+      if (!config || !file) {
+        return;
+      }
+
+      setMessage(config.messageId, "Reading import file...");
+
+      try {
+        const rows = await parseBulkImportFile(file);
+
+        if (rows.length === 0) {
+          throw new Error("The selected file has no import rows.");
+        }
+
+        setMessage(config.messageId, `Importing ${rows.length} rows...`);
+
+        const response = await apiRequest(config.endpoint, {
+          method: "POST",
+          body: JSON.stringify({ rows }),
+        });
+
+        await loadSharedData();
+        renderCurrentView();
+        bindView();
+        setMessage(
+          config.messageId,
+          renderBulkImportSummary(response.data),
+          response.data?.failed ? "error" : "success",
+        );
+      } catch (error) {
+        setMessage(
+          config.messageId,
+          error instanceof Error
+            ? error.message
+            : "Unable to import file.",
+          "error",
+        );
+      } finally {
+        input.value = "";
+      }
+    });
+  });
+}
+
 function renderRegistrationShell() {
   return `
     <section class="panel">
@@ -3204,6 +3656,11 @@ function renderRegistrationShell() {
         <button class="primary-button" type="submit">Create account</button>
         <div id="registrationMessage" class="status-message" hidden></div>
       </form>
+      ${renderBulkImportPanel(
+        "adminAccounts",
+        "Bulk upload command accounts",
+        "Upload a CSV or Excel file to create administrator or super admin accounts in one batch.",
+      )}
     </section>
   `;
 }
@@ -3267,6 +3724,11 @@ function renderAdminUnitRegistration() {
         <button class="primary-button" type="submit">Create unit user</button>
         <div id="unitUserMessage" class="status-message" hidden></div>
       </form>
+      ${renderBulkImportPanel(
+        "unitAccounts",
+        "Bulk upload responder/documenter accounts",
+        "Upload a CSV or Excel file to create multiple responder and healthcare documenter accounts.",
+      )}
     </section>
     <div style="margin-top:16px">${renderAdminAccountList()}</div>
   `;
@@ -7487,6 +7949,11 @@ function renderEvacuationCreator() {
         <button class="primary-button" type="submit">Create evacuation center</button>
         <div id="evacuationMessage" class="status-message" hidden></div>
       </form>
+      ${renderBulkImportPanel(
+        "evacuationCenters",
+        "Bulk upload evacuation centers",
+        "Upload a CSV or Excel file to create multiple evacuation centers. Each row can use incidentId, incidentCode, or incidentName.",
+      )}
     </section>
   `;
 }
@@ -7547,6 +8014,11 @@ function renderFacilityCreator() {
         <button class="primary-button" type="submit">Create healthcare facility</button>
         <div id="facilityMessage" class="status-message" hidden></div>
       </form>
+      ${renderBulkImportPanel(
+        "healthcareFacilities",
+        "Bulk upload healthcare facilities",
+        "Upload a CSV or Excel file to create multiple official healthcare facilities.",
+      )}
     </section>
     ${renderHealthcareFacilitiesTable()}
   `;

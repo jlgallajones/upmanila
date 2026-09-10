@@ -23,6 +23,10 @@ type CreateHealthcareFacilityRequest = {
   longitude?: number;
 };
 
+type BulkHealthcareFacilityRequest = {
+  rows?: CreateHealthcareFacilityRequest[];
+};
+
 const facilityManagerRoles = new Set([
   "super_admin",
   "admin",
@@ -63,6 +67,14 @@ const healthcareFacilitySelect = `
   created_at,
   updated_at
 `;
+
+function rowError(rowNumber: number, message: string) {
+  return {
+    rowNumber,
+    success: false,
+    message,
+  };
+}
 
 async function getFacilityOwnerScopeForUser(user: {
   id: string;
@@ -327,6 +339,202 @@ export async function createHealthcareFacility(
       success: true,
       message: "Healthcare facility created successfully.",
       data: facility,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function bulkCreateHealthcareFacilities(
+  request: Request<
+    Record<string, never>,
+    unknown,
+    BulkHealthcareFacilityRequest
+  >,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const user = getAuthenticatedUser(request);
+    const { data: creator, error: creatorError } = await supabase
+      .from("users")
+      .select("id, role, is_active")
+      .eq("id", user.id)
+      .single();
+
+    if (creatorError || !creator) {
+      response.status(404).json({
+        success: false,
+        message: "Creator account not found.",
+      });
+      return;
+    }
+
+    if (!creator.is_active) {
+      response.status(403).json({
+        success: false,
+        message: "The creator account is inactive.",
+      });
+      return;
+    }
+
+    if (!facilityManagerRoles.has(creator.role)) {
+      response.status(403).json({
+        success: false,
+        message:
+          "Your account is not allowed to create healthcare facilities.",
+      });
+      return;
+    }
+
+    const rows = Array.isArray(request.body.rows)
+      ? request.body.rows.slice(0, 300)
+      : [];
+    const results = [];
+
+    for (const [index, row] of rows.entries()) {
+      const rowNumber = index + 2;
+
+      try {
+        const normalizedName = row.facilityName?.trim();
+        const facilityLevel = row.facilityLevel || "unknown";
+
+        if (!normalizedName) {
+          results.push(rowError(rowNumber, "facilityName is required."));
+          continue;
+        }
+
+        if (!facilityLevels.has(facilityLevel)) {
+          results.push(rowError(rowNumber, "Invalid healthcare facility level."));
+          continue;
+        }
+
+        if (
+          row.latitude !== undefined &&
+          (row.latitude < -90 || row.latitude > 90)
+        ) {
+          results.push(rowError(rowNumber, "Latitude must be from -90 to 90."));
+          continue;
+        }
+
+        if (
+          row.longitude !== undefined &&
+          (row.longitude < -180 || row.longitude > 180)
+        ) {
+          results.push(
+            rowError(rowNumber, "Longitude must be from -180 to 180."),
+          );
+          continue;
+        }
+
+        let existingQuery = supabase
+          .from("healthcare_facilities")
+          .select(healthcareFacilitySelect)
+          .ilike("facility_name", normalizedName)
+          .eq("is_active", true)
+          .limit(1);
+
+        if (creator.role !== "super_admin") {
+          existingQuery = existingQuery.eq("created_by", user.id);
+        }
+
+        if (row.municipality?.trim()) {
+          existingQuery = existingQuery.ilike(
+            "municipality",
+            row.municipality.trim(),
+          );
+        }
+
+        if (row.province?.trim()) {
+          existingQuery = existingQuery.ilike(
+            "province",
+            row.province.trim(),
+          );
+        }
+
+        const { data: existingFacility, error: existingError } =
+          await existingQuery.maybeSingle();
+
+        if (existingError) {
+          results.push(
+            rowError(
+              rowNumber,
+              `Unable to check existing facility: ${existingError.message}`,
+            ),
+          );
+          continue;
+        }
+
+        if (existingFacility) {
+          results.push({
+            rowNumber,
+            success: false,
+            skipped: true,
+            message: "Existing healthcare facility skipped.",
+            data: existingFacility,
+          });
+          continue;
+        }
+
+        const { data: facility, error } = await supabase
+          .from("healthcare_facilities")
+          .insert({
+            facility_name: normalizedName,
+            facility_level: facilityLevel,
+            address: row.address?.trim() || null,
+            barangay: row.barangay?.trim() || null,
+            municipality: row.municipality?.trim() || null,
+            province: row.province?.trim() || null,
+            contact_person: row.contactPerson?.trim() || null,
+            contact_number: row.contactNumber?.trim() || null,
+            latitude: row.latitude ?? null,
+            longitude: row.longitude ?? null,
+            is_active: true,
+            created_by: user.id,
+          })
+          .select(healthcareFacilitySelect)
+          .single();
+
+        if (error || !facility) {
+          results.push(
+            rowError(
+              rowNumber,
+              `Unable to create facility: ${
+                error?.message ?? "Unknown database error"
+              }`,
+            ),
+          );
+          continue;
+        }
+
+        results.push({
+          rowNumber,
+          success: true,
+          message: "Healthcare facility created.",
+          data: facility,
+        });
+      } catch (error) {
+        results.push(
+          rowError(
+            rowNumber,
+            error instanceof Error ? error.message : "Unable to create row.",
+          ),
+        );
+      }
+    }
+
+    const created = results.filter((result) => result.success).length;
+    const skipped = results.filter((result) => "skipped" in result).length;
+
+    response.status(200).json({
+      success: true,
+      message: `Bulk healthcare facility import finished. ${created} of ${results.length} rows created.`,
+      data: {
+        created,
+        skipped,
+        failed: results.length - created - skipped,
+        results,
+      },
     });
   } catch (error) {
     next(error);

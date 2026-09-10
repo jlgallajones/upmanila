@@ -1,6 +1,8 @@
 import { Router } from "express";
 
 import {
+  bulkRegisterAdmins,
+  bulkRegisterUnitUsers,
   deleteUnitUser,
   getManagedAccounts,
   getUnitUsers,
@@ -31,6 +33,12 @@ authRouter.post(
   requireRole(["super_admin"]),
   registerAdmin,
 );
+authRouter.post(
+  "/bulk-register-admins",
+  requireAuth,
+  requireRole(["super_admin"]),
+  bulkRegisterAdmins,
+);
 authRouter.get(
   "/accounts",
   requireAuth,
@@ -42,6 +50,12 @@ authRouter.post(
   requireAuth,
   requireRole(["super_admin", "admin", "administrator", "encoder"]),
   registerUnitUser,
+);
+authRouter.post(
+  "/bulk-register-unit-users",
+  requireAuth,
+  requireRole(["super_admin", "admin", "administrator", "encoder"]),
+  bulkRegisterUnitUsers,
 );
 authRouter.get(
   "/unit-users",
