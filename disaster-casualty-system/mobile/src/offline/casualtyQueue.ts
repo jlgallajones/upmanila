@@ -173,6 +173,32 @@ export async function getQueuedCasualtySubmissions(): Promise<
   return readQueue();
 }
 
+export async function assignQueuedCasualtyIncident(
+  queueId: string,
+  incident: { id: string; name: string },
+): Promise<void> {
+  const queue = await readQueue();
+  const now = new Date().toISOString();
+
+  await writeQueue(
+    queue.map((item) =>
+      item.id === queueId
+        ? {
+            ...item,
+            payload: {
+              ...item.payload,
+              incidentId: incident.id,
+              offlineIncidentName: incident.name,
+            },
+            status: "pending",
+            updatedAt: now,
+            lastError: undefined,
+          }
+        : item,
+    ),
+  );
+}
+
 async function markQueueItemSyncing(
   queueId: string,
 ): Promise<void> {

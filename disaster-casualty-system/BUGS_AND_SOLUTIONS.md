@@ -206,6 +206,12 @@ This document summarizes the main issues encountered during development of the D
 
 **Solution:** A successful submission notification should be created only after casualty creation returns a valid casualty/record ID. The notification payload should include the event type and casualty ID, and tapping the notification should route to the same casualty detail view used by Records.
 
+## 35. First-Time Offline Add Casualty Blocked By Missing Incident List
+
+**Problem:** If a responder opened the mobile app in airplane mode before the incident list had ever been cached, the Add Casualty flow had no incident options and blocked the user from proceeding or submitting. Removing the required incident field would allow navigation, but the casualty still could not sync later because the API requires an official incident ID.
+
+**Solution:** Add Casualty now allows a first-time offline placeholder path when no incident list is available. The casualty can be saved locally in the offline queue without an incident ID, with an optional temporary offline incident name. Records now marks those queued casualties as needing an incident, lets the user assign an active incident after reconnecting, and then retry sync.
+
 ## Priority Improvement Areas
 
 These are the improvements that matter most based on the bugs encountered so far. They are ordered by risk to data privacy, data integrity, field usability, and presentation readiness.

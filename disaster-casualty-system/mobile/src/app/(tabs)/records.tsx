@@ -37,6 +37,7 @@ import {
   type ResponderAssignment,
 } from "../../auth/responderAssignment";
 import {
+  assignQueuedCasualtyIncident,
   getQueuedCasualtySubmissions,
   retryQueuedCasualtySubmission,
   syncQueuedCasualtySubmissions,
@@ -685,15 +686,27 @@ function QueuedCasualtyCard({
   item,
   isRetrying,
   onRetry,
+  canAssignIncident,
+  onOpenIncidentAssignment,
 }: {
   item: QueuedCasualtySubmission;
   isRetrying: boolean;
   onRetry: () => void;
+  canAssignIncident: boolean;
+  onOpenIncidentAssignment: () => void;
 }) {
   const fullName = getQueuedCasualtyName(item);
   const location = getQueuedCasualtyLocation(item);
+  const needsIncidentAssignment = !item.payload.incidentId;
   const statusStyle =
-    item.status === "failed"
+    needsIncidentAssignment
+      ? {
+          backgroundColor: COLORS.paleOrange,
+          color: COLORS.orange,
+          label: "NEEDS INCIDENT",
+          icon: "link-outline" as const,
+        }
+      : item.status === "failed"
       ? {
           backgroundColor: COLORS.paleRed,
           color: COLORS.red,
@@ -816,13 +829,46 @@ function QueuedCasualtyCard({
         </Text>
       ) : null}
 
+      {needsIncidentAssignment ? (
+        <View style={styles.queuedIncidentWarning}>
+          <Ionicons
+            name="information-circle-outline"
+            size={16}
+            color={COLORS.orange}
+          />
+          <Text style={styles.queuedIncidentWarningText}>
+            This casualty was encoded before an incident list was available.
+            Assign an active incident before syncing.
+          </Text>
+        </View>
+      ) : null}
+
       {item.lastError ? (
         <Text style={styles.queuedErrorText}>
           {item.lastError}
         </Text>
       ) : null}
 
-      {item.status === "failed" ? (
+      {needsIncidentAssignment ? (
+        <Pressable
+          disabled={!canAssignIncident || isRetrying}
+          onPress={onOpenIncidentAssignment}
+          style={({ pressed }) => [
+            styles.queuedRetryButton,
+            (!canAssignIncident || isRetrying) &&
+              styles.queuedRetryButtonDisabled,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Text style={styles.queuedRetryButtonText}>
+            {canAssignIncident
+              ? "Assign incident"
+              : "Refresh when online to load incidents"}
+          </Text>
+        </Pressable>
+      ) : null}
+
+      {item.status === "failed" && !needsIncidentAssignment ? (
         <Pressable
           disabled={isRetrying}
           onPress={onRetry}
@@ -1180,6 +1226,10 @@ export default function RecordsScreen() {
     useState(false);
   const [queueMessage, setQueueMessage] =
     useState<string | null>(null);
+  const [
+    assigningIncidentQueueId,
+    setAssigningIncidentQueueId,
+  ] = useState<string | null>(null);
 
   const loadQueuedSubmissions = useCallback(async () => {
     const queue = await getQueuedCasualtySubmissions();
@@ -1220,8 +1270,11 @@ export default function RecordsScreen() {
         return;
       }
 
-      const data = await getCasualties();
-      setIncidents([]);
+      const [incidentData, data] = await Promise.all([
+        getIncidents(),
+        getCasualties(),
+      ]);
+      setIncidents(incidentData);
       setRecords(
         filterOwnRecordsForDataEntryRole(
           data,
@@ -1288,7 +1341,7 @@ export default function RecordsScreen() {
               }),
               getCasualties(),
             ])
-          : [[], await getCasualties()];
+          : await Promise.all([getIncidents(), getCasualties()]);
 
         if (isMounted) {
           setIncidents(incidentData);
@@ -1431,6 +1484,33 @@ export default function RecordsScreen() {
       setIsRetryingAllQueued(false);
     }
   }, [loadQueuedSubmissions, loadRecords]);
+
+  const handleAssignQueuedIncident = useCallback(
+    async (incident: Incident) => {
+      if (!assigningIncidentQueueId) {
+        return;
+      }
+
+      try {
+        await assignQueuedCasualtyIncident(assigningIncidentQueueId, {
+          id: incident.id,
+          name: incident.incident_name,
+        });
+        setAssigningIncidentQueueId(null);
+        setQueueMessage(
+          "Incident assigned. Retry sync when the connection is stable.",
+        );
+        await loadQueuedSubmissions();
+      } catch (error) {
+        setQueueMessage(
+          error instanceof Error
+            ? error.message
+            : "Unable to assign incident to queued casualty.",
+        );
+      }
+    },
+    [assigningIncidentQueueId, loadQueuedSubmissions],
+  );
 
   function toggleReviewFilter(filter: FieldResponderReviewFilter) {
     setActiveReviewFilters((current) =>
@@ -1586,6 +1666,17 @@ matchesFilter =
   ).length;
   const pendingQueuedCount =
     queuedSubmissions.length - failedQueuedCount;
+  const activeIncidentAssignmentOptions = useMemo(
+    () =>
+      incidents.filter(
+        (incident) =>
+          !incident.ended_at && incident.status !== "closed",
+      ),
+    [incidents],
+  );
+  const assigningQueuedSubmission = queuedSubmissions.find(
+    (item) => item.id === assigningIncidentQueueId,
+  );
 
   const casualtyCountByIncidentId = useMemo(() => {
     return records.reduce<Record<string, number>>((counts, record) => {
@@ -2556,6 +2647,12 @@ function toggleHealthcareLocationFilter(
                     syncingQueueId === item.id ||
                     isRetryingAllQueued
                   }
+                  canAssignIncident={
+                    activeIncidentAssignmentOptions.length > 0
+                  }
+                  onOpenIncidentAssignment={() =>
+                    setAssigningIncidentQueueId(item.id)
+                  }
                   onRetry={() => {
                     void handleRetryQueuedSubmission(item.id);
                   }}
@@ -2569,6 +2666,87 @@ function toggleHealthcareLocationFilter(
           )}
         </View>
       ) : null}
+
+      <Modal
+        visible={Boolean(assigningIncidentQueueId)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAssigningIncidentQueueId(null)}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => setAssigningIncidentQueueId(null)}
+        >
+          <Pressable
+            style={styles.incidentAssignSheet}
+            onPress={(event) => event.stopPropagation()}
+          >
+            <View style={styles.sheetHandle} />
+
+            <Text style={styles.incidentAssignTitle}>
+              Assign Incident
+            </Text>
+
+            <Text style={styles.incidentAssignSubtitle}>
+              {assigningQueuedSubmission
+                ? `${getQueuedCasualtyName(assigningQueuedSubmission)} will sync under the selected active incident.`
+                : "Select the active incident for this queued casualty."}
+            </Text>
+
+            {activeIncidentAssignmentOptions.length > 0 ? (
+              <View style={styles.incidentAssignList}>
+                {activeIncidentAssignmentOptions.map((incident) => (
+                  <Pressable
+                    key={incident.id}
+                    onPress={() => {
+                      void handleAssignQueuedIncident(incident);
+                    }}
+                    style={({ pressed }) => [
+                      styles.incidentAssignOption,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <View style={styles.incidentAssignOptionIcon}>
+                      <Ionicons
+                        name="radio-button-on-outline"
+                        size={16}
+                        color={COLORS.maroon}
+                      />
+                    </View>
+
+                    <View style={styles.incidentAssignOptionText}>
+                      <Text style={styles.incidentAssignOptionTitle}>
+                        {incident.incident_name}
+                      </Text>
+                      <Text style={styles.incidentAssignOptionMeta}>
+                        {incident.disaster_type || "Incident"}{" "}
+                        {"\u00B7"} {incident.incident_code}
+                      </Text>
+                    </View>
+                  </Pressable>
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.incidentAssignEmpty}>
+                No active incidents are available yet. Refresh this page
+                after reconnecting to the internet.
+              </Text>
+            )}
+
+            <Pressable
+              onPress={() => setAssigningIncidentQueueId(null)}
+              style={({ pressed }) => [
+                styles.incidentAssignCancel,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={styles.incidentAssignCancelText}>
+                Cancel
+              </Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <FlatList
         data={filteredRecords}
@@ -3100,6 +3278,95 @@ const styles = StyleSheet.create({
     marginTop: 11,
   },
 
+  incidentAssignSheet: {
+    width: "100%",
+    maxWidth: 390,
+    maxHeight: "82%",
+    borderRadius: 24,
+    padding: 18,
+    backgroundColor: COLORS.white,
+  },
+
+  incidentAssignTitle: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: "900",
+    marginTop: 12,
+  },
+
+  incidentAssignSubtitle: {
+    color: COLORS.secondaryText,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 6,
+  },
+
+  incidentAssignList: {
+    gap: 9,
+    marginTop: 14,
+  },
+
+  incidentAssignOption: {
+    minHeight: 62,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 11,
+    backgroundColor: "#F8FAFC",
+  },
+
+  incidentAssignOptionIcon: {
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 10,
+    backgroundColor: COLORS.paleRed,
+  },
+
+  incidentAssignOptionText: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  incidentAssignOptionTitle: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+
+  incidentAssignOptionMeta: {
+    color: COLORS.secondaryText,
+    fontSize: 10,
+    fontWeight: "700",
+    marginTop: 4,
+  },
+
+  incidentAssignEmpty: {
+    color: COLORS.secondaryText,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 14,
+  },
+
+  incidentAssignCancel: {
+    minHeight: 42,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 13,
+    marginTop: 14,
+    backgroundColor: COLORS.paleGray,
+  },
+
+  incidentAssignCancelText: {
+    color: COLORS.text,
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
   list: {
     flex: 1,
   },
@@ -3365,6 +3632,24 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
+  queuedIncidentWarning: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 7,
+    marginTop: 9,
+    borderRadius: 11,
+    padding: 10,
+    backgroundColor: COLORS.paleOrange,
+  },
+
+  queuedIncidentWarningText: {
+    flex: 1,
+    color: COLORS.orange,
+    fontSize: 10,
+    lineHeight: 15,
+    fontWeight: "800",
+  },
+
   queuedRetryButton: {
     alignSelf: "flex-start",
     minHeight: 34,
@@ -3374,6 +3659,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
     marginTop: 10,
     backgroundColor: COLORS.paleRed,
+  },
+
+  queuedRetryButtonDisabled: {
+    opacity: 0.62,
   },
 
   queuedRetryButtonText: {

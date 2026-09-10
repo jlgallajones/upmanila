@@ -5058,6 +5058,12 @@ const [
   const hasSavedResponderSafetyResponse =
     responderSafetyResponse !== null &&
     responderSafetyResponse.incident_id === form.incidentId;
+  const canSaveWithOfflineIncidentPlaceholder =
+    !isEditing &&
+    Boolean(currentUserId) &&
+    !form.incidentId &&
+    incidents.length === 0 &&
+    Boolean(incidentError);
 
   function getAllowedTriageSystemOptions(
     triageStage: string,
@@ -6873,7 +6879,8 @@ const victimCodeAlreadyExists = useMemo(() => {
         if (
           (isFieldResponderFlow || isSaResponderFlow) &&
           !form.incidentId &&
-          currentUserId
+          currentUserId &&
+          !canSaveWithOfflineIncidentPlaceholder
         ) {
           Alert.alert(
             "Incident required",
@@ -6920,7 +6927,11 @@ const victimCodeAlreadyExists = useMemo(() => {
       case "Intro":
       case "General Information":
       case "Incident":
-        if (!form.incidentId && currentUserId) {
+        if (
+          !form.incidentId &&
+          currentUserId &&
+          !canSaveWithOfflineIncidentPlaceholder
+        ) {
           Alert.alert(
             "Incident required",
             "Select the incident before submitting this casualty.",
@@ -7515,7 +7526,11 @@ if (
         return true;
 
       case "Intro":
-        if (!form.incidentId && currentUserId) {
+        if (
+          !form.incidentId &&
+          currentUserId &&
+          !canSaveWithOfflineIncidentPlaceholder
+        ) {
           Alert.alert(
             "Incident required",
             "Select the incident before encoding victim details.",
@@ -7600,7 +7615,11 @@ if (
         return true;
 
       case "General Information":
-        if (!form.incidentId && currentUserId) {
+        if (
+          !form.incidentId &&
+          currentUserId &&
+          !canSaveWithOfflineIncidentPlaceholder
+        ) {
           Alert.alert(
             "Incident required",
             "Select the active incident before documenting hospital care.",
@@ -7743,7 +7762,11 @@ if (
         return true;
 
       case "Incident":
-        if (!form.incidentId && (currentUserId || isEditing)) {
+        if (
+          !form.incidentId &&
+          (currentUserId || isEditing) &&
+          !canSaveWithOfflineIncidentPlaceholder
+        ) {
           Alert.alert(
             "Incident required",
             "Choose or create a disaster incident before continuing.",
@@ -10268,6 +10291,38 @@ if (
       }
 
       if (!form.incidentId) {
+        if (canSaveWithOfflineIncidentPlaceholder) {
+          try {
+            setIsSubmitting(true);
+
+            await queueCurrentCasualtySubmission();
+
+            if (shouldResetPendingDepartureForm) {
+              resetForNextCasualty();
+            }
+
+            setSubmissionFeedback({
+              title: "Saved offline",
+              message:
+                "No incident list is available on this device yet, so the casualty was saved locally. When internet returns, open Records, assign the queued casualty to an active incident, then retry sync.",
+              resetOnClose: shouldResetPendingDepartureForm
+                ? false
+                : undefined,
+            });
+          } catch (error) {
+            Alert.alert(
+              "Unable to save offline",
+              error instanceof Error
+                ? error.message
+                : "Please try saving the record again.",
+            );
+          } finally {
+            setIsSubmitting(false);
+          }
+
+          return;
+        }
+
         Alert.alert(
           "Select a disaster incident",
           "Choose or create a disaster incident before submitting this casualty.",
@@ -10497,6 +10552,17 @@ function confirmExitAddCasualty() {
                 </Text>
               </View>
             ) : null}
+
+            {canSaveWithOfflineIncidentPlaceholder ? (
+              <FormField
+                label="OFFLINE INCIDENT NAME"
+                value={form.incidentName}
+                placeholder="Optional temporary incident label"
+                onChangeText={(value) =>
+                  updateField("incidentName", value)
+                }
+              />
+            ) : null}
           </>
         ) : null}
 
@@ -10616,6 +10682,17 @@ function confirmExitAddCasualty() {
           }
           onPress={() => openChoiceSheet("incident")}
         />
+
+        {canSaveWithOfflineIncidentPlaceholder ? (
+          <FormField
+            label="OFFLINE INCIDENT NAME"
+            value={form.incidentName}
+            placeholder="Optional temporary incident label"
+            onChangeText={(value) =>
+              updateField("incidentName", value)
+            }
+          />
+        ) : null}
 
         <SelectField
           label="RECEIVING FACILITY NAME"
@@ -11589,6 +11666,17 @@ function confirmExitAddCasualty() {
               {incidentError}
             </Text>
           </View>
+        ) : null}
+
+        {canSaveWithOfflineIncidentPlaceholder ? (
+          <FormField
+            label="OFFLINE INCIDENT NAME"
+            value={form.incidentName}
+            placeholder="Optional temporary incident label"
+            onChangeText={(value) =>
+              updateField("incidentName", value)
+            }
+          />
         ) : null}
 
         {canManageReferenceData ? (
