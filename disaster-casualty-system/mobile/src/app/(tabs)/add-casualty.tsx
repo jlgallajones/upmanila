@@ -1966,10 +1966,12 @@ function triageColorToCategory(
 ): TriageCategory {
   switch (value) {
     case "red":
+    case "orange":
       return "immediate";
     case "yellow":
       return "delayed";
     case "green":
+    case "blue":
     case "white":
       return "minimal";
     case "black":
@@ -1985,7 +1987,7 @@ function triageFinalAnswerToCategory(
 ): TriageCategory {
   const normalizedSystem = normalizeTriageSystem(system);
 
-  if (normalizedSystem === "esi" || normalizedSystem === "metts") {
+  if (normalizedSystem === "esi") {
     return "unknown";
   }
 
@@ -2773,6 +2775,97 @@ function calculateEsiFinalTriage(
   return "";
 }
 
+function calculateMettsFinalTriage(
+  answers: Record<string, unknown>,
+): string {
+  const airway = readAssessmentString(answers, "airway");
+  const stridor = readAssessmentString(answers, "stridor");
+  const oxygenSaturation = readAssessmentString(
+    answers,
+    "oxygenSaturation",
+  );
+  const oxygenSupport = readAssessmentString(
+    answers,
+    "oxygenSupport",
+  );
+  const respirations = readAssessmentString(answers, "respirations");
+  const pulseRate = readAssessmentString(answers, "pulseRate");
+  const systolicBloodPressure = readAssessmentString(
+    answers,
+    "systolicBloodPressure",
+  );
+  const consciousness = readAssessmentString(
+    answers,
+    "consciousness",
+  );
+  const ongoingSeizures = readAssessmentString(
+    answers,
+    "ongoingSeizures",
+  );
+  const glasgowComaScale = readAssessmentNumber(
+    answers,
+    "glasgowComaScale",
+  );
+  const temperature = readAssessmentString(answers, "temperature");
+
+  if (
+    airway === "obstructed" ||
+    stridor === "present" ||
+    (oxygenSaturation === "less_than_90" &&
+      oxygenSupport === "present") ||
+    respirations === "more_than_30" ||
+    respirations === "less_than_8" ||
+    pulseRate === "irregular_more_than_150" ||
+    pulseRate === "regular_more_than_130" ||
+    systolicBloodPressure === "less_than_90" ||
+    consciousness === "unconscious" ||
+    ongoingSeizures === "present"
+  ) {
+    return "red";
+  }
+
+  if (
+    (oxygenSaturation === "less_than_90" &&
+      oxygenSupport === "absent") ||
+    respirations === "26_to_29" ||
+    pulseRate === "121_to_130" ||
+    pulseRate === "less_than_40" ||
+    (glasgowComaScale !== null &&
+      glasgowComaScale >= 8 &&
+      glasgowComaScale <= 12) ||
+    temperature === "more_than_41" ||
+    temperature === "less_than_35"
+  ) {
+    return "orange";
+  }
+
+  if (
+    oxygenSaturation === "90_to_95" ||
+    pulseRate === "111_to_120" ||
+    pulseRate === "40_to_49" ||
+    consciousness === "disoriented" ||
+    temperature === "38_6_to_40_9"
+  ) {
+    return "yellow";
+  }
+
+  if (
+    airway === "unobstructed" &&
+    stridor === "absent" &&
+    oxygenSaturation === "more_than_95" &&
+    respirations === "8_to_25" &&
+    pulseRate === "50_to_110" &&
+    systolicBloodPressure === "more_than_90" &&
+    consciousness === "alert_conscious" &&
+    ongoingSeizures === "absent" &&
+    temperature === "35_to_38_5"
+  ) {
+    return "green";
+  }
+
+  return "";
+}
+
 function calculateMobileTriageCategory(
   triageSystem: string,
   assessmentAnswers: Record<string, unknown> | undefined,
@@ -2823,12 +2916,15 @@ function calculateMobileTriageCategory(
     case "smart":
       return calculateSmartTriage(algorithmAnswers);
     case "esi":
-    case "metts":
     case "ed_triage":
     case "stm":
     case "swift":
     case "other":
       return "unknown";
+    case "metts":
+      return triageColorToCategory(
+        calculateMettsFinalTriage(algorithmAnswers),
+      );
     default:
       return "unknown";
   }
@@ -2906,6 +3002,12 @@ function getCalculatedFinalTriageAnswer(
    */
   if (normalizedSystem === "esi") {
     return calculateEsiFinalTriage(
+      assessmentAnswers,
+    );
+  }
+
+  if (normalizedSystem === "metts") {
+    return calculateMettsFinalTriage(
       assessmentAnswers,
     );
   }

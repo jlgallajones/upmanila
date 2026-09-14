@@ -12,6 +12,16 @@ type RefreshSessionRequest = {
   refreshToken: string;
 };
 
+type ForgotPasswordRequest = {
+  email: string;
+  redirectTo?: string;
+};
+
+type RecoverPasswordRequest = {
+  accessToken: string;
+  password: string;
+};
+
 type RegisterAdminRequest = {
   fullName: string;
   email: string;
@@ -155,6 +165,148 @@ async function findProfileByEmail(email: string) {
   }
 
   return user;
+}
+
+function getPasswordResetRedirectUrl(
+  requestRedirectTo: string | undefined,
+): string | undefined {
+  const candidate =
+    requestRedirectTo?.trim() ||
+    process.env.MOBILE_PASSWORD_RESET_REDIRECT_URL?.trim() ||
+    process.env.PASSWORD_RESET_REDIRECT_URL?.trim();
+
+  if (!candidate) {
+    return undefined;
+  }
+
+  try {
+    const url = new URL(candidate);
+
+    if (["javascript:", "data:", "vbscript:"].includes(url.protocol)) {
+      return undefined;
+    }
+
+    return url.toString();
+  } catch {
+    return undefined;
+  }
+}
+
+export async function forgotPassword(
+  request: Request<Record<string, never>, unknown, ForgotPasswordRequest>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const email = request.body.email?.trim().toLowerCase();
+
+    if (!email) {
+      response.status(400).json({
+        success: false,
+        message: "Email address is required.",
+      });
+      return;
+    }
+
+    const redirectTo = getPasswordResetRedirectUrl(
+      request.body.redirectTo,
+    );
+
+    const { error } = await supabaseAuth.auth.resetPasswordForEmail(
+      email,
+      redirectTo ? { redirectTo } : undefined,
+    );
+
+    if (error) {
+      console.warn("Unable to send password reset email", {
+        email,
+        reason: error.message,
+      });
+    }
+
+    response.json({
+      success: true,
+      message:
+        "If the account exists, a password reset email has been sent.",
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function recoverPassword(
+  request: Request<Record<string, never>, unknown, RecoverPasswordRequest>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const accessToken = request.body.accessToken?.trim();
+    const password = request.body.password;
+
+    if (!accessToken || !password) {
+      response.status(400).json({
+        success: false,
+        message: "Recovery token and new password are required.",
+      });
+      return;
+    }
+
+    if (password.length < 6) {
+      response.status(400).json({
+        success: false,
+        message: "Password must be at least 6 characters.",
+      });
+      return;
+    }
+
+    const { data: authData, error: tokenError } =
+      await supabaseAuth.auth.getUser(accessToken);
+
+    if (tokenError || !authData.user) {
+      response.status(400).json({
+        success: false,
+        message:
+          "This password reset link is invalid or expired. Please request a new reset link.",
+      });
+      return;
+    }
+
+    const { error: updateError } =
+      await supabaseAuth.auth.admin.updateUserById(authData.user.id, {
+        password,
+      });
+
+    if (updateError) {
+      throw new Error(
+        `Unable to update password: ${updateError.message}`,
+      );
+    }
+
+    await recordAuditLog({
+      actor: {
+        id: authData.user.id,
+        fullName:
+          typeof authData.user.user_metadata.full_name === "string"
+            ? authData.user.user_metadata.full_name
+            : undefined,
+        role: "user",
+      },
+      action: "account.password_reset",
+      entityType: "user",
+      entityId: authData.user.id,
+      entityLabel: authData.user.email ?? "Recovered account",
+      metadata: {
+        source: "password_recovery",
+      },
+    });
+
+    response.json({
+      success: true,
+      message: "Password updated. You can now sign in.",
+    });
+  } catch (error) {
+    next(error);
+  }
 }
 
 export async function login(

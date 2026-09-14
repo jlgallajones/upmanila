@@ -10,6 +10,11 @@ export type LoginResponse = {
   };
 };
 
+type MessageResponse = {
+  success: boolean;
+  message: string;
+};
+
 export async function login(
   email: string,
   password: string,
@@ -20,4 +25,34 @@ export async function login(
   });
 
   return response.data.data;
+}
+
+export async function requestPasswordReset(
+  email: string,
+  redirectTo?: string,
+): Promise<string> {
+  const response = await api.post<MessageResponse>(
+    "/auth/forgot-password",
+    {
+      email,
+      ...(redirectTo ? { redirectTo } : {}),
+    },
+  );
+
+  return response.data.message;
+}
+
+export async function recoverPassword(
+  accessToken: string,
+  password: string,
+): Promise<string> {
+  const response = await api.post<MessageResponse>(
+    "/auth/recover-password",
+    {
+      accessToken,
+      password,
+    },
+  );
+
+  return response.data.message;
 }

@@ -4,10 +4,12 @@ import {
   bulkRegisterAdmins,
   bulkRegisterUnitUsers,
   deleteUnitUser,
+  forgotPassword,
   getManagedAccounts,
   getUnitUsers,
   login,
   previewOperationalDataReset,
+  recoverPassword,
   registerAdmin,
   registerUnitUser,
   resetOperationalData,
@@ -21,6 +23,8 @@ export const authRouter = Router();
 
 authRouter.post("/login", login);
 authRouter.post("/refresh", refreshSession);
+authRouter.post("/forgot-password", forgotPassword);
+authRouter.post("/recover-password", recoverPassword);
 authRouter.patch("/me", requireAuth, updateCurrentUser);
 authRouter.get(
   "/reset-operational-data/preview",

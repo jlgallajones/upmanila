@@ -24,6 +24,10 @@ type CreateHealthcareFacilityRequest = {
   longitude?: number;
 };
 
+type UpdateHealthcareFacilityRequest = Partial<CreateHealthcareFacilityRequest> & {
+  isActive?: boolean;
+};
+
 type BulkHealthcareFacilityRequest = {
   rows?: CreateHealthcareFacilityRequest[];
 };
@@ -133,8 +137,11 @@ export async function getHealthcareFacilities(
     let query = supabase
       .from("healthcare_facilities")
       .select(healthcareFacilitySelect)
-      .eq("is_active", true)
       .order("facility_name", { ascending: true });
+
+    if (!facilityManagerRoles.has(user.role)) {
+      query = query.eq("is_active", true);
+    }
 
     if (facilityOwnerScope !== undefined) {
       query = query.eq("created_by", facilityOwnerScope);
@@ -353,6 +360,230 @@ export async function createHealthcareFacility(
     response.status(201).json({
       success: true,
       message: "Healthcare facility created successfully.",
+      data: facility,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateHealthcareFacility(
+  request: Request<
+    { id: string },
+    unknown,
+    UpdateHealthcareFacilityRequest
+  >,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const facilityId = request.params.id;
+    const {
+      facilityName,
+      facilityLevel = "unknown",
+      address,
+      barangay,
+      municipality,
+      province,
+      contactPerson,
+      contactNumber,
+      latitude,
+      longitude,
+      isActive,
+    } = request.body;
+    const user = getAuthenticatedUser(request);
+
+    const normalizedName = facilityName?.trim();
+
+    if (!normalizedName) {
+      response.status(400).json({
+        success: false,
+        message: "facilityName is required.",
+      });
+      return;
+    }
+
+    if (!facilityLevels.has(facilityLevel)) {
+      response.status(400).json({
+        success: false,
+        message: "Invalid healthcare facility level.",
+      });
+      return;
+    }
+
+    if (
+      latitude !== undefined &&
+      (latitude < -90 || latitude > 90)
+    ) {
+      response.status(400).json({
+        success: false,
+        message: "Latitude must be from -90 to 90.",
+      });
+      return;
+    }
+
+    if (
+      longitude !== undefined &&
+      (longitude < -180 || longitude > 180)
+    ) {
+      response.status(400).json({
+        success: false,
+        message: "Longitude must be from -180 to 180.",
+      });
+      return;
+    }
+
+    const { data: creator, error: creatorError } = await supabase
+      .from("users")
+      .select("id, role, is_active")
+      .eq("id", user.id)
+      .single();
+
+    if (creatorError || !creator) {
+      response.status(404).json({
+        success: false,
+        message: "Creator account not found.",
+      });
+      return;
+    }
+
+    if (!creator.is_active) {
+      response.status(403).json({
+        success: false,
+        message: "The creator account is inactive.",
+      });
+      return;
+    }
+
+    if (!facilityManagerRoles.has(creator.role)) {
+      response.status(403).json({
+        success: false,
+        message:
+          "Your account is not allowed to edit healthcare facilities.",
+      });
+      return;
+    }
+
+    let facilityQuery = supabase
+      .from("healthcare_facilities")
+      .select(healthcareFacilitySelect)
+      .eq("id", facilityId);
+
+    if (creator.role !== "super_admin") {
+      facilityQuery = facilityQuery.eq("created_by", user.id);
+    }
+
+    const { data: existingFacility, error: facilityError } =
+      await facilityQuery.maybeSingle();
+
+    if (facilityError) {
+      throw new Error(
+        `Unable to retrieve healthcare facility: ${facilityError.message}`,
+      );
+    }
+
+    if (!existingFacility) {
+      response.status(404).json({
+        success: false,
+        message: "Healthcare facility not found.",
+      });
+      return;
+    }
+
+    let duplicateQuery = supabase
+      .from("healthcare_facilities")
+      .select("id")
+      .ilike("facility_name", normalizedName)
+      .eq("is_active", true)
+      .neq("id", facilityId)
+      .limit(1);
+
+    if (creator.role !== "super_admin") {
+      duplicateQuery = duplicateQuery.eq("created_by", user.id);
+    }
+
+    const normalizedMunicipality = municipality?.trim();
+    const normalizedProvince = province?.trim();
+
+    if (normalizedMunicipality) {
+      duplicateQuery = duplicateQuery.ilike(
+        "municipality",
+        normalizedMunicipality,
+      );
+    }
+
+    if (normalizedProvince) {
+      duplicateQuery = duplicateQuery.ilike(
+        "province",
+        normalizedProvince,
+      );
+    }
+
+    const { data: duplicateFacility, error: duplicateError } =
+      await duplicateQuery.maybeSingle();
+
+    if (duplicateError) {
+      throw new Error(
+        `Unable to check existing healthcare facility: ${duplicateError.message}`,
+      );
+    }
+
+    if (duplicateFacility) {
+      response.status(409).json({
+        success: false,
+        message:
+          "A healthcare facility with the same name and location already exists.",
+      });
+      return;
+    }
+
+    const { data: facility, error } = await supabase
+      .from("healthcare_facilities")
+      .update({
+        facility_name: normalizedName,
+        facility_level: facilityLevel,
+        address: address?.trim() || null,
+        barangay: barangay?.trim() || null,
+        municipality: municipality?.trim() || null,
+        province: province?.trim() || null,
+        contact_person: contactPerson?.trim() || null,
+        contact_number: contactNumber?.trim() || null,
+        latitude: latitude ?? null,
+        longitude: longitude ?? null,
+        is_active:
+          typeof isActive === "boolean" ? isActive : existingFacility.is_active,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", facilityId)
+      .select(healthcareFacilitySelect)
+      .single();
+
+    if (error || !facility) {
+      throw new Error(
+        `Unable to update healthcare facility: ${
+          error?.message ?? "Unknown database error"
+        }`,
+      );
+    }
+
+    await recordAuditLog({
+      actor: user,
+      action: "healthcare_facility.updated",
+      entityType: "healthcare_facility",
+      entityId: facility.id,
+      entityLabel: facility.facility_name,
+      metadata: {
+        previousName: existingFacility.facility_name,
+        facilityLevel: facility.facility_level,
+        municipality: facility.municipality,
+        province: facility.province,
+        isActive: facility.is_active,
+      },
+    });
+
+    response.status(200).json({
+      success: true,
+      message: "Healthcare facility updated successfully.",
       data: facility,
     });
   } catch (error) {

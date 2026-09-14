@@ -4,6 +4,7 @@ import {
   bulkCreateHealthcareFacilities,
   createHealthcareFacility,
   getHealthcareFacilities,
+  updateHealthcareFacility,
 } from "../controllers/healthcare-facility.controller.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 
@@ -21,5 +22,11 @@ healthcareFacilityRouter.post(
   requireAuth,
   requireRole(["super_admin", "admin", "administrator", "encoder"]),
   bulkCreateHealthcareFacilities,
+);
+healthcareFacilityRouter.patch(
+  "/:id",
+  requireAuth,
+  requireRole(["super_admin", "admin", "administrator", "encoder"]),
+  updateHealthcareFacility,
 );
 

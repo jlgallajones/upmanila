@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as Linking from "expo-linking";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
@@ -15,7 +16,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { login } from "../../api/auth";
+import { login, requestPasswordReset } from "../../api/auth";
 import { saveSession } from "../../auth/session";
 import EmergencyShield from "../../components/common/EmergencyShield";
 import {
@@ -45,7 +46,14 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRequestingPasswordReset, setIsRequestingPasswordReset] =
+    useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [passwordResetMessage, setPasswordResetMessage] = useState<
+    string | null
+  >(null);
+  const [passwordResetMessageType, setPasswordResetMessageType] =
+    useState<"success" | "error">("success");
 
   function getLoginErrorMessage(error: unknown): string {
     const message =
@@ -76,6 +84,7 @@ export default function LoginScreen() {
   function handleEmailChange(value: string) {
     setEmail(value);
     setLoginError(null);
+    setPasswordResetMessage(null);
   }
 
   function handlePasswordChange(value: string) {
@@ -114,11 +123,68 @@ export default function LoginScreen() {
     }
   }
 
+  function getPasswordResetRedirectUrl() {
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      return `${window.location.origin}/reset-password`;
+    }
+
+    return Linking.createURL("/reset-password");
+  }
+
   function handleForgotPassword() {
-    Alert.alert(
-      "Forgot password",
-      "Password recovery will be connected to Supabase Auth later.",
-    );
+    const trimmedEmail = email.trim();
+
+    if (!trimmedEmail) {
+      setPasswordResetMessageType("error");
+      setPasswordResetMessage(
+        "Enter your email address first so we can send the reset link.",
+      );
+      return;
+    }
+
+    void sendPasswordReset(trimmedEmail);
+  }
+
+  async function sendPasswordReset(targetEmail: string) {
+    try {
+      setIsRequestingPasswordReset(true);
+      setPasswordResetMessageType("success");
+      setPasswordResetMessage("Sending password reset link...");
+      const message = await requestPasswordReset(
+        targetEmail,
+        getPasswordResetRedirectUrl(),
+      );
+
+      setPasswordResetMessageType("success");
+      setPasswordResetMessage(
+        message ||
+          "If the account exists, a password reset email has been sent.",
+      );
+
+      Alert.alert(
+        "Check your email",
+        message ||
+          "If the account exists, a password reset email has been sent.",
+      );
+    } catch (error) {
+      logUiError("Password reset request failed", error);
+      setPasswordResetMessageType("error");
+      setPasswordResetMessage(
+        getUserFriendlyMessage(
+          error,
+          "Please check your connection and try again.",
+        ),
+      );
+      Alert.alert(
+        "Unable to send reset link",
+        getUserFriendlyMessage(
+          error,
+          "Please check your connection and try again.",
+        ),
+      );
+    } finally {
+      setIsRequestingPasswordReset(false);
+    }
   }
 
   return (
@@ -275,12 +341,50 @@ export default function LoginScreen() {
                 </Text>
               </Pressable>
 
-              <Pressable onPress={handleForgotPassword}>
+              <Pressable
+                disabled={isRequestingPasswordReset}
+                onPress={handleForgotPassword}
+              >
                 <Text style={styles.forgotText}>
-                  Forgot Password?
+                  {isRequestingPasswordReset
+                    ? "Sending reset link..."
+                    : "Forgot Password?"}
                 </Text>
               </Pressable>
             </View>
+
+            {passwordResetMessage ? (
+              <View
+                style={[
+                  styles.passwordResetCard,
+                  passwordResetMessageType === "error" &&
+                    styles.passwordResetCardError,
+                ]}
+              >
+                <Ionicons
+                  name={
+                    passwordResetMessageType === "error"
+                      ? "alert-circle-outline"
+                      : "mail-outline"
+                  }
+                  size={18}
+                  color={
+                    passwordResetMessageType === "error"
+                      ? COLORS.warningText
+                      : COLORS.maroon
+                  }
+                />
+                <Text
+                  style={[
+                    styles.passwordResetText,
+                    passwordResetMessageType === "error" &&
+                      styles.passwordResetTextError,
+                  ]}
+                >
+                  {passwordResetMessage}
+                </Text>
+              </View>
+            ) : null}
           </View>
 
           <Pressable
@@ -494,6 +598,32 @@ const styles = StyleSheet.create({
     color: COLORS.maroon,
     fontSize: 13,
     fontWeight: "600",
+  },
+  passwordResetCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    borderWidth: 1,
+    borderColor: "#F0D8D9",
+    borderRadius: 11,
+    backgroundColor: "#FFF8F8",
+  },
+  passwordResetCardError: {
+    borderColor: COLORS.warningBorder,
+    backgroundColor: COLORS.warningBackground,
+  },
+  passwordResetText: {
+    flex: 1,
+    marginLeft: 8,
+    color: COLORS.maroon,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "600",
+  },
+  passwordResetTextError: {
+    color: COLORS.warningText,
   },
 
   loginButton: {

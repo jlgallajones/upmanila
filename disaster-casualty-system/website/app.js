@@ -70,6 +70,7 @@ const state = {
   activeView: localStorage.getItem("dcms.admin.activeView") || "home",
   incidentSearchQuery: "",
   incidentDateFilter: "",
+  casualtyRecordIncidentFocus: "all",
   casualtyRecordVerificationFilter: "all",
   casualtyRecordDateFilter: "",
   verificationReviewIncidentFilter: "all",
@@ -183,7 +184,6 @@ const adminViews = [
   ["incident-management", "Incident Management"],
   ["incident-analytics", "Incident Analytics"],
   ["incidents", "Official Incidents"],
-  ["evacuation", "Evacuation Centers"],
   ["facilities", "Healthcare Facilities"],
   ["users", "Accounts"],
   ["records", "Casualty Records"],
@@ -565,10 +565,15 @@ function compareCasualtyRecordsByLatest(first, second) {
 }
 
 function filterCasualtyRecordsForTable(records) {
+  const incidentFocus = state.casualtyRecordIncidentFocus;
   const verificationStatus = state.casualtyRecordVerificationFilter;
   const date = state.casualtyRecordDateFilter.trim();
 
   return records.filter((record) => {
+    const matchesIncident =
+      !incidentFocus ||
+      incidentFocus === "all" ||
+      record.incident?.id === incidentFocus;
     const matchesStatus =
       verificationStatus === "all" ||
       record.verification_status === verificationStatus;
@@ -576,7 +581,7 @@ function filterCasualtyRecordsForTable(records) {
       !date ||
       formatDateFilterValue(casualtyRecordDateValue(record)) === date;
 
-    return matchesStatus && matchesDate;
+    return matchesIncident && matchesStatus && matchesDate;
   });
 }
 
@@ -1682,7 +1687,20 @@ function bindShell() {
     openProfileModal();
   });
 
-  qs("#logoutButton").addEventListener("click", () => {
+  qs("#logoutButton").addEventListener("click", async () => {
+    const confirmed = await showDashboardConfirm({
+      title: "Log out?",
+      message:
+        "You will return to the login screen and need to sign in again to continue.",
+      confirmLabel: "Logout",
+      cancelLabel: "Stay signed in",
+      danger: true,
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
     clearSession();
     render();
   });
@@ -1985,7 +2003,6 @@ function renderCurrentView(errorMessage = "") {
         "incident-management": "Incident Management",
         "incident-analytics": "Incident Analytics",
         incidents: "Official Incidents",
-        evacuation: "Evacuation Centers",
         facilities: "Healthcare Facilities",
         users: "Accounts",
         records: "Casualty Records",
@@ -2020,11 +2037,13 @@ function bindView() {
   bindCreateIncidentForm();
   bindCreateEvacuationForm();
   bindCreateFacilityForm();
+  bindHealthcareFacilityActions();
   bindRegisterAdminForm();
   bindRegisterUnitUserForm();
   bindAccountActions();
   bindIncidentManagementActions();
   bindIncidentAnalyticsActions();
+  bindIncidentHistoryActions();
   bindCasualtyRecordIncidents();
   bindOpenCasualtyRecord();
   bindVerificationReviewActions();
@@ -2347,6 +2366,38 @@ function bindIncidentAnalyticsActions() {
   }
 }
 
+function bindIncidentHistoryActions() {
+  document.querySelectorAll("[data-view-incident-records]").forEach((button) => {
+    if (button.dataset.viewRecordsBound === "true") return;
+    button.dataset.viewRecordsBound = "true";
+
+    button.addEventListener("click", () => {
+      const incidentId = button.dataset.viewIncidentRecords;
+      if (!incidentId) return;
+
+      state.casualtyRecordIncidentFocus = incidentId;
+      setActiveView("records");
+      renderCurrentView();
+      bindView();
+    });
+  });
+
+  document.querySelectorAll("[data-view-incident-analytics]").forEach((button) => {
+    if (button.dataset.viewAnalyticsBound === "true") return;
+    button.dataset.viewAnalyticsBound = "true";
+
+    button.addEventListener("click", () => {
+      const incidentId = button.dataset.viewIncidentAnalytics;
+      if (!incidentId) return;
+
+      state.analyticsIncidentId = incidentId;
+      setActiveView("incident-analytics");
+      renderCurrentView();
+      bindView();
+    });
+  });
+}
+
 function renderDashboardShellIntoExisting() {
   const app = document.getElementById("app");
   app.innerHTML = renderDashboardShell();
@@ -2381,8 +2432,6 @@ function renderAdminView() {
       return renderIncidentAnalytics();
     case "incidents":
       return renderIncidentCreator();
-    case "evacuation":
-      return renderEvacuationCreator();
     case "facilities":
       return renderFacilityCreator();
     case "users":
@@ -2447,11 +2496,6 @@ function renderSuperAdminHome() {
             label: "Export healthcare facilities CSV",
             path: "/exports/healthcare-facilities.csv",
             fileName: "dcms-healthcare-facilities.csv",
-          },
-          {
-            label: "Export evacuation centers CSV",
-            path: "/exports/evacuation-centers.csv",
-            fileName: "dcms-evacuation-centers.csv",
           },
           {
             label: "Download system backup JSON",
@@ -4686,7 +4730,7 @@ function renderRegistrationShell() {
       </form>
       ${renderBulkImportPanel(
         "adminAccounts",
-        "Bulk upload command accounts",
+        "Upload Super Admin / Admin Accounts",
         "Upload a CSV or Excel file to create administrator or super admin accounts in one batch.",
       )}
     </section>
@@ -4754,7 +4798,7 @@ function renderAdminUnitRegistration() {
       </form>
       ${renderBulkImportPanel(
         "unitAccounts",
-        "Bulk upload responder/documenter accounts",
+        "Upload Responder/Documenter Accounts",
         "Upload a CSV or Excel file to create multiple responder and healthcare documenter accounts.",
       )}
       <div style="margin-top:12px">
@@ -5043,6 +5087,11 @@ function bindAccountDeleteAction(userId) {
 function renderAdminCasualtyRecords(compact = false) {
   const byIncident = new Map();
   const filteredCasualties = filterCasualtyRecordsForTable(state.casualties);
+  const focusedIncident =
+    state.casualtyRecordIncidentFocus &&
+    state.casualtyRecordIncidentFocus !== "all"
+      ? getIncidentById(state.casualtyRecordIncidentFocus)
+      : null;
 
   for (const item of filteredCasualties) {
     const incidentId =
@@ -5083,9 +5132,18 @@ function renderAdminCasualtyRecords(compact = false) {
         <div>
           <h2>Casualty Records</h2>
           <p class="panel-subtitle">
-            Select an incident to view casualty records submitted for that incident.
+            ${
+              focusedIncident
+                ? `Showing casualty records for ${escapeHtml(focusedIncident.incident_name)}.`
+                : "Select an incident to view casualty records submitted for that incident."
+            }
           </p>
         </div>
+        ${
+          focusedIncident
+            ? `<button class="ghost-button mini" type="button" data-clear-records-incident-focus>Show all incidents</button>`
+            : ""
+        }
       </div>
 
       ${compact ? "" : renderCasualtyRecordFilters(filteredCasualties.length, state.casualties.length)}
@@ -5296,6 +5354,15 @@ function renderAdminCasualtyRecords(compact = false) {
 }
 
 function bindCasualtyRecordIncidents() {
+  const clearFocusButton = qs("[data-clear-records-incident-focus]");
+  if (clearFocusButton) {
+    clearFocusButton.addEventListener("click", () => {
+      state.casualtyRecordIncidentFocus = "all";
+      renderCurrentView();
+      bindView();
+    });
+  }
+
   document
     .querySelectorAll("[data-records-incident]")
     .forEach((button) => {
@@ -5709,6 +5776,69 @@ function formatTriageRecordValue(value) {
   return roleLabel(text);
 }
 
+const assessmentAnswerLabels = {
+  airwayrisk: "Actual or potential airway risk?",
+  breathingafterairwaymanagement: "Breathing after airway management?",
+  breathingafterrescuebreaths: "Breathing after 5 rescue breaths?",
+  breathingrisk: "Actual or potential breathing risk?",
+  canwalk: "Can walk?",
+  canwalkornovisibleinjuries: "Can walk or no visible injuries?",
+  capillaryrefill: "Capillary refill",
+  catastrophichemorrhage: "Catastrophic hemorrhage?",
+  circulationrisk: "Actual or potential circulation risk?",
+  delayedsurgerypermitted: "Surgery can be delayed safely?",
+  disabilityrisk: "Actual or potential disability risk?",
+  exposurerisk: "Actual or potential exposure risk?",
+  finaltriage: "Final triage",
+  followssimplecommands: "Mental status",
+  gcs: "Glasgow Coma Scale",
+  heartrate: "Heart rate",
+  injury: "Injury",
+  lifesavingsurgeryhighsurvival: "Life-saving surgery, high survival chance?",
+  lowsurvivalcomplextreatment: "Complex treatment with low survival chance?",
+  mentalstatus: "Mental status",
+  minorselfcare: "Minor injuries, can self-care?",
+  palpablepulseafterairwaymanagement:
+    "Palpable pulse after airway management?",
+  pulse: "Pulse",
+  radialpulse: "Radial pulse",
+  respirations: "Respirations",
+  respiratoryrate: "Respiratory rate",
+  savecategory: "SAVE category",
+  specialpopulation: "Special population",
+  spontaneousbreathing: "Spontaneous breathing?",
+  suckingchestwound: "Sucking chest wound?",
+  systolicbp: "Systolic BP",
+};
+
+function formatAssessmentAnswerLabel(key) {
+  const raw = String(key || "").trim();
+  const normalized = raw
+    .replace(/[^a-z0-9]/gi, "")
+    .toLowerCase();
+
+  if (assessmentAnswerLabels[normalized]) {
+    return assessmentAnswerLabels[normalized];
+  }
+
+  return raw
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .trim()
+    .split(/\s+/)
+    .map((part) => {
+      const upperPart = part.toUpperCase();
+
+      if (["BP", "CBG", "GCS", "PR", "RR", "SPO2"].includes(upperPart)) {
+        return upperPart;
+      }
+
+      return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+    })
+    .join(" ");
+}
+
 function renderTriageAssessmentAnswers(answers) {
   if (!answers || typeof answers !== "object") {
     return `
@@ -5733,7 +5863,7 @@ function renderTriageAssessmentAnswers(answers) {
       ${entries
         .map(([key, value]) =>
           detailItem(
-            roleLabel(key),
+            formatAssessmentAnswerLabel(key),
             formatTriageRecordValue(value),
           ),
         )
@@ -7595,6 +7725,7 @@ function formatAuditAction(action) {
     "incident.closed": "Incident closed",
     "operational_data.reset": "Records reset",
     "healthcare_facility.created": "Healthcare facility created",
+    "healthcare_facility.updated": "Healthcare facility updated",
     "evacuation_center.created": "Evacuation center created",
     "bulk_import.admin_accounts": "Bulk admin account import",
     "bulk_import.unit_accounts": "Bulk unit account import",
@@ -7707,20 +7838,26 @@ function renderAuditLogsTable() {
 }
 
 function renderIncidentHistory() {
-  const incidents = filterIncidentsBySearchAndDate(state.incidents);
+  const allVisibleIncidents = state.allIncidents.length
+    ? state.allIncidents
+    : state.incidents;
+  const incidents = filterIncidentsBySearchAndDate(allVisibleIncidents);
+  const subtitle = isUnitScopedAdmin()
+    ? "All official incidents created by this admin account, including active and closed incidents."
+    : "All official incidents created by admin users, including active and closed incidents.";
 
   return `
     <section class="panel">
       <div class="panel-header">
         <div>
           <h2>Incident history</h2>
-          <p class="panel-subtitle">All official incidents created by admin users.</p>
+          <p class="panel-subtitle">${escapeHtml(subtitle)}</p>
         </div>
       </div>
-      ${renderIncidentSearchFilters(incidents.length, state.incidents.length)}
+      ${renderIncidentSearchFilters(incidents.length, allVisibleIncidents.length)}
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Code</th><th>Name</th><th>Hazard</th><th>Location</th><th>Status</th><th>Started</th></tr></thead>
+          <thead><tr><th>Code</th><th>Name</th><th>Hazard</th><th>Location</th><th>Status</th><th>Started</th><th>Actions</th></tr></thead>
           <tbody>
             ${incidents
               .map(
@@ -7732,10 +7869,16 @@ function renderIncidentHistory() {
                     <td>${escapeHtml([incident.barangay, incident.municipality, incident.province].filter(Boolean).join(", "))}</td>
                     <td><span class="pill blue">${escapeHtml(incident.status)}</span></td>
                     <td>${formatDate(incident.started_at)}</td>
+                    <td>
+                      <div class="table-actions">
+                        <button class="ghost-button mini" type="button" data-view-incident-records="${escapeHtml(incident.id)}">View records</button>
+                        <button class="ghost-button mini" type="button" data-view-incident-analytics="${escapeHtml(incident.id)}">View analytics</button>
+                      </div>
+                    </td>
                   </tr>
                 `,
               )
-              .join("") || `<tr><td colspan="6"><div class="empty-state">No incidents match the current search filters.</div></td></tr>`}
+              .join("") || `<tr><td colspan="7"><div class="empty-state">No incidents match the current search filters.</div></td></tr>`}
           </tbody>
         </table>
       </div>
@@ -9144,52 +9287,6 @@ function bindCreateIncidentForm() {
   });
 }
 
-function renderEvacuationCreator() {
-  return `
-    <section class="panel">
-      <div class="panel-header">
-        <div>
-          <h2>Add evacuation center</h2>
-          <p class="panel-subtitle">Evacuation centers are assigned to an active incident.</p>
-        </div>
-        <button
-          class="ghost-button mini"
-          type="button"
-          data-export-download="/exports/evacuation-centers.csv"
-          data-export-file="dcms-evacuation-centers.csv"
-        >
-          Export CSV
-        </button>
-      </div>
-      <form id="evacuationForm" class="form-grid" style="margin-top:14px">
-        <div class="form-section-title">Center assignment</div>
-        <label class="field"><span>Incident</span><select name="incidentId" required>${incidentOptions()}</select></label>
-        <div class="form-grid two">
-          <label class="field"><span>Center name</span><input name="centerName" required /></label>
-          <label class="field"><span>Capacity</span><input name="capacity" type="number" min="0" /></label>
-        </div>
-        <label class="field"><span>Address</span><input name="address" /></label>
-        <div class="form-grid three">
-          <label class="field"><span>Barangay</span><input name="barangay" /></label>
-          <label class="field"><span>Municipality</span><input name="municipality" /></label>
-          <label class="field"><span>Province</span><input name="province" /></label>
-        </div>
-        <div class="form-grid two">
-          <label class="field"><span>Contact person</span><input name="contactPerson" /></label>
-          <label class="field"><span>Contact number</span><input name="contactNumber" /></label>
-        </div>
-        <button class="primary-button" type="submit">Create evacuation center</button>
-        <div id="evacuationMessage" class="status-message" hidden></div>
-      </form>
-      ${renderBulkImportPanel(
-        "evacuationCenters",
-        "Bulk upload evacuation centers",
-        "Upload a CSV or Excel file to create multiple evacuation centers. Each row can use incidentId, incidentCode, or incidentName.",
-      )}
-    </section>
-  `;
-}
-
 function bindCreateEvacuationForm() {
   const form = qs("#evacuationForm");
   if (!form) return;
@@ -9260,7 +9357,7 @@ function renderFacilityCreator() {
       </form>
       ${renderBulkImportPanel(
         "healthcareFacilities",
-        "Bulk upload healthcare facilities",
+        " Upload Healthcare Facilities",
         "Upload a CSV or Excel file to create multiple official healthcare facilities.",
       )}
     </section>
@@ -9291,6 +9388,7 @@ function renderHealthcareFacilitiesTable() {
           <td>${escapeHtml(facility.contact_number || "Not recorded")}</td>
           <td><span class="pill ${facility.is_active ? "green" : "red"}">${facility.is_active ? "Active" : "Inactive"}</span></td>
           <td>${formatDate(facility.created_at)}</td>
+          <td><button class="ghost-button mini" type="button" data-edit-healthcare-facility="${escapeHtml(facility.id)}">Edit facility</button></td>
         </tr>
       `;
     });
@@ -9314,15 +9412,151 @@ function renderHealthcareFacilitiesTable() {
               <th>Contact number</th>
               <th>Status</th>
               <th>Date added</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            ${rows.join("") || `<tr><td colspan="7"><div class="empty-state">No healthcare facilities added yet.</div></td></tr>`}
+            ${rows.join("") || `<tr><td colspan="8"><div class="empty-state">No healthcare facilities added yet.</div></td></tr>`}
           </tbody>
         </table>
       </div>
+      <div id="facilityTableMessage" class="status-message" hidden></div>
     </section>
   `;
+}
+
+function renderHealthcareFacilityEditModal(facility) {
+  return `
+    <div class="modal-backdrop" data-close-modal>
+      <section class="record-modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="facilityModalTitle">
+        <form id="facilityEditForm">
+          <div class="modal-header">
+            <div>
+              <span class="eyebrow">Healthcare Facilities</span>
+              <h2 id="facilityModalTitle">Edit facility</h2>
+              <p>${escapeHtml(facility.facility_name || "Healthcare facility")}</p>
+            </div>
+            <button class="icon-button" type="button" data-close-modal aria-label="Close facility editor">&times;</button>
+          </div>
+
+          <div class="modal-body">
+            <div class="form-grid two">
+              <label class="field"><span>Facility name</span><input name="facilityName" required value="${escapeHtml(facility.facility_name || "")}" /></label>
+              <label class="field">
+                <span>Facility level</span>
+                <select name="facilityLevel">
+                  ${facilityLevels
+                    .map(
+                      (level) =>
+                        `<option value="${escapeHtml(level)}" ${facility.facility_level === level ? "selected" : ""}>${escapeHtml(roleLabel(level))}</option>`,
+                    )
+                    .join("")}
+                </select>
+              </label>
+              <label class="field">
+                <span>Status</span>
+                <select name="isActive">
+                  <option value="true" ${facility.is_active ? "selected" : ""}>Active</option>
+                  <option value="false" ${!facility.is_active ? "selected" : ""}>Inactive</option>
+                </select>
+              </label>
+              <label class="field"><span>Contact person</span><input name="contactPerson" value="${escapeHtml(facility.contact_person || "")}" /></label>
+              <label class="field"><span>Contact number</span><input name="contactNumber" value="${escapeHtml(facility.contact_number || "")}" /></label>
+              <label class="field"><span>Barangay</span><input name="barangay" value="${escapeHtml(facility.barangay || "")}" /></label>
+              <label class="field"><span>Municipality</span><input name="municipality" value="${escapeHtml(facility.municipality || "")}" /></label>
+              <label class="field"><span>Province</span><input name="province" value="${escapeHtml(facility.province || "")}" /></label>
+            </div>
+            <label class="field"><span>Address</span><input name="address" value="${escapeHtml(facility.address || "")}" /></label>
+            <div class="account-status-strip">
+              <span class="pill ${facility.is_active ? "green" : "red"}">${facility.is_active ? "Active" : "Inactive"}</span>
+              <span>${facility.created_at ? `Created ${formatDate(facility.created_at)}` : "No creation date recorded"}</span>
+              <span>${facility.updated_at ? `Last updated ${formatDate(facility.updated_at)}` : "No update recorded"}</span>
+            </div>
+            <div id="facilityEditMessage" class="status-message" hidden></div>
+          </div>
+
+          <div class="modal-footer">
+            <button class="ghost-button" type="button" data-close-modal>Cancel</button>
+            <button class="primary-button" type="submit">Save facility</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  `;
+}
+
+function openHealthcareFacilityEditModal(facilityId) {
+  const facility = state.healthcareFacilities.find(
+    (item) => item.id === facilityId,
+  );
+
+  if (!facility) {
+    setMessage("facilityTableMessage", "Healthcare facility could not be found.", "error");
+    return;
+  }
+
+  closeRecordModal();
+  document.body.insertAdjacentHTML(
+    "beforeend",
+    renderHealthcareFacilityEditModal(facility),
+  );
+
+  document.querySelectorAll("[data-close-modal]").forEach((element) => {
+    element.addEventListener("click", (event) => {
+      if (event.target === element || element.matches("button")) {
+        closeRecordModal();
+      }
+    });
+  });
+
+  bindHealthcareFacilityEditForm(facility.id);
+}
+
+function bindHealthcareFacilityActions() {
+  document.querySelectorAll("[data-edit-healthcare-facility]").forEach((button) => {
+    if (button.dataset.editBound === "true") return;
+    button.dataset.editBound = "true";
+
+    button.addEventListener("click", () => {
+      openHealthcareFacilityEditModal(button.dataset.editHealthcareFacility);
+    });
+  });
+}
+
+function bindHealthcareFacilityEditForm(facilityId) {
+  const form = qs("#facilityEditForm");
+  if (!form) return;
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    setMessage("facilityEditMessage", "Saving healthcare facility...");
+
+    try {
+      await apiRequest(`/healthcare-facilities/${encodeURIComponent(facilityId)}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          facilityName: formValue(form, "facilityName"),
+          facilityLevel: formValue(form, "facilityLevel"),
+          isActive: formValue(form, "isActive") === "true",
+          address: formValue(form, "address"),
+          barangay: formValue(form, "barangay"),
+          municipality: formValue(form, "municipality"),
+          province: formValue(form, "province"),
+          contactPerson: formValue(form, "contactPerson"),
+          contactNumber: formValue(form, "contactNumber"),
+        }),
+      });
+
+      await loadSharedData();
+      closeRecordModal();
+      renderCurrentView();
+      bindView();
+      setMessage("facilityTableMessage", "Healthcare facility updated successfully.", "success");
+      showDashboardToast("Healthcare facility updated successfully.", "success");
+    } catch (error) {
+      setMessage("facilityEditMessage", error.message, "error");
+    }
+  });
 }
 
 function bindCreateFacilityForm() {

@@ -604,6 +604,82 @@ function calculateSmartTriage(
   return breathing === true ? "delayed" : "unknown";
 }
 
+function calculateMettsTriage(
+  answers: Record<string, unknown>,
+): TriageCategory {
+  const airway = readString(answers, "airway");
+  const stridor = readString(answers, "stridor");
+  const oxygenSaturation = readString(answers, "oxygenSaturation");
+  const oxygenSupport = readString(answers, "oxygenSupport");
+  const respirations = readString(answers, "respirations");
+  const pulseRate = readString(answers, "pulseRate");
+  const systolicBloodPressure = readString(
+    answers,
+    "systolicBloodPressure",
+  );
+  const consciousness = readString(answers, "consciousness");
+  const ongoingSeizures = readString(answers, "ongoingSeizures");
+  const glasgowComaScale = readNumber(answers, "glasgowComaScale");
+  const temperature = readString(answers, "temperature");
+
+  if (
+    airway === "obstructed" ||
+    stridor === "present" ||
+    (oxygenSaturation === "less_than_90" &&
+      oxygenSupport === "present") ||
+    respirations === "more_than_30" ||
+    respirations === "less_than_8" ||
+    pulseRate === "irregular_more_than_150" ||
+    pulseRate === "regular_more_than_130" ||
+    systolicBloodPressure === "less_than_90" ||
+    consciousness === "unconscious" ||
+    ongoingSeizures === "present"
+  ) {
+    return "immediate";
+  }
+
+  if (
+    (oxygenSaturation === "less_than_90" &&
+      oxygenSupport === "absent") ||
+    respirations === "26_to_29" ||
+    pulseRate === "121_to_130" ||
+    pulseRate === "less_than_40" ||
+    (glasgowComaScale !== null &&
+      glasgowComaScale >= 8 &&
+      glasgowComaScale <= 12) ||
+    temperature === "more_than_41" ||
+    temperature === "less_than_35"
+  ) {
+    return "immediate";
+  }
+
+  if (
+    oxygenSaturation === "90_to_95" ||
+    pulseRate === "111_to_120" ||
+    pulseRate === "40_to_49" ||
+    consciousness === "disoriented" ||
+    temperature === "38_6_to_40_9"
+  ) {
+    return "delayed";
+  }
+
+  if (
+    airway === "unobstructed" &&
+    stridor === "absent" &&
+    oxygenSaturation === "more_than_95" &&
+    respirations === "8_to_25" &&
+    pulseRate === "50_to_110" &&
+    systolicBloodPressure === "more_than_90" &&
+    consciousness === "alert_conscious" &&
+    ongoingSeizures === "absent" &&
+    temperature === "35_to_38_5"
+  ) {
+    return "minimal";
+  }
+
+  return "unknown";
+}
+
 export function calculateTriageCategory(
   triageSystem: TriageSystem,
   assessmentAnswers: Record<string, unknown>,
@@ -665,8 +741,10 @@ export function calculateTriageCategory(
       return calculateMassTriage(algorithmAnswers);
 
     case "esi":
-    case "metts":
       return "unknown";
+
+    case "metts":
+      return calculateMettsTriage(algorithmAnswers);
 
     case "urgent_non_urgent":
       return calculateUrgentNonUrgentTriage(algorithmAnswers);

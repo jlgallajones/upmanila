@@ -168,7 +168,118 @@ type TriageAssessmentRow = {
   triage_stage: string | null;
   triaged_at: string | null;
   triaged_by?: string | null;
+  assessment_answers?: Record<string, unknown> | null;
 };
+
+type AnalyticsTriageCategory =
+  | "immediate"
+  | "delayed"
+  | "minimal"
+  | "expectant"
+  | "unknown";
+
+function normalizeAnalyticsTriageCategory(
+  value: unknown,
+): AnalyticsTriageCategory {
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  if (!normalized) {
+    return "unknown";
+  }
+
+  if (
+    [
+      "immediate",
+      "red",
+      "orange",
+      "esi_1",
+      "esi_2",
+      "t1",
+      "priority_1",
+      "critical",
+    ].includes(normalized)
+  ) {
+    return "immediate";
+  }
+
+  if (
+    [
+      "delayed",
+      "yellow",
+      "esi_3",
+      "t2",
+      "priority_2",
+      "urgent",
+    ].includes(normalized)
+  ) {
+    return "delayed";
+  }
+
+  if (
+    [
+      "minimal",
+      "minor",
+      "green",
+      "blue",
+      "esi_4",
+      "esi_5",
+      "t3",
+      "priority_3",
+      "non_urgent",
+    ].includes(normalized)
+  ) {
+    return "minimal";
+  }
+
+  if (
+    [
+      "expectant",
+      "black",
+      "white",
+      "dead",
+      "deceased",
+      "t4",
+      "priority_4",
+    ].includes(normalized)
+  ) {
+    return "expectant";
+  }
+
+  return "unknown";
+}
+
+function getAnalyticsTriageCategory(
+  row: TriageAssessmentRow | undefined,
+): AnalyticsTriageCategory {
+  if (!row) {
+    return "unknown";
+  }
+
+  const finalTriage =
+    row.assessment_answers &&
+    typeof row.assessment_answers === "object"
+      ? row.assessment_answers.finalTriage
+      : null;
+
+  for (const value of [
+    row.triage_category,
+    row.responder_category,
+    row.calculated_category,
+    finalTriage,
+  ]) {
+    const category = normalizeAnalyticsTriageCategory(value);
+
+    if (category !== "unknown") {
+      return category;
+    }
+  }
+
+  return "unknown";
+}
 
 type TransportRecordRow = {
   casualty_incident_id: string;
@@ -2081,7 +2192,7 @@ export async function getIncidentOnsiteTriageSummary(
         ? await supabase
             .from("casualty_triage_assessments")
             .select(
-              "casualty_incident_id, triage_system, triage_category, responder_category, calculated_category, triage_stage, triaged_at",
+              "casualty_incident_id, triage_system, triage_category, responder_category, calculated_category, triage_stage, triaged_at, assessment_answers",
             )
             .in("casualty_incident_id", casualtyIncidentIds)
             .eq("triage_stage", "on_site")
@@ -2390,7 +2501,7 @@ export async function getIncidentOnsiteCareSummary(
         ? await supabase
             .from("casualty_triage_assessments")
             .select(
-              "casualty_incident_id, triage_category, triage_stage, triaged_at",
+              "casualty_incident_id, triage_system, triage_category, responder_category, calculated_category, triage_stage, triaged_at, assessment_answers",
             )
             .in("casualty_incident_id", casualtyIncidentIds)
             .eq("triage_stage", "on_site")
@@ -2607,7 +2718,7 @@ export async function getIncidentSceneClearanceSummary(
         ? await supabase
             .from("casualty_triage_assessments")
             .select(
-              "casualty_incident_id, triage_category, triage_stage, triaged_at",
+              "casualty_incident_id, triage_system, triage_category, responder_category, calculated_category, triage_stage, triaged_at, assessment_answers",
             )
             .in("casualty_incident_id", casualtyIncidentIds)
             .eq("triage_stage", "on_site")
@@ -3151,7 +3262,7 @@ export async function getIncidentEdResourceSummary(
         ? await supabase
             .from("casualty_triage_assessments")
             .select(
-              "casualty_incident_id, triage_category, triage_stage, triaged_at",
+              "casualty_incident_id, triage_system, triage_category, responder_category, calculated_category, triage_stage, triaged_at, assessment_answers",
             )
             .in("casualty_incident_id", casualtyIncidentIds)
             .order("triaged_at", { ascending: false })
@@ -3229,8 +3340,9 @@ export async function getIncidentEdResourceSummary(
     const intervalMinutes = [0, 15, 30, 45, 60];
 
     const getCategoryForCasualty = (casualtyIncidentId: string) =>
-      latestTriageByCasualty.get(casualtyIncidentId)?.triage_category ??
-      "unknown";
+      getAnalyticsTriageCategory(
+        latestTriageByCasualty.get(casualtyIncidentId),
+      );
 
     const buildRatioMetric = (
       label: string,
@@ -3448,7 +3560,7 @@ export async function getIncidentHospitalResourceSummary(
         ? await supabase
             .from("casualty_triage_assessments")
             .select(
-              "casualty_incident_id, triage_category, triage_stage, triaged_at",
+              "casualty_incident_id, triage_system, triage_category, responder_category, calculated_category, triage_stage, triaged_at, assessment_answers",
             )
             .in("casualty_incident_id", casualtyIncidentIds)
             .order("triaged_at", { ascending: false })
@@ -3512,8 +3624,9 @@ export async function getIncidentHospitalResourceSummary(
     const totalOperatingRooms = snapshot?.total_operating_rooms ?? 0;
 
     const getCategoryForCasualty = (casualtyIncidentId: string) =>
-      latestTriageByCasualty.get(casualtyIncidentId)?.triage_category ??
-      "unknown";
+      getAnalyticsTriageCategory(
+        latestTriageByCasualty.get(casualtyIncidentId),
+      );
     const isCritical = (casualtyIncidentId: string) =>
       severityByCasualty.get(casualtyIncidentId) === "critical" ||
       getCategoryForCasualty(casualtyIncidentId) === "immediate";
@@ -3800,7 +3913,7 @@ export async function getIncidentMorbidityMortalitySummary(
         ? await supabase
             .from("casualty_triage_assessments")
             .select(
-              "casualty_incident_id, triage_category, triage_stage, triaged_at",
+              "casualty_incident_id, triage_system, triage_category, responder_category, calculated_category, triage_stage, triaged_at, assessment_answers",
             )
             .in("casualty_incident_id", casualtyIncidentIds)
             .order("triaged_at", { ascending: false })
@@ -3876,8 +3989,9 @@ export async function getIncidentMorbidityMortalitySummary(
 
     const encounterRows = Array.from(firstEncounterByCasualty.values());
     const getCategoryForCasualty = (casualtyIncidentId: string) =>
-      latestTriageByCasualty.get(casualtyIncidentId)?.triage_category ??
-      "unknown";
+      getAnalyticsTriageCategory(
+        latestTriageByCasualty.get(casualtyIncidentId),
+      );
     const rowsByCategory = (category: string) =>
       encounterRows.filter(
         (row) => getCategoryForCasualty(row.casualty_incident_id) === category,
@@ -4244,8 +4358,9 @@ export async function getIncidentAnalyticsSummary(
     }
 
     const categoryForCasualty = (casualtyIncidentId: string) =>
-      latestTriageByCasualty.get(casualtyIncidentId)?.triage_category ??
-      "unknown";
+      getAnalyticsTriageCategory(
+        latestTriageByCasualty.get(casualtyIncidentId),
+      );
     const categoryRows = (
       rows: Array<{
         casualty_incident_id: string;
@@ -4355,6 +4470,12 @@ const safeResponders = responderSafetyResponses.filter(
 const unsafeResponders = responderSafetyResponses.filter(
   (row) => row.safety_status === "no",
 ).length;
+    const soughtEdCare = (row: FacilityEncounterRow) =>
+      row.sought_ed_care === true ||
+      (
+        row.sought_ed_care !== false &&
+        (Boolean(row.facility_id) || Boolean(row.arrived_at))
+      );
     const edCareByCategory = (
       ["immediate", "delayed", "minimal", "expectant"] as const
     ).reduce<Record<string, { count: number; total: number; percentage: number }>>(
@@ -4366,7 +4487,7 @@ const unsafeResponders = responderSafetyResponses.filter(
         const count = encounterRows.filter(
           (row) =>
             categoryForCasualty(row.casualty_incident_id) === category &&
-            row.sought_ed_care === true,
+            soughtEdCare(row),
         ).length;
 
         values[category] = {

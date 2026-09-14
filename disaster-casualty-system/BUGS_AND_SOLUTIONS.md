@@ -50,6 +50,18 @@ This document summarizes the main issues encountered during development of the D
 
 **Solution:** A new Incident Analytics tab was added. Metrics were scoped per selected incident, cards were corrected to show incident-specific counts, pie charts and axis-based bar charts were added, and legends/colors were refined.
 
+## 8A. HCFD ED-Care Pie Chart Showing No Data
+
+**Problem:** The "Victims Seeking ED Care According to Triage Category" pie chart could stay empty even after HCFD/documenter users selected a receiving facility, arrival time, and tertiary triage assessment. Tertiary systems such as ESI, METTS, and ED Triage could save the normalized `triage_category` as `unknown` while keeping the visible answer in `assessment_answers.finalTriage`.
+
+**Solution:** Incident Analytics now normalizes triage category values from multiple sources: `triage_category`, `responder_category`, `calculated_category`, and `assessment_answers.finalTriage`. ED-style values such as `red`, `orange`, `yellow`, `green`, `blue`, `black`, `white`, and `esi_1` through `esi_5` are mapped into the analytics buckets `immediate`, `delayed`, `minimal`, and `expectant`.
+
+## 8B. METTS Final Triage Not Calculating
+
+**Problem:** The HCFD/documenter METTS assessment showed a Final triage field, but the app did not calculate a final METTS color even after all METTS vital-sign questions were answered. The mobile and API triage calculators treated METTS as `unknown`.
+
+**Solution:** METTS calculation was added to the mobile app and API. The formula now maps unstable RED criteria, potentially life-threatening ORANGE criteria, YELLOW emergency-care criteria, and GREEN stable criteria from the METTS vital-sign fields. METTS colors are mapped into the system analytics categories so red/orange count as immediate, yellow as delayed, and green/blue as minimal.
+
 ## 9. Sidebar And Web Dashboard Responsiveness
 
 **Problem:** The collapsible sidebar looked unprofessional when collapsed and the dashboard was not mobile-browser friendly.
@@ -61,6 +73,18 @@ This document summarizes the main issues encountered during development of the D
 **Problem:** Some dashboard tabs, especially Incident Analytics and Audit Logs, required manual refresh to show new records.
 
 **Solution:** Realtime refresh behavior was expanded so more dashboard sections update without needing a full page refresh.
+
+## 10A. Logout Had No Confirmation
+
+**Problem:** The web dashboard logged the user out immediately when the Logout button was clicked, which made accidental clicks disruptive.
+
+**Solution:** Logout now opens an in-app confirmation dialog. The session is only cleared after the user confirms; cancelling keeps the user signed in.
+
+## 10B. Mobile Forgot Password Was Not Connected
+
+**Problem:** The mobile login screen had a Forgot Password button, but it only showed a placeholder message and did not start a real password recovery flow.
+
+**Solution:** Mobile forgot password now sends a Supabase password recovery email through the API. A `/reset-password` mobile/PWA screen was added to accept the recovery token, validate the new password, and update the account password through the backend.
 
 ## 11. Search, Sorting, And Date Filters
 
@@ -217,6 +241,24 @@ This document summarizes the main issues encountered during development of the D
 **Problem:** A first-time offline casualty could save locally, but after assigning an incident and retrying sync online, the mobile app showed “A matching record already exists” even when the user did not see a matching casualty record. The message was too generic and could be triggered by the backend duplicate `id_number` guard, especially when a generated offline casualty ID collided with an existing generated ID.
 
 **Solution:** Mobile error handling now preserves the specific casualty ID-number duplicate message instead of converting it to a generic matching-record message. Offline queue sync now detects duplicate generated casualty IDs and retries once with a safe `CAS-SYNC-*` ID. Manually entered ID numbers are not silently changed.
+
+## 37. Healthcare Facilities Could Not Be Edited
+
+**Problem:** Healthcare facilities could be created and imported from the web dashboard, but there was no row-level edit action like the one available in Account Management. Fixing facility names, levels, locations, contacts, or active status required database-level changes.
+
+**Solution:** The web dashboard now shows an **Edit facility** button in the Healthcare Facilities table Actions column. It opens an in-app edit modal for facility profile, location, contact details, and active/inactive status. The API now supports a scoped healthcare facility update endpoint and records an audit log entry when a facility is edited.
+
+## 38. Evacuation Center Section Removed From Dashboard
+
+**Problem:** The web dashboard still exposed an Evacuation Centers management section even though the current workflow no longer needs that standalone section.
+
+**Solution:** The Evacuation Centers navigation item, admin view route, and super admin evacuation center export shortcut were removed from the dashboard UI. The underlying API/data code was left in place so existing records are preserved and the feature can be restored later if needed.
+
+## 39. Admin Incident History Did Not Launch Closed Incident Review
+
+**Problem:** Incident History under Official Incidents did not clearly support reviewing all incidents created by the logged-in admin, and closed incidents had no direct row actions for reviewing casualty records or analytics.
+
+**Solution:** Incident History now uses the all-incidents dataset for the logged-in admin, including active and closed incidents. Each history row now has **View records** and **View analytics** actions. View records opens Casualty Records scoped to that incident, while View analytics opens Incident Analytics with that incident selected, including closed incidents.
 
 ## Priority Improvement Areas
 
