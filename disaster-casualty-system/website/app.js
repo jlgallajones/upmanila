@@ -1,10 +1,4 @@
-const PRODUCTION_API_BASE_URL = "https://dcms-api-ljco.onrender.com/api";
-const LOCAL_API_BASE_URL = "http://localhost:5000/api";
-const SUPABASE_URL =
-  "https://uehlntrridfrxpcocpqv.supabase.co";
-
-const SUPABASE_PUBLISHABLE_KEY =
-  "sb_publishable_aY9UBi090m8dQsY7laosWw_MevYzFlM";
+const FALLBACK_API_BASE_URL = "/api";
 
 let realtimeClient = null;
 let dashboardRealtimeChannel = null;
@@ -18,16 +12,41 @@ let auditLogsLiveRefreshInFlight = false;
 
 function getDefaultApiBaseUrl() {
   if (typeof window === "undefined") {
-    return LOCAL_API_BASE_URL;
+    return FALLBACK_API_BASE_URL;
   }
 
-  const { hostname } = window.location;
+  const configuredApiBaseUrl = String(
+    window.DCMS_CONFIG?.apiBaseUrl || "",
+  ).trim();
 
-  if (!hostname || hostname === "localhost" || hostname === "127.0.0.1") {
-    return LOCAL_API_BASE_URL;
+  if (configuredApiBaseUrl) {
+    return configuredApiBaseUrl;
   }
 
-  return PRODUCTION_API_BASE_URL;
+  return FALLBACK_API_BASE_URL;
+}
+
+function getDashboardRealtimeConfig() {
+  if (typeof window === "undefined") {
+    return {
+      supabaseUrl: "",
+      supabasePublishableKey: "",
+    };
+  }
+
+  return {
+    supabaseUrl: String(
+      window.DCMS_CONFIG?.supabaseUrl || "",
+    ).trim(),
+    supabasePublishableKey: String(
+      window.DCMS_CONFIG?.supabasePublishableKey || "",
+    ).trim(),
+  };
+}
+
+function hasDashboardRealtimeConfig() {
+  const config = getDashboardRealtimeConfig();
+  return Boolean(config.supabaseUrl && config.supabasePublishableKey);
 }
 
 function isInvalidStoredApiBaseUrl(value) {
@@ -70,6 +89,7 @@ const state = {
   activeView: localStorage.getItem("dcms.admin.activeView") || "home",
   incidentSearchQuery: "",
   incidentDateFilter: "",
+  incidentStatusFilter: "all",
   casualtyRecordIncidentFocus: "all",
   casualtyRecordVerificationFilter: "all",
   casualtyRecordAccountTypeFilter: "all",
@@ -91,6 +111,7 @@ const state = {
   casualties: [],
   caseLinks: [],
   healthcareFacilities: [],
+  callDownStaff: [],
   unitUsers: [],
   auditLogs: [],
   formDrafts: [],
@@ -124,6 +145,7 @@ const dashboardRealtimeTables = [
   "ems_vehicle_arrivals",
   "evacuation_centers",
   "healthcare_facilities",
+  "call_down_staff",
   "audit_logs",
   "users",
   "sitreps",
@@ -205,6 +227,7 @@ const superAdminViews = [
 
 const adminViews = [
   ["home", "Homepage"],
+  ["call-down-list", "Call Down List"],
   ["incident-management", "Incident Management"],
   ["incident-analytics", "Incident Analytics"],
   ["incidents", "Official Incidents"],
@@ -218,6 +241,92 @@ const adminViews = [
   ["logs", "Action Logs"],
 ];
 
+const superAdminNavGroups = [
+  {
+    id: "overview",
+    label: "Overview",
+    icon: "O",
+    views: [["home", "Summary"]],
+  },
+  {
+    id: "administration",
+    label: "Administration",
+    icon: "AD",
+    views: [
+      ["registration", "Account Registration"],
+      ["drafts", "Drafts"],
+    ],
+  },
+  {
+    id: "incidents",
+    label: "Incidents",
+    icon: "IN",
+    views: [
+      ["incident-management", "Incident Management"],
+      ["incident-analytics", "Incident Analytics"],
+      ["history", "Incident History"],
+    ],
+  },
+  {
+    id: "reports",
+    label: "Reports & Logs",
+    icon: "RL",
+    views: [["logs", "Action Logs"]],
+  },
+];
+
+const adminNavGroups = [
+  {
+    id: "overview",
+    label: "Overview",
+    icon: "O",
+    views: [["home", "Homepage"]],
+  },
+  {
+    id: "incidents",
+    label: "Incidents",
+    icon: "IN",
+    views: [
+      ["call-down-list", "Call Down List"],
+      ["incident-management", "Incident Management"],
+      ["incident-analytics", "Incident Analytics"],
+      ["incidents", "Official Incidents"],
+    ],
+  },
+  {
+    id: "casualties",
+    label: "Casualties",
+    icon: "CA",
+    views: [
+      ["records", "Casualty Records"],
+      ["verification", "Verification Review"],
+      ["match-casing", "Match Casing"],
+      ["matched-cases", "Matched Cases"],
+    ],
+  },
+  {
+    id: "resources",
+    label: "Resources",
+    icon: "RS",
+    views: [["facilities", "Healthcare Facilities"]],
+  },
+  {
+    id: "administration",
+    label: "Administration",
+    icon: "AD",
+    views: [
+      ["users", "Accounts"],
+      ["drafts", "Drafts"],
+    ],
+  },
+  {
+    id: "reports",
+    label: "Reports & Logs",
+    icon: "RL",
+    views: [["logs", "Action Logs"]],
+  },
+];
+
 const matchCasingRequiredRoleSlots = [
   "field_responder",
   "sa_responder",
@@ -226,6 +335,10 @@ const matchCasingRequiredRoleSlots = [
 
 function getViewsForRole(role) {
   return role === "super_admin" ? superAdminViews : adminViews;
+}
+
+function getNavGroupsForRole(role) {
+  return role === "super_admin" ? superAdminNavGroups : adminNavGroups;
 }
 
 function isViewAllowedForRole(view, role) {
@@ -244,6 +357,7 @@ function setActiveView(view) {
 
   state.activeView = nextView;
   localStorage.setItem("dcms.admin.activeView", nextView);
+  updateSidebarActiveState();
 }
 
 if (state.user) {
@@ -379,8 +493,9 @@ function filterRecentActivityForCurrentAdmin(activity, encoderIds, casualtyIds) 
 function filterIncidentsBySearchAndDate(incidents) {
   const query = state.incidentSearchQuery.trim().toLowerCase();
   const date = state.incidentDateFilter.trim();
+  const status = state.incidentStatusFilter || "all";
 
-  if (!query && !date) {
+  if (!query && !date && status === "all") {
     return incidents;
   }
 
@@ -404,7 +519,8 @@ function filterIncidentsBySearchAndDate(incidents) {
 
     return (
       (!query || searchable.includes(query)) &&
-      (!date || incidentDate === date)
+      (!date || incidentDate === date) &&
+      (status === "all" || incident.status === status)
     );
   });
 }
@@ -609,6 +725,64 @@ function compareCasualtyRecordsByLatest(first, second) {
   return casualtyRecordTimestamp(second) - casualtyRecordTimestamp(first);
 }
 
+function renderSidebarNavButton([id, label]) {
+  return `
+    <button class="nav-button ${state.activeView === id ? "active" : ""}" data-view="${id}" title="${escapeHtml(label)}">
+      <span class="nav-glyph">
+        ${escapeHtml(getNavInitials(label))}
+      </span>
+
+      <span>
+        ${escapeHtml(label)}
+      </span>
+    </button>
+  `;
+}
+
+function renderSidebarNavGroup(group) {
+  const isActiveGroup = group.views.some(([id]) => id === state.activeView);
+  const viewCountLabel = `${group.views.length} ${group.views.length === 1 ? "menu" : "menus"}`;
+
+  return `
+    <details class="nav-group ${isActiveGroup ? "active" : ""}" data-nav-group="${escapeHtml(group.id)}" ${isActiveGroup ? "open" : ""}>
+      <summary class="nav-group-summary ${isActiveGroup ? "active" : ""}" title="${escapeHtml(group.label)}">
+        <span class="nav-glyph">${escapeHtml(group.icon || getNavInitials(group.label))}</span>
+        <span class="nav-group-label">${escapeHtml(group.label)}</span>
+        <span class="nav-group-count">${escapeHtml(viewCountLabel)}</span>
+        <span class="nav-group-chevron">&rsaquo;</span>
+      </summary>
+
+      <div class="nav-group-items">
+        ${group.views.map(renderSidebarNavButton).join("")}
+      </div>
+    </details>
+  `;
+}
+
+function renderSidebarNavigation() {
+  return getNavGroupsForRole(state.user?.role)
+    .map(renderSidebarNavGroup)
+    .join("");
+}
+
+function updateSidebarActiveState() {
+  document.querySelectorAll(".nav-button").forEach((item) => {
+    item.classList.toggle("active", item.dataset.view === state.activeView);
+  });
+
+  document.querySelectorAll(".nav-group").forEach((group) => {
+    const isActiveGroup = Array.from(group.querySelectorAll(".nav-button")).some(
+      (button) => button.dataset.view === state.activeView,
+    );
+    group.classList.toggle("active", isActiveGroup);
+    group.querySelector(".nav-group-summary")?.classList.toggle("active", isActiveGroup);
+
+    if (isActiveGroup && !state.sidebarCollapsed) {
+      group.open = true;
+    }
+  });
+}
+
 function compareCasualtyRecordsBySubmittedTime(first, second) {
   const firstTimestamp = casualtyRecordTimestamp(first);
   const secondTimestamp = casualtyRecordTimestamp(second);
@@ -730,6 +904,11 @@ function toLocalDateTimeInput(value) {
 function nullableFormText(form, name) {
   const value = formValue(form, name);
   return value || null;
+}
+
+function nullableTextValue(value) {
+  const trimmed = String(value ?? "").trim();
+  return trimmed || null;
 }
 
 function nullableFormNumber(form, name) {
@@ -1226,6 +1405,7 @@ async function loadSharedData() {
     casualties,
     caseLinks,
     healthcareFacilities,
+    callDownStaff,
     unitUsers,
     auditLogs,
     formDrafts,
@@ -1238,6 +1418,7 @@ async function loadSharedData() {
       apiRequest("/casualties"),
       apiRequest("/casualties/case-links"),
       apiRequest("/healthcare-facilities"),
+      apiRequest("/call-down-staff"),
       apiRequest("/auth/unit-users"),
       apiRequest("/audit-logs?limit=100"),
       apiRequest("/drafts"),
@@ -1253,6 +1434,7 @@ async function loadSharedData() {
   let loadedCasualties = state.casualties;
   let loadedCaseLinks = state.caseLinks;
   let loadedHealthcareFacilities = state.healthcareFacilities;
+  let loadedCallDownStaff = state.callDownStaff;
   let loadedUnitUsers = state.unitUsers;
   let loadedAuditLogs = state.auditLogs;
   let loadedFormDrafts = state.formDrafts;
@@ -1278,6 +1460,10 @@ async function loadSharedData() {
 
   if (healthcareFacilities.status === "fulfilled") {
     loadedHealthcareFacilities = healthcareFacilities.value.data || [];
+  }
+
+  if (callDownStaff.status === "fulfilled") {
+    loadedCallDownStaff = callDownStaff.value.data || [];
   }
 
   if (unitUsers.status === "fulfilled") {
@@ -1322,6 +1508,7 @@ async function loadSharedData() {
   state.casualties = loadedCasualties;
   state.caseLinks = loadedCaseLinks;
   state.healthcareFacilities = loadedHealthcareFacilities;
+  state.callDownStaff = loadedCallDownStaff;
   state.unitUsers = loadedUnitUsers;
   state.auditLogs = loadedAuditLogs;
   state.formDrafts = loadedFormDrafts;
@@ -1335,13 +1522,22 @@ async function getRealtimeClient() {
     return realtimeClient;
   }
 
+  const realtimeConfig = getDashboardRealtimeConfig();
+
+  if (
+    !realtimeConfig.supabaseUrl ||
+    !realtimeConfig.supabasePublishableKey
+  ) {
+    throw new Error("Supabase Realtime config is missing.");
+  }
+
   const { createClient } = await import(
     "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm"
   );
 
   realtimeClient = createClient(
-    SUPABASE_URL,
-    SUPABASE_PUBLISHABLE_KEY,
+    realtimeConfig.supabaseUrl,
+    realtimeConfig.supabasePublishableKey,
     {
       auth: {
         persistSession: false,
@@ -1501,7 +1697,8 @@ function syncAuditLogsLiveRefresh() {
 async function startDashboardRealtime() {
   if (
     !state.accessToken ||
-    dashboardRealtimeChannel
+    dashboardRealtimeChannel ||
+    !hasDashboardRealtimeConfig()
   ) {
     return;
   }
@@ -1687,8 +1884,6 @@ function bindLogin() {
 }
 
 function renderDashboardShell() {
-  const views = isSuperAdmin() ? superAdminViews : adminViews;
-
   return `
     <div class="app-shell ${state.sidebarCollapsed ? "sidebar-collapsed" : ""}">
       <aside class="sidebar">
@@ -1711,21 +1906,7 @@ function renderDashboardShell() {
 
         <div class="nav-section-label">Workspace</div>
         <nav class="nav-list">
-          ${views
-            .map(
-              ([id, label]) => `
-                <button class="nav-button ${state.activeView === id ? "active" : ""}" data-view="${id}" title="${escapeHtml(label)}">
-                  <span class="nav-glyph">
-                    ${escapeHtml(getNavInitials(label))}
-                  </span>
-
-                  <span>
-                    ${escapeHtml(label)}
-                  </span>
-                </button>
-              `,
-            )
-            .join("")}
+          ${renderSidebarNavigation()}
         </nav>
 
         <div class="sidebar-footer">
@@ -1760,9 +1941,7 @@ function bindShell() {
   document.querySelectorAll(".nav-button").forEach((button) => {
     button.addEventListener("click", () => {
       setActiveView(button.dataset.view);
-      document.querySelectorAll(".nav-button").forEach((item) =>
-        item.classList.toggle("active", item.dataset.view === state.activeView),
-      );
+      updateSidebarActiveState();
       renderCurrentView();
       bindView();
     });
@@ -2085,6 +2264,7 @@ function renderCurrentView(errorMessage = "") {
       }[state.activeView]
     : {
         home: "Admin Homepage",
+        "call-down-list": "Call Down List",
         "incident-management": "Incident Management",
         "incident-analytics": "Incident Analytics",
         incidents: "Official Incidents",
@@ -2119,6 +2299,7 @@ function bindView() {
   bindCreateEvacuationForm();
   bindCreateFacilityForm();
   bindHealthcareFacilityActions();
+  bindCallDownStaffActions();
   bindRegisterAdminForm();
   bindRegisterUnitUserForm();
   bindAccountActions();
@@ -2181,8 +2362,16 @@ function bindScopeLinks() {
 }
 
 function renderIncidentSearchFilters(resultCount, totalCount) {
+  const statusOptions = [
+    ["all", "All statuses"],
+    ["active", "Active"],
+    ["closed", "Closed"],
+    ["draft", "Draft"],
+    ["archived", "Archived"],
+  ];
+
   return `
-    <div class="form-grid two" style="margin-top:16px">
+    <div class="form-grid three" style="margin-top:16px">
       <label class="field">
         <span>Search incidents</span>
         <input
@@ -2200,6 +2389,19 @@ function renderIncidentSearchFilters(resultCount, totalCount) {
           value="${escapeHtml(state.incidentDateFilter)}"
         />
       </label>
+      <label class="field">
+        <span>Filter by status</span>
+        <select id="incidentStatusFilterInput">
+          ${statusOptions
+            .map(
+              ([value, label]) =>
+                `<option value="${escapeHtml(value)}" ${
+                  state.incidentStatusFilter === value ? "selected" : ""
+                }>${escapeHtml(label)}</option>`,
+            )
+            .join("")}
+        </select>
+      </label>
     </div>
     <p class="panel-subtitle" style="margin-top:10px">
       Showing ${resultCount} of ${totalCount} incidents.
@@ -2210,6 +2412,7 @@ function renderIncidentSearchFilters(resultCount, totalCount) {
 function bindIncidentSearchFilters() {
   const searchInput = qs("#incidentSearchInput");
   const dateInput = qs("#incidentDateFilterInput");
+  const statusInput = qs("#incidentStatusFilterInput");
 
   if (searchInput) {
     searchInput.addEventListener("input", () => {
@@ -2223,6 +2426,14 @@ function bindIncidentSearchFilters() {
   if (dateInput) {
     dateInput.addEventListener("input", () => {
       state.incidentDateFilter = dateInput.value;
+      renderCurrentView();
+      bindView();
+    });
+  }
+
+  if (statusInput) {
+    statusInput.addEventListener("change", () => {
+      state.incidentStatusFilter = statusInput.value || "all";
       renderCurrentView();
       bindView();
     });
@@ -2564,6 +2775,8 @@ function renderSuperAdminView() {
 
 function renderAdminView() {
   switch (state.activeView) {
+    case "call-down-list":
+      return renderCallDownList();
     case "incident-management":
       return renderIncidentManagement();
     case "incident-analytics":
@@ -3382,11 +3595,6 @@ function renderAnalyticsGraphSection(title, data, options = {}) {
           <h2>${escapeHtml(title)}</h2>
           ${options.note ? `<p class="panel-subtitle">${escapeHtml(options.note)}</p>` : ""}
         </div>
-        ${
-          options.viewResponders && options.incidentId
-            ? `<button class="ghost-button" type="button" data-view-responders="${escapeHtml(options.incidentId)}">View Responders</button>`
-            : ""
-        }
       </div>
       ${graphBody}
     </section>
@@ -4278,6 +4486,11 @@ function validateBulkImportRow(type, row) {
     if (!unitAccountRoles.includes(row.role)) {
       reasons.push("role must be field_responder, sa_responder, or documenter.");
     }
+    if (!row.phoneNumber) reasons.push("phoneNumber is required.");
+    if (!row.assignedMunicipality) {
+      reasons.push("assignedMunicipality is required.");
+    }
+    if (!row.assignedBarangay) reasons.push("assignedBarangay is required.");
   } else if (type === "healthcareFacilities") {
     if (!row.facilityName) reasons.push("facilityName is required.");
     if (
@@ -4728,6 +4941,49 @@ function renderBulkImportSummary(data) {
     .join(". ");
 }
 
+function bulkImportTypeLabel(type) {
+  const labels = {
+    adminAccounts: "admin accounts",
+    unitAccounts: "FR, SAR, and HCFD accounts",
+    healthcareFacilities: "healthcare facilities",
+    evacuationCenters: "evacuation centers",
+  };
+
+  return labels[type] || "records";
+}
+
+function bulkImportSuccessMessage(type, data) {
+  const created = Number(data?.created ?? 0);
+  const skipped = Number(data?.skipped ?? 0);
+  const failed = Number(data?.failed ?? 0);
+  const total = data?.results?.length ?? created + skipped + failed;
+
+  return [
+    `The ${bulkImportTypeLabel(type)} upload has finished.`,
+    `Rows processed: ${total}.`,
+    `Created: ${created}.`,
+    `Skipped: ${skipped}.`,
+    `Failed: ${failed}.`,
+  ].join(" ");
+}
+
+function getBulkImportCompletionMessageType(data, preview) {
+  const created = Number(data?.created ?? 0);
+  const skipped = Number(data?.skipped ?? 0);
+  const failed = Number(data?.failed ?? 0);
+  const previewIssues = Number(preview?.failedRows?.length ?? 0);
+
+  if (created > 0 && (skipped > 0 || failed > 0 || previewIssues > 0)) {
+    return "warning";
+  }
+
+  if (created === 0 && (skipped > 0 || failed > 0 || previewIssues > 0)) {
+    return "warning";
+  }
+
+  return "success";
+}
+
 function bindBulkImportActions() {
   document.querySelectorAll("[data-download-template]").forEach((button) => {
     if (button.dataset.templateBound === "true") return;
@@ -4832,12 +5088,26 @@ function bindBulkImportActions() {
         setMessage(
           config.messageId,
           renderBulkImportSummary(response.data),
-          response.data?.failed ||
-            response.data?.skipped ||
-            state.bulkImportPreviews[type].failedRows.length
-            ? "error"
-            : "success",
+          getBulkImportCompletionMessageType(
+            response.data,
+            state.bulkImportPreviews[type],
+          ),
         );
+        showDashboardToast(
+          getBulkImportCompletionMessageType(
+            response.data,
+            state.bulkImportPreviews[type],
+          ) === "warning"
+            ? "Bulk upload completed with warnings."
+            : "Bulk upload completed.",
+          "success",
+        );
+        await showDashboardNotice({
+          eyebrow: "Bulk Upload",
+          title: "Successful upload",
+          message: bulkImportSuccessMessage(type, response.data),
+          confirmLabel: "Done",
+        });
       } catch (error) {
         const message =
           error instanceof Error
@@ -9235,6 +9505,174 @@ function renderRecentActivity() {
   `;
 }
 
+function renderCallDownList() {
+  const activeStaff = state.callDownStaff.filter((staff) => staff.is_active !== false);
+
+  return `
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Call Down List</h2>
+          <p class="panel-subtitle">Extra operational staff contacts used by DMMP Staff Call Down. System account users are added automatically.</p>
+        </div>
+        <span class="pill blue">${activeStaff.length} active contacts</span>
+      </div>
+      <form id="callDownStaffForm" class="form-grid">
+        <input name="staffId" type="hidden" />
+        <div class="form-grid two">
+          <label class="field"><span>Full name</span><input name="fullName" required placeholder="Staff full name" /></label>
+          <label class="field"><span>Role / position</span><input name="rolePosition" placeholder="Doctor, nurse, driver, coordinator" /></label>
+          <label class="field"><span>Contact number</span><input name="contactNumber" placeholder="Mobile or radio contact" /></label>
+          <label class="field"><span>Assigned team / unit</span><input name="assignedTeamUnit" placeholder="DMMP, EMS, ER, logistics" /></label>
+        </div>
+        <label class="field"><span>Notes</span><textarea name="notes" placeholder="Availability, specialty, or contact instruction"></textarea></label>
+        <div class="button-row">
+          <button class="primary-button" type="submit" id="callDownStaffSubmitButton">Add staff contact</button>
+          <button class="ghost-button" type="button" data-clear-call-down-staff-form>Clear form</button>
+        </div>
+        <div id="callDownStaffMessage" class="status-message" hidden></div>
+      </form>
+      <div class="table-wrap" style="margin-top:18px">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Role / Position</th>
+              <th>Contact</th>
+              <th>Team / Unit</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${state.callDownStaff
+              .map(
+                (staff) => `
+                  <tr>
+                    <td><strong>${escapeHtml(staff.full_name || "Unnamed staff")}</strong></td>
+                    <td>${escapeHtml(staff.role_position || "Not recorded")}</td>
+                    <td>${escapeHtml(staff.contact_number || "Not recorded")}</td>
+                    <td>${escapeHtml(staff.assigned_team_unit || "Not recorded")}</td>
+                    <td><span class="pill ${staff.is_active === false ? "orange" : "green"}">${staff.is_active === false ? "Inactive" : "Active"}</span></td>
+                    <td>
+                      <div class="table-actions">
+                        <button class="ghost-button mini" type="button" data-edit-call-down-staff="${escapeHtml(staff.id)}">Edit</button>
+                        ${
+                          staff.is_active === false
+                            ? `<button class="secondary-button mini" type="button" data-activate-call-down-staff="${escapeHtml(staff.id)}">Reactivate</button>`
+                            : `<button class="danger-button mini" type="button" data-deactivate-call-down-staff="${escapeHtml(staff.id)}">Deactivate</button>`
+                        }
+                      </div>
+                    </td>
+                  </tr>
+                `,
+              )
+              .join("") || `<tr><td colspan="6"><div class="empty-state">No call down staff contacts yet.</div></td></tr>`}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `;
+}
+
+function setCallDownStaffForm(staff = null) {
+  const form = qs("#callDownStaffForm");
+  if (!form) return;
+
+  form.elements.staffId.value = staff?.id || "";
+  form.elements.fullName.value = staff?.full_name || "";
+  form.elements.rolePosition.value = staff?.role_position || "";
+  form.elements.contactNumber.value = staff?.contact_number || "";
+  form.elements.assignedTeamUnit.value = staff?.assigned_team_unit || "";
+  form.elements.notes.value = staff?.notes || "";
+
+  const button = qs("#callDownStaffSubmitButton");
+  if (button) {
+    button.textContent = staff ? "Save staff contact" : "Add staff contact";
+  }
+}
+
+function bindCallDownStaffActions() {
+  const form = qs("#callDownStaffForm");
+
+  if (form) {
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      const staffId = formValue(form, "staffId");
+      const isEditing = Boolean(staffId);
+
+      try {
+        setMessage("callDownStaffMessage", isEditing ? "Saving staff contact..." : "Adding staff contact...");
+        await apiRequest(
+          isEditing
+            ? `/call-down-staff/${encodeURIComponent(staffId)}`
+            : "/call-down-staff",
+          {
+            method: isEditing ? "PATCH" : "POST",
+            body: JSON.stringify({
+              fullName: formValue(form, "fullName"),
+              rolePosition: nullableFormText(form, "rolePosition"),
+              contactNumber: nullableFormText(form, "contactNumber"),
+              assignedTeamUnit: nullableFormText(form, "assignedTeamUnit"),
+              notes: nullableFormText(form, "notes"),
+            }),
+          },
+        );
+        await loadSharedData();
+        renderCurrentView();
+        bindView();
+        setMessage("callDownStaffMessage", isEditing ? "Staff contact saved." : "Staff contact added.", "success");
+      } catch (error) {
+        setMessage("callDownStaffMessage", getErrorMessage(error), "error");
+      }
+    });
+  }
+
+  qs("[data-clear-call-down-staff-form]")?.addEventListener("click", () => {
+    setCallDownStaffForm(null);
+  });
+
+  document.querySelectorAll("[data-edit-call-down-staff]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const staff = state.callDownStaff.find(
+        (item) => item.id === button.dataset.editCallDownStaff,
+      );
+      setCallDownStaffForm(staff || null);
+      qs("#callDownStaffForm")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  });
+
+  document
+    .querySelectorAll("[data-deactivate-call-down-staff], [data-activate-call-down-staff]")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        const staffId =
+          button.dataset.deactivateCallDownStaff ||
+          button.dataset.activateCallDownStaff;
+        const isActive = Boolean(button.dataset.activateCallDownStaff);
+
+        if (!staffId) return;
+
+        try {
+          await apiRequest(`/call-down-staff/${encodeURIComponent(staffId)}`, {
+            method: "PATCH",
+            body: JSON.stringify({ isActive }),
+          });
+          await loadSharedData();
+          renderCurrentView();
+          bindView();
+          showDashboardToast(
+            isActive ? "Staff contact reactivated." : "Staff contact deactivated.",
+            "success",
+          );
+        } catch (error) {
+          showDashboardToast(getErrorMessage(error), "error");
+        }
+      });
+    });
+}
+
 const incidentTimelineFields = [
   ["disasterOccurredAt", "Disaster occurred", "disaster_occurred_at"],
   ["eventNotificationAt", "Event notification", "event_notification_at"],
@@ -9257,10 +9695,11 @@ const disruptionOptions = ["none", "minimal", "moderate", "total", "unknown"];
 const safetyOptions = ["yes", "no", "unknown"];
 
 const incidentManagementSections = [
+  ["edit-incident", "Edit Incident", true, "accent"],
   ["timeline", "Response Timeline", true],
   ["dmmp-staff", "DMMP Staff Call-down", true],
+  ["responder-safety", "Responder Safety", false],
   ["coordination", "Coordination Assessment", true],
-  ["responder-safety", "Responder Safety", true],
   ["deactivation", "Deactivation & Continuity", true],
   ["onsite-triage", "Onsite Triage", false],
   ["facility-triage", "Facility Triage", false],
@@ -9271,7 +9710,6 @@ const incidentManagementSections = [
   ["hospital-resources", "Hospital Resources", false],
   ["morbidity-mortality", "Morbidity & Mortality", false],
   ["sitrep-close", "SitRep & Close Incident", false],
-  ["edit-incident", "Edit Incident", true],
 ];
 
 async function loadIncidentManagementDetails(incidentId, options = {}) {
@@ -9383,16 +9821,44 @@ function renderIncidentManagementItem(incident) {
   `;
 }
 
-function renderIncidentManagementSections(incident, _details) {
+function getIncidentSectionLauncherSubtitle(sectionId, canEdit, details) {
+  if (sectionId === "dmmp-staff") {
+    const accountNames = state.unitUsers
+      .filter((user) => user.is_active !== false)
+      .map((user) => user.full_name || user.email)
+      .filter(Boolean);
+    const extraNames = state.callDownStaff
+      .filter((staff) => staff.is_active !== false)
+      .map((staff) => staff.full_name)
+      .filter(Boolean);
+    const names = [...accountNames, ...extraNames]
+      .slice(0, 3)
+      .filter(Boolean);
+    const extraCount = Math.max(
+      0,
+      accountNames.length + extraNames.length - names.length,
+    );
+
+    if (names.length > 0) {
+      return `${names.join(", ")}${extraCount > 0 ? ` +${extraCount} more` : ""}`;
+    }
+
+    return "Created accounts appear automatically";
+  }
+
+  return canEdit ? "View or edit" : "View summary";
+}
+
+function renderIncidentManagementSections(incident, details) {
   return `
     <div class="incident-management-body">
       <div class="section-launcher-grid">
         ${incidentManagementSections
           .map(
-            ([id, title, canEdit]) => `
-              <button class="section-launcher" type="button" data-open-incident-section="${id}" data-incident-id="${escapeHtml(incident.id)}">
+            ([id, title, canEdit, tone]) => `
+              <button class="section-launcher ${tone === "accent" ? "section-launcher-accent" : ""}" type="button" data-open-incident-section="${id}" data-incident-id="${escapeHtml(incident.id)}">
                 <span>${escapeHtml(title)}</span>
-                <small>${canEdit ? "View or edit" : "View summary"}</small>
+                <small>${escapeHtml(getIncidentSectionLauncherSubtitle(id, canEdit, details))}</small>
               </button>
             `,
           )
@@ -9473,12 +9939,6 @@ function renderIncidentSectionEditContent(incident, details, sectionId) {
       );
     case "coordination":
       return renderCoordinationManagementForm(details.coordination?.data, true);
-    case "responder-safety":
-      return renderResponderSafetyManagementForm(
-        details.responderSafety?.data,
-        details.responderSafety?.summary,
-        true,
-      );
     case "deactivation":
       return renderDeactivationManagementForm(details, true);
     case "hospital-resources":
@@ -9527,16 +9987,7 @@ function renderIncidentSectionViewContent(incident, details, sectionId) {
         ["Notes", details.coordination?.data?.notes || "Not recorded"],
       ]);
     case "responder-safety":
-      return renderKeyValueSection([
-        ["Safety actions established", roleLabel(details.responderSafety?.data?.safety_actions_established || "unknown")],
-        ["PPE decision at", formatDate(details.responderSafety?.data?.ppe_decision_at)],
-        ["Response deactivated at", formatDate(details.responderSafety?.data?.response_deactivated_at)],
-        ["Deployed responders", details.responderSafety?.data?.deployed_responders ?? 0],
-        ["Injured responders", details.responderSafety?.data?.injured_responders ?? 0],
-        ["Ill responders", details.responderSafety?.data?.ill_responders ?? 0],
-        ["Deceased responders", details.responderSafety?.data?.deceased_responders ?? 0],
-        ["Killed percentage", `${details.responderSafety?.summary?.killedPercentage ?? 0}%`],
-      ]);
+      return renderResponderSafetySummaryView(details);
     case "deactivation":
       return renderDeactivationSummaryView(details);
     case "onsite-triage":
@@ -9774,28 +10225,100 @@ function renderFacilityOperationalSummary(summary, mode = "continuity") {
   `;
 }
 
+function getDmmpStaffRosterRows(staffRecords) {
+  const accountStaff = state.unitUsers
+    .filter((user) => user.is_active !== false)
+    .slice()
+    .sort((first, second) => compareText(first.full_name, second.full_name));
+  const extraStaff = state.callDownStaff
+    .filter((staff) => staff.is_active !== false)
+    .slice()
+    .sort((first, second) => compareText(first.full_name, second.full_name));
+  const recordsByUserId = new Map(
+    staffRecords
+      .filter((record) => record.linked_user_id)
+      .map((record) => [record.linked_user_id, record]),
+  );
+  const recordsByStaffId = new Map(
+    staffRecords
+      .filter((record) => record.call_down_staff_id)
+      .map((record) => [record.call_down_staff_id, record]),
+  );
+  const accountRows = accountStaff.map((user) => ({
+    source: "account",
+    sourceId: user.id,
+    name: user.full_name || user.email || "Unnamed account",
+    roleName: roleLabel(user.role),
+    teamName: user.assigned_barangay || user.assigned_municipality || "System account",
+    record: recordsByUserId.get(user.id) || null,
+  }));
+  const extraRows = extraStaff.map((staff) => ({
+    source: "staff",
+    sourceId: staff.id,
+    name: staff.full_name || "Unnamed staff",
+    roleName: staff.role_position || "No role",
+    teamName: staff.assigned_team_unit || "Extra staff",
+    record: recordsByStaffId.get(staff.id) || null,
+  }));
+  const legacyRows = staffRecords
+    .filter((record) => !record.call_down_staff_id && !record.linked_user_id)
+    .map((record) => ({
+      source: "legacy",
+      sourceId: record.id,
+      name: record.staff_name || "Unnamed staff",
+      roleName: record.role_name || "No role",
+      teamName: "Legacy record",
+      record,
+    }));
+
+  return [...accountRows, ...extraRows, ...legacyRows];
+}
+
 function renderDmmpStaffView(staffRecords, summary) {
+  const rosterRows = getDmmpStaffRosterRows(staffRecords);
+  const totalStaffRecords = Math.max(
+    summary?.totalStaffRecords ?? 0,
+    rosterRows.length,
+  );
+
   return `
     ${renderKeyValueSection([
-      ["Total staff records", summary?.totalStaffRecords ?? 0],
+      ["Total staff records", totalStaffRecords],
       ["Contacted", summary?.totalContacted ?? 0],
       ["Arrived", summary?.totalArrived ?? 0],
       ["Arrived within standard", summary?.totalArrivedWithinStandard ?? 0],
       ["Reporting percentage", `${summary?.reportingPercentage ?? 0}%`],
+      ["Time of arrival of last person contacted", formatDate(summary?.lastPersonContactedArrivalAt)],
     ])}
-    <div class="mini-table">
-      ${staffRecords
-        .map(
-          (record) => `
-            <div class="mini-table-row readonly">
-              <strong>${escapeHtml(record.staff_name || "Unnamed staff")}</strong>
-              <span>${escapeHtml(record.role_name || "No role")}</span>
-              <span>${record.was_contacted ? "Contacted" : "Not contacted"}</span>
-              <span>${record.arrived_at ? `Arrived ${formatDate(record.arrived_at)}` : "No arrival time"}</span>
-            </div>
-          `,
-        )
-        .join("") || `<div class="empty-state">No DMMP staff records yet.</div>`}
+    <div class="table-wrap" style="margin-top:14px">
+      <table>
+        <thead>
+          <tr><th>Staff</th><th>Role</th><th>Contacted?</th><th>Arrived?</th><th>Status</th><th>Arrival time</th></tr>
+        </thead>
+        <tbody>
+          ${rosterRows
+            .map(
+              ({ source, name, roleName, teamName, record }) => {
+                const displayRole = [roleName, teamName].filter(Boolean).join(" / ");
+
+                return `
+                <tr>
+                  <td>
+                    <strong>${escapeHtml(name)}</strong>
+                    <div class="panel-subtitle">${source === "account" ? "System account" : source === "staff" ? "Call Down List" : "Legacy entry"}</div>
+                  </td>
+                  <td>${escapeHtml(displayRole || "No role")}</td>
+                  <td>${record?.was_contacted ? "Yes" : "No"}</td>
+                  <td>${record?.has_arrived || record?.arrived_at ? "Yes" : "No"}</td>
+                  <td>${escapeHtml(roleLabel(record?.status || "unknown"))}</td>
+                  <td>${formatDate(record?.arrived_at)}</td>
+                </tr>
+              `;
+              },
+            )
+            .join("") || `<tr><td colspan="6"><div class="empty-state">No account users or extra call down staff contacts yet.</div></td></tr>`}
+        </tbody>
+      </table>
     </div>
   `;
 }
@@ -9848,45 +10371,196 @@ function renderTimelineManagementForm(incident, details, forModal = false) {
 }
 
 function renderDmmpStaffManagement(staffRecords, summary, forModal = false) {
+  const rosterRows = getDmmpStaffRosterRows(staffRecords);
+  const totalStaffRecords = Math.max(
+    summary?.totalStaffRecords ?? 0,
+    rosterRows.length,
+  );
+
   return `
     <section class="incident-section-card">
       <div class="section-card-header">
         <div>
           <h3>DMMP Staff Call-down</h3>
-          <p class="panel-subtitle">${summary ? `${summary.totalArrived || 0}/${summary.totalStaffRecords || 0} arrived. Reporting ${summary.reportingPercentage || 0}%.` : "Add and review DMMP staff contact records."}</p>
+          <p class="panel-subtitle">${summary ? `${summary.totalArrived || 0}/${summary.totalStaffRecords || 0} arrived. Reporting ${summary.reportingPercentage || 0}%. Last contacted-staff arrival: ${formatDate(summary.lastPersonContactedArrivalAt)}.` : "Update incident-specific staff call-down status."}</p>
         </div>
       </div>
       <form id="${forModal ? "incidentSectionEditForm" : ""}" class="form-grid" data-incident-section-form="dmmp-staff">
-        <div class="form-grid two">
-          <label class="field"><span>Staff name</span><input name="staffName" placeholder="Name" /></label>
-          <label class="field"><span>Role / assignment</span><input name="roleName" placeholder="Role" /></label>
-          <label class="field">
-            <span>Was contacted?</span>
-            <select name="wasContacted"><option value="false">No</option><option value="true">Yes</option></select>
-          </label>
-          <label class="field"><span>Contacted at</span><input name="contactedAt" type="datetime-local" /></label>
-          <label class="field"><span>Required arrival</span><input name="requiredArrivalAt" type="datetime-local" /></label>
-          <label class="field"><span>Arrived at</span><input name="arrivedAt" type="datetime-local" /></label>
+        <div class="summary-facts">
+          <div><span>Total staff records</span><strong>${totalStaffRecords}</strong></div>
+          <div><span>Contacted</span><strong>${summary?.totalContacted ?? 0}</strong></div>
+          <div><span>Arrived</span><strong>${summary?.totalArrived ?? 0}</strong></div>
+          <div><span>Reporting percentage</span><strong>${summary?.reportingPercentage ?? 0}%</strong></div>
+          <div><span>Last contacted-staff arrival</span><strong>${formatDate(summary?.lastPersonContactedArrivalAt)}</strong></div>
         </div>
-        ${forModal ? "" : `<button class="secondary-button mini" type="submit">Add staff record</button>`}
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Staff</th>
+                <th>Role / Team</th>
+                <th>Contacted?</th>
+                <th>Arrived?</th>
+                <th>Status</th>
+                <th>Arrival time</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rosterRows
+                .map(({ source, sourceId, name, roleName, teamName, record }) => {
+                  const displayRole = [roleName, teamName].filter(Boolean).join(" / ");
+
+                  return `
+                    <tr data-dmmp-staff-row>
+                      <td>
+                        <strong>${escapeHtml(name)}</strong>
+                        <div class="panel-subtitle">${source === "account" ? "System account" : source === "staff" ? "Call Down List" : "Legacy entry"}</div>
+                        <input type="hidden" data-dmmp-field="recordId" value="${escapeHtml(record?.id || "")}" />
+                        <input type="hidden" data-dmmp-field="linkedUserId" value="${escapeHtml(source === "account" ? sourceId : record?.linked_user_id || "")}" />
+                        <input type="hidden" data-dmmp-field="callDownStaffId" value="${escapeHtml(source === "staff" ? sourceId : record?.call_down_staff_id || "")}" />
+                        <input type="hidden" data-dmmp-field="staffName" value="${escapeHtml(name)}" />
+                        <input type="hidden" data-dmmp-field="roleName" value="${escapeHtml(displayRole || "No role")}" />
+                      </td>
+                      <td>${escapeHtml(displayRole || "No role")}</td>
+                      <td><input type="checkbox" data-dmmp-field="wasContacted" ${record?.was_contacted ? "checked" : ""} aria-label="Contacted ${escapeHtml(name)}" /></td>
+                      <td><input type="checkbox" data-dmmp-field="hasArrived" ${record?.has_arrived || record?.arrived_at ? "checked" : ""} aria-label="Arrived ${escapeHtml(name)}" /></td>
+                      <td>
+                        <select data-dmmp-field="status" aria-label="Status for ${escapeHtml(name)}">
+                          ${renderDmmpStaffStatusOptions(record?.status)}
+                        </select>
+                      </td>
+                      <td><input type="datetime-local" data-dmmp-field="arrivedAt" value="${toLocalDateTimeInput(record?.arrived_at)}" /></td>
+                    </tr>
+                  `;
+                })
+                .join("") || `<tr><td colspan="6"><div class="empty-state">No account users or extra call down staff contacts yet.</div></td></tr>`}
+            </tbody>
+          </table>
+        </div>
         <div id="dmmpStaffMessage" class="status-message" hidden></div>
       </form>
-      <div class="mini-table">
-        ${staffRecords
-          .map(
-            (record) => `
-              <div class="mini-table-row">
-                <strong>${escapeHtml(record.staff_name || "Unnamed staff")}</strong>
-                <span>${escapeHtml(record.role_name || "No role")}</span>
-                <span>${record.was_contacted ? "Contacted" : "Not contacted"}</span>
-                <span>${record.arrived_at ? `Arrived ${formatDate(record.arrived_at)}` : "No arrival time"}</span>
-                <button class="danger-button mini" type="button" data-delete-dmmp-staff="${escapeHtml(record.id)}">Delete</button>
-              </div>
-            `,
-          )
-          .join("") || `<div class="empty-state">No DMMP staff records yet.</div>`}
-      </div>
     </section>
+  `;
+}
+
+function renderDmmpStaffStatusOptions(selected) {
+  const options = [
+    ["", "Not recorded"],
+    ["ill", "Ill"],
+    ["injured", "Injured"],
+    ["deceased", "Deceased"],
+    ["safe", "Safe"],
+    ["unsafe", "Unsafe"],
+  ];
+
+  return options
+    .map(
+      ([value, label]) =>
+        `<option value="${escapeHtml(value)}" ${selected === value ? "selected" : ""}>${escapeHtml(label)}</option>`,
+    )
+    .join("");
+}
+
+function buildResponderSafetyStatusSummary(details) {
+  const staffRecords = details?.dmmpStaff?.data || [];
+  const rosterRows = getDmmpStaffRosterRows(staffRecords);
+  const statusCounts = {
+    safe: 0,
+    unsafe: 0,
+    ill: 0,
+    injured: 0,
+    deceased: 0,
+    notRecorded: 0,
+  };
+
+  rosterRows.forEach(({ record }) => {
+    const status = record?.status;
+
+    if (status && Object.prototype.hasOwnProperty.call(statusCounts, status)) {
+      statusCounts[status] += 1;
+    } else {
+      statusCounts.notRecorded += 1;
+    }
+  });
+
+  const analyticsSafety =
+    details?.analytics?.data?.barGraphs?.responderSafety || {};
+  const analyticsSafe = Number(analyticsSafety.safe || 0);
+  const analyticsUnsafe = Number(analyticsSafety.unsafe || 0);
+
+  return {
+    rosterRows,
+    statusCounts,
+    totalResponders: rosterRows.length,
+    analyticsSafe,
+    analyticsUnsafe,
+  };
+}
+
+function renderResponderSafetySummaryView(details) {
+  const {
+    rosterRows,
+    statusCounts,
+    totalResponders,
+    analyticsSafe,
+    analyticsUnsafe,
+  } = buildResponderSafetyStatusSummary(details);
+  const totalUnsafeStatus =
+    statusCounts.unsafe +
+    statusCounts.ill +
+    statusCounts.injured +
+    statusCounts.deceased;
+
+  return `
+    ${renderKeyValueSection([
+      ["Total responders / staff in call-down", totalResponders],
+      ["Safe from Call Down", statusCounts.safe],
+      ["Unsafe from Call Down", totalUnsafeStatus],
+      ["Ill", statusCounts.ill],
+      ["Injured", statusCounts.injured],
+      ["Deceased", statusCounts.deceased],
+      ["Not recorded", statusCounts.notRecorded],
+      ["Analytics safe responders", analyticsSafe],
+      ["Analytics unsafe responders", analyticsUnsafe],
+    ])}
+    <div class="table-wrap" style="margin-top:14px">
+      <table>
+        <thead>
+          <tr>
+            <th>Responder / Staff</th>
+            <th>Source</th>
+            <th>Role / Team</th>
+            <th>Call-down status</th>
+            <th>Contacted?</th>
+            <th>Arrived?</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rosterRows
+            .map(({ source, name, roleName, teamName, record }) => {
+              const displayRole = [roleName, teamName].filter(Boolean).join(" / ");
+              const sourceLabel =
+                source === "account"
+                  ? "System account"
+                  : source === "staff"
+                    ? "Call Down List"
+                    : "Legacy entry";
+
+              return `
+                <tr>
+                  <td><strong>${escapeHtml(name)}</strong></td>
+                  <td>${escapeHtml(sourceLabel)}</td>
+                  <td>${escapeHtml(displayRole || "No role")}</td>
+                  <td>${escapeHtml(roleLabel(record?.status || "not_recorded"))}</td>
+                  <td>${record?.was_contacted ? "Yes" : "No"}</td>
+                  <td>${record?.has_arrived || record?.arrived_at ? "Yes" : "No"}</td>
+                </tr>
+              `;
+            })
+            .join("") || `<tr><td colspan="6"><div class="empty-state">No responder or call-down staff roster is available yet.</div></td></tr>`}
+        </tbody>
+      </table>
+    </div>
   `;
 }
 
@@ -10084,36 +10758,66 @@ function renderSitrepAndCloseSection(incident) {
       <div class="section-card-header">
         <div>
           <h3>SitRep & Close Incident</h3>
-          <p class="panel-subtitle">Generate the latest situation report or close an active incident.</p>
+          <p class="panel-subtitle">Generate an incident-wide situation report covering FR, SAR, and HCFD records.</p>
         </div>
       </div>
-      <label class="field">
-        <span>Responder function scope</span>
-        <select id="sitrepResponderFunctionFilter">
-          <option value="both">Field Responder and SAR</option>
-          <option value="field_responder">Field Responder only</option>
-          <option value="sa_responder">Stabilization Area Responder only</option>
-        </select>
-      </label>
+      <div class="selected-incident-summary">
+        <span>Selected incident</span>
+        <strong>${escapeHtml(incident.incident_name || "Unnamed incident")}</strong>
+        <small>${escapeHtml(incident.incident_code || incident.id)} · ${escapeHtml(roleLabel(incident.status || "unknown"))}</small>
+      </div>
       <div class="button-row">
-        <button class="secondary-button" type="button" data-generate-sitrep="${escapeHtml(incident.id)}">Generate & Download PDF</button>
+        <button class="secondary-button" type="button" data-generate-sitrep="${escapeHtml(incident.id)}">Generate Selected Incident SitRep</button>
         <button class="ghost-button" type="button" data-download-sitrep="pdf" data-incident-id="${escapeHtml(incident.id)}">Download Latest PDF</button>
         <button class="ghost-button" type="button" data-download-sitrep="csv" data-incident-id="${escapeHtml(incident.id)}">Download Latest CSV</button>
         <button class="ghost-button" type="button" data-export-download="/incidents/${escapeHtml(incident.id)}/export/casualties.csv" data-export-file="${escapeHtml(incident.incident_code || incident.id)}-casualties.csv">Download Casualty CSV</button>
         <button class="ghost-button" type="button" data-export-download="/exports/incidents/${escapeHtml(incident.id)}/package.json" data-export-file="${escapeHtml(incident.incident_code || incident.id)}-incident-package.json">Download Incident Package</button>
-        <button class="danger-button" type="button" data-close-incident="${escapeHtml(incident.id)}" ${incident.status !== "active" ? "disabled" : ""}>Close Incident</button>
+        ${
+          incident.status === "closed"
+            ? isSuperAdmin()
+              ? incident.reopen_request_status === "pending"
+                ? `<button class="primary-button" type="button" data-approve-reopen-incident="${escapeHtml(incident.id)}">Approve Reopen</button>`
+                : `<span class="pill blue">Closed</span>`
+              : incident.reopen_request_status === "pending"
+                  ? `<span class="pill orange">Reopen requested</span>`
+                  : `<button class="secondary-button" type="button" data-request-reopen-incident="${escapeHtml(incident.id)}">Request Reopen</button>`
+            : `<button class="danger-button" type="button" data-close-incident="${escapeHtml(incident.id)}">Close Incident</button>`
+        }
       </div>
       <div id="incidentActionMessage" class="status-message" hidden></div>
     </section>
   `;
 }
 
-function getSelectedSitrepResponderFunctionFilter() {
-  const value = qs("#sitrepResponderFunctionFilter")?.value;
+function getIncidentCloseWarnings(incidentId) {
+  const details = state.incidentManagementDetails[incidentId] || {};
+  const missing = [];
 
-  return ["field_responder", "sa_responder", "both"].includes(value)
-    ? value
-    : "both";
+  if (!details.timeline?.data?.dmmp_activated_at) {
+    missing.push("DMMP activation time");
+  }
+
+  if (!details.dmmpStaffSummary?.data?.totalStaffRecords) {
+    missing.push("DMMP staff call-down records");
+  }
+
+  if (!details.coordination?.data) {
+    missing.push("Coordination assessment");
+  }
+
+  if (
+    !buildResponderSafetyStatusSummary(details).rosterRows.some(
+      ({ record }) => Boolean(record?.status),
+    )
+  ) {
+    missing.push("Responder safety");
+  }
+
+  if (!details.deactivation?.summary?.sceneDemobilizedAt) {
+    missing.push("Scene demobilization");
+  }
+
+  return missing;
 }
 
 function bindIncidentManagementActions() {
@@ -10231,21 +10935,21 @@ function bindIncidentManagementActions() {
     button.addEventListener("click", async () => {
       const incidentId = button.dataset.generateSitrep;
 
-      if (!incidentId) return;
+      if (!incidentId) {
+        setMessage("incidentActionMessage", "Select an incident before generating a SitRep.", "error");
+        return;
+      }
 
       try {
-        const responderFunctionFilter =
-          getSelectedSitrepResponderFunctionFilter();
         setMessage("incidentActionMessage", "Generating SitRep...");
         const response = await apiRequest(`/incidents/${encodeURIComponent(incidentId)}/sitreps`, {
           method: "POST",
-          body: JSON.stringify({ responderFunctionFilter }),
+          body: JSON.stringify({}),
         });
         const reportNumber = response.data?.report_number || "latest-sitrep";
-        const encodedScope = encodeURIComponent(responderFunctionFilter);
         await downloadApiFile(
-          `/incidents/${encodeURIComponent(incidentId)}/export/sitrep.pdf?responderFunctionFilter=${encodedScope}`,
-          `${reportNumber}-${responderFunctionFilter}.pdf`,
+          `/incidents/${encodeURIComponent(incidentId)}/export/sitrep.pdf`,
+          `${reportNumber}-incident.pdf`,
         );
         setMessage(
           "incidentActionMessage",
@@ -10263,16 +10967,18 @@ function bindIncidentManagementActions() {
       const incidentId = button.dataset.incidentId;
       const format = button.dataset.downloadSitrep;
 
-      if (!incidentId || !["pdf", "csv"].includes(format)) return;
+      if (!incidentId) {
+        setMessage("incidentActionMessage", "Select an incident before downloading a SitRep.", "error");
+        return;
+      }
+
+      if (!["pdf", "csv"].includes(format)) return;
 
       try {
-        const responderFunctionFilter =
-          getSelectedSitrepResponderFunctionFilter();
-        const encodedScope = encodeURIComponent(responderFunctionFilter);
         setMessage("incidentActionMessage", `Preparing SitRep ${format.toUpperCase()}...`);
         await downloadApiFile(
-          `/incidents/${encodeURIComponent(incidentId)}/export/sitrep.${format}?responderFunctionFilter=${encodedScope}`,
-          `dcms-${incidentId}-sitrep-${responderFunctionFilter}.${format}`,
+          `/incidents/${encodeURIComponent(incidentId)}/export/sitrep.${format}`,
+          `dcms-${incidentId}-incident-sitrep.${format}`,
         );
         setMessage(
           "incidentActionMessage",
@@ -10291,10 +10997,18 @@ function bindIncidentManagementActions() {
 
       if (!incidentId) return;
 
+      if (!state.incidentManagementDetails[incidentId]) {
+        await loadIncidentManagementDetails(incidentId, { renderLoading: false });
+      }
+
+      const warnings = getIncidentCloseWarnings(incidentId);
+      const warningText = warnings.length
+        ? `Missing or incomplete items: ${warnings.join(", ")}. You can still proceed if the incident must be closed now.`
+        : "All key incident management sections have recorded data.";
       const confirmed = await showDashboardConfirm({
         title: "Close incident?",
         message:
-          "This marks the incident as closed and removes it from active incident workflows. Historical records remain available.",
+          `This marks the incident as closed and removes it from active incident workflows. Historical records remain available. ${warningText}`,
         confirmLabel: "Close incident",
         cancelLabel: "Keep active",
         danger: true,
@@ -10339,7 +11053,6 @@ async function handleIncidentSectionSubmit(form) {
     timeline: saveIncidentTimelineSection,
     "dmmp-staff": saveDmmpStaffSection,
     coordination: saveCoordinationSection,
-    "responder-safety": saveResponderSafetySection,
     deactivation: saveDeactivationSection,
     "hospital-resources": saveHospitalResourcesSection,
   };
@@ -10355,7 +11068,6 @@ async function handleIncidentSectionSubmit(form) {
       timeline: "timelineMessage",
       "dmmp-staff": "dmmpStaffMessage",
       coordination: "coordinationMessage",
-      "responder-safety": "responderSafetyMessage",
       deactivation: "deactivationMessage",
       "hospital-resources": "hospitalResourcesMessage",
     }[section];
@@ -10428,32 +11140,47 @@ async function saveIncidentTimelineSection(incidentId, form) {
 }
 
 async function saveDmmpStaffSection(incidentId, form) {
-  setMessage("dmmpStaffMessage", "Adding staff record...");
+  setMessage("dmmpStaffMessage", "Saving DMMP staff call-down...");
 
-  const hasStaffInput = [
-    "staffName",
-    "roleName",
-    "contactedAt",
-    "requiredArrivalAt",
-    "arrivedAt",
-  ].some((name) => formValue(form, name));
+  const rows = Array.from(form.querySelectorAll("[data-dmmp-staff-row]"));
 
-  if (!hasStaffInput) {
-    throw new Error("Enter staff details before saving a new DMMP staff record.");
+  if (rows.length === 0) {
+    throw new Error("Add staff contacts in Call Down List before saving DMMP staff call-down.");
   }
 
-  await apiRequest(`/incidents/${encodeURIComponent(incidentId)}/dmmp-staff`, {
-    method: "POST",
-    body: JSON.stringify({
-      staffName: nullableFormText(form, "staffName"),
-      roleName: nullableFormText(form, "roleName"),
-      wasContacted: nullableFormBoolean(form, "wasContacted"),
-      contactedAt: toNullableIsoFromLocal(formValue(form, "contactedAt")),
-      requiredArrivalAt: toNullableIsoFromLocal(formValue(form, "requiredArrivalAt")),
-      arrivedAt: toNullableIsoFromLocal(formValue(form, "arrivedAt")),
+  await Promise.all(
+    rows.map((row) => {
+      const valueFor = (field) =>
+        row.querySelector(`[data-dmmp-field="${field}"]`)?.value || "";
+      const checkedFor = (field) =>
+        Boolean(row.querySelector(`[data-dmmp-field="${field}"]`)?.checked);
+      const recordId = valueFor("recordId");
+      const arrivedAt = toNullableIsoFromLocal(valueFor("arrivedAt"));
+      const hasArrived = checkedFor("hasArrived");
+      const payload = {
+        linkedUserId: nullableTextValue(valueFor("linkedUserId")),
+        callDownStaffId: nullableTextValue(valueFor("callDownStaffId")),
+        staffName: nullableTextValue(valueFor("staffName")),
+        roleName: nullableTextValue(valueFor("roleName")),
+        wasContacted: checkedFor("wasContacted"),
+        hasArrived,
+        status: nullableTextValue(valueFor("status")),
+        arrivedAt,
+      };
+
+      return apiRequest(
+        recordId
+          ? `/dmmp-staff/${encodeURIComponent(recordId)}`
+          : `/incidents/${encodeURIComponent(incidentId)}/dmmp-staff`,
+        {
+          method: recordId ? "PATCH" : "POST",
+          body: JSON.stringify(payload),
+        },
+      );
     }),
-  });
-  await reloadExpandedIncident("DMMP staff record added.");
+  );
+
+  await reloadExpandedIncident("DMMP staff call-down saved.");
 }
 
 async function saveCoordinationSection(incidentId, form) {
@@ -10786,6 +11513,75 @@ function bindDraftActions() {
         showDashboardToast("Draft deleted.", "success");
       } catch (error) {
         setMessage("draftsMessage", getErrorMessage(error), "error");
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-request-reopen-incident]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const incidentId = button.dataset.requestReopenIncident;
+
+      if (!incidentId) return;
+
+      const reason = await showDashboardTextPrompt({
+        title: "Request incident reopen",
+        message:
+          "Send a reopen request to the super admin. The incident remains closed until approved.",
+        label: "Reason",
+        placeholder: "Explain why this closed incident should be reopened.",
+        confirmLabel: "Request reopen",
+        required: true,
+      });
+
+      if (reason === null) return;
+
+      try {
+        setMessage("incidentActionMessage", "Submitting reopen request...");
+        await apiRequest(`/incidents/${encodeURIComponent(incidentId)}/reopen-request`, {
+          method: "POST",
+          body: JSON.stringify({ reason }),
+        });
+        delete state.incidentManagementDetails[incidentId];
+        await loadSharedData();
+        await loadIncidentManagementDetails(incidentId);
+        renderCurrentView();
+        bindView();
+        showDashboardToast("Reopen request submitted.", "success");
+      } catch (error) {
+        showDashboardToast(getErrorMessage(error), "error");
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-approve-reopen-incident]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const incidentId = button.dataset.approveReopenIncident;
+
+      if (!incidentId) return;
+
+      const confirmed = await showDashboardConfirm({
+        title: "Approve reopen request?",
+        message:
+          "This returns the incident to active status and clears its closed timestamp.",
+        confirmLabel: "Approve reopen",
+        cancelLabel: "Cancel",
+      });
+
+      if (!confirmed) return;
+
+      try {
+        setMessage("incidentActionMessage", "Approving reopen request...");
+        await apiRequest(`/incidents/${encodeURIComponent(incidentId)}/reopen-approval`, {
+          method: "PATCH",
+        });
+        delete state.incidentManagementDetails[incidentId];
+        await loadSharedData();
+        await loadIncidentManagementDetails(incidentId);
+        renderCurrentView();
+        bindView();
+        showDashboardToast("Incident reopened.", "success");
+      } catch (error) {
+        showDashboardToast(getErrorMessage(error), "error");
       }
     });
   });

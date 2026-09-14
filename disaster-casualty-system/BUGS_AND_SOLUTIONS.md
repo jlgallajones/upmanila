@@ -4,9 +4,9 @@ This document summarizes the main issues encountered during development of the D
 
 ## 1. SitRep Download And Filtering
 
-**Problem:** Generated SitRep files were difficult to view and downloaded files appeared identical. The SitRep also needed filtering by responder function: Field Responder, SAR, or both.
+**Problem:** Generated SitRep files were difficult to view and downloaded files appeared identical. Earlier testing explored responder-function filtering, but this was later superseded by the requirement that SitRep exports must be incident-wide.
 
-**Solution:** SitRep generation/export was updated to support responder-function scope and downloadable report output. The SitRep analytics were also improved with charts instead of text-only summaries.
+**Solution:** SitRep generation/export was updated to produce downloadable reports. Later updates changed SitRep generation to selected-incident scope and added analytics-backed PDF content.
 
 ## 2. Rejected Casualty Record Resubmission
 
@@ -477,5 +477,101 @@ Create a short checklist for the exact demo flow:
 **Problem:** The web dashboard Casualty Records page did not have a dedicated filter button and could not filter records by account type or sort submitted records ascending/descending by submitted time.
 
 **Solution:** Added account-type filtering for Field Responder, SAR, HCFD, and legacy responder records. Added a submitted-time sort control for newest-first or oldest-first ordering. Added **Filter Records** and **Clear Filters** buttons so admins can set filter choices first and then apply them intentionally.
+
+**Status:** Implemented.
+
+## 55. Incident Management And DMMP Call Down Needed Clearer Workflow
+
+**Problem:** Incident Management was difficult to navigate because important sections were not ordered by the expected workflow, DMMP Staff Call Down depended on incident-specific entries instead of a reusable staff list, analytics cards still showed a **View Responders** action, and closing incidents was too rigid for real operations.
+
+**Solution:** Reordered Incident Management sections so **Edit Incident** appears first with a distinct color, followed by Response Timeline, DMMP Staff Call Down, Responder Safety, Coordination Assessment, Deactivation & Continuity, and the remaining summary sections. Added a separate **Call Down List** admin tab for extra staff contacts who do not have login accounts. Admin-created system accounts are automatically included in each incident's DMMP Staff Call Down roster, while Call Down List entries add non-account staff. DMMP Staff Call Down lets admins mark contacted, arrived, status, and arrival time while retaining reporting percentage and showing the time of arrival of the last contacted person. Removed the analytics **View Responders** button. Incident closing now warns about missing key details but allows the admin to proceed. Closed incidents can receive admin reopen requests, and super admins can approve those requests.
+
+**Status:** Implemented.
+
+## 56. Responder Safety Needed To Become A Read-Only Summary
+
+**Problem:** The Incident Management **Responder Safety** section was editable and repeated operational fields such as safety action established, PPE decision, and response deactivated. The requested workflow treats responder safety as a summary, with statuses coming from responder/call-down records and analytics.
+
+**Solution:** The Incident Management **Responder Safety** section is now view-summary-only. The edit action was removed for that section. The displayed summary no longer shows safety action established, PPE decision, or response deactivated fields. It now shows responder/staff safety counts from the DMMP Staff Call-down roster and also displays the safe/unsafe responder counts used by Incident Analytics.
+
+**Status:** Implemented.
+
+## 57. SitRep PDF Export Was Hard To Read
+
+**Problem:** Downloaded SitRep PDFs were difficult to understand because the export used a simple text dump layout with weak section hierarchy, limited spacing, and chart content appended in a raw format.
+
+**Solution:** The SitRep PDF generator was redesigned with a clearer report layout: branded header, report metadata cards, executive summary, operational snapshot cards, structured tables for responder coverage, casualties, triage, transport, and facilities, plus a visual summary section with cleaner horizontal bar charts. The content now reads like an operational situation report rather than raw exported text.
+
+**Status:** Implemented.
+
+## 58. Admin Sidebar Became Too Long
+
+**Problem:** The admin dashboard sidebar had too many flat menu items, making it visually long and harder to scan as new features were added.
+
+**Solution:** The sidebar navigation was reorganized into expandable workspace groups: Overview, Incidents, Casualties, Resources, Administration, and Reports & Logs. Active groups open automatically, menu highlighting is preserved, collapsed sidebar behavior still works, and the mobile browser layout remains horizontally scrollable.
+
+**Status:** Implemented.
+
+## 59. SitRep Was Role-Scoped Instead Of Incident-Wide
+
+**Problem:** Generated SitRep exports were still tied to a Field Responder/SAR responder-function scope, so the report could represent only one role or a limited role pair instead of the whole selected incident. The PDF also looked too much like a raw data export instead of a professional situation report.
+
+**Solution:** SitRep generation now always creates an incident-wide report for the selected incident and includes FR, SAR, and HCFD/documenter records together. The responder-scope dropdown was removed from the web dashboard. Latest SitRep export now retrieves the incident-level report, with compatibility for older saved reports. PDF labels and layout were updated to read as an incident situation report, including role coverage for Field Responder, SAR, Healthcare Facility Documenter, and unspecified records.
+
+**Status:** Implemented.
+
+## 60. SitRep Location Text And Analytics Snapshot Needed Fixes
+
+**Problem:** Long incident locations in the SitRep PDF overlapped inside the report metadata card because wrapped lines were drawn on top of each other. The SitRep panel also needed to make the selected incident obvious, and the report needed data from Incident Analytics instead of only basic record counts.
+
+**Solution:** The PDF metadata card renderer now gives each wrapped value line its own vertical position and grows the card height for long values. The web SitRep panel now displays the selected incident before generation and shows an error if no incident is selected. SitRep payloads now include an analytics snapshot with KPI counts, primary/secondary/facility triage distributions, ED-care by triage category, stabilization strategies, responder safety, and the updated 15 min, 30 min, 1 hr, 2 hr, and 3 hr cumulative intervals.
+
+**Status:** Implemented.
+
+## 61. Bulk Upload Needed A Clear Success Popup
+
+**Problem:** After confirming CSV/Excel bulk imports, the dashboard only updated the inline status area. Users could miss whether the upload finished successfully, especially after importing accounts or healthcare facilities.
+
+**Solution:** The shared bulk import flow now shows a modal popup titled **Successful upload** after the backend import completes. The popup summarizes rows processed, created, skipped, and failed for admin accounts, FR/SAR/HCFD accounts, healthcare facilities, and evacuation centers.
+
+**Status:** Implemented.
+
+## 62. Bulk Upload Showed Generic Error Even When Rows Were Created
+
+**Problem:** Bulk account and healthcare facility imports could create records successfully but still show a generic “something went wrong” style message when some rows were skipped, duplicated, or invalid.
+
+**Solution:** Completed bulk imports now use a success or warning status instead of an error status. The inline message keeps the detailed created/skipped/failed summary, while the successful upload modal still appears after the import finishes.
+
+**Status:** Implemented.
+
+## 63. Bulk Account Import Returned 500 After Creating The Account
+
+**Problem:** Unit account bulk import could create the account successfully, but the API still returned a 500 error afterward. After refresh, the account appeared in the list, showing the failure happened after record creation.
+
+**Solution:** Bulk import audit logging is now guarded for admin account imports, unit account imports, healthcare facility imports, and evacuation center imports. Bulk audit summary rows now provide an `entity_id` so deployments where `audit_logs.entity_id` is required do not fail after creating records. If audit logging still fails after rows are created, the API returns the completed import summary instead of failing the whole request.
+
+**Status:** Implemented.
+
+## 64. Incomplete Bulk Unit Account Rows Were Still Created
+
+**Problem:** FR/SAR/HCFD account CSV rows with blank columns after `role`, such as missing phone number, assigned municipality, or assigned barangay, were still treated as valid and created accounts.
+
+**Solution:** Bulk unit account preview and backend validation now require `phoneNumber`, `assignedMunicipality`, and `assignedBarangay`. Rows missing those fields are marked invalid and are not sent to Supabase Auth for account creation.
+
+**Status:** Implemented.
+
+## 65. Incident History Needed Status Filtering
+
+**Problem:** Incident History did not have a direct status filter, making it harder for admins to separate active, closed, draft, and archived incidents while reviewing historical incident records.
+
+**Solution:** Added a status dropdown to the shared incident filter controls. Incident History and Incident Management now display all loaded incident records by default and can be filtered by all statuses, active, closed, draft, or archived.
+
+**Status:** Implemented.
+
+## 66. Client Source Exposed Hardcoded Runtime Keys
+
+**Problem:** The web dashboard had Supabase Realtime runtime values hardcoded near the top of `website/app.js`, and `mobile/.env` was tracked with an `EXPO_PUBLIC_TEST_USER_ID`. Even publishable keys and public Expo variables can be viewed from browser/mobile bundles, which can be flagged during security or penetration testing.
+
+**Solution:** Removed hardcoded Supabase Realtime values and deployment API URLs from `website/app.js`. The dashboard now loads `website/config.js` before `app.js` and reads runtime values from `window.DCMS_CONFIG`, with `website/config.example.js` kept as the safe template. Added ignored runtime config/env patterns, created `mobile/.env.example`, removed the mobile test user variable, and removed `mobile/.env` from Git tracking while keeping it locally available.
 
 **Status:** Implemented.

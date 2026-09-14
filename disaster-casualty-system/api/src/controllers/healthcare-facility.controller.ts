@@ -81,6 +81,19 @@ function rowError(rowNumber: number, message: string) {
   };
 }
 
+async function recordBulkImportAuditLog(
+  input: Parameters<typeof recordAuditLog>[0],
+): Promise<void> {
+  try {
+    await recordAuditLog(input);
+  } catch (error) {
+    console.warn(
+      "[DCMS Audit] Bulk import completed, but audit log was not recorded:",
+      error,
+    );
+  }
+}
+
 async function getFacilityOwnerScopeForUser(user: {
   id: string;
   role: string;
@@ -773,10 +786,11 @@ export async function bulkCreateHealthcareFacilities(
     const skipped = results.filter((result) => "skipped" in result).length;
     const failed = results.length - created - skipped;
 
-    await recordAuditLog({
+    await recordBulkImportAuditLog({
       actor: user,
       action: "bulk_import.healthcare_facilities",
       entityType: "healthcare_facility",
+      entityId: user.id,
       entityLabel: "Bulk healthcare facility import",
       metadata: {
         created,

@@ -52,6 +52,7 @@ type CountMap = Record<string, number>;
 type ResponderFunctionFilter =
   | "field_responder"
   | "sa_responder"
+  | "documenter"
   | "both";
 type ResponderFunctionKind = Exclude<ResponderFunctionFilter, "both">;
 
@@ -62,6 +63,7 @@ type IncidentSitrepPayload = {
   responderFunctionSummary: {
     fieldResponderRecords: number;
     stabilizationAreaResponderRecords: number;
+    healthcareFacilityDocumenterRecords?: number;
     unspecifiedResponderRecords: number;
   };
   generatedBy: {
@@ -99,6 +101,29 @@ type IncidentSitrepPayload = {
   facilitySummary: {
     evacuationCenters: CountMap;
     receivingFacilities: CountMap;
+  };
+  analyticsSnapshot?: {
+    keyPerformanceIndicators: {
+      totalVictims: number;
+      verifiedRecords: number;
+      pendingReview: number;
+      primaryTriageAssessments: number;
+      secondaryTriageAssessments: number;
+      facilityTriageAssessments: number;
+      edCareVictims: number;
+      arrivedFacility: number;
+      safeResponders: number;
+      unsafeResponders: number;
+    };
+    triageDistributions: {
+      primary: CountMap;
+      secondary: CountMap;
+      facility: CountMap;
+      tertiaryBySystem: Record<string, { label: string; counts: CountMap; total: number }>;
+    };
+    edCareByTriageCategory: Record<string, { count: number; total: number; percentage: number }>;
+    stabilizationStrategies: CountMap;
+    cumulativeIntervalsMinutes: number[];
   };
 };
 
@@ -602,9 +627,11 @@ function formatResponderFunctionFilter(
       return "Field Responder only";
     case "sa_responder":
       return "Stabilization Area Responder only";
+    case "documenter":
+      return "Healthcare Facility Documenter only";
     case "both":
     default:
-      return "Field Responder and Stabilization Area Responder";
+      return "Full incident - Field Responder, SAR, and HCFD";
   }
 }
 
@@ -617,6 +644,10 @@ function normalizeResponderFunctionFromRole(
 
   if (role === "sa_responder") {
     return "sa_responder";
+  }
+
+  if (role === "documenter" || role === "medical_personnel") {
+    return "documenter";
   }
 
   return null;
@@ -694,6 +725,7 @@ function buildResponderFunctionSummary(
 ): IncidentSitrepPayload["responderFunctionSummary"] {
   let fieldResponderRecords = 0;
   let stabilizationAreaResponderRecords = 0;
+  let healthcareFacilityDocumenterRecords = 0;
   let unspecifiedResponderRecords = 0;
 
   for (const casualty of casualties) {
@@ -736,6 +768,10 @@ function buildResponderFunctionSummary(
       stabilizationAreaResponderRecords += 1;
     }
 
+    if (functions.has("documenter")) {
+      healthcareFacilityDocumenterRecords += 1;
+    }
+
     if (functions.size === 0) {
       unspecifiedResponderRecords += 1;
     }
@@ -744,6 +780,7 @@ function buildResponderFunctionSummary(
   return {
     fieldResponderRecords,
     stabilizationAreaResponderRecords,
+    healthcareFacilityDocumenterRecords,
     unspecifiedResponderRecords,
   };
 }
@@ -1059,6 +1096,8 @@ type PdfChart = {
   counts: CountMap;
 };
 
+type PdfTableRow = [string, string | number];
+
 function getChartEntries(counts: CountMap): Array<[string, number]> {
   return Object.entries(counts)
     .filter(([, count]) => count > 0)
@@ -1070,16 +1109,54 @@ function getChartEntries(counts: CountMap): Array<[string, number]> {
 }
 
 function buildSitrepCharts(payload: IncidentSitrepPayload): PdfChart[] {
+  const analytics = payload.analyticsSnapshot;
+  const edCareCounts = Object.entries(
+    analytics?.edCareByTriageCategory ?? {},
+  ).reduce<CountMap>((counts, [category, value]) => {
+    counts[category] = value.count;
+    return counts;
+  }, {});
+  const charts: PdfChart[] = [
+    ...(analytics
+      ? [
+          {
+            title: "Primary Triage Distribution",
+            counts: analytics.triageDistributions.primary,
+          },
+          {
+            title: "Secondary Triage Distribution",
+            counts: analytics.triageDistributions.secondary,
+          },
+          {
+            title: "Facility Triage Distribution",
+            counts: analytics.triageDistributions.facility,
+          },
+          {
+            title: "Victims Seeking ED Care by Triage Category",
+            counts: edCareCounts,
+          },
+          {
+            title: "Stabilization Strategies",
+            counts: analytics.stabilizationStrategies,
+          },
+        ]
+      : []),
+  ];
+
   return [
+    ...charts,
     {
-      title: "Responder Function Records",
+      title: "Role Coverage",
       counts: {
         "Field Responder":
           payload.responderFunctionSummary?.fieldResponderRecords ?? 0,
         "Stabilization Area Responder":
           payload.responderFunctionSummary
             ?.stabilizationAreaResponderRecords ?? 0,
-        "Unspecified Responder":
+        "Healthcare Facility Documenter":
+          payload.responderFunctionSummary
+            ?.healthcareFacilityDocumenterRecords ?? 0,
+        "Unspecified Role":
           payload.responderFunctionSummary?.unspecifiedResponderRecords ?? 0,
       },
     },
@@ -1108,6 +1185,65 @@ function buildSitrepCharts(payload: IncidentSitrepPayload): PdfChart[] {
       counts: payload.transportSummary.emsUnits,
     },
   ];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stringValue(
+  source: unknown,
+  key: string,
+  fallback = "Not recorded",
+): string {
+  if (!isRecord(source)) {
+    return fallback;
+  }
+
+  const value = source[key];
+
+  if (value === null || value === undefined || value === "") {
+    return fallback;
+  }
+
+  return String(value);
+}
+
+function formatSitrepDate(value: string | null | undefined): string {
+  if (!value) {
+    return "Not recorded";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString("en-PH", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatSitrepLabel(value: string): string {
+  return String(value || "unknown")
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function countRows(counts: CountMap): PdfTableRow[] {
+  const entries = Object.entries(counts || {}).sort(([first], [second]) =>
+    first.localeCompare(second),
+  );
+
+  return entries.length > 0
+    ? entries.map(([label, value]) => [formatSitrepLabel(label), value])
+    : [["No data recorded", 0]];
 }
 
 function buildPdfWithCharts(
@@ -1261,12 +1397,416 @@ function buildPdfWithCharts(
   return Buffer.from(parts.join(""), "utf8");
 }
 
-function buildSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
-  return buildPdfWithCharts(
-    `Situation Report - ${sitrep.report_number}`,
-    buildSitrepLines(sitrep),
-    buildSitrepCharts(sitrep.generated_payload),
+function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
+  const payload = sitrep.generated_payload;
+  const incident = payload.incident;
+  const incidentName = stringValue(incident, "incident_name", "Unknown incident");
+  const incidentCode = stringValue(incident, "incident_code", "No code");
+  const incidentType = stringValue(incident, "disaster_type", "Not recorded");
+  const location = [
+    stringValue(incident, "barangay", ""),
+    stringValue(incident, "municipality", ""),
+    stringValue(incident, "province", ""),
+  ]
+    .filter(Boolean)
+    .join(", ") || "Not recorded";
+  const charts = buildSitrepCharts(payload);
+  const pageWidth = 612;
+  const pageHeight = 792;
+  const marginX = 42;
+  const bottomMargin = 54;
+  const contentWidth = pageWidth - marginX * 2;
+  const pages: string[][] = [[]];
+  let currentPage = pages[0]!;
+  let cursorY = 724;
+
+  const drawHeader = () => {
+    currentPage.push(
+      "0.48 0.07 0.08 rg",
+      `0 742 ${pageWidth} 50 re f`,
+      "0.99 0.73 0.19 rg",
+      `${marginX} 742 112 4 re f`,
+      "0 g",
+      "1 1 1 rg",
+      `BT /F2 14 Tf ${marginX} 770 Td (${escapePdfText("DCMS INCIDENT SITUATION REPORT")}) Tj ET`,
+      `BT /F1 8 Tf ${marginX} 754 Td (${escapePdfText(`${incidentCode} | ${sitrep.report_number}`)}) Tj ET`,
+      `BT /F1 8 Tf ${pageWidth - 174} 754 Td (${escapePdfText(formatSitrepDate(sitrep.generated_at))}) Tj ET`,
+      "0 g",
+    );
+  };
+
+  const drawFooter = (pageNumber: number) => {
+    currentPage.push(
+      "0.72 0.76 0.82 RG",
+      `${marginX} 38 ${contentWidth} 0.5 re S`,
+      "0 g",
+      `BT /F1 8 Tf ${marginX} 24 Td (${escapePdfText("Incident-wide SitRep - FR, SAR, and HCFD records included")}) Tj ET`,
+      `BT /F1 8 Tf ${pageWidth - 92} 24 Td (${escapePdfText(`Page ${pageNumber}`)}) Tj ET`,
+    );
+  };
+
+  drawHeader();
+
+  const addPage = () => {
+    drawFooter(pages.length);
+    currentPage = [];
+    pages.push(currentPage);
+    cursorY = 724;
+    drawHeader();
+  };
+
+  const ensureSpace = (height: number) => {
+    if (cursorY - height < bottomMargin) {
+      addPage();
+    }
+  };
+
+  const text = (
+    value: string,
+    x: number,
+    y: number,
+    size = 9,
+    font = "F1",
+  ) => {
+    currentPage.push(
+      `BT /${font} ${size} Tf ${x} ${y} Td (${escapePdfText(value)}) Tj ET`,
+    );
+  };
+
+  const addSectionTitle = (sectionTitle: string) => {
+    ensureSpace(34);
+    currentPage.push(
+      "0.48 0.07 0.08 rg",
+      `${marginX} ${cursorY - 11} 5 16 re f`,
+      "0.82 0.86 0.91 RG",
+      `${marginX} ${cursorY - 17} ${contentWidth} 0.6 re S`,
+      "0 g",
+    );
+    text(sectionTitle.toUpperCase(), marginX + 12, cursorY - 3, 10, "F2");
+    currentPage.push("0 g");
+    cursorY -= 34;
+  };
+
+  const addWrappedParagraph = (
+    value: string,
+    x = marginX,
+    maxLength = 96,
+    size = 9,
+  ) => {
+    for (const line of wrapText(value || "Not recorded", maxLength)) {
+      ensureSpace(13);
+      text(line, x, cursorY, size);
+      cursorY -= 13;
+    }
+  };
+
+  const addKeyValueGrid = (rows: PdfTableRow[]) => {
+    const colGap = 12;
+    const colWidth = (contentWidth - colGap) / 2;
+
+    for (let index = 0; index < rows.length; index += 2) {
+      const pair = [rows[index], rows[index + 1]].filter(
+        Boolean,
+      ) as PdfTableRow[];
+      const wrappedPair = pair.map(([label, value]) => ({
+        label: String(label),
+        valueLines: wrapText(String(value), 30).slice(0, 4),
+      }));
+      const cardHeight = Math.max(
+        46,
+        ...wrappedPair.map((item) => 24 + item.valueLines.length * 11),
+      );
+
+      ensureSpace(cardHeight + 8);
+
+      for (let col = 0; col < 2; col += 1) {
+        const row = wrappedPair[col];
+        if (!row) continue;
+
+        const x = marginX + col * (colWidth + colGap);
+        currentPage.push(
+          "0.95 0.97 0.99 rg",
+          `${x} ${cursorY - cardHeight + 8} ${colWidth} ${cardHeight} re f`,
+          "0.82 0.86 0.91 RG",
+          `${x} ${cursorY - cardHeight + 8} ${colWidth} ${cardHeight} re S`,
+          "0 g",
+        );
+        text(row.label.toUpperCase(), x + 8, cursorY - 8, 7, "F2");
+        row.valueLines.forEach((line, lineIndex) => {
+          text(line, x + 8, cursorY - 24 - lineIndex * 11, 8.5, "F2");
+        });
+      }
+
+      cursorY -= cardHeight + 8;
+    }
+  };
+
+  const addTable = (tableTitle: string, rows: PdfTableRow[]) => {
+    addSectionTitle(tableTitle);
+    const rowHeight = 20;
+    const labelWidth = 330;
+
+    ensureSpace(rowHeight + 8);
+    currentPage.push(
+      "0.92 0.94 0.97 rg",
+      `${marginX} ${cursorY - rowHeight + 5} ${contentWidth} ${rowHeight} re f`,
+      "0 g",
+    );
+    text("Item", marginX + 8, cursorY - 8, 8, "F2");
+    text("Value", marginX + labelWidth + 12, cursorY - 8, 8, "F2");
+    cursorY -= rowHeight;
+
+    for (const [label, value] of rows) {
+      ensureSpace(rowHeight + 3);
+      currentPage.push(
+        "0.86 0.89 0.93 RG",
+        `${marginX} ${cursorY - rowHeight + 5} ${contentWidth} 0.5 re S`,
+        "0 g",
+      );
+      text(String(label), marginX + 8, cursorY - 8, 8);
+      text(String(value), marginX + labelWidth + 12, cursorY - 8, 8, "F2");
+      cursorY -= rowHeight;
+    }
+
+    cursorY -= 6;
+  };
+
+  const addChart = (chart: PdfChart) => {
+    const entries = getChartEntries(chart.counts);
+    const chartHeight = entries.length > 0 ? 34 + entries.length * 21 : 52;
+
+    ensureSpace(chartHeight);
+    text(chart.title, marginX, cursorY, 10, "F2");
+    cursorY -= 18;
+
+    if (entries.length === 0) {
+      addWrappedParagraph("No chart data recorded.", marginX + 8, 92, 8);
+      cursorY -= 4;
+      return;
+    }
+
+    const maxCount = Math.max(...entries.map(([, count]) => count), 1);
+    const labelWidth = 190;
+    const barX = marginX + labelWidth;
+    const maxBarWidth = contentWidth - labelWidth - 46;
+
+    for (const [label, count] of entries) {
+      ensureSpace(20);
+      text(formatSitrepLabel(label), marginX + 6, cursorY, 8);
+      currentPage.push(
+        "0.48 0.07 0.08 rg",
+        `${barX} ${cursorY - 4} ${Math.max(3, (count / maxCount) * maxBarWidth).toFixed(2)} 10 re f`,
+        "0 g",
+      );
+      text(String(count), pageWidth - marginX - 28, cursorY, 8, "F2");
+      cursorY -= 20;
+    }
+
+    cursorY -= 8;
+  };
+
+  text("Incident Situation Report", marginX, cursorY, 22, "F2");
+  cursorY -= 20;
+  addWrappedParagraph(incidentName, marginX, 78, 11);
+  cursorY -= 6;
+
+  addKeyValueGrid([
+    ["Report number", sitrep.report_number],
+    ["Incident code", incidentCode],
+    ["Incident type", incidentType],
+    ["Location", location],
+    ["Generated by", `${payload.generatedBy.fullName} (${formatSitrepLabel(payload.generatedBy.role)})`],
+    ["Report scope", "Full incident - FR, SAR, and HCFD"],
+    ["Period start", formatSitrepDate(payload.period.start)],
+    ["Period end", formatSitrepDate(payload.period.end)],
+  ]);
+
+  addSectionTitle("Executive Summary");
+  addWrappedParagraph(sitrep.summary || "No narrative summary recorded.", marginX, 96, 9);
+
+  addSectionTitle("Operational Snapshot");
+  addKeyValueGrid([
+    ["Total casualties", payload.casualtySummary.total],
+    ["Verified records", payload.casualtySummary.byVerification.verified ?? 0],
+    ["Pending review", payload.casualtySummary.byVerification.submitted ?? 0],
+    ["Rejected records", payload.casualtySummary.byVerification.rejected ?? 0],
+    ["Triage assessments", payload.triageSummary.totalAssessments],
+    ["Transport records", payload.transportSummary.totalRecords],
+    ["Departed scene", payload.transportSummary.departedScene],
+    ["Arrived facility", payload.transportSummary.arrivedFacility],
+  ]);
+
+  if (payload.analyticsSnapshot) {
+    const analytics = payload.analyticsSnapshot;
+    addTable("Incident Analytics Snapshot", [
+      ["Total victims", analytics.keyPerformanceIndicators.totalVictims],
+      ["Verified records", analytics.keyPerformanceIndicators.verifiedRecords],
+      ["Pending review", analytics.keyPerformanceIndicators.pendingReview],
+      [
+        "Primary triage assessments",
+        analytics.keyPerformanceIndicators.primaryTriageAssessments,
+      ],
+      [
+        "Secondary triage assessments",
+        analytics.keyPerformanceIndicators.secondaryTriageAssessments,
+      ],
+      [
+        "HCFD / facility triage assessments",
+        analytics.keyPerformanceIndicators.facilityTriageAssessments,
+      ],
+      ["Victims seeking ED care", analytics.keyPerformanceIndicators.edCareVictims],
+      ["Arrived at facility", analytics.keyPerformanceIndicators.arrivedFacility],
+      ["Safe responders", analytics.keyPerformanceIndicators.safeResponders],
+      ["Unsafe responders", analytics.keyPerformanceIndicators.unsafeResponders],
+      [
+        "Cumulative timeline intervals",
+        analytics.cumulativeIntervalsMinutes
+          .map((minutes) => (minutes >= 60 ? `${minutes / 60} hr` : `${minutes} min`))
+          .join(", "),
+      ],
+    ]);
+
+    addTable(
+      "ED Care by Triage Category",
+      Object.entries(analytics.edCareByTriageCategory).map(
+        ([category, value]) =>
+          [
+            formatSitrepLabel(category),
+            `${value.count}/${value.total} (${value.percentage}%)`,
+          ] as PdfTableRow,
+      ),
+    );
+  }
+
+  addTable("Role Coverage", [
+    ["Field Responder records", payload.responderFunctionSummary?.fieldResponderRecords ?? 0],
+    [
+      "Stabilization Area Responder records",
+      payload.responderFunctionSummary?.stabilizationAreaResponderRecords ?? 0,
+    ],
+    [
+      "Healthcare Facility Documenter records",
+      payload.responderFunctionSummary?.healthcareFacilityDocumenterRecords ?? 0,
+    ],
+    ["Unspecified role records", payload.responderFunctionSummary?.unspecifiedResponderRecords ?? 0],
+  ]);
+
+  addTable("Casualty Identification", [
+    ["Identified", payload.casualtySummary.identified],
+    ["Partially identified", payload.casualtySummary.partiallyIdentified],
+    ["Unidentified", payload.casualtySummary.unidentified],
+    ...countRows(payload.casualtySummary.byStatus).map(([label, value]) => [
+      `Status - ${label}`,
+      value,
+    ] as PdfTableRow),
+    ...countRows(payload.casualtySummary.bySeverity).map(([label, value]) => [
+      `Severity - ${label}`,
+      value,
+    ] as PdfTableRow),
+  ]);
+
+  addTable("Triage", [
+    ["Total assessments", payload.triageSummary.totalAssessments],
+    ...countRows(payload.triageSummary.latestByCategory).map(([label, value]) => [
+      `Latest category - ${label}`,
+      value,
+    ] as PdfTableRow),
+    ...countRows(payload.triageSummary.latestByStage).map(([label, value]) => [
+      `Stage - ${label}`,
+      value,
+    ] as PdfTableRow),
+  ]);
+
+  addTable("Transport", [
+    ["Total records", payload.transportSummary.totalRecords],
+    ["Departed scene", payload.transportSummary.departedScene],
+    ["Arrived facility", payload.transportSummary.arrivedFacility],
+    ...countRows(payload.transportSummary.modes).map(([label, value]) => [
+      `Mode - ${label}`,
+      value,
+    ] as PdfTableRow),
+    ...countRows(payload.transportSummary.emsUnits).map(([label, value]) => [
+      `EMS unit - ${label}`,
+      value,
+    ] as PdfTableRow),
+  ]);
+
+  addTable("Facilities", [
+    ...countRows(payload.facilitySummary.evacuationCenters).map(([label, value]) => [
+      `Evacuation center - ${label}`,
+      value,
+    ] as PdfTableRow),
+    ...countRows(payload.facilitySummary.receivingFacilities).map(([label, value]) => [
+      `Receiving facility - ${label}`,
+      value,
+    ] as PdfTableRow),
+  ]);
+
+  addSectionTitle("Visual Summary");
+  for (const chart of charts) {
+    addChart(chart);
+  }
+
+  drawFooter(pages.length);
+
+  const objects: string[] = [];
+  const addObject = (content: string): number => {
+    objects.push(content);
+    return objects.length;
+  };
+
+  const catalogId = addObject("<< /Type /Catalog /Pages 2 0 R >>");
+  const pagesId = addObject("");
+  const fontId = addObject(
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
   );
+  const boldFontId = addObject(
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>",
+  );
+  const pageIds: number[] = [];
+
+  for (const pageCommands of pages) {
+    const content = pageCommands.join("\n");
+    const contentId = addObject(
+      `<< /Length ${Buffer.byteLength(content, "utf8")} >>\nstream\n${content}\nendstream`,
+    );
+    const pageId = addObject(
+      `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${fontId} 0 R /F2 ${boldFontId} 0 R >> >> /Contents ${contentId} 0 R >>`,
+    );
+
+    pageIds.push(pageId);
+  }
+
+  objects[pagesId - 1] =
+    `<< /Type /Pages /Kids [${pageIds
+      .map((id) => `${id} 0 R`)
+      .join(" ")}] /Count ${pageIds.length} >>`;
+
+  const parts = ["%PDF-1.4\n"];
+  const offsets: number[] = [];
+
+  objects.forEach((object, index) => {
+    offsets.push(Buffer.byteLength(parts.join(""), "utf8"));
+    parts.push(`${index + 1} 0 obj\n${object}\nendobj\n`);
+  });
+
+  const xrefOffset = Buffer.byteLength(parts.join(""), "utf8");
+  parts.push(`xref\n0 ${objects.length + 1}\n`);
+  parts.push("0000000000 65535 f \n");
+
+  for (const offset of offsets) {
+    parts.push(`${String(offset).padStart(10, "0")} 00000 n \n`);
+  }
+
+  parts.push(
+    `trailer\n<< /Size ${objects.length + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`,
+  );
+
+  return Buffer.from(parts.join(""), "utf8");
+}
+
+function buildSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
+  return buildImprovedSitrepPdf(sitrep);
 }
 
 function sendPdf(
@@ -1308,22 +1848,23 @@ function buildSitrepLines(sitrep: SitrepResponseRecord): string[] {
     `Status: ${sitrep.status}`,
     `Generated At: ${sitrep.generated_at}`,
     `Generated By: ${payload.generatedBy.fullName} (${payload.generatedBy.role})`,
-    `Responder Function Scope: ${formatResponderFunctionFilter(
-      payload.responderFunctionFilter ?? "both",
-    )}`,
+    "Report Scope: Full incident - FR, SAR, and HCFD",
     `Period: ${payload.period.start ?? "Unavailable"} to ${payload.period.end}`,
     "",
     "Summary",
     sitrep.summary,
     "",
-    "Responder Function Coverage",
+    "Role Coverage",
     `Field Responder Records: ${
       payload.responderFunctionSummary?.fieldResponderRecords ?? 0
     }`,
     `Stabilization Area Responder Records: ${
       payload.responderFunctionSummary?.stabilizationAreaResponderRecords ?? 0
     }`,
-    `Unspecified Responder Records: ${
+    `Healthcare Facility Documenter Records: ${
+      payload.responderFunctionSummary?.healthcareFacilityDocumenterRecords ?? 0
+    }`,
+    `Unspecified Role Records: ${
       payload.responderFunctionSummary?.unspecifiedResponderRecords ?? 0
     }`,
     "",
@@ -1424,6 +1965,12 @@ export async function getIncidents(
         started_at,
         ended_at,
         status,
+        reopen_request_status,
+        reopen_request_reason,
+        reopen_requested_by,
+        reopen_requested_at,
+        reopen_approved_by,
+        reopen_approved_at,
         created_by,
         created_at,
         updated_at
@@ -1530,9 +2077,15 @@ export async function createIncident(
           municipality,
           barangay,
           started_at,
-          ended_at,
-          status,
-          created_by,
+        ended_at,
+        status,
+        reopen_request_status,
+        reopen_request_reason,
+        reopen_requested_by,
+        reopen_requested_at,
+        reopen_approved_by,
+        reopen_approved_at,
+        created_by,
           created_at,
           updated_at
         `)
@@ -1592,6 +2145,12 @@ export async function createIncident(
         started_at,
         ended_at,
         status,
+        reopen_request_status,
+        reopen_request_reason,
+        reopen_requested_by,
+        reopen_requested_at,
+        reopen_approved_by,
+        reopen_approved_at,
         created_by,
         created_at,
         updated_at
@@ -1772,6 +2331,12 @@ export async function updateIncident(
         started_at,
         ended_at,
         status,
+        reopen_request_status,
+        reopen_request_reason,
+        reopen_requested_by,
+        reopen_requested_at,
+        reopen_approved_by,
+        reopen_approved_at,
         created_by,
         created_at,
         updated_at
@@ -1830,7 +2395,6 @@ export async function closeIncident(
         updated_at: new Date().toISOString(),
       })
       .eq("id", id)
-      .eq("status", "active")
       .select(`
         id,
         incident_code,
@@ -1843,6 +2407,12 @@ export async function closeIncident(
         started_at,
         ended_at,
         status,
+        reopen_request_status,
+        reopen_request_reason,
+        reopen_requested_by,
+        reopen_requested_at,
+        reopen_approved_by,
+        reopen_approved_at,
         created_by,
         created_at,
         updated_at
@@ -1861,7 +2431,7 @@ export async function closeIncident(
     if (!incident) {
       response.status(404).json({
         success: false,
-        message: "Active incident not found.",
+        message: "Incident not found.",
       });
       return;
     }
@@ -1883,6 +2453,178 @@ export async function closeIncident(
     response.status(200).json({
       success: true,
       message: `${user.fullName} closed the incident.`,
+      data: incident,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function requestIncidentReopen(
+  request: Request<{ id: string }>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { id } = request.params;
+    const user = getAuthenticatedUser(request);
+    const reason =
+      typeof request.body?.reason === "string"
+        ? request.body.reason.trim()
+        : null;
+
+    let query = supabase
+      .from("incidents")
+      .update({
+        reopen_request_status: "pending",
+        reopen_request_reason: reason || null,
+        reopen_requested_by: user.id,
+        reopen_requested_at: new Date().toISOString(),
+        reopen_approved_by: null,
+        reopen_approved_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .eq("status", "closed")
+      .select(`
+        id,
+        incident_code,
+        incident_name,
+        disaster_type,
+        description,
+        province,
+        municipality,
+        barangay,
+        started_at,
+        ended_at,
+        status,
+        reopen_request_status,
+        reopen_request_reason,
+        reopen_requested_by,
+        reopen_requested_at,
+        reopen_approved_by,
+        reopen_approved_at,
+        created_by,
+        created_at,
+        updated_at
+      `);
+
+    if (user.role !== "super_admin") {
+      query = query.eq("created_by", user.id);
+    }
+
+    const { data: incident, error } = await query.maybeSingle();
+
+    if (error) {
+      throw new Error(`Unable to request incident reopen: ${error.message}`);
+    }
+
+    if (!incident) {
+      response.status(404).json({
+        success: false,
+        message: "Closed incident not found.",
+      });
+      return;
+    }
+
+    await recordAuditLog({
+      actor: user,
+      action: "incident.reopen_requested",
+      entityType: "incident",
+      entityId: incident.id,
+      entityLabel: incident.incident_name,
+      metadata: {
+        incidentCode: incident.incident_code,
+        reason,
+      },
+      scopeAdminId:
+        user.role === "super_admin" ? null : incident.created_by,
+    });
+
+    response.status(200).json({
+      success: true,
+      message: "Incident reopen request submitted.",
+      data: incident,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function approveIncidentReopen(
+  request: Request<{ id: string }>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { id } = request.params;
+    const user = getAuthenticatedUser(request);
+
+    const { data: incident, error } = await supabase
+      .from("incidents")
+      .update({
+        status: "active",
+        ended_at: null,
+        reopen_request_status: "approved",
+        reopen_approved_by: user.id,
+        reopen_approved_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .eq("reopen_request_status", "pending")
+      .select(`
+        id,
+        incident_code,
+        incident_name,
+        disaster_type,
+        description,
+        province,
+        municipality,
+        barangay,
+        started_at,
+        ended_at,
+        status,
+        reopen_request_status,
+        reopen_request_reason,
+        reopen_requested_by,
+        reopen_requested_at,
+        reopen_approved_by,
+        reopen_approved_at,
+        created_by,
+        created_at,
+        updated_at
+      `)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Unable to approve incident reopen: ${error.message}`);
+    }
+
+    if (!incident) {
+      response.status(404).json({
+        success: false,
+        message: "Pending reopen request not found.",
+      });
+      return;
+    }
+
+    await recordAuditLog({
+      actor: user,
+      action: "incident.reopened",
+      entityType: "incident",
+      entityId: incident.id,
+      entityLabel: incident.incident_name,
+      metadata: {
+        incidentCode: incident.incident_code,
+        requestedBy: incident.reopen_requested_by,
+        requestedAt: incident.reopen_requested_at,
+      },
+      scopeAdminId: null,
+    });
+
+    response.status(200).json({
+      success: true,
+      message: "Incident reopen request approved.",
       data: incident,
     });
   } catch (error) {
@@ -2577,7 +3319,7 @@ export async function getIncidentOnsiteCareSummary(
     const responseInitiatedDate = responseInitiatedAt
       ? new Date(responseInitiatedAt)
       : null;
-    const intervalMinutes = [1, 5, 10, 15, 30, 60];
+    const intervalMinutes = [15, 30, 60, 120, 180];
     const totalSurvivors = casualtyIncidentIds.length;
 
     const buildIntervalRows = (category: string) =>
@@ -2811,7 +3553,7 @@ export async function getIncidentSceneClearanceSummary(
     const responseInitiatedDate = responseInitiatedAt
       ? new Date(responseInitiatedAt)
       : null;
-    const intervalMinutes = [1, 5, 10, 15, 30, 60];
+    const intervalMinutes = [15, 30, 60, 120, 180];
     const totalSurvivors = casualtyIncidentIds.length;
 
     const buildTransportIntervalRows = (category: string) =>
@@ -3109,7 +3851,7 @@ export async function getIncidentSurvivorDistributionSummary(
     const responseInitiatedDate = responseInitiatedAt
       ? new Date(responseInitiatedAt)
       : null;
-    const intervalMinutes = [1, 5, 10, 15, 30, 60];
+    const intervalMinutes = [15, 30, 60, 120, 180];
     const totalEdArrivals = arrivedRows.length;
     const transferDenominator = encounterRows.filter((row) =>
       Boolean(row.facility_id),
@@ -4328,7 +5070,7 @@ export async function getIncidentAnalyticsSummary(
         ? []
         : ((responderSafetyResponsesResult.data ??
             []) as ResponderSafetyResponseRow[]);
-    const intervalMinutes = [1, 5, 10, 15, 30, 60];
+    const intervalMinutes = [15, 30, 60, 120, 180];
     const totalVictims = casualtyIncidentIds.length;
     const verifiedRecords = casualtyIncidentRows.filter(
       (item) => item.verification_status === "verified",
@@ -4790,9 +5532,7 @@ export async function generateIncidentSitrep(
     const { id } = request.params;
     const user = getAuthenticatedUser(request);
     const generatedAt = new Date().toISOString();
-    const responderFunctionFilter = parseResponderFunctionFilter(
-      request.body?.responderFunctionFilter,
-    );
+    const responderFunctionFilter: ResponderFunctionFilter = "both";
 
     const { data: incidentData, error: incidentError } =
       await supabase
@@ -4900,7 +5640,7 @@ export async function generateIncidentSitrep(
         ? await supabase
             .from("casualty_triage_assessments")
             .select(
-              "casualty_incident_id, triage_system, triage_category, triage_stage, triaged_at, triaged_by",
+              "casualty_incident_id, triage_system, triage_category, responder_category, calculated_category, triage_stage, triaged_at, triaged_by, assessment_answers",
             )
             .in("casualty_incident_id", casualtyIncidentIds)
             .order("triaged_at", { ascending: false })
@@ -4929,10 +5669,68 @@ export async function generateIncidentSitrep(
       );
     }
 
+    const treatmentResult =
+      casualtyIncidentIds.length > 0
+        ? await supabase
+            .from("casualty_treatments")
+            .select(
+              "casualty_incident_id, treatment_strategy, treatment_area_name, stabilization_started_at, stabilized_at, created_at",
+            )
+            .in("casualty_incident_id", casualtyIncidentIds)
+            .order("created_at", { ascending: true })
+        : { data: [], error: null };
+
+    if (treatmentResult.error) {
+      throw new Error(
+        `Unable to collect treatment analytics data: ${treatmentResult.error.message}`,
+      );
+    }
+
+    const encounterResult =
+      casualtyIncidentIds.length > 0
+        ? await supabase
+            .from("facility_encounters")
+            .select(
+              "casualty_incident_id, facility_id, arrived_at, sought_ed_care, admitted_to_hospital, ed_admitted_at, ed_departed_at, hospital_admitted_at, hospital_discharged_at, created_at",
+            )
+            .in("casualty_incident_id", casualtyIncidentIds)
+            .order("created_at", { ascending: true })
+        : { data: [], error: null };
+
+    if (encounterResult.error) {
+      throw new Error(
+        `Unable to collect facility analytics data: ${encounterResult.error.message}`,
+      );
+    }
+
+    const responderSafetyResponsesResult = await supabase
+      .from("responder_safety_responses")
+      .select("safety_status, ppe_used_at")
+      .eq("incident_id", id);
+    const responderSafetyResponsesError =
+      responderSafetyResponsesResult.error?.code === "42P01"
+        ? null
+        : responderSafetyResponsesResult.error;
+
+    if (responderSafetyResponsesError) {
+      throw new Error(
+        `Unable to collect responder safety analytics data: ${responderSafetyResponsesError.message}`,
+      );
+    }
+
     const triageRows =
       (triageResult.data ?? []) as TriageAssessmentRow[];
     const transportRows =
       (transportResult.data ?? []) as TransportRecordRow[];
+    const treatmentRows =
+      (treatmentResult.data ?? []) as TreatmentRecordRow[];
+    const encounterRows =
+      (encounterResult.data ?? []) as FacilityEncounterRow[];
+    const responderSafetyResponses =
+      responderSafetyResponsesResult.error
+        ? []
+        : ((responderSafetyResponsesResult.data ??
+            []) as ResponderSafetyResponseRow[]);
     const participantUserIds = [
       ...new Set(
         [
@@ -4982,32 +5780,11 @@ export async function generateIncidentSitrep(
     const triageRowsByCasualty = groupRowsByCasualtyId(triageRows);
     const transportRowsByCasualty =
       groupRowsByCasualtyId(transportRows);
-    const filteredCasualties = filterCasualtiesByResponderFunction(
-      casualties,
-      responderFunctionFilter,
-      triageRowsByCasualty,
-      transportRowsByCasualty,
-      userFunctionsById,
-    );
-    const filteredCasualtyIds = new Set(
-      filteredCasualties.map((item) => item.id),
-    );
-    const filteredTriageRows = filterRowsByResponderFunction(
-      triageRows.filter((item) =>
-        filteredCasualtyIds.has(item.casualty_incident_id),
-      ),
-      responderFunctionFilter,
-      (row) => inferResponderFunctionFromTriage(row, userFunctionsById),
-    );
-    const filteredTransportRows = filterRowsByResponderFunction(
-      transportRows.filter((item) =>
-        filteredCasualtyIds.has(item.casualty_incident_id),
-      ),
-      responderFunctionFilter,
-      (row) => inferResponderFunctionFromTransport(row, userFunctionsById),
-    );
+    const incidentCasualties = casualties;
+    const incidentTriageRows = triageRows;
+    const incidentTransportRows = transportRows;
     const responderFunctionSummary = buildResponderFunctionSummary(
-      filteredCasualties,
+      incidentCasualties,
       triageRowsByCasualty,
       transportRowsByCasualty,
       userFunctionsById,
@@ -5015,7 +5792,7 @@ export async function generateIncidentSitrep(
 
     const receivingFacilityIds = Array.from(
       new Set(
-        filteredTransportRows
+        incidentTransportRows
           .map((item) => item.receiving_facility_id)
           .filter((value): value is string => Boolean(value)),
       ),
@@ -5046,7 +5823,7 @@ export async function generateIncidentSitrep(
       TriageAssessmentRow
     >();
 
-    for (const triage of filteredTriageRows) {
+    for (const triage of incidentTriageRows) {
       if (!latestTriageByCasualty.has(triage.casualty_incident_id)) {
         latestTriageByCasualty.set(
           triage.casualty_incident_id,
@@ -5060,7 +5837,7 @@ export async function generateIncidentSitrep(
       TransportRecordRow
     >();
 
-    for (const transport of filteredTransportRows) {
+    for (const transport of incidentTransportRows) {
       if (
         !latestTransportByCasualty.has(
           transport.casualty_incident_id,
@@ -5079,32 +5856,122 @@ export async function generateIncidentSitrep(
     const latestTransportRows = Array.from(
       latestTransportByCasualty.values(),
     );
+    const isPrimaryTriage = (row: TriageAssessmentRow) =>
+      row.triage_stage === "on_site" ||
+      primaryTriageSystems.has(row.triage_system ?? "");
+    const isSecondaryTriage = (row: TriageAssessmentRow) =>
+      row.triage_stage === "reassessment" ||
+      secondaryTriageSystems.has(row.triage_system ?? "");
+    const isFacilityTriage = (row: TriageAssessmentRow) =>
+      row.triage_stage === "facility_arrival" ||
+      tertiaryTriageSystems.has(
+        normalizeAnalyticsTriageSystem(row.triage_system),
+      );
+    const primaryTriageRows = incidentTriageRows.filter(isPrimaryTriage);
+    const secondaryTriageRows = incidentTriageRows.filter(isSecondaryTriage);
+    const facilityTriageRows = incidentTriageRows.filter(isFacilityTriage);
+    const latestFacilityTriageByCasualty = new Map<
+      string,
+      TriageAssessmentRow
+    >();
+
+    for (const triage of facilityTriageRows) {
+      if (!latestFacilityTriageByCasualty.has(triage.casualty_incident_id)) {
+        latestFacilityTriageByCasualty.set(
+          triage.casualty_incident_id,
+          triage,
+        );
+      }
+    }
+
+    const facilityCategoryForCasualty = (casualtyIncidentId: string) =>
+      getAnalyticsTriageCategory(
+        latestFacilityTriageByCasualty.get(casualtyIncidentId) ??
+          latestTriageByCasualty.get(casualtyIncidentId),
+      );
+    const countTriageRowsByCategory = (rows: TriageAssessmentRow[]) =>
+      countBy(rows, (row) => getAnalyticsTriageCategory(row));
+    const tertiaryTriageBySystem = Object.entries(
+      tertiaryTriageSystemLabels,
+    ).reduce<
+      Record<string, { label: string; counts: CountMap; total: number }>
+    >((charts, [systemKey, label]) => {
+      const systemRows = facilityTriageRows.filter(
+        (row) =>
+          normalizeAnalyticsTriageSystem(row.triage_system) === systemKey,
+      );
+
+      charts[systemKey] = {
+        label,
+        counts: countTriageRowsByCategory(systemRows),
+        total: systemRows.length,
+      };
+
+      return charts;
+    }, {});
+    const soughtEdCare = (row: FacilityEncounterRow) =>
+      row.sought_ed_care === true ||
+      (
+        row.sought_ed_care !== false &&
+        (Boolean(row.facility_id) || Boolean(row.arrived_at))
+      );
+    const edCareByTriageCategory = (
+      ["immediate", "delayed", "minimal", "expectant"] as const
+    ).reduce<Record<string, { count: number; total: number; percentage: number }>>(
+      (values, category) => {
+        const total = casualtyIncidentIds.filter(
+          (casualtyIncidentId) =>
+            facilityCategoryForCasualty(casualtyIncidentId) === category,
+        ).length;
+        const count = encounterRows.filter(
+          (row) =>
+            facilityCategoryForCasualty(row.casualty_incident_id) ===
+              category &&
+            soughtEdCare(row),
+        ).length;
+
+        values[category] = {
+          count,
+          total,
+          percentage: calculatePercentage(count, total),
+        };
+        return values;
+      },
+      {},
+    );
+    const safeResponders = responderSafetyResponses.filter(
+      (row) => row.safety_status === "yes",
+    ).length;
+    const unsafeResponders = responderSafetyResponses.filter(
+      (row) => row.safety_status === "no",
+    ).length;
+    const edCareVictims = encounterRows.filter(soughtEdCare).length;
 
     const casualtySummary = {
-      total: filteredCasualties.length,
-      byStatus: countBy(filteredCasualties, (item) => item.current_status),
-      bySeverity: countBy(filteredCasualties, (item) => item.severity),
+      total: incidentCasualties.length,
+      byStatus: countBy(incidentCasualties, (item) => item.current_status),
+      bySeverity: countBy(incidentCasualties, (item) => item.severity),
       byVerification: countBy(
-        filteredCasualties,
+        incidentCasualties,
         (item) => item.verification_status,
       ),
-      identified: filteredCasualties.filter(
+      identified: incidentCasualties.filter(
         (item) =>
           item.casualty?.identification_status === "identified",
       ).length,
-      partiallyIdentified: filteredCasualties.filter(
+      partiallyIdentified: incidentCasualties.filter(
         (item) =>
           item.casualty?.identification_status ===
           "partially_identified",
       ).length,
-      unidentified: filteredCasualties.filter(
+      unidentified: incidentCasualties.filter(
         (item) =>
           item.casualty?.identification_status === "unidentified",
       ).length,
     };
 
     const triageSummary = {
-      totalAssessments: filteredTriageRows.length,
+      totalAssessments: incidentTriageRows.length,
       latestByCategory: countBy(
         latestTriageRows,
         (item) => item.triage_category,
@@ -5116,7 +5983,7 @@ export async function generateIncidentSitrep(
     };
 
     const transportSummary = {
-      totalRecords: filteredTransportRows.length,
+      totalRecords: incidentTransportRows.length,
       required: countBy(
         latestTransportRows,
         (item) => item.transport_required,
@@ -5150,7 +6017,7 @@ export async function generateIncidentSitrep(
       );
     }
 
-    const evacuationCenters = countBy(filteredCasualties, (item) =>
+    const evacuationCenters = countBy(incidentCasualties, (item) =>
       formatEvacuationCenterLabel(item.evacuation_center),
     );
 
@@ -5160,6 +6027,34 @@ export async function generateIncidentSitrep(
       activeEvacuationCenterCount:
         evacuationCentersResult.data?.length ?? 0,
     };
+    const analyticsSnapshot: IncidentSitrepPayload["analyticsSnapshot"] = {
+      keyPerformanceIndicators: {
+        totalVictims: casualtySummary.total,
+        verifiedRecords: casualtySummary.byVerification.verified ?? 0,
+        pendingReview:
+          (casualtySummary.byVerification.submitted ?? 0) +
+          (casualtySummary.byVerification.under_review ?? 0),
+        primaryTriageAssessments: primaryTriageRows.length,
+        secondaryTriageAssessments: secondaryTriageRows.length,
+        facilityTriageAssessments: facilityTriageRows.length,
+        edCareVictims,
+        arrivedFacility: transportSummary.arrivedFacility,
+        safeResponders,
+        unsafeResponders,
+      },
+      triageDistributions: {
+        primary: countTriageRowsByCategory(primaryTriageRows),
+        secondary: countTriageRowsByCategory(secondaryTriageRows),
+        facility: countTriageRowsByCategory(facilityTriageRows),
+        tertiaryBySystem: tertiaryTriageBySystem,
+      },
+      edCareByTriageCategory,
+      stabilizationStrategies: countBy(
+        treatmentRows,
+        (row) => row.treatment_strategy,
+      ),
+      cumulativeIntervalsMinutes: [15, 30, 60, 120, 180],
+    };
 
     const summary = buildSitrepSummary(
       incident,
@@ -5167,13 +6062,9 @@ export async function generateIncidentSitrep(
       casualtySummary.bySeverity.critical ?? 0,
       casualtySummary.byStatus.deceased ?? 0,
       transportSummary.required.yes ?? 0,
-    ).concat(
-      `; responder function scope: ${formatResponderFunctionFilter(
-        responderFunctionFilter,
-      )}`,
     );
 
-    const periodStart = getPeriodStart(incident, filteredCasualties);
+    const periodStart = getPeriodStart(incident, incidentCasualties);
     const payload: IncidentSitrepPayload = {
       incident,
       generatedAt,
@@ -5193,6 +6084,7 @@ export async function generateIncidentSitrep(
       triageSummary,
       transportSummary,
       facilitySummary,
+      analyticsSnapshot,
     };
 
     const { data: sitrepData, error: sitrepError } = await supabase
@@ -5366,7 +6258,6 @@ export async function exportIncidentCasualtiesCsv(
 
 async function getLatestSitrep(
   incidentId: string,
-  responderFunctionFilter: ResponderFunctionFilter = "both",
 ): Promise<SitrepResponseRecord | null> {
   const { data, error } = await supabase
     .from("sitreps")
@@ -5391,9 +6282,10 @@ async function getLatestSitrep(
   return (
     records.find(
       (item) =>
-        (item.generated_payload.responderFunctionFilter ?? "both") ===
-        responderFunctionFilter,
-    ) ?? null
+        (item.generated_payload.responderFunctionFilter ?? "both") === "both",
+    ) ??
+    records[0] ??
+    null
   );
 }
 
@@ -5403,19 +6295,13 @@ export async function exportLatestSitrepCsv(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const responderFunctionFilter = parseResponderFunctionFilter(
-      request.query.responderFunctionFilter,
-    );
-    const sitrep = await getLatestSitrep(
-      request.params.id,
-      responderFunctionFilter,
-    );
+    const sitrep = await getLatestSitrep(request.params.id);
 
     if (!sitrep) {
       response.status(404).json({
         success: false,
         message:
-          "Generate a SitRep for the selected responder function scope before exporting.",
+          "Generate an incident SitRep before exporting.",
       });
       return;
     }
@@ -5428,12 +6314,46 @@ export async function exportLatestSitrepCsv(
         ["report", "generated_at", sitrep.generated_at],
         [
           "report",
-          "responder_function_scope",
-          formatResponderFunctionFilter(
-            payload.responderFunctionFilter ?? "both",
-          ),
+          "report_scope",
+          "Full incident - FR, SAR, and HCFD",
         ],
         ["report", "summary", sitrep.summary],
+        [
+          "analytics",
+          "primary_triage_assessments",
+          payload.analyticsSnapshot?.keyPerformanceIndicators
+            .primaryTriageAssessments ?? 0,
+        ],
+        [
+          "analytics",
+          "secondary_triage_assessments",
+          payload.analyticsSnapshot?.keyPerformanceIndicators
+            .secondaryTriageAssessments ?? 0,
+        ],
+        [
+          "analytics",
+          "facility_triage_assessments",
+          payload.analyticsSnapshot?.keyPerformanceIndicators
+            .facilityTriageAssessments ?? 0,
+        ],
+        [
+          "analytics",
+          "ed_care_victims",
+          payload.analyticsSnapshot?.keyPerformanceIndicators
+            .edCareVictims ?? 0,
+        ],
+        [
+          "analytics",
+          "safe_responders",
+          payload.analyticsSnapshot?.keyPerformanceIndicators
+            .safeResponders ?? 0,
+        ],
+        [
+          "analytics",
+          "unsafe_responders",
+          payload.analyticsSnapshot?.keyPerformanceIndicators
+            .unsafeResponders ?? 0,
+        ],
         [
           "responder_function",
           "field_responder_records",
@@ -5444,6 +6364,12 @@ export async function exportLatestSitrepCsv(
           "stabilization_area_responder_records",
           payload.responderFunctionSummary
             ?.stabilizationAreaResponderRecords ?? 0,
+        ],
+        [
+          "responder_function",
+          "healthcare_facility_documenter_records",
+          payload.responderFunctionSummary
+            ?.healthcareFacilityDocumenterRecords ?? 0,
         ],
         [
           "responder_function",
@@ -5499,19 +6425,13 @@ export async function exportLatestSitrepPdf(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const responderFunctionFilter = parseResponderFunctionFilter(
-      request.query.responderFunctionFilter,
-    );
-    const sitrep = await getLatestSitrep(
-      request.params.id,
-      responderFunctionFilter,
-    );
+    const sitrep = await getLatestSitrep(request.params.id);
 
     if (!sitrep) {
       response.status(404).json({
         success: false,
         message:
-          "Generate a SitRep for the selected responder function scope before exporting.",
+          "Generate an incident SitRep before exporting.",
       });
       return;
     }

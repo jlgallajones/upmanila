@@ -139,6 +139,33 @@ function parseSafetyActionStatus(
   return value;
 }
 
+function parseDmmpStaffStatus(
+  value: unknown,
+  fieldName: string,
+): string | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null || value === "") {
+    return null;
+  }
+
+  if (
+    value !== "ill" &&
+    value !== "injured" &&
+    value !== "deceased" &&
+    value !== "safe" &&
+    value !== "unsafe"
+  ) {
+    throw new Error(
+      `${fieldName} must be ill, injured, deceased, safe, unsafe, or null.`,
+    );
+  }
+
+  return value;
+}
+
 function parseDisruptionLevel(
   value: unknown,
   fieldName: string,
@@ -672,12 +699,38 @@ export async function createDmmpStaff(
 
     let staffName: string | null | undefined;
     let roleName: string | null | undefined;
+    let callDownStaffId: string | null | undefined;
+    let linkedUserId: string | null | undefined;
     let wasContacted: boolean | null | undefined;
+    let hasArrived: boolean | null | undefined;
+    let status: string | null | undefined;
     let contactedAt: string | null | undefined;
     let requiredArrivalAt: string | null | undefined;
     let arrivedAt: string | null | undefined;
 
     try {
+      if (request.body.callDownStaffId !== undefined) {
+        callDownStaffId = parseNullableText(
+          request.body.callDownStaffId,
+          "callDownStaffId",
+        );
+
+        if (callDownStaffId && !isValidUuid(callDownStaffId)) {
+          throw new Error("callDownStaffId must be a valid UUID or null.");
+        }
+      }
+
+      if (request.body.linkedUserId !== undefined) {
+        linkedUserId = parseNullableText(
+          request.body.linkedUserId,
+          "linkedUserId",
+        );
+
+        if (linkedUserId && !isValidUuid(linkedUserId)) {
+          throw new Error("linkedUserId must be a valid UUID or null.");
+        }
+      }
+
       staffName = parseNullableText(
         request.body.staffName,
         "staffName",
@@ -691,6 +744,16 @@ export async function createDmmpStaff(
       wasContacted = parseNullableBoolean(
         request.body.wasContacted,
         "wasContacted",
+      );
+
+      hasArrived = parseNullableBoolean(
+        request.body.hasArrived,
+        "hasArrived",
+      );
+
+      status = parseDmmpStaffStatus(
+        request.body.status,
+        "status",
       );
 
       contactedAt = parseNullableDate(
@@ -720,6 +783,8 @@ export async function createDmmpStaff(
 
     const normalizedWasContacted =
       wasContacted ?? false;
+    const normalizedHasArrived =
+      hasArrived ?? Boolean(arrivedAt);
 
     const arrivedWithinStandard =
       arrivedAt && requiredArrivalAt
@@ -731,9 +796,13 @@ export async function createDmmpStaff(
       .from("dmmp_staff_call_downs")
       .insert({
         incident_id: incidentId,
+        call_down_staff_id: callDownStaffId ?? null,
+        linked_user_id: linkedUserId ?? null,
         staff_name: staffName ?? null,
         role_name: roleName ?? null,
         was_contacted: normalizedWasContacted,
+        has_arrived: normalizedHasArrived,
+        status: status ?? null,
         contacted_at: contactedAt ?? null,
         required_arrival_at:
           requiredArrivalAt ?? null,
@@ -823,6 +892,32 @@ export async function updateDmmpStaff(
     };
 
     try {
+      if (request.body.callDownStaffId !== undefined) {
+        const callDownStaffId = parseNullableText(
+          request.body.callDownStaffId,
+          "callDownStaffId",
+        );
+
+        if (callDownStaffId && !isValidUuid(callDownStaffId)) {
+          throw new Error("callDownStaffId must be a valid UUID or null.");
+        }
+
+        updates.call_down_staff_id = callDownStaffId;
+      }
+
+      if (request.body.linkedUserId !== undefined) {
+        const linkedUserId = parseNullableText(
+          request.body.linkedUserId,
+          "linkedUserId",
+        );
+
+        if (linkedUserId && !isValidUuid(linkedUserId)) {
+          throw new Error("linkedUserId must be a valid UUID or null.");
+        }
+
+        updates.linked_user_id = linkedUserId;
+      }
+
       const staffName = parseNullableText(
         request.body.staffName,
         "staffName",
@@ -836,6 +931,16 @@ export async function updateDmmpStaff(
       const wasContacted = parseNullableBoolean(
         request.body.wasContacted,
         "wasContacted",
+      );
+
+      const hasArrived = parseNullableBoolean(
+        request.body.hasArrived,
+        "hasArrived",
+      );
+
+      const status = parseDmmpStaffStatus(
+        request.body.status,
+        "status",
       );
 
       const contactedAt = parseNullableDate(
@@ -864,6 +969,14 @@ export async function updateDmmpStaff(
       if (wasContacted !== undefined) {
         updates.was_contacted =
           wasContacted ?? false;
+      }
+
+      if (hasArrived !== undefined) {
+        updates.has_arrived = hasArrived ?? false;
+      }
+
+      if (status !== undefined) {
+        updates.status = status;
       }
 
       if (contactedAt !== undefined) {
@@ -898,6 +1011,13 @@ export async function updateDmmpStaff(
       updates.arrived_at !== undefined
         ? (updates.arrived_at as string | null)
         : existingRecord.arrived_at;
+
+    if (
+      updates.has_arrived === undefined &&
+      updates.arrived_at !== undefined
+    ) {
+      updates.has_arrived = Boolean(finalArrivedAt);
+    }
 
     updates.arrived_within_standard =
       finalArrivedAt && finalRequiredArrivalAt
@@ -1028,6 +1148,7 @@ export async function getDmmpStaffSummary(
         `
           id,
           was_contacted,
+          has_arrived,
           arrived_at,
           arrived_within_standard
         `,
@@ -1049,7 +1170,7 @@ export async function getDmmpStaffSummary(
     ).length;
 
     const totalArrived = records.filter(
-      (record) => Boolean(record.arrived_at),
+      (record) => record.has_arrived || Boolean(record.arrived_at),
     ).length;
 
     const totalArrivedWithinStandard =
@@ -1063,12 +1184,20 @@ export async function getDmmpStaffSummary(
       totalContacted > 0
         ? Number(
             (
-              (totalArrivedWithinStandard /
+              (totalArrived /
                 totalContacted) *
               100
             ).toFixed(2),
           )
         : 0;
+    const contactedArrivalTimestamps = records
+      .filter((record) => record.was_contacted && Boolean(record.arrived_at))
+      .map((record) => new Date(record.arrived_at).getTime())
+      .filter((timestamp) => !Number.isNaN(timestamp));
+    const lastPersonContactedArrivalAt =
+      contactedArrivalTimestamps.length > 0
+        ? new Date(Math.max(...contactedArrivalTimestamps)).toISOString()
+        : null;
 
     response.status(200).json({
       success: true,
@@ -1078,8 +1207,9 @@ export async function getDmmpStaffSummary(
         totalArrived,
         totalArrivedWithinStandard,
         reportingPercentage,
+        lastPersonContactedArrivalAt,
         formula:
-          "(staff who arrived within standard / staff contacted) × 100",
+          "(staff who arrived / staff contacted) x 100",
       },
     });
   } catch (error) {

@@ -8,6 +8,7 @@ import express, {
 import { auditLogRouter } from "./routes/audit-log.routes.js";
 import { attachmentRouter } from "./routes/attachment.routes.js";
 import { authRouter } from "./routes/auth.routes.js";
+import { callDownStaffRouter } from "./routes/call-down-staff.routes.js";
 import { casualtyRouter } from "./routes/casualty.routes.js";
 import { dashboardRouter } from "./routes/dashboard.routes.js";
 import { draftRouter } from "./routes/draft.routes.js";
@@ -102,6 +103,7 @@ app.get("/api/health", (_request: Request, response: Response) => {
 
 app.use("/api/auth", authRouter);
 app.use("/api/audit-logs", auditLogRouter);
+app.use("/api/call-down-staff", callDownStaffRouter);
 app.use("/api/drafts", draftRouter);
 app.use("/api/exports", exportRouter);
 app.use("/api/incidents", incidentRouter);

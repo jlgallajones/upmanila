@@ -36,6 +36,22 @@ When deployed, it uses the Render API:
 https://dcms-api-ljco.onrender.com/api
 ```
 
+## Runtime Configuration And Security
+
+Do not place Supabase service-role keys or other private secrets in this folder.
+Anything in `website` can be viewed from browser DevTools after deployment.
+
+The dashboard can read optional runtime config from `window.DCMS_CONFIG`.
+Use `website/config.example.js` as the template for a local/deployment-only
+`website/config.js` file if Realtime needs to be enabled. `website/config.js`
+is ignored by Git. If you use `config.js`, load it before `app.js` in the
+deployed `index.html` or inject the same `window.DCMS_CONFIG` object through
+the hosting provider.
+
+The Supabase publishable key is not a server secret, but it is intentionally no
+longer hardcoded in `app.js` to avoid a penetration testing finding for
+hardcoded keys in client source.
+
 ## Implemented
 
 - Login page using the existing `/api/auth/login` endpoint.

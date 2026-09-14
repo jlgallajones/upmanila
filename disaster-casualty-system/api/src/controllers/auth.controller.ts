@@ -134,6 +134,19 @@ function rowError(rowNumber: number, message: string) {
   };
 }
 
+async function recordBulkImportAuditLog(
+  input: Parameters<typeof recordAuditLog>[0],
+): Promise<void> {
+  try {
+    await recordAuditLog(input);
+  } catch (error) {
+    console.warn(
+      "[DCMS Audit] Bulk import completed, but audit log was not recorded:",
+      error,
+    );
+  }
+}
+
 const managedAccountSelect = `
   id,
   full_name,
@@ -825,13 +838,14 @@ export async function bulkRegisterAdmins(
     const created = results.filter((result) => result.success).length;
     const failed = results.length - created;
 
-    await recordAuditLog({
+    await recordBulkImportAuditLog({
       actor: {
         id: currentUser.id,
         role: currentUser.role ?? "super_admin",
       },
       action: "bulk_import.admin_accounts",
       entityType: "user",
+      entityId: currentUser.id,
       entityLabel: "Bulk admin account import",
       metadata: {
         created,
@@ -847,6 +861,7 @@ export async function bulkRegisterAdmins(
       message: `Bulk admin account import finished. ${created} of ${results.length} rows created.`,
       data: {
         created,
+        skipped: 0,
         failed,
         results,
       },
@@ -1198,16 +1213,27 @@ export async function bulkRegisterUnitUsers(
           continue;
         }
 
+        if (!row.phoneNumber?.trim()) {
+          results.push(rowError(rowNumber, "phoneNumber is required."));
+          continue;
+        }
+
+        if (!row.assignedMunicipality?.trim()) {
+          results.push(
+            rowError(rowNumber, "assignedMunicipality is required."),
+          );
+          continue;
+        }
+
+        if (!row.assignedBarangay?.trim()) {
+          results.push(rowError(rowNumber, "assignedBarangay is required."));
+          continue;
+        }
+
         const { role, reportingContext } =
           getUnitUserContext(requestedRole);
-        const assignedMunicipality =
-          row.assignedMunicipality?.trim() ||
-          creator.assigned_municipality ||
-          null;
-        const assignedBarangay =
-          row.assignedBarangay?.trim() ||
-          creator.assigned_barangay ||
-          null;
+        const assignedMunicipality = row.assignedMunicipality.trim();
+        const assignedBarangay = row.assignedBarangay.trim();
 
         const { data: authData, error: authError } =
           await supabaseAuth.auth.admin.createUser({
@@ -1284,13 +1310,14 @@ export async function bulkRegisterUnitUsers(
     const created = results.filter((result) => result.success).length;
     const failed = results.length - created;
 
-    await recordAuditLog({
+    await recordBulkImportAuditLog({
       actor: {
         id: currentUser.id,
         role: currentUser.role ?? "admin",
       },
       action: "bulk_import.unit_accounts",
       entityType: "user",
+      entityId: currentUser.id,
       entityLabel: "Bulk unit account import",
       metadata: {
         created,
@@ -1305,6 +1332,7 @@ export async function bulkRegisterUnitUsers(
       message: `Bulk unit account import finished. ${created} of ${results.length} rows created.`,
       data: {
         created,
+        skipped: 0,
         failed,
         results,
       },

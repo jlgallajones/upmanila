@@ -1,6 +1,7 @@
 import { Router } from "express";
 
 import {
+  approveIncidentReopen,
   closeIncident,
   createIncident,
   exportIncidentCasualtiesCsv,
@@ -18,6 +19,7 @@ import {
   getIncidentOnsiteTriageSummary,
   getIncidentSceneClearanceSummary,
   getIncidentSurvivorDistributionSummary,
+  requestIncidentReopen,
   updateIncident,
   updateIncidentTimeline,
 } from "../controllers/incident.controller.js";
@@ -133,4 +135,16 @@ incidentRouter.patch(
   requireAuth,
   requireRole(["super_admin", "admin", "administrator", "encoder"]),
   closeIncident,
+);
+incidentRouter.post(
+  "/:id/reopen-request",
+  requireAuth,
+  requireRole(["admin", "administrator", "encoder"]),
+  requestIncidentReopen,
+);
+incidentRouter.patch(
+  "/:id/reopen-approval",
+  requireAuth,
+  requireRole(["super_admin"]),
+  approveIncidentReopen,
 );

@@ -57,6 +57,19 @@ function rowError(rowNumber: number, message: string) {
   };
 }
 
+async function recordBulkImportAuditLog(
+  input: Parameters<typeof recordAuditLog>[0],
+): Promise<void> {
+  try {
+    await recordAuditLog(input);
+  } catch (error) {
+    console.warn(
+      "[DCMS Audit] Bulk import completed, but audit log was not recorded:",
+      error,
+    );
+  }
+}
+
 async function getVisibleIncidentIdsForReferenceData(user: {
   id: string;
   role: string;
@@ -584,10 +597,11 @@ export async function bulkCreateEvacuationCenters(
     const skipped = results.filter((result) => "skipped" in result).length;
     const failed = results.length - created - skipped;
 
-    await recordAuditLog({
+    await recordBulkImportAuditLog({
       actor: user,
       action: "bulk_import.evacuation_centers",
       entityType: "evacuation_center",
+      entityId: user.id,
       entityLabel: "Bulk evacuation center import",
       metadata: {
         created,
