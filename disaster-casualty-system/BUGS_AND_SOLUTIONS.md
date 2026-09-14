@@ -575,3 +575,11 @@ Create a short checklist for the exact demo flow:
 **Solution:** Removed hardcoded Supabase Realtime values and deployment API URLs from `website/app.js`. The dashboard now loads `website/config.js` before `app.js` and reads runtime values from `window.DCMS_CONFIG`, with `website/config.example.js` kept as the safe template. Added ignored runtime config/env patterns, created `mobile/.env.example`, removed the mobile test user variable, and removed `mobile/.env` from Git tracking while keeping it locally available.
 
 **Status:** Implemented.
+
+## 67. Deployed Mobile Login Called An API URL With An Encoded Quote
+
+**Problem:** After PWA deployment, login failed with `API route not found` because the request URL included `%22` after `/api`, meaning the deployed `EXPO_PUBLIC_API_URL` value contained an accidental double quote.
+
+**Solution:** The mobile API client now trims whitespace, strips wrapping single/double quotes, and removes trailing slashes from `EXPO_PUBLIC_API_URL` before creating the Axios client. The PWA deployment notes were also updated to show the correct production env format and warn not to wrap the URL in quotes.
+
+**Status:** Implemented.

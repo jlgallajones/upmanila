@@ -13,7 +13,14 @@ import {
   uiMessages,
 } from "../utils/uiMessages";
 
-const apiUrl = process.env.EXPO_PUBLIC_API_URL;
+function normalizeApiUrl(value: string | undefined): string {
+  return String(value ?? "")
+    .trim()
+    .replace(/^['"]+|['"]+$/g, "")
+    .replace(/\/+$/, "");
+}
+
+const apiUrl = normalizeApiUrl(process.env.EXPO_PUBLIC_API_URL);
 
 if (!apiUrl) {
   throw new Error("EXPO_PUBLIC_API_URL is missing.");

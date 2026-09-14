@@ -5,7 +5,7 @@ npx expo export -p web (this creates the dist folder)
 npx serve dist
 
 
-ngrok auth token: 3HSMJyrV7Njbu7Ijqqp2LbWoiao_7TSPJmmQSXdbJLphw4jX7
+ngrok auth token: store this only in your local ngrok account/settings, not in this file
 
 
 how to test deploy using ngrok
@@ -29,7 +29,10 @@ then recommit and upload new dist in render and netlify
 
 
 env.local EXPO_PUBLIC_API_URL=http://localhost:5000/api
-env.prod https://dcms-api-ljco.onrender.com/api
+env.prod EXPO_PUBLIC_API_URL=https://dcms-api-ljco.onrender.com/api
+
+Do not wrap EXPO_PUBLIC_API_URL in quotes. If the deployed app calls
+.../api%22/auth/login, the production environment variable has an extra quote.
 
 
 running local
