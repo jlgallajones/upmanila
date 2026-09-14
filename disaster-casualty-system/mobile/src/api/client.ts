@@ -14,9 +14,21 @@ import {
 } from "../utils/uiMessages";
 
 function normalizeApiUrl(value: string | undefined): string {
-  return String(value ?? "")
+  let normalized = String(value ?? "")
     .trim()
     .replace(/^['"]+|['"]+$/g, "")
+    .replace(/^(%22|%27)+|(%22|%27)+$/gi, "");
+
+  try {
+    normalized = decodeURIComponent(normalized);
+  } catch {
+    // Keep the raw value if it contains a non-URL-encoded percent sequence.
+  }
+
+  return normalized
+    .trim()
+    .replace(/^['"]+|['"]+$/g, "")
+    .replace(/^(%22|%27)+|(%22|%27)+$/gi, "")
     .replace(/\/+$/, "");
 }
 

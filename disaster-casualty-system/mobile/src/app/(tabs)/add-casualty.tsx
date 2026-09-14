@@ -6942,10 +6942,12 @@ const victimCodeAlreadyExists = useMemo(() => {
 
       setLoadedDraftId(null);
       resetForNextCasualty();
-      Alert.alert(
-        "Saved as draft",
-        "This casualty form was saved on this device. Open Drafts to continue it later.",
-      );
+      setSubmissionFeedback({
+        title: "Saved as draft",
+        message:
+          "This casualty form was saved on this device. Open Drafts to continue it later.",
+        resetOnClose: false,
+      });
     } catch (error) {
       console.error("Failed to save casualty draft:", error);
       Alert.alert(

@@ -583,3 +583,11 @@ Create a short checklist for the exact demo flow:
 **Solution:** The mobile API client now trims whitespace, strips wrapping single/double quotes, and removes trailing slashes from `EXPO_PUBLIC_API_URL` before creating the Axios client. The PWA deployment notes were also updated to show the correct production env format and warn not to wrap the URL in quotes.
 
 **Status:** Implemented.
+
+## 68. Mobile Save Draft Had No Visible Confirmation
+
+**Problem:** In the mobile/PWA Add Casualty form, tapping **Save Draft** saved the local draft but did not show a clear confirmation like the web dashboard. The previous native alert behavior could be easy to miss or unreliable in the web/PWA runtime.
+
+**Solution:** Mobile Add Casualty now uses the existing in-app feedback modal after saving a draft. The form still clears after the draft is saved, and the modal tells the user to open Drafts to continue later.
+
+**Status:** Implemented.
