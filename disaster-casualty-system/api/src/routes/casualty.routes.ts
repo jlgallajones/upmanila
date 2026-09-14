@@ -6,6 +6,7 @@ import {
   createCasualty,
   deleteCasualtyRecord,
   getCasualties,
+  getCasualtyCaseLinks,
   getCasualtyById,
   getNextCasualtyIdSequence,
   getCasualtyStatusHistory,
@@ -14,6 +15,8 @@ import {
   getCasualtyTreatmentHistory,
   getCasualtyVerificationActionLogs,
   getCasualtyVerificationHistory,
+  matchCasualtyCaseRecords,
+  unmatchCasualtyCaseRecord,
   updateCasualty,
   updateCasualtyVerification,
 } from "../controllers/casualty.controller.js";
@@ -36,6 +39,36 @@ casualtyRouter.get(
     "administrator",
   ]),
   getCasualtyVerificationActionLogs,
+);
+casualtyRouter.get(
+  "/case-links",
+  requireAuth,
+  requireRole([
+    "super_admin",
+    "admin",
+    "administrator",
+  ]),
+  getCasualtyCaseLinks,
+);
+casualtyRouter.post(
+  "/case-links",
+  requireAuth,
+  requireRole([
+    "super_admin",
+    "admin",
+    "administrator",
+  ]),
+  matchCasualtyCaseRecords,
+);
+casualtyRouter.delete(
+  "/:id/case-link",
+  requireAuth,
+  requireRole([
+    "super_admin",
+    "admin",
+    "administrator",
+  ]),
+  unmatchCasualtyCaseRecord,
 );
 casualtyRouter.get(
   "/:id/status-history",

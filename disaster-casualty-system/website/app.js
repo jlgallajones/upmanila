@@ -72,8 +72,15 @@ const state = {
   incidentDateFilter: "",
   casualtyRecordIncidentFocus: "all",
   casualtyRecordVerificationFilter: "all",
+  casualtyRecordAccountTypeFilter: "all",
+  casualtyRecordSortOrder: "desc",
   casualtyRecordDateFilter: "",
   verificationReviewIncidentFilter: "all",
+  matchCasingIncidentFilter: "all",
+  selectedMatchCasingRecordIds: [],
+  matchCasingPickerRole: null,
+  matchCasingAttachments: {},
+  matchCasingAttachmentsLoading: false,
   incidents: [],
   allIncidents: [],
   expandedIncidentId: null,
@@ -82,9 +89,12 @@ const state = {
   incidentManagementDetails: {},
   loadingIncidentManagementId: null,
   casualties: [],
+  caseLinks: [],
   healthcareFacilities: [],
   unitUsers: [],
   auditLogs: [],
+  formDrafts: [],
+  draftToResume: null,
   dashboard: null,
   recentActivity: [],
   bulkImportPreviews: {},
@@ -98,6 +108,7 @@ const dashboardRealtimeTables = [
   "casualty_treatments",
   "casualty_status_history",
   "casualty_verification_history",
+  "casualty_case_links",
   "casualty_outcomes",
   "facility_encounters",
   "clinical_procedures",
@@ -170,9 +181,22 @@ const facilityLevels = [
   "unknown",
 ];
 
+const unitAccountRoles = [
+  "field_responder",
+  "sa_responder",
+  "documenter",
+];
+
+const editableUnitAccountRoles = [
+  "responder",
+  "medical_personnel",
+  ...unitAccountRoles,
+];
+
 const superAdminViews = [
   ["home", "Summary"],
   ["registration", "Account Registration"],
+  ["drafts", "Drafts"],
   ["incident-management", "Incident Management"],
   ["incident-analytics", "Incident Analytics"],
   ["history", "Incident History"],
@@ -187,8 +211,17 @@ const adminViews = [
   ["facilities", "Healthcare Facilities"],
   ["users", "Accounts"],
   ["records", "Casualty Records"],
+  ["match-casing", "Match Casing"],
+  ["matched-cases", "Matched Cases"],
+  ["drafts", "Drafts"],
   ["verification", "Verification Review"],
   ["logs", "Action Logs"],
+];
+
+const matchCasingRequiredRoleSlots = [
+  "field_responder",
+  "sa_responder",
+  "documenter",
 ];
 
 function getViewsForRole(role) {
@@ -267,6 +300,18 @@ function clearSession() {
 }
 
 function roleLabel(role) {
+  const labels = {
+    responder: "Legacy Responder",
+    field_responder: "Field Responder",
+    sa_responder: "SAR Responder",
+    documenter: "Healthcare Facility Documenter",
+    medical_personnel: "Legacy Medical Personnel",
+  };
+
+  if (labels[role]) {
+    return labels[role];
+  }
+
   return (role || "unknown")
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
@@ -564,9 +609,24 @@ function compareCasualtyRecordsByLatest(first, second) {
   return casualtyRecordTimestamp(second) - casualtyRecordTimestamp(first);
 }
 
+function compareCasualtyRecordsBySubmittedTime(first, second) {
+  const firstTimestamp = casualtyRecordTimestamp(first);
+  const secondTimestamp = casualtyRecordTimestamp(second);
+  const timestampDifference =
+    state.casualtyRecordSortOrder === "asc"
+      ? firstTimestamp - secondTimestamp
+      : secondTimestamp - firstTimestamp;
+
+  return (
+    timestampDifference ||
+    compareText(casualtySortLabel(first), casualtySortLabel(second))
+  );
+}
+
 function filterCasualtyRecordsForTable(records) {
   const incidentFocus = state.casualtyRecordIncidentFocus;
   const verificationStatus = state.casualtyRecordVerificationFilter;
+  const accountType = state.casualtyRecordAccountTypeFilter;
   const date = state.casualtyRecordDateFilter.trim();
 
   return records.filter((record) => {
@@ -577,11 +637,13 @@ function filterCasualtyRecordsForTable(records) {
     const matchesStatus =
       verificationStatus === "all" ||
       record.verification_status === verificationStatus;
+    const matchesAccountType =
+      accountType === "all" || matchCasingRoleBucket(record) === accountType;
     const matchesDate =
       !date ||
       formatDateFilterValue(casualtyRecordDateValue(record)) === date;
 
-    return matchesIncident && matchesStatus && matchesDate;
+    return matchesIncident && matchesStatus && matchesAccountType && matchesDate;
   });
 }
 
@@ -731,6 +793,13 @@ function getUserFriendlyMessage(
     normalizedMessage.includes("timeout")
   ) {
     return "Unable to reach the server. Please check your connection and try again.";
+  }
+
+  if (
+    normalizedMessage.includes("only create responder or documenter accounts") ||
+    normalizedMessage.includes("only assign responder or documenter")
+  ) {
+    return "The dashboard is reaching an older API version that does not support separated FR/SAR/HCFD roles yet. Restart or redeploy the API after applying the role-separation update.";
   }
 
   if (
@@ -1155,9 +1224,11 @@ async function loadSharedData() {
     incidents,
     allIncidents,
     casualties,
+    caseLinks,
     healthcareFacilities,
     unitUsers,
     auditLogs,
+    formDrafts,
     recent,
   ] =
     await Promise.allSettled([
@@ -1165,9 +1236,11 @@ async function loadSharedData() {
       apiRequest("/incidents"),
       apiRequest("/incidents?scope=all"),
       apiRequest("/casualties"),
+      apiRequest("/casualties/case-links"),
       apiRequest("/healthcare-facilities"),
       apiRequest("/auth/unit-users"),
       apiRequest("/audit-logs?limit=100"),
+      apiRequest("/drafts"),
       apiRequest("/dashboard/recent-activity?limit=12"),
     ]);
 
@@ -1178,9 +1251,11 @@ async function loadSharedData() {
   let loadedIncidents = state.incidents;
   let loadedAllIncidents = state.allIncidents;
   let loadedCasualties = state.casualties;
+  let loadedCaseLinks = state.caseLinks;
   let loadedHealthcareFacilities = state.healthcareFacilities;
   let loadedUnitUsers = state.unitUsers;
   let loadedAuditLogs = state.auditLogs;
+  let loadedFormDrafts = state.formDrafts;
   let loadedRecentActivity = state.recentActivity;
 
   if (incidents.status === "fulfilled") {
@@ -1197,6 +1272,10 @@ async function loadSharedData() {
     loadedCasualties = casualties.value.data || [];
   }
 
+  if (caseLinks.status === "fulfilled") {
+    loadedCaseLinks = caseLinks.value.data || [];
+  }
+
   if (healthcareFacilities.status === "fulfilled") {
     loadedHealthcareFacilities = healthcareFacilities.value.data || [];
   }
@@ -1207,6 +1286,10 @@ async function loadSharedData() {
 
   if (auditLogs.status === "fulfilled") {
     loadedAuditLogs = auditLogs.value.data || [];
+  }
+
+  if (formDrafts.status === "fulfilled") {
+    loadedFormDrafts = formDrafts.value.data || [];
   }
 
   if (recent.status === "fulfilled") {
@@ -1237,9 +1320,11 @@ async function loadSharedData() {
     ? loadedAllIncidents
     : loadedIncidents;
   state.casualties = loadedCasualties;
+  state.caseLinks = loadedCaseLinks;
   state.healthcareFacilities = loadedHealthcareFacilities;
   state.unitUsers = loadedUnitUsers;
   state.auditLogs = loadedAuditLogs;
+  state.formDrafts = loadedFormDrafts;
   state.recentActivity = loadedRecentActivity;
 
   recomputeAdminDashboardSummary();
@@ -2006,19 +2091,15 @@ function renderCurrentView(errorMessage = "") {
         facilities: "Healthcare Facilities",
         users: "Accounts",
         records: "Casualty Records",
+        "match-casing": "Match Casing",
+        "matched-cases": "Matched Cases",
+        drafts: "Drafts",
         verification: "Verification Review",
         logs: "Action Logs",
       }[state.activeView];
 
   root.innerHTML = `
-    <header class="topbar">
-      <div>
-        <span class="eyebrow">${isSuperAdmin() ? "Super Admin" : "Admin"}</span>
-        <h1>${title}</h1>
-        <p>${isSuperAdmin() ? "System-wide oversight and administrator controls." : "Create official response references for the mobile app."}</p>
-      </div>
-      
-    </header>
+
     ${errorMessage ? `<div class="status-message error">${escapeHtml(errorMessage)}</div>` : ""}
     ${isSuperAdmin() ? renderSuperAdminView() : renderAdminView()}
   `;
@@ -2046,6 +2127,8 @@ function bindView() {
   bindIncidentHistoryActions();
   bindCasualtyRecordIncidents();
   bindOpenCasualtyRecord();
+  bindMatchCasingActions();
+  bindDraftActions();
   bindVerificationReviewActions();
   bindDeleteCasualtyActions();
   bindVerificationReviewFilters();
@@ -2153,6 +2236,21 @@ function renderCasualtyRecordFilters(resultCount, totalCount) {
     ["verified", "Verified"],
     ["rejected", "Rejected"],
   ];
+  const accountTypeOptions = [
+    ["all", "All account types"],
+    ["field_responder", "Field Responder"],
+    ["sa_responder", "SAR"],
+    ["documenter", "HCFD"],
+    ["responder", "Legacy Responder"],
+  ];
+  const sortOptions = [
+    ["desc", "Newest submitted first"],
+    ["asc", "Oldest submitted first"],
+  ];
+  const sortLabel =
+    state.casualtyRecordSortOrder === "asc"
+      ? "oldest to newest"
+      : "newest to oldest";
 
   return `
     <div class="form-grid two" style="margin-top:16px">
@@ -2168,6 +2266,28 @@ function renderCasualtyRecordFilters(resultCount, totalCount) {
         </select>
       </label>
       <label class="field">
+        <span>Filter by account type</span>
+        <select id="casualtyRecordAccountTypeFilter">
+          ${accountTypeOptions
+            .map(
+              ([value, label]) =>
+                `<option value="${escapeHtml(value)}" ${state.casualtyRecordAccountTypeFilter === value ? "selected" : ""}>${escapeHtml(label)}</option>`,
+            )
+            .join("")}
+        </select>
+      </label>
+      <label class="field">
+        <span>Sort by time submitted</span>
+        <select id="casualtyRecordSortOrder">
+          ${sortOptions
+            .map(
+              ([value, label]) =>
+                `<option value="${escapeHtml(value)}" ${state.casualtyRecordSortOrder === value ? "selected" : ""}>${escapeHtml(label)}</option>`,
+            )
+            .join("")}
+        </select>
+      </label>
+      <label class="field">
         <span>Filter by reported date</span>
         <input
           id="casualtyRecordDateFilter"
@@ -2176,27 +2296,45 @@ function renderCasualtyRecordFilters(resultCount, totalCount) {
         />
       </label>
     </div>
+    <div class="button-row" style="margin-top:12px">
+      <button class="primary-button" type="button" data-apply-casualty-record-filters>
+        Filter Records
+      </button>
+      <button class="ghost-button" type="button" data-clear-casualty-record-filters>
+        Clear Filters
+      </button>
+    </div>
     <p class="panel-subtitle" style="margin-top:10px">
-      Showing ${resultCount} of ${totalCount} casualty records, sorted latest to past.
+      Showing ${resultCount} of ${totalCount} casualty records, sorted ${sortLabel} by submitted time.
     </p>
   `;
 }
 
 function bindCasualtyRecordFilters() {
   const statusInput = qs("#casualtyRecordVerificationFilter");
+  const accountTypeInput = qs("#casualtyRecordAccountTypeFilter");
+  const sortOrderInput = qs("#casualtyRecordSortOrder");
   const dateInput = qs("#casualtyRecordDateFilter");
+  const applyButton = qs("[data-apply-casualty-record-filters]");
+  const clearButton = qs("[data-clear-casualty-record-filters]");
 
-  if (statusInput) {
-    statusInput.addEventListener("change", () => {
-      state.casualtyRecordVerificationFilter = statusInput.value;
+  if (applyButton) {
+    applyButton.addEventListener("click", () => {
+      state.casualtyRecordVerificationFilter = statusInput?.value || "all";
+      state.casualtyRecordAccountTypeFilter = accountTypeInput?.value || "all";
+      state.casualtyRecordSortOrder = sortOrderInput?.value || "desc";
+      state.casualtyRecordDateFilter = dateInput?.value || "";
       renderCurrentView();
       bindView();
     });
   }
 
-  if (dateInput) {
-    dateInput.addEventListener("input", () => {
-      state.casualtyRecordDateFilter = dateInput.value;
+  if (clearButton) {
+    clearButton.addEventListener("click", () => {
+      state.casualtyRecordVerificationFilter = "all";
+      state.casualtyRecordAccountTypeFilter = "all";
+      state.casualtyRecordSortOrder = "desc";
+      state.casualtyRecordDateFilter = "";
       renderCurrentView();
       bindView();
     });
@@ -2438,6 +2576,12 @@ function renderAdminView() {
       return renderAdminUnitRegistration();
     case "records":
       return renderAdminCasualtyRecords();
+    case "match-casing":
+      return renderMatchCasing();
+    case "matched-cases":
+      return renderMatchedCaseRecords();
+    case "drafts":
+      return renderDrafts();
     case "verification":
       return renderAdminVerificationReview();
     case "logs":
@@ -2945,16 +3089,16 @@ function renderAnalyticsPieChart(rows, options = {}) {
 function compactAxisLabel(label) {
   const normalized = String(label || "");
 
-  if (normalized === "1 minute") {
-    return "1m";
-  }
-
   if (normalized.endsWith(" minutes")) {
     return `${normalized.replace(" minutes", "")}m`;
   }
 
   if (normalized === "1 hour") {
     return "1h";
+  }
+
+  if (normalized.endsWith(" hours")) {
+    return `${normalized.replace(" hours", "")}h`;
   }
 
   return roleLabel(normalized);
@@ -3020,11 +3164,16 @@ function renderAnalyticsSection(title, subtitle, content) {
 }
 
 function renderAnalyticsLineChart(title, series, options = {}) {
+  const allowedIntervalMinutes = new Set([15, 30, 60, 120, 180]);
   const normalizedSeries = (series || [])
     .map((item, index) => ({
       key: item.key || item.label || `series-${index}`,
       label: item.label || item.key || `Series ${index + 1}`,
-      data: Array.isArray(item.data) ? item.data : [],
+      data: Array.isArray(item.data)
+        ? item.data.filter((row) =>
+            allowedIntervalMinutes.has(Number(row.minutes)),
+          )
+        : [],
     }))
     .filter((item) => item.data.length);
   const hasKnownDenominator = normalizedSeries.some((item) =>
@@ -3244,10 +3393,28 @@ function renderAnalyticsGraphSection(title, data, options = {}) {
   `;
 }
 
+function renderTertiaryTriageSystemCharts(graphs) {
+  const systems = [
+    ["esi", "Victims Using ESI Tertiary Triage"],
+    ["metts", "Victims Using METTS Tertiary Triage"],
+    ["ed_triage", "Victims Using ED Triage"],
+  ];
+  const charts = graphs.tertiaryTriageBySystem || {};
+
+  return systems
+    .map(([key, title]) => {
+      const chart = charts[key] || {};
+      const data = Number(chart.total || 0) > 0 ? chart.counts : {};
+
+      return renderAnalyticsGraphSection(title, data, { chart: "pie" });
+    })
+    .join("");
+}
+
 function renderAnalyticsGraphGrid(analytics, incidentId) {
   const graphs = analytics?.barGraphs || {};
   const lineGraphs = getAnalyticsLineGraphs(analytics);
-  const cumulativeNote = "Cumulative after disaster plan activation: 1 minute, 5 minutes, 10 minutes, 15 minutes, 30 minutes, and 1 hour.";
+  const cumulativeNote = "Cumulative after disaster plan activation: 15 minutes, 30 minutes, 1 hour, 2 hours, and 3 hours.";
 
   return `
     ${renderAnalyticsSection(
@@ -3257,6 +3424,7 @@ function renderAnalyticsGraphGrid(analytics, incidentId) {
         ${renderAnalyticsGraphSection("Immediate, Delayed, Minor, and Expectant Victims Using Primary Triage", graphs.primaryTriageByCategory, { chart: "pie" })}
         ${renderAnalyticsGraphSection("Immediate, Delayed, Minor, and Expectant Victims Using Secondary Triage", graphs.secondaryTriageByCategory, { chart: "pie" })}
         ${renderAnalyticsGraphSection("Victims Seeking ED Care According to Triage Category", graphs.edCareByTriageCategory, { chart: "pie" })}
+        ${renderTertiaryTriageSystemCharts(graphs)}
       </div>`,
     )}
     ${renderAnalyticsSection(
@@ -3676,9 +3844,11 @@ function renderAdminScopeCard() {
         </div>
       </div>
       <div class="scope-list">
-        <button class="scope-item" data-view-link="users"><strong>Accounts</strong><span>Register and manage responder/documenter accounts in this unit.</span></button>
-        <button class="scope-item" data-view-link="incidents"><strong>Reported incident history</strong><span>Review incidents created within this unit.</span></button>
+        <button class="scope-item" data-view-link="users"><strong>Accounts</strong><span>Register and manage FR, SAR, and HCFD accounts in this unit.</span></button>
+        <button class="scope-item" data-view-link="incident-analytics"><strong>Reported incident history</strong><span>Review incident analytics for records created within this unit.</span></button>
         <button class="scope-item" data-view-link="records"><strong>Casualty records</strong><span>See a summary of all casualty entries.</span></button>
+        <button class="scope-item" data-view-link="match-casing"><strong>Match Casing</strong><span>Build complete FR, SAR, and HCFD matched cases.</span></button>
+        <button class="scope-item" data-view-link="matched-cases"><strong>Matched Cases</strong><span>Review completed matched casualty case records.</span></button>
         <button class="scope-item" data-view-link="logs"><strong>Action logs</strong><span>Audit actions by users this admin created.</span></button>
         <button class="scope-item" data-view-link="verification"><strong>Verification review</strong><span>Review casualty entries from assigned responders.</span></button>
       </div>
@@ -3818,11 +3988,20 @@ const bulkImportConfigs = {
     ],
     sampleRows: [
       [
-        "Responder One",
-        "responder@example.com",
+        "Field Responder One",
+        "fr@example.com",
         "Temporary123",
-        "responder",
+        "field_responder",
         "09171234567",
+        state.user?.assigned_municipality || "Manila",
+        state.user?.assigned_barangay || "Ermita",
+      ],
+      [
+        "SAR Responder One",
+        "sar@example.com",
+        "Temporary123",
+        "sa_responder",
+        "09171234568",
         state.user?.assigned_municipality || "Manila",
         state.user?.assigned_barangay || "Ermita",
       ],
@@ -3831,7 +4010,7 @@ const bulkImportConfigs = {
         "hcfd@example.com",
         "Temporary123",
         "documenter",
-        "09171234568",
+        "09171234569",
         state.user?.assigned_municipality || "Manila",
         state.user?.assigned_barangay || "Ermita",
       ],
@@ -4096,8 +4275,8 @@ function validateBulkImportRow(type, row) {
     if (row.password && row.password.length < 6) {
       reasons.push("password must be at least 6 characters.");
     }
-    if (!["responder", "documenter"].includes(row.role)) {
-      reasons.push("role must be responder or documenter.");
+    if (!unitAccountRoles.includes(row.role)) {
+      reasons.push("role must be field_responder, sa_responder, or documenter.");
     }
   } else if (type === "healthcareFacilities") {
     if (!row.facilityName) reasons.push("facilityName is required.");
@@ -4446,10 +4625,26 @@ function normalizeBulkRows(rows) {
           .replace(/[^a-z0-9]+/g, "_")
           .replace(/^_|_$/g, "");
 
-        if (normalizedRole.includes("documenter")) {
+        if (
+          normalizedRole.includes("healthcare") ||
+          normalizedRole.includes("hcfd") ||
+          normalizedRole.includes("documenter")
+        ) {
           normalized[mappedKey] = "documenter";
+        } else if (
+          normalizedRole.includes("sar") ||
+          normalizedRole.includes("stabilization") ||
+          normalizedRole === "sa_responder"
+        ) {
+          normalized[mappedKey] = "sa_responder";
+        } else if (
+          normalizedRole.includes("field") ||
+          normalizedRole === "fr" ||
+          normalizedRole === "field_responder"
+        ) {
+          normalized[mappedKey] = "field_responder";
         } else if (normalizedRole.includes("responder")) {
-          normalized[mappedKey] = "responder";
+          normalized[mappedKey] = "field_responder";
         } else if (normalizedRole === "super_admin") {
           normalized[mappedKey] = "super_admin";
         } else if (
@@ -4725,7 +4920,11 @@ function renderRegistrationShell() {
           <label class="field"><span>Assigned municipality</span><input name="assignedMunicipality" /></label>
         </div>
         <label class="field"><span>Assigned barangay</span><input name="assignedBarangay" /></label>
-        <button class="primary-button" type="submit">Create account</button>
+        <div class="button-row">
+          <button class="primary-button" type="submit">Create account</button>
+          <button class="ghost-button" type="button" data-save-draft="account">Save draft</button>
+          <button class="ghost-button" type="button" data-view-link="drafts">Open drafts</button>
+        </div>
         <div id="registrationMessage" class="status-message" hidden></div>
       </form>
       ${renderBulkImportPanel(
@@ -4740,6 +4939,34 @@ function renderRegistrationShell() {
 function bindRegisterAdminForm() {
   const form = qs("#registerAdminForm");
   if (!form) return;
+
+  applyPendingDraftToForm(form, "account", "registrationMessage");
+
+  qs('[data-save-draft="account"]')?.addEventListener("click", async () => {
+    try {
+      await saveFormDraft({
+        form,
+        formType: "account",
+        payload: getAccountDraftPayload(form),
+        messageId: "registrationMessage",
+      });
+      clearFormAfterDraftSave(form);
+      setMessage(
+        "registrationMessage",
+        "Draft saved. Temporary passwords are not stored in drafts.",
+        "success",
+      );
+      await showDashboardNotice({
+        eyebrow: "Draft saved",
+        title: "Saved as draft",
+        message:
+          "This account form was saved in Drafts. The form has been cleared so you can start a new entry.",
+        confirmLabel: "Done",
+      });
+    } catch (error) {
+      setMessage("registrationMessage", getErrorMessage(error), "error");
+    }
+  });
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -4759,6 +4986,7 @@ function bindRegisterAdminForm() {
         }),
       });
 
+      await deleteSubmittedFormDraft(form);
       form.reset();
       setMessage("registrationMessage", "Account created. The user can now log in with the temporary password.", "success");
     } catch (error) {
@@ -4771,7 +4999,7 @@ function renderAdminUnitRegistration() {
   return `
     <section class="panel">
       <h2>Create account within admin unit scope</h2>
-      <p class="panel-subtitle">Create responder and documenter accounts tied to this admin unit. Responders choose Field or Stabilization Area function in the mobile Profile tab.</p>
+      <p class="panel-subtitle">Create Field Responder, SAR Responder, and HCFD accounts tied to this admin unit.</p>
     </section>
     <section class="panel" style="margin-top:16px">
       <form id="unitUserForm" class="form-grid">
@@ -4785,21 +5013,29 @@ function renderAdminUnitRegistration() {
           <label class="field">
             <span>Account role</span>
             <select name="role">
-              <option value="responder">Responder</option>
-              <option value="documenter">Healthcare Facility Documenter</option>
+              ${unitAccountRoles
+                .map(
+                  (role) =>
+                    `<option value="${escapeHtml(role)}">${escapeHtml(roleLabel(role))}</option>`,
+                )
+                .join("")}
             </select>
           </label>
           <label class="field"><span>Assigned municipality</span><input name="assignedMunicipality" value="${escapeHtml(state.user.assigned_municipality || "")}" placeholder="Current admin unit" /></label>
           <label class="field"><span>Assigned barangay</span><input name="assignedBarangay" value="${escapeHtml(state.user.assigned_barangay || "")}" /></label>
           <label class="field"><span>Phone number</span><input name="phoneNumber" /></label>
         </div>
-        <button class="primary-button" type="submit">Create unit user</button>
+        <div class="button-row">
+          <button class="primary-button" type="submit">Create unit user</button>
+          <button class="ghost-button" type="button" data-save-draft="account">Save draft</button>
+          <button class="ghost-button" type="button" data-view-link="drafts">Open drafts</button>
+        </div>
         <div id="unitUserMessage" class="status-message" hidden></div>
       </form>
       ${renderBulkImportPanel(
         "unitAccounts",
         "Upload Responder/Documenter Accounts",
-        "Upload a CSV or Excel file to create multiple responder and healthcare documenter accounts.",
+        "Upload a CSV or Excel file to create multiple FR, SAR, and HCFD accounts.",
       )}
       <div style="margin-top:12px">
         <button
@@ -4808,7 +5044,7 @@ function renderAdminUnitRegistration() {
           data-export-download="/exports/responders-documenters.csv"
           data-export-file="dcms-responders-documenters.csv"
         >
-          Export responders/documenters CSV
+          Export FR/SAR/HCFD CSV
         </button>
       </div>
     </section>
@@ -4822,7 +5058,7 @@ function renderAdminAccountList() {
       <div class="panel-header">
         <div>
           <h2>Accounts created by this admin</h2>
-          <p class="panel-subtitle">Responder and documenter accounts that can access the mobile app.</p>
+          <p class="panel-subtitle">FR, SAR, HCFD, and legacy responder accounts that can access the mobile app.</p>
         </div>
       </div>
       <div class="table-wrap">
@@ -4854,7 +5090,7 @@ function renderAdminAccountList() {
                     </tr>
                   `;
                 })
-                .join("") || `<tr><td colspan="6"><div class="empty-state">No responder or documenter accounts created yet.</div></td></tr>`
+                .join("") || `<tr><td colspan="6"><div class="empty-state">No FR, SAR, or HCFD accounts created yet.</div></td></tr>`
             }
           </tbody>
         </table>
@@ -4867,6 +5103,34 @@ function renderAdminAccountList() {
 function bindRegisterUnitUserForm() {
   const form = qs("#unitUserForm");
   if (!form) return;
+
+  applyPendingDraftToForm(form, "account", "unitUserMessage");
+
+  qs('[data-save-draft="account"]')?.addEventListener("click", async () => {
+    try {
+      await saveFormDraft({
+        form,
+        formType: "account",
+        payload: getAccountDraftPayload(form),
+        messageId: "unitUserMessage",
+      });
+      clearFormAfterDraftSave(form);
+      setMessage(
+        "unitUserMessage",
+        "Draft saved. Temporary passwords are not stored in drafts.",
+        "success",
+      );
+      await showDashboardNotice({
+        eyebrow: "Draft saved",
+        title: "Saved as draft",
+        message:
+          "This account form was saved in Drafts. The form has been cleared so you can start a new entry.",
+        confirmLabel: "Done",
+      });
+    } catch (error) {
+      setMessage("unitUserMessage", getErrorMessage(error), "error");
+    }
+  });
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -4889,6 +5153,7 @@ function bindRegisterUnitUserForm() {
       const municipality = formValue(form, "assignedMunicipality");
       const barangay = formValue(form, "assignedBarangay");
 
+      await deleteSubmittedFormDraft(form);
       form.reset();
       form.elements.assignedMunicipality.value = municipality;
       form.elements.assignedBarangay.value = barangay;
@@ -4901,7 +5166,7 @@ function bindRegisterUnitUserForm() {
         "success",
       );
     } catch (error) {
-      setMessage("unitUserMessage", error.message, "error");
+      setMessage("unitUserMessage", getErrorMessage(error), "error");
     }
   });
 }
@@ -4927,8 +5192,12 @@ function renderAccountEditModal(user) {
               <label class="field">
                 <span>Role</span>
                 <select name="role">
-                  <option value="responder" ${user.role === "responder" ? "selected" : ""}>Responder</option>
-                  <option value="documenter" ${user.role === "documenter" ? "selected" : ""}>Healthcare Facility Documenter</option>
+                  ${editableUnitAccountRoles
+                    .map(
+                      (role) =>
+                        `<option value="${escapeHtml(role)}" ${user.role === role ? "selected" : ""}>${escapeHtml(roleLabel(role))}</option>`,
+                    )
+                    .join("")}
                 </select>
               </label>
               <label class="field">
@@ -5163,9 +5432,17 @@ function renderAdminCasualtyRecords(compact = false) {
             ${
               Array.from(byIncident.values())
                 .sort(
-                  (first, second) =>
-                    second.latestReportedAt - first.latestReportedAt ||
-                    compareText(first.incidentName, second.incidentName),
+                  (first, second) => {
+                    const timestampDifference =
+                      state.casualtyRecordSortOrder === "asc"
+                        ? first.latestReportedAt - second.latestReportedAt
+                        : second.latestReportedAt - first.latestReportedAt;
+
+                    return (
+                      timestampDifference ||
+                      compareText(first.incidentName, second.incidentName)
+                    );
+                  },
                 )
                 .map((group) => {
                   const incidentKey = escapeHtml(
@@ -5247,7 +5524,7 @@ function renderAdminCasualtyRecords(compact = false) {
                                     <tbody>
                                       ${group.records
                                         .slice()
-                                        .sort(compareCasualtyRecordsByLatest)
+                                        .sort(compareCasualtyRecordsBySubmittedTime)
                                         .map(
                                           (item) => `
                                             <tr
@@ -5404,6 +5681,920 @@ function bindCasualtyRecordIncidents() {
         }
       });
     });
+}
+
+function matchCasingRoleBucket(record) {
+  const role = record?.encoder?.role;
+
+  if (role === "field_responder") return "field_responder";
+  if (role === "sa_responder") return "sa_responder";
+  if (role === "documenter" || role === "medical_personnel") {
+    return "documenter";
+  }
+
+  return "responder";
+}
+
+function matchCasingRoleLabel(role) {
+  switch (role) {
+    case "field_responder":
+      return "Field Responder";
+    case "sa_responder":
+      return "SAR";
+    case "documenter":
+      return "HCFD";
+    case "responder":
+      return "Legacy Responder";
+    default:
+      return roleLabel(role);
+  }
+}
+
+function isMatchCasingRoleEligible(role) {
+  return ["field_responder", "sa_responder", "documenter"].includes(role);
+}
+
+function getMatchCasingRecordById(recordId) {
+  return state.casualties.find((record) => record.id === recordId) || null;
+}
+
+function getSelectedMatchCasingRecords() {
+  return state.selectedMatchCasingRecordIds
+    .map((recordId) => getMatchCasingRecordById(recordId))
+    .filter(Boolean);
+}
+
+function getSelectedMatchCasingRecordsByRole() {
+  return getSelectedMatchCasingRecords().reduce((recordsByRole, record) => {
+    const role = matchCasingRoleBucket(record);
+    if (isMatchCasingRoleEligible(role)) {
+      recordsByRole[role] = record;
+    }
+
+    return recordsByRole;
+  }, {});
+}
+
+function getMatchCasingSelectedIncidentId() {
+  return (
+    getSelectedMatchCasingRecords()
+      .map((record) => record?.incident?.id)
+      .find(Boolean) || null
+  );
+}
+
+function setMatchCasingRoleSelection(role, recordId) {
+  const record = getMatchCasingRecordById(recordId);
+  if (!record) return;
+
+  const recordRole = matchCasingRoleBucket(record);
+  if (recordRole !== role) {
+    showMatchCasingWarning(
+      `Select a ${matchCasingRoleLabel(role)} record for this slot.`,
+    );
+    return;
+  }
+
+  const selectedIncidentId = getMatchCasingSelectedIncidentId();
+  if (selectedIncidentId && record?.incident?.id !== selectedIncidentId) {
+    showMatchCasingWarning(
+      "Selected records must belong to the same incident.",
+    );
+    return;
+  }
+
+  const selectedRecords = getSelectedMatchCasingRecords();
+  state.selectedMatchCasingRecordIds = [
+    ...selectedRecords
+      .filter((selectedRecord) => matchCasingRoleBucket(selectedRecord) !== role)
+      .map((selectedRecord) => selectedRecord.id),
+    recordId,
+  ];
+  state.matchCasingPickerRole = null;
+  renderCurrentView();
+  bindView();
+}
+
+function removeMatchCasingRoleSelection(role) {
+  state.selectedMatchCasingRecordIds = getSelectedMatchCasingRecords()
+    .filter((record) => matchCasingRoleBucket(record) !== role)
+    .map((record) => record.id);
+  renderCurrentView();
+  bindView();
+}
+
+function getMatchCasingCandidateRecords(role) {
+  const linkByRecordId = getCaseLinksByRecordId();
+  const selectedRecordIds = new Set(state.selectedMatchCasingRecordIds);
+  const selectedIncidentId = getMatchCasingSelectedIncidentId();
+
+  return getMatchCasingFilteredRecords().filter((record) => {
+    if (matchCasingRoleBucket(record) !== role) return false;
+    if (linkByRecordId.has(record.id)) return false;
+    if (selectedRecordIds.has(record.id)) return false;
+    if (selectedIncidentId && record?.incident?.id !== selectedIncidentId) {
+      return false;
+    }
+
+    return true;
+  });
+}
+
+function showMatchCasingWarning(message) {
+  setMessage("matchCasingMessage", message, "error");
+  showDashboardToast(message, "error");
+}
+
+function toggleMatchCasingRecordSelection(recordId) {
+  const record = getMatchCasingRecordById(recordId);
+  if (!record) return;
+
+  const selectedIds = new Set(state.selectedMatchCasingRecordIds);
+
+  if (selectedIds.has(recordId)) {
+    selectedIds.delete(recordId);
+    state.selectedMatchCasingRecordIds = [...selectedIds];
+    renderCurrentView();
+    bindView();
+    return;
+  }
+
+  const role = matchCasingRoleBucket(record);
+  if (!isMatchCasingRoleEligible(role)) {
+    showMatchCasingWarning(
+      "Only Field Responder, SAR, and HCFD records can be matched.",
+    );
+    return;
+  }
+
+  const selectedRecords = getSelectedMatchCasingRecords();
+  if (selectedRecords.length >= 3) {
+    showMatchCasingWarning(
+      "You can only select up to 3 records for one matched case.",
+    );
+    return;
+  }
+
+  const matchingRole = selectedRecords.find(
+    (selectedRecord) => matchCasingRoleBucket(selectedRecord) === role,
+  );
+  if (matchingRole) {
+    showMatchCasingWarning(
+      `You have already selected a ${matchCasingRoleLabel(role)} record for this matched case.`,
+    );
+    return;
+  }
+
+  const selectedIncidentId = selectedRecords[0]?.incident?.id;
+  if (selectedIncidentId && record?.incident?.id !== selectedIncidentId) {
+    showMatchCasingWarning(
+      "Selected records must belong to the same incident.",
+    );
+    return;
+  }
+
+  selectedIds.add(recordId);
+  state.selectedMatchCasingRecordIds = [...selectedIds];
+  renderCurrentView();
+  bindView();
+}
+
+function getCaseLinksByRecordId() {
+  return new Map(
+    (state.caseLinks || []).map((link) => [
+      link.casualty_incident_id,
+      link,
+    ]),
+  );
+}
+
+function getCaseLinksByCaseId() {
+  return (state.caseLinks || []).reduce((groups, link) => {
+    if (!groups.has(link.case_id)) {
+      groups.set(link.case_id, []);
+    }
+
+    groups.get(link.case_id).push(link);
+    return groups;
+  }, new Map());
+}
+
+function getMatchCasingIncidentOptions() {
+  const options = new Map();
+
+  state.casualties.forEach((record) => {
+    const incidentId = record?.incident?.id;
+    if (!incidentId) return;
+
+    options.set(
+      incidentId,
+      record?.incident?.incident_name || "Unknown incident",
+    );
+  });
+
+  return [...options.entries()].sort((first, second) =>
+    compareText(first[1], second[1]),
+  );
+}
+
+function getMatchCasingFilteredRecords() {
+  const incidentFilter = state.matchCasingIncidentFilter;
+
+  return [...state.casualties]
+    .filter((record) => {
+      if (incidentFilter === "all") return true;
+      return record?.incident?.id === incidentFilter;
+    })
+    .sort(
+      (first, second) =>
+        compareText(
+          first?.incident?.incident_name,
+          second?.incident?.incident_name,
+        ) ||
+        compareText(
+          matchCasingRoleLabel(matchCasingRoleBucket(first)),
+          matchCasingRoleLabel(matchCasingRoleBucket(second)),
+        ) ||
+        new Date(second?.reported_at || second?.created_at || 0).getTime() -
+          new Date(first?.reported_at || first?.created_at || 0).getTime(),
+    );
+}
+
+function renderMatchCasingPhotoPreview(record) {
+  const attachments = state.matchCasingAttachments[record.id];
+  const imageAttachment = (attachments || []).find(isImageAttachment);
+
+  if (imageAttachment?.signed_url) {
+    const fileName =
+      imageAttachment.file_name || "Casualty photo attachment";
+
+    return `
+      <button
+        class="attachment-card"
+        type="button"
+        data-open-attachment-preview
+        data-attachment-url="${escapeHtml(imageAttachment.signed_url)}"
+        data-attachment-name="${escapeHtml(fileName)}"
+        data-attachment-mime="${escapeHtml(imageAttachment.mime_type || "image/jpeg")}"
+      >
+        <span class="attachment-preview">
+          <img src="${escapeHtml(imageAttachment.signed_url)}" alt="${escapeHtml(fileName)}" loading="lazy" />
+        </span>
+        <span class="attachment-meta">
+          <strong>${escapeHtml(fileName)}</strong>
+          <small>Photo clue for matching</small>
+        </span>
+      </button>
+    `;
+  }
+
+  return `
+    <div class="empty-state" style="padding:14px">
+      ${attachments ? "No casualty photo attached." : "Loading photo clues..."}
+    </div>
+  `;
+}
+
+function renderMatchCasingRecordCard(record, options = {}) {
+  const link = getCaseLinksByRecordId().get(record.id);
+  const role = matchCasingRoleBucket(record);
+  const selected = state.selectedMatchCasingRecordIds.includes(record.id);
+  const eligible = isMatchCasingRoleEligible(role);
+  const incidentName = record?.incident?.incident_name || "Unknown incident";
+  const triage =
+    record?.latest_triage_assessment?.calculated_category ||
+    record?.latest_triage_assessment?.triage_category ||
+    record?.latest_triage_assessment?.responder_category ||
+    "unknown";
+  const facility =
+    record?.healthcare_facility?.facility_name ||
+    record?.hospital_name ||
+    record?.current_location ||
+    "No facility or location recorded";
+
+  return `
+    <article
+      class="incident-section-card match-casing-card ${options.selectable ? "selectable" : ""} ${selected ? "selected" : ""} ${options.selectable && !eligible ? "disabled" : ""}"
+      style="gap:12px"
+      ${
+        options.selectable
+          ? `data-match-casing-card="${escapeHtml(record.id)}" role="button" tabindex="0" aria-pressed="${selected ? "true" : "false"}"`
+          : ""
+      }
+    >
+      <div class="section-card-header">
+        <div>
+          <h3>${escapeHtml(matchCasingRoleLabel(role))}</h3>
+          <p class="panel-subtitle">${escapeHtml(incidentName)}</p>
+        </div>
+        ${
+          options.selectable
+            ? `<span class="pill ${selected ? "green" : eligible ? "blue" : "orange"}">${selected ? "Selected" : eligible ? "Click card to select" : "Not eligible"}</span>`
+            : link
+              ? `<span class="pill green">Matched</span>`
+              : `<span class="pill orange">Unmatched</span>`
+        }
+      </div>
+
+      ${renderMatchCasingPhotoPreview(record)}
+
+      <div class="summary-facts">
+        <div><span>Victim Code</span><strong>${escapeHtml(record?.casualty?.id_number || "Not recorded")}</strong></div>
+        <div><span>Name</span><strong>${escapeHtml(fullCasualtyName(record?.casualty))}</strong></div>
+        <div><span>Triage</span><strong>${escapeHtml(roleLabel(triage))}</strong></div>
+        <div><span>Facility / Location</span><strong>${escapeHtml(facility)}</strong></div>
+        <div><span>Encoded By</span><strong>${escapeHtml(record?.encoder?.full_name || "Unknown")}</strong></div>
+        <div><span>Recorded</span><strong>${escapeHtml(formatDate(record?.reported_at || record?.created_at))}</strong></div>
+      </div>
+
+      <div class="button-row">
+        <button class="ghost-button mini" type="button" data-open-casualty="${escapeHtml(record.id)}">View record</button>
+        ${
+          link && !options.hideUnmatch
+            ? `<button class="danger-button mini" type="button" data-unmatch-case-record="${escapeHtml(record.id)}">Unmatch</button>`
+            : ""
+        }
+      </div>
+    </article>
+  `;
+}
+
+function renderMatchCasingSelectedRecordSummary(record) {
+  const triage =
+    record?.latest_triage_assessment?.calculated_category ||
+    record?.latest_triage_assessment?.triage_category ||
+    record?.latest_triage_assessment?.responder_category ||
+    "unknown";
+
+  return `
+    <div class="match-casing-selected-record">
+      <div>
+        <span>Victim Code</span>
+        <strong>${escapeHtml(record?.casualty?.id_number || "Not recorded")}</strong>
+      </div>
+      <div>
+        <span>Name</span>
+        <strong>${escapeHtml(fullCasualtyName(record?.casualty))}</strong>
+      </div>
+      <div>
+        <span>Incident</span>
+        <strong>${escapeHtml(record?.incident?.incident_name || "Unknown incident")}</strong>
+      </div>
+      <div>
+        <span>Triage</span>
+        <strong>${escapeHtml(roleLabel(triage))}</strong>
+      </div>
+      <div>
+        <span>Encoded By</span>
+        <strong>${escapeHtml(record?.encoder?.full_name || "Unknown")}</strong>
+      </div>
+    </div>
+  `;
+}
+
+function renderMatchCasingSlot(role) {
+  const selectedByRole = getSelectedMatchCasingRecordsByRole();
+  const selectedRecord = selectedByRole[role];
+  const candidateCount = getMatchCasingCandidateRecords(role).length;
+  const slotLabel = matchCasingRoleLabel(role);
+
+  return `
+    <article class="match-casing-slot ${selectedRecord ? "filled" : ""}">
+      <div class="match-casing-slot-header">
+        <div>
+          <h3>${escapeHtml(slotLabel)}</h3>
+          <p>${candidateCount} available record${candidateCount === 1 ? "" : "s"}</p>
+        </div>
+        ${selectedRecord ? `<span class="pill green">Selected</span>` : `<span class="pill blue">Required</span>`}
+      </div>
+
+      ${
+        selectedRecord
+          ? `
+            ${renderMatchCasingSelectedRecordSummary(selectedRecord)}
+            <div class="button-row">
+              <button class="ghost-button mini" type="button" data-open-match-picker="${escapeHtml(role)}">Replace</button>
+              <button class="danger-button mini" type="button" data-remove-match-slot="${escapeHtml(role)}">Remove</button>
+              <button class="ghost-button mini" type="button" data-open-casualty="${escapeHtml(selectedRecord.id)}">View record</button>
+            </div>
+          `
+          : `
+            <button
+              class="match-casing-slot-add"
+              type="button"
+              data-open-match-picker="${escapeHtml(role)}"
+              ${candidateCount === 0 ? "disabled" : ""}
+            >
+              <span>+</span>
+              <strong>Add ${escapeHtml(slotLabel)} Record</strong>
+            </button>
+          `
+      }
+    </article>
+  `;
+}
+
+function renderMatchCasingPickerModal() {
+  const role = state.matchCasingPickerRole;
+  if (!role) return "";
+
+  const records = getMatchCasingCandidateRecords(role);
+  const slotLabel = matchCasingRoleLabel(role);
+
+  return `
+    <div class="modal-backdrop">
+      <section class="record-modal incident-section-modal">
+        <div class="modal-header">
+          <div>
+            <span class="eyebrow">Select ${escapeHtml(slotLabel)}</span>
+            <h2>${escapeHtml(slotLabel)} Records</h2>
+            <p>Choose one record for this role slot. Already selected and already matched records are hidden.</p>
+          </div>
+          <button class="icon-button" type="button" data-close-match-picker aria-label="Close">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="grid two">
+            ${
+              records
+                .map(
+                  (record) => `
+                    <article class="incident-section-card match-casing-card selectable" data-pick-match-card="${escapeHtml(record.id)}" data-pick-match-role="${escapeHtml(role)}" role="button" tabindex="0">
+                      <div class="section-card-header">
+                        <div>
+                          <h3>${escapeHtml(slotLabel)}</h3>
+                          <p class="panel-subtitle">${escapeHtml(record?.incident?.incident_name || "Unknown incident")}</p>
+                        </div>
+                        <span class="pill blue">Available</span>
+                      </div>
+
+                      ${renderMatchCasingPhotoPreview(record)}
+                      ${renderMatchCasingSelectedRecordSummary(record)}
+
+                      <div class="button-row">
+                        <button class="primary-button mini" type="button" data-pick-match-record="${escapeHtml(record.id)}" data-pick-match-role="${escapeHtml(role)}">Use this record</button>
+                        <button class="ghost-button mini" type="button" data-open-casualty="${escapeHtml(record.id)}">View record</button>
+                      </div>
+                    </article>
+                  `,
+                )
+                .join("") ||
+              `<div class="empty-state">No available ${escapeHtml(slotLabel)} records for this incident filter.</div>`
+            }
+          </div>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function getFilteredCaseGroups() {
+  return [...getCaseLinksByCaseId().entries()]
+    .map(([caseId, links]) => ({
+      caseId,
+      links: links.filter((link) => {
+        if (state.matchCasingIncidentFilter === "all") return true;
+        return link.incident_id === state.matchCasingIncidentFilter;
+      }),
+    }))
+    .filter((group) => group.links.length > 0);
+}
+
+function renderMatchedCaseGroup({ caseId, links }) {
+  const linkedRecords = links
+    .map((link) => ({
+      link,
+      record: state.casualties.find(
+        (item) => item.id === link.casualty_incident_id,
+      ),
+    }))
+    .filter((item) => item.record);
+
+  return `
+    <section class="incident-management-item">
+      <div class="incident-management-toggle">
+        <div>
+          <span class="eyebrow">Matched Case</span>
+          <h3>${escapeHtml(caseId.slice(0, 8).toUpperCase())}</h3>
+          <p>${linkedRecords.length} linked role record${linkedRecords.length === 1 ? "" : "s"}</p>
+        </div>
+        <div class="incident-management-meta">
+          ${linkedRecords
+            .map(({ link }) => `<strong>${escapeHtml(matchCasingRoleLabel(link.role))}</strong>`)
+            .join("")}
+        </div>
+      </div>
+      <div class="incident-management-body">
+        <div class="grid three">
+          ${linkedRecords
+            .map(({ record }) =>
+              renderMatchCasingRecordCard(record, {
+                selectable: false,
+                hideUnmatch: true,
+              }),
+            )
+            .join("")}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderMatchCasing() {
+  const incidentOptions = getMatchCasingIncidentOptions();
+  const records = getMatchCasingFilteredRecords();
+  const linkByRecordId = getCaseLinksByRecordId();
+  const selectedRecordIds = new Set(state.selectedMatchCasingRecordIds);
+  const availableRecords = records.filter((record) => {
+    const role = matchCasingRoleBucket(record);
+    return (
+      isMatchCasingRoleEligible(role) &&
+      !linkByRecordId.has(record.id) &&
+      !selectedRecordIds.has(record.id)
+    );
+  });
+  const selectedCount = state.selectedMatchCasingRecordIds.length;
+  const canMatch = selectedCount === matchCasingRequiredRoleSlots.length;
+
+  return `
+    <div class="topbar">
+      <div>
+        <span class="eyebrow">Admin Review</span>
+        <h1>Match Casing</h1>
+        <p>Complete the Field Responder, SAR, and HCFD slots before matching one casualty case.</p>
+      </div>
+    </div>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Candidate filters</h2>
+          <p class="panel-subtitle">Only unmatched FR, SAR, and HCFD records are available for new case matching.</p>
+        </div>
+        <span class="pill blue">${availableRecords.length} available</span>
+      </div>
+
+      <div class="form-grid two">
+        <label class="field">
+          <span>Incident</span>
+          <select id="matchCasingIncidentFilter">
+            <option value="all" ${state.matchCasingIncidentFilter === "all" ? "selected" : ""}>All incidents</option>
+            ${incidentOptions
+              .map(
+                ([id, name]) =>
+                  `<option value="${escapeHtml(id)}" ${state.matchCasingIncidentFilter === id ? "selected" : ""}>${escapeHtml(name)}</option>`,
+              )
+            .join("")}
+          </select>
+        </label>
+        <div class="button-row" style="align-self:end; justify-content:flex-end">
+          <button class="ghost-button" type="button" data-view-link="matched-cases">View matched cases</button>
+        </div>
+      </div>
+
+      <div id="matchCasingMessage" class="status-message" hidden></div>
+    </section>
+
+    <section class="panel" style="margin-top:16px">
+      <div class="panel-header">
+        <div>
+          <h2>Build matched case</h2>
+          <p class="panel-subtitle">Fill all 3 role boxes. A case cannot be matched until Field Responder, SAR, and HCFD are complete.</p>
+        </div>
+        <span class="pill ${canMatch ? "green" : "orange"}">${selectedCount} / 3 filled</span>
+      </div>
+
+      <div class="match-casing-slots">
+        ${matchCasingRequiredRoleSlots.map(renderMatchCasingSlot).join("")}
+      </div>
+
+      <div class="match-casing-submit-row">
+        <button
+          class="primary-button"
+          type="button"
+          data-create-match-case
+          ${canMatch ? "" : "disabled"}
+        >
+          Match selected records
+        </button>
+        <button class="ghost-button" type="button" data-clear-match-selection>Clear selection</button>
+      </div>
+    </section>
+
+    ${renderMatchCasingPickerModal()}
+  `;
+}
+
+function renderMatchedCaseRecords() {
+  const incidentOptions = getMatchCasingIncidentOptions();
+  const caseGroups = getFilteredCaseGroups();
+
+  return `
+    <div class="topbar">
+      <div>
+        <span class="eyebrow">Admin Review</span>
+        <h1>Matched Case Records</h1>
+        <p>Review completed FR, SAR, and HCFD case matches. Submitted matches are locked.</p>
+      </div>
+    </div>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Matched case filters</h2>
+          <p class="panel-subtitle">Filter completed matched cases by incident.</p>
+        </div>
+        <span class="pill green">${caseGroups.length} matched case${caseGroups.length === 1 ? "" : "s"}</span>
+      </div>
+
+      <div class="form-grid two">
+        <label class="field">
+          <span>Incident</span>
+          <select id="matchCasingIncidentFilter">
+            <option value="all" ${state.matchCasingIncidentFilter === "all" ? "selected" : ""}>All incidents</option>
+            ${incidentOptions
+              .map(
+                ([id, name]) =>
+                  `<option value="${escapeHtml(id)}" ${state.matchCasingIncidentFilter === id ? "selected" : ""}>${escapeHtml(name)}</option>`,
+              )
+              .join("")}
+          </select>
+        </label>
+        <div class="button-row" style="align-self:end; justify-content:flex-end">
+          <button class="ghost-button" type="button" data-view-link="match-casing">Create match</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" style="margin-top:16px">
+      <div class="panel-header">
+        <div>
+          <h2>Completed matched cases</h2>
+          <p class="panel-subtitle">These links are permanent. Records remain separate in the database but are grouped for review.</p>
+        </div>
+      </div>
+
+      <div class="grid">
+        ${caseGroups.map(renderMatchedCaseGroup).join("") || `<div class="empty-state">No matched casualty cases yet.</div>`}
+      </div>
+    </section>
+  `;
+}
+
+async function ensureMatchCasingAttachmentPreviews(records) {
+  if (state.matchCasingAttachmentsLoading) return;
+
+  const missingRecords = records.filter(
+    (record) => !state.matchCasingAttachments[record.id],
+  );
+
+  if (missingRecords.length === 0) return;
+
+  state.matchCasingAttachmentsLoading = true;
+
+  try {
+    const results = await Promise.allSettled(
+      missingRecords.map((record) =>
+        apiRequest(
+          `/attachments?casualtyIncidentId=${encodeURIComponent(record.id)}`,
+        ),
+      ),
+    );
+
+    missingRecords.forEach((record, index) => {
+      const result = results[index];
+      state.matchCasingAttachments[record.id] =
+        result.status === "fulfilled" ? result.value.data || [] : [];
+    });
+
+    if (["match-casing", "matched-cases"].includes(state.activeView)) {
+      renderCurrentView();
+      bindView();
+    }
+  } finally {
+    state.matchCasingAttachmentsLoading = false;
+  }
+}
+
+function bindMatchCasingActions() {
+  if (!["match-casing", "matched-cases"].includes(state.activeView)) return;
+
+  const records = getMatchCasingFilteredRecords();
+  void ensureMatchCasingAttachmentPreviews(records);
+
+  const incidentFilter = qs("#matchCasingIncidentFilter");
+  if (incidentFilter) {
+    incidentFilter.addEventListener("change", () => {
+      state.matchCasingIncidentFilter = incidentFilter.value;
+      if (state.activeView === "match-casing") {
+        state.selectedMatchCasingRecordIds = [];
+        state.matchCasingPickerRole = null;
+      }
+      renderCurrentView();
+      bindView();
+    });
+  }
+
+  document.querySelectorAll("[data-open-match-picker]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const role = button.dataset.openMatchPicker;
+      if (!role || !isMatchCasingRoleEligible(role)) return;
+
+      state.matchCasingPickerRole = role;
+      renderCurrentView();
+      bindView();
+    });
+  });
+
+  qs("[data-close-match-picker]")?.addEventListener("click", () => {
+    state.matchCasingPickerRole = null;
+    renderCurrentView();
+    bindView();
+  });
+
+  document.querySelectorAll("[data-remove-match-slot]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const role = button.dataset.removeMatchSlot;
+      if (!role || !isMatchCasingRoleEligible(role)) return;
+
+      removeMatchCasingRoleSelection(role);
+    });
+  });
+
+  document.querySelectorAll("[data-pick-match-record]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const role = button.dataset.pickMatchRole;
+      const recordId = button.dataset.pickMatchRecord;
+      if (!role || !recordId) return;
+
+      setMatchCasingRoleSelection(role, recordId);
+    });
+  });
+
+  document.querySelectorAll("[data-pick-match-card]").forEach((card) => {
+    const pickRecord = (event) => {
+      const target = event.target;
+      if (
+        target?.closest &&
+        target.closest("button, a, input, label, select")
+      ) {
+        return;
+      }
+
+      const role = card.dataset.pickMatchRole;
+      const recordId = card.dataset.pickMatchCard;
+      if (!role || !recordId) return;
+
+      setMatchCasingRoleSelection(role, recordId);
+    };
+
+    card.addEventListener("click", pickRecord);
+    card.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+
+      event.preventDefault();
+      pickRecord(event);
+    });
+  });
+
+  document
+    .querySelectorAll("[data-match-casing-card]")
+    .forEach((card) => {
+      const toggleCard = (event) => {
+        const target = event.target;
+        if (
+          target?.closest &&
+          target.closest("button, a, input, label, select")
+        ) {
+          return;
+        }
+
+        const recordId = card.dataset.matchCasingCard;
+        if (!recordId) return;
+
+        toggleMatchCasingRecordSelection(recordId);
+      };
+
+      card.addEventListener("click", toggleCard);
+      card.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+
+        event.preventDefault();
+        toggleCard(event);
+      });
+    });
+
+  qs("[data-clear-match-selection]")?.addEventListener("click", () => {
+    state.selectedMatchCasingRecordIds = [];
+    state.matchCasingPickerRole = null;
+    renderCurrentView();
+    bindView();
+  });
+
+  qs("[data-create-match-case]")?.addEventListener("click", async () => {
+    const selectedRecords = getSelectedMatchCasingRecords();
+    const selectedRoles = selectedRecords.map(matchCasingRoleBucket);
+
+    if (selectedRecords.length !== matchCasingRequiredRoleSlots.length) {
+      showMatchCasingWarning(
+        "Complete Field Responder, SAR, and HCFD before matching.",
+      );
+      return;
+    }
+
+    if (selectedRoles.some((role) => !isMatchCasingRoleEligible(role))) {
+      showMatchCasingWarning(
+        "Only Field Responder, SAR, and HCFD records can be matched.",
+      );
+      return;
+    }
+
+    if (new Set(selectedRoles).size !== selectedRoles.length) {
+      showMatchCasingWarning(
+        "Each matched case can only include one record per role.",
+      );
+      return;
+    }
+
+    const missingRole = matchCasingRequiredRoleSlots.find(
+      (role) => !selectedRoles.includes(role),
+    );
+    if (missingRole) {
+      showMatchCasingWarning(
+        `Add a ${matchCasingRoleLabel(missingRole)} record before matching.`,
+      );
+      return;
+    }
+
+    const selectedIncidentIds = new Set(
+      selectedRecords.map((record) => record?.incident?.id).filter(Boolean),
+    );
+    if (selectedIncidentIds.size > 1) {
+      showMatchCasingWarning(
+        "Selected records must belong to the same incident.",
+      );
+      return;
+    }
+
+    setMessage("matchCasingMessage", "Matching selected records...");
+
+    try {
+      await apiRequest("/casualties/case-links", {
+        method: "POST",
+        body: JSON.stringify({
+          casualtyIncidentIds: state.selectedMatchCasingRecordIds,
+        }),
+      });
+
+      state.selectedMatchCasingRecordIds = [];
+      state.matchCasingPickerRole = null;
+      await loadSharedData();
+      state.activeView = "matched-cases";
+      localStorage.setItem("dcms.admin.activeView", state.activeView);
+      renderCurrentView();
+      bindView();
+      showDashboardToast(
+        "Complete matched case was created and locked.",
+        "success",
+      );
+    } catch (error) {
+      setMessage("matchCasingMessage", getErrorMessage(error), "error");
+    }
+  });
+
+  document.querySelectorAll("[data-unmatch-case-record]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      const recordId = button.dataset.unmatchCaseRecord;
+      if (!recordId) return;
+
+      const confirmed = await showDashboardConfirm({
+        title: "Unmatch casualty record?",
+        message:
+          "This removes the selected role record from its matched case. The casualty record itself will not be deleted.",
+        confirmLabel: "Unmatch record",
+        cancelLabel: "Keep matched",
+        tone: "danger",
+      });
+
+      if (!confirmed) return;
+
+      try {
+        await apiRequest(
+          `/casualties/${encodeURIComponent(recordId)}/case-link`,
+          { method: "DELETE" },
+        );
+        await loadSharedData();
+        renderCurrentView();
+        bindView();
+        showDashboardToast("Record removed from matched case.", "success");
+      } catch (error) {
+        showDashboardToast(getErrorMessage(error), "error");
+      }
+    });
+  });
+
+  bindAttachmentPreviewActions();
 }
 
 function renderAdminVerificationReview() {
@@ -6430,6 +7621,68 @@ function renderSaTreatmentHistoryContent(
     `;
 }
 
+function renderMatchedCaseSummary(recordDetails) {
+  const matchedRecords = recordDetails?.matchedRecords || [];
+  const currentRecordId = recordDetails?.casualty?.id;
+
+  if (matchedRecords.length <= 1) {
+    return "";
+  }
+
+  return `
+    <section class="record-section">
+      <div class="section-card-header">
+        <div>
+          <h3>Matched Case</h3>
+          <p class="panel-subtitle">These separate role records were linked by admin Match Casing.</p>
+        </div>
+        <span class="pill green">${matchedRecords.length} linked records</span>
+      </div>
+
+      <div class="grid three">
+        ${matchedRecords
+          .map((record) => {
+            const role = matchCasingRoleBucket(record);
+            const triage =
+              record?.latest_triage_assessment?.calculated_category ||
+              record?.latest_triage_assessment?.triage_category ||
+              record?.latest_triage_assessment?.responder_category ||
+              "unknown";
+            const isCurrent = record.id === currentRecordId;
+
+            return `
+              <article class="incident-section-card">
+                <div class="section-card-header">
+                  <div>
+                    <h3>${escapeHtml(matchCasingRoleLabel(role))}</h3>
+                    <p class="panel-subtitle">${escapeHtml(record?.encoder?.full_name || "Unknown encoder")}</p>
+                  </div>
+                  <span class="pill ${isCurrent ? "blue" : "green"}">${isCurrent ? "Current" : "Matched"}</span>
+                </div>
+
+                <div class="summary-facts">
+                  <div><span>Victim Code</span><strong>${escapeHtml(record?.casualty?.id_number || "Not recorded")}</strong></div>
+                  <div><span>Name</span><strong>${escapeHtml(fullCasualtyName(record?.casualty))}</strong></div>
+                  <div><span>Triage</span><strong>${escapeHtml(roleLabel(triage))}</strong></div>
+                  <div><span>Recorded</span><strong>${escapeHtml(formatDate(record?.reported_at || record?.created_at))}</strong></div>
+                </div>
+
+                <div class="button-row">
+                  ${
+                    isCurrent
+                      ? `<button class="ghost-button mini" type="button" disabled>Opened record</button>`
+                      : `<button class="ghost-button mini" type="button" data-open-casualty="${escapeHtml(record.id)}">Open matched record</button>`
+                  }
+                </div>
+              </article>
+            `;
+          })
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
 function renderCasualtyRecordModal(
   item,
   recordDetails = null,
@@ -6439,27 +7692,48 @@ function renderCasualtyRecordModal(
   const evacuationCenter = item.evacuation_center || {};
   const healthcareFacility = item.healthcare_facility || {};
   const encoder = item.encoder || {};
-  const triageHistory =
-  recordDetails?.triageHistory || [];
+  const matchedRecordDetails =
+    recordDetails?.matchedRecordDetails?.length
+      ? recordDetails.matchedRecordDetails
+      : [recordDetails].filter(Boolean);
+  const findMatchedDetails = (role) =>
+    matchedRecordDetails.find(
+      (details) => matchCasingRoleBucket(details?.casualty) === role,
+    ) || null;
+  const fieldRecordDetails =
+    findMatchedDetails("field_responder") ||
+    (matchCasingRoleBucket(item) === "responder"
+      ? recordDetails
+      : null);
+  const saRecordDetails =
+    findMatchedDetails("sa_responder") || null;
+  const healthcareRecordDetails =
+    findMatchedDetails("documenter") || null;
+  const fieldItem = fieldRecordDetails?.casualty || {};
+  const saItem = saRecordDetails?.casualty || {};
+  const healthcareItem = healthcareRecordDetails?.casualty || {};
+  const fieldCasualty = fieldItem.casualty || {};
+  const saCasualty = saItem.casualty || {};
+  const healthcareCasualty = healthcareItem.casualty || {};
 
   const fieldResponderTriage =
-    triageHistory.filter(
+    (fieldRecordDetails?.triageHistory || []).filter(
       (record) => record.triage_stage === "on_site",
     );
 
   const saResponderTriage =
-    triageHistory.filter(
+    (saRecordDetails?.triageHistory || []).filter(
       (record) => record.triage_stage === "reassessment",
     );
 
   const healthcareFacilityTriage =
-    triageHistory.filter(
+    (healthcareRecordDetails?.triageHistory || []).filter(
       (record) =>
         record.triage_stage === "facility_arrival",
     );
 
     const healthcareDocumenterTreatment =
-  (recordDetails?.treatmentHistory || []).find(
+  (healthcareRecordDetails?.treatmentHistory || []).find(
     (record) => {
       const details = record?.treatment_details;
 
@@ -6480,12 +7754,12 @@ const healthcareDocumenterDetails =
   {};
 
 const healthcareFacilityEncounter =
-  item.latest_facility_encounter || {};
+  healthcareItem.latest_facility_encounter || {};
 
     const victimCode =
   getCasualtyVictimCode(
-    item,
-    recordDetails,
+    saItem,
+    saRecordDetails,
   );
 
 const healthcareAdmittedUnit =
@@ -6502,21 +7776,21 @@ const healthcareIsOtherUnit =
 
 const newborn =
   extractRecordSectionValue(
-    item.remarks,
+    saItem.remarks,
     "SA Responder Details",
     "Newborn",
   );
 
 const pregnant =
   extractRecordSectionValue(
-    item.remarks,
+    saItem.remarks,
     "SA Responder Details",
     "Pregnant",
   );
 
 const religion =
   extractRecordSectionValue(
-    item.remarks,
+    saItem.remarks,
     "SA Responder Details",
     "Religion",
   );
@@ -6541,6 +7815,8 @@ const religion =
 
         <div class="modal-body">
 
+          ${renderMatchedCaseSummary(recordDetails)}
+
           <section class="record-section">
             <h3>Field Responder</h3>
 
@@ -6559,7 +7835,7 @@ const religion =
                 ${detailItem(
                   "Are You Safe?",
                   extractRecordSectionValue(
-                    item.remarks,
+                    fieldItem.remarks,
                     "Responder Safety",
                     "Are you safe",
                   ),
@@ -6568,7 +7844,7 @@ const religion =
                 ${detailItem(
                   "Time of PPE Use",
                   extractRecordSectionValue(
-                    item.remarks,
+                    fieldItem.remarks,
                     "Responder Safety",
                     "Time of PPE Use",
                   ),
@@ -6614,7 +7890,7 @@ const religion =
               <div class="casualty-detail-grid">
                 ${detailItem(
                   "Notes",
-                  extractRecordBaseText(item.remarks) ||
+                  extractRecordBaseText(fieldItem.remarks) ||
                     "No notes",
                 )}
 
@@ -6646,7 +7922,7 @@ const religion =
                 ${detailItem(
                   "Are You Safe?",
                   extractRecordSectionValue(
-                    item.remarks,
+                    saItem.remarks,
                     "Responder Safety",
                     "Are you safe",
                   ),
@@ -6655,7 +7931,7 @@ const religion =
                 ${detailItem(
                   "Time of PPE Use",
                   extractRecordSectionValue(
-                    item.remarks,
+                    saItem.remarks,
                     "Responder Safety",
                     "Time of PPE Use",
                   ),
@@ -6680,7 +7956,7 @@ const religion =
                 ${detailItem(
                   "Witness Present",
                   extractRecordSectionValue(
-                    item.remarks,
+                    saItem.remarks,
                     "SA Responder Details",
                     "Witness present",
                   ),
@@ -6689,7 +7965,7 @@ const religion =
                 ${detailItem(
                   "Other Witness",
                   extractRecordSectionValue(
-                    item.remarks,
+                    saItem.remarks,
                     "SA Responder Details",
                     "Witness other",
                   ),
@@ -6698,7 +7974,7 @@ const religion =
                 ${detailItem(
                   "Witness Response",
                   extractRecordSectionValue(
-                    item.remarks,
+                    saItem.remarks,
                     "SA Responder Details",
                     "Witness response",
                   ),
@@ -6707,7 +7983,7 @@ const religion =
                 ${detailItem(
                   "CPR Type",
                   extractRecordSectionValue(
-                    item.remarks,
+                    saItem.remarks,
                     "SA Responder Details",
                     "CPR type",
                   ),
@@ -6733,42 +8009,42 @@ const religion =
 
                 ${detailItem(
                   "Patient Identified",
-                  formatPatientIdentified(casualty),
+                  formatPatientIdentified(saCasualty),
                 )}
 
                 ${detailItem(
                   "ID Number",
-                  casualty.id_number,
+                  saCasualty.id_number,
                 )}
 
                 ${detailItem(
                   "Age",
-                  casualty.estimated_age,
+                  saCasualty.estimated_age,
                 )}
 
                 ${detailItem(
                   "First Name",
-                  casualty.first_name,
+                  saCasualty.first_name,
                 )}
 
                 ${detailItem(
                   "Middle Name",
-                  casualty.middle_name,
+                  saCasualty.middle_name,
                 )}
 
                 ${detailItem(
                   "Last Name",
-                  casualty.last_name,
+                  saCasualty.last_name,
                 )}
 
                 ${detailItem(
                   "Sex",
-                  casualty.sex,
+                  saCasualty.sex,
                 )}
 
                 ${detailItem(
                   "Date of Birth",
-                  casualty.date_of_birth,
+                  saCasualty.date_of_birth,
                 )}
 
                 ${detailItem("Newborn", newborn)}
@@ -6777,7 +8053,7 @@ const religion =
 
                 ${detailItem(
                   "Contact Number",
-                  casualty.contact_number,
+                  saCasualty.contact_number,
                 )}
               </div>
             </div>
@@ -6798,27 +8074,27 @@ const religion =
               <div class="casualty-detail-grid">
                 ${detailItem(
                   "House / Street",
-                  casualty.house_street,
+                  saCasualty.house_street,
                 )}
 
                 ${detailItem(
                   "Barangay",
-                  casualty.barangay,
+                  saCasualty.barangay,
                 )}
 
                 ${detailItem(
                   "Municipality / City",
-                  casualty.municipality,
+                  saCasualty.municipality,
                 )}
 
                 ${detailItem(
                   "Province",
-                  casualty.province,
+                  saCasualty.province,
                 )}
 
                 ${detailItem(
                   "Region",
-                  casualty.region,
+                  saCasualty.region,
                 )}
               </div>
             </div>
@@ -6859,8 +8135,8 @@ const religion =
               </h4>
 
               ${renderSaTreatmentHistoryContent(
-                recordDetails?.treatmentHistory || [],
-                item,
+                saRecordDetails?.treatmentHistory || [],
+                saItem,
               )}
             </div>
             
@@ -6879,7 +8155,7 @@ const religion =
               </h4>
 
               ${renderSaTransportHistoryContent(
-                recordDetails?.transportHistory || [],
+                saRecordDetails?.transportHistory || [],
               )}
             </div>
 
@@ -6899,7 +8175,7 @@ const religion =
               <div class="casualty-detail-grid">
                 ${detailItem(
                   "Remarks",
-                  extractRecordBaseText(item.remarks) ||
+                  extractRecordBaseText(saItem.remarks) ||
                     "No remarks",
                 )}
               </div>
@@ -6931,27 +8207,27 @@ const religion =
 
                   ${detailItem(
                     "First Name",
-                    casualty.first_name,
+                    healthcareCasualty.first_name,
                   )}
 
                   ${detailItem(
                     "Middle Name",
-                    casualty.middle_name,
+                    healthcareCasualty.middle_name,
                   )}
 
                   ${detailItem(
                     "Last Name",
-                    casualty.last_name,
+                    healthcareCasualty.last_name,
                   )}
 
                   ${detailItem(
                     "Sex",
-                    casualty.sex,
+                    healthcareCasualty.sex,
                   )}
 
                   ${detailItem(
                     "Date of Birth",
-                    casualty.date_of_birth,
+                    healthcareCasualty.date_of_birth,
                   )}
 
                 </div>
@@ -7442,7 +8718,7 @@ function closeRecordModal() {
   document.querySelector(".modal-backdrop")?.remove();
 }
 
-async function loadCasualtyRecordDetails(casualtyId) {
+async function loadSingleCasualtyRecordDetails(casualtyId) {
   const encodedId = encodeURIComponent(casualtyId);
 
   const existingRecord = state.casualties.find(
@@ -7511,6 +8787,46 @@ transportHistory:
   };
 }
 
+async function loadCasualtyRecordDetails(casualtyId) {
+  const primaryDetails = await loadSingleCasualtyRecordDetails(casualtyId);
+  const currentCaseLink = (state.caseLinks || []).find(
+    (link) => link.casualty_incident_id === casualtyId,
+  );
+
+  if (!currentCaseLink) {
+    return {
+      ...primaryDetails,
+      matchedRecords: [primaryDetails.casualty],
+      matchedRecordDetails: [primaryDetails],
+    };
+  }
+
+  const matchedIds = (state.caseLinks || [])
+    .filter((link) => link.case_id === currentCaseLink.case_id)
+    .map((link) => link.casualty_incident_id)
+    .filter(Boolean);
+
+  const otherIds = matchedIds.filter((id) => id !== casualtyId);
+  const otherDetails = await Promise.all(
+    otherIds.map((id) => loadSingleCasualtyRecordDetails(id)),
+  );
+  const matchedRecordDetails = [
+    primaryDetails,
+    ...otherDetails,
+  ].sort((first, second) =>
+    compareText(
+      matchCasingRoleLabel(matchCasingRoleBucket(first.casualty)),
+      matchCasingRoleLabel(matchCasingRoleBucket(second.casualty)),
+    ),
+  );
+
+  return {
+    ...primaryDetails,
+    matchedRecords: matchedRecordDetails.map((details) => details.casualty),
+    matchedRecordDetails,
+  };
+}
+
 async function openCasualtyRecordModal(casualtyId) {
   if (!casualtyId) {
     return;
@@ -7545,6 +8861,7 @@ async function openCasualtyRecordModal(casualtyId) {
 
     bindVerificationReviewActions();
     bindAttachmentPreviewActions();
+    bindOpenCasualtyRecord();
   } catch (error) {
     console.error(
       "Failed to load casualty record details:",
@@ -9207,6 +10524,273 @@ async function saveHospitalResourcesSection(incidentId, form) {
   await reloadExpandedIncident("Hospital resources saved.");
 }
 
+function draftFormLabel(formType) {
+  const labels = {
+    incident: "Official Incident",
+    healthcare_facility: "Healthcare Facility",
+    casualty_field_responder: "Field Responder Casualty",
+    casualty_sar: "SAR Casualty",
+    casualty_hcfd: "HCFD Casualty",
+    account: "Account",
+  };
+
+  return labels[formType] || roleLabel(formType);
+}
+
+function draftTargetView(formType) {
+  switch (formType) {
+    case "incident":
+      return "incidents";
+    case "healthcare_facility":
+      return "facilities";
+    case "account":
+      return isSuperAdmin() ? "registration" : "users";
+    default:
+      return null;
+  }
+}
+
+function getIncidentDraftPayload(form) {
+  return {
+    incidentName: formValue(form, "incidentName"),
+    disasterType: formValue(form, "disasterType"),
+    description: formValue(form, "description"),
+    barangay: formValue(form, "barangay"),
+    municipality: formValue(form, "municipality"),
+    province: formValue(form, "province"),
+    startedAt: formValue(form, "startedAt"),
+    emsAlertedAt: formValue(form, "emsAlertedAt"),
+    emsDeployedAt: formValue(form, "emsDeployedAt"),
+    emsArrivedAt: formValue(form, "emsArrivedAt"),
+  };
+}
+
+function getHealthcareFacilityDraftPayload(form) {
+  return {
+    facilityName: formValue(form, "facilityName"),
+    facilityLevel: formValue(form, "facilityLevel"),
+    address: formValue(form, "address"),
+    barangay: formValue(form, "barangay"),
+    municipality: formValue(form, "municipality"),
+    province: formValue(form, "province"),
+    contactPerson: formValue(form, "contactPerson"),
+    contactNumber: formValue(form, "contactNumber"),
+  };
+}
+
+function getAccountDraftPayload(form) {
+  return {
+    fullName: formValue(form, "fullName"),
+    email: formValue(form, "email"),
+    role: formValue(form, "role"),
+    phoneNumber: formValue(form, "phoneNumber"),
+    assignedMunicipality: formValue(form, "assignedMunicipality"),
+    assignedBarangay: formValue(form, "assignedBarangay"),
+  };
+}
+
+function setFormValues(form, payload = {}) {
+  Object.entries(payload || {}).forEach(([name, value]) => {
+    const field = form.elements[name];
+    if (!field) return;
+
+    field.value = value ?? "";
+  });
+}
+
+function getDraftTitle(formType, payload) {
+  if (formType === "incident") {
+    return payload.incidentName || "Untitled official incident";
+  }
+
+  if (formType === "healthcare_facility") {
+    return payload.facilityName || "Untitled healthcare facility";
+  }
+
+  if (formType === "account") {
+    return payload.fullName || payload.email || "Untitled account";
+  }
+
+  return `${draftFormLabel(formType)} draft`;
+}
+
+async function saveFormDraft({
+  form,
+  formType,
+  payload,
+  messageId,
+}) {
+  setMessage(messageId, "Saving draft...");
+
+  const existingDraftId = form.dataset.draftId;
+  const savedDraft = await apiRequest(
+    existingDraftId
+      ? `/drafts/${encodeURIComponent(existingDraftId)}`
+      : "/drafts",
+    {
+      method: existingDraftId ? "PATCH" : "POST",
+      body: JSON.stringify({
+        ...(existingDraftId ? {} : { formType }),
+        title: getDraftTitle(formType, payload),
+        payload,
+      }),
+    },
+  );
+
+  form.dataset.draftId = savedDraft.data.id;
+
+  await loadSharedData();
+  setMessage(messageId, "Draft saved. You can resume it from Drafts.", "success");
+  showDashboardToast("Draft saved.", "success");
+  return savedDraft.data;
+}
+
+function clearFormAfterDraftSave(form) {
+  if (!form) return;
+
+  form.reset();
+  delete form.dataset.draftId;
+}
+
+async function deleteSubmittedFormDraft(form) {
+  const draftId = form?.dataset?.draftId;
+  if (!draftId) return;
+
+  try {
+    await apiRequest(`/drafts/${encodeURIComponent(draftId)}`, {
+      method: "DELETE",
+    });
+    delete form.dataset.draftId;
+  } catch (error) {
+    console.warn("Unable to remove submitted draft:", error);
+  }
+}
+
+function applyPendingDraftToForm(form, formType, messageId) {
+  const draft = state.draftToResume;
+  if (!draft || draft.form_type !== formType) return;
+
+  form.dataset.draftId = draft.id;
+  setFormValues(form, draft.payload || {});
+  setMessage(messageId, `Loaded draft: ${draft.title}`, "success");
+  state.draftToResume = null;
+}
+
+function renderDrafts() {
+  const rows = state.formDrafts
+    .slice()
+    .sort(
+      (first, second) =>
+        new Date(second.updated_at || 0).getTime() -
+        new Date(first.updated_at || 0).getTime(),
+    )
+    .map((draft) => {
+      const targetView = draftTargetView(draft.form_type);
+
+      return `
+        <tr>
+          <td><strong>${escapeHtml(draft.title || "Untitled draft")}</strong></td>
+          <td>${escapeHtml(draftFormLabel(draft.form_type))}</td>
+          <td>${formatDate(draft.updated_at || draft.created_at)}</td>
+          <td>
+            <div class="table-actions">
+              ${
+                targetView
+                  ? `<button class="ghost-button mini" type="button" data-resume-draft="${escapeHtml(draft.id)}">Resume</button>`
+                  : `<button class="ghost-button mini" type="button" disabled>Mobile draft</button>`
+              }
+              <button class="danger-button mini" type="button" data-delete-draft="${escapeHtml(draft.id)}">Delete</button>
+            </div>
+          </td>
+        </tr>
+      `;
+    });
+
+  return `
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Drafts</h2>
+          <p class="panel-subtitle">Resume saved forms that have not been submitted yet.</p>
+        </div>
+        <span class="pill blue">${state.formDrafts.length} draft${state.formDrafts.length === 1 ? "" : "s"}</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Draft</th>
+              <th>Form</th>
+              <th>Last saved</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.join("") || `<tr><td colspan="4"><div class="empty-state">No saved drafts yet.</div></td></tr>`}
+          </tbody>
+        </table>
+      </div>
+      <div id="draftsMessage" class="status-message" hidden></div>
+    </section>
+  `;
+}
+
+function bindDraftActions() {
+  document.querySelectorAll("[data-resume-draft]").forEach((button) => {
+    if (button.dataset.draftBound === "true") return;
+    button.dataset.draftBound = "true";
+
+    button.addEventListener("click", () => {
+      const draft = state.formDrafts.find(
+        (item) => item.id === button.dataset.resumeDraft,
+      );
+      if (!draft) return;
+
+      const targetView = draftTargetView(draft.form_type);
+      if (!targetView) {
+        setMessage("draftsMessage", "This draft can only be resumed in the mobile app.", "error");
+        return;
+      }
+
+      state.draftToResume = draft;
+      setActiveView(targetView);
+      renderDashboardShellIntoExisting();
+    });
+  });
+
+  document.querySelectorAll("[data-delete-draft]").forEach((button) => {
+    if (button.dataset.deleteDraftBound === "true") return;
+    button.dataset.deleteDraftBound = "true";
+
+    button.addEventListener("click", async () => {
+      const draftId = button.dataset.deleteDraft;
+      if (!draftId) return;
+
+      const confirmed = await showDashboardConfirm({
+        title: "Delete draft?",
+        message: "This removes the saved draft. Submitted records are not affected.",
+        confirmLabel: "Delete draft",
+        cancelLabel: "Keep draft",
+        tone: "danger",
+      });
+
+      if (!confirmed) return;
+
+      try {
+        await apiRequest(`/drafts/${encodeURIComponent(draftId)}`, {
+          method: "DELETE",
+        });
+        await loadSharedData();
+        renderCurrentView();
+        bindView();
+        showDashboardToast("Draft deleted.", "success");
+      } catch (error) {
+        setMessage("draftsMessage", getErrorMessage(error), "error");
+      }
+    });
+  });
+}
+
 function renderIncidentCreator(compact = false) {
   return `
     <section class="panel">
@@ -9235,7 +10819,11 @@ function renderIncidentCreator(compact = false) {
           <label class="field"><span>EMS deployed</span><input name="emsDeployedAt" type="datetime-local" /></label>
           <label class="field"><span>EMS arrived</span><input name="emsArrivedAt" type="datetime-local" /></label>
         </div>
-        <button class="primary-button" type="submit">Create official incident</button>
+        <div class="button-row">
+          <button class="primary-button" type="submit">Create official incident</button>
+          <button class="ghost-button" type="button" data-save-draft="incident">Save draft</button>
+          <button class="ghost-button" type="button" data-view-link="drafts">Open drafts</button>
+        </div>
         <div id="incidentMessage" class="status-message" hidden></div>
       </form>
     </section>
@@ -9246,6 +10834,29 @@ function renderIncidentCreator(compact = false) {
 function bindCreateIncidentForm() {
   const form = qs("#incidentForm");
   if (!form) return;
+
+  applyPendingDraftToForm(form, "incident", "incidentMessage");
+
+  qs('[data-save-draft="incident"]')?.addEventListener("click", async () => {
+    try {
+      await saveFormDraft({
+        form,
+        formType: "incident",
+        payload: getIncidentDraftPayload(form),
+        messageId: "incidentMessage",
+      });
+      clearFormAfterDraftSave(form);
+      await showDashboardNotice({
+        eyebrow: "Draft saved",
+        title: "Saved as draft",
+        message:
+          "This official incident form was saved in Drafts. The form has been cleared so you can start a new entry.",
+        confirmLabel: "Done",
+      });
+    } catch (error) {
+      setMessage("incidentMessage", getErrorMessage(error), "error");
+    }
+  });
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -9278,6 +10889,7 @@ function bindCreateIncidentForm() {
         });
       }
 
+      await deleteSubmittedFormDraft(form);
       form.reset();
       setMessage("incidentMessage", "Official incident created and synced to mobile incident selection.", "success");
       await loadSharedData();
@@ -9352,7 +10964,11 @@ function renderFacilityCreator() {
           <label class="field"><span>Contact person</span><input name="contactPerson" /></label>
           <label class="field"><span>Contact number</span><input name="contactNumber" /></label>
         </div>
-        <button class="primary-button" type="submit">Create healthcare facility</button>
+        <div class="button-row">
+          <button class="primary-button" type="submit">Create healthcare facility</button>
+          <button class="ghost-button" type="button" data-save-draft="healthcare_facility">Save draft</button>
+          <button class="ghost-button" type="button" data-view-link="drafts">Open drafts</button>
+        </div>
         <div id="facilityMessage" class="status-message" hidden></div>
       </form>
       ${renderBulkImportPanel(
@@ -9563,6 +11179,29 @@ function bindCreateFacilityForm() {
   const form = qs("#facilityForm");
   if (!form) return;
 
+  applyPendingDraftToForm(form, "healthcare_facility", "facilityMessage");
+
+  qs('[data-save-draft="healthcare_facility"]')?.addEventListener("click", async () => {
+    try {
+      await saveFormDraft({
+        form,
+        formType: "healthcare_facility",
+        payload: getHealthcareFacilityDraftPayload(form),
+        messageId: "facilityMessage",
+      });
+      clearFormAfterDraftSave(form);
+      await showDashboardNotice({
+        eyebrow: "Draft saved",
+        title: "Saved as draft",
+        message:
+          "This healthcare facility form was saved in Drafts. The form has been cleared so you can start a new entry.",
+        confirmLabel: "Done",
+      });
+    } catch (error) {
+      setMessage("facilityMessage", getErrorMessage(error), "error");
+    }
+  });
+
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     setMessage("facilityMessage", "Creating healthcare facility...");
@@ -9582,6 +11221,7 @@ function bindCreateFacilityForm() {
         }),
       });
 
+      await deleteSubmittedFormDraft(form);
       form.reset();
       await loadSharedData();
       renderCurrentView();

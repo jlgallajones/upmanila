@@ -103,6 +103,21 @@ export default function TabLayout() {
       />
 
       <Tabs.Screen
+        name="drafts"
+        options={{
+          href: isSuperAdmin ? null : undefined,
+          title: "Drafts",
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "document-text" : "document-text-outline"}
+              size={size}
+              color={color}
+            />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
         name="notifications"
         options={{
           title: "Notifications",

@@ -60,6 +60,17 @@ const initialForm: AccountForm = {
 };
 
 function roleLabel(role: string): string {
+  const labels: Record<string, string> = {
+    responder: "Legacy Responder",
+    field_responder: "Field Responder",
+    sa_responder: "SAR Responder",
+    documenter: "Healthcare Facility Documenter",
+  };
+
+  if (labels[role]) {
+    return labels[role];
+  }
+
   return role
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
@@ -117,7 +128,7 @@ export default function AccountManagementScreen() {
 
       setForm((current) => ({
         ...current,
-        role: user.role === "super_admin" ? "administrator" : "responder",
+        role: user.role === "super_admin" ? "administrator" : "field_responder",
         assignedMunicipality:
           user.role === "super_admin"
             ? current.assignedMunicipality
@@ -172,22 +183,22 @@ export default function AccountManagementScreen() {
   const isSuperAdmin = currentRole === "super_admin";
   const roleOptions: AccountRole[] = isSuperAdmin
     ? ["administrator", "super_admin"]
-    : ["responder", "documenter"];
+    : ["field_responder", "sa_responder", "documenter"];
   const formTitle = isSuperAdmin
     ? "Create admin account"
-    : "Create responder/documenter account";
+    : "Create FR/SAR/HCFD account";
   const formSubtitle = isSuperAdmin
     ? "Admin accounts are assigned to a unit or location."
-    : "Responder and documenter accounts are assigned under your unit.";
+    : "Field Responder, SAR, and HCFD accounts are assigned under your unit.";
   const directorySubtitle = isSuperAdmin
     ? "Alphabetical directory of all managed user accounts."
-    : "Responder and documenter accounts under your admin/unit scope.";
+    : "FR, SAR, HCFD, and legacy responder accounts under your admin/unit scope.";
   const headerSubtitle = isSuperAdmin
     ? "Super admin account controls"
     : "Admin unit account controls";
   const createSuccessMessage = isSuperAdmin
     ? "The admin account can now log in with the temporary password."
-    : "The responder or documenter account can now log in with the temporary password.";
+    : "The FR, SAR, or HCFD account can now log in with the temporary password.";
 
   function updateForm<K extends keyof AccountForm>(
     key: K,
@@ -228,13 +239,18 @@ export default function AccountManagementScreen() {
       } else {
         await registerUnitUser({
           ...payload,
-          role: payload.role === "documenter" ? "documenter" : "responder",
+          role:
+            payload.role === "sa_responder"
+              ? "sa_responder"
+              : payload.role === "documenter"
+                ? "documenter"
+                : "field_responder",
         });
       }
 
       setForm({
         ...initialForm,
-        role: isSuperAdmin ? "administrator" : "responder",
+        role: isSuperAdmin ? "administrator" : "field_responder",
         assignedMunicipality: isSuperAdmin ? "" : form.assignedMunicipality,
         assignedBarangay: isSuperAdmin ? "" : form.assignedBarangay,
       });

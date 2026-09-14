@@ -78,6 +78,11 @@ import {
   type QueuedCasualtyAttachment,
   type QueuedCasualtyPayload,
 } from "../../offline/casualtyQueue";
+import {
+  deleteLocalFormDraft,
+  getLocalFormDraft,
+  saveLocalFormDraft,
+} from "../../offline/formDrafts";
 
 const COLORS = {
   maroon: "#7B1113",
@@ -3107,12 +3112,22 @@ function getTriageStageOptionsForRole(
     return [...TRIAGE_STAGE_OPTIONS];
   }
 
-  if (responderAssignment === "field_responder") {
+  if (role === "field_responder") {
     return ["Primary Triage"];
   }
 
-  if (responderAssignment === "sa_responder") {
+  if (role === "sa_responder") {
     return ["Secondary Triage"];
+  }
+
+  if (role === "responder") {
+    if (responderAssignment === "field_responder") {
+      return ["Primary Triage"];
+    }
+
+    if (responderAssignment === "sa_responder") {
+      return ["Secondary Triage"];
+    }
   }
 
   const roleOptions = role
@@ -3147,30 +3162,30 @@ function isFieldResponderCaptureFlow(
   role: string | null,
   responderAssignment: ResponderAssignment | null,
 ): boolean {
-  if (responderAssignment === "field_responder") {
+  if (role === "field_responder") {
     return true;
   }
 
-  if (responderAssignment === "sa_responder") {
+  if (role === "sa_responder") {
     return false;
   }
 
-  return role === "field_responder";
+  return role === "responder" && responderAssignment === "field_responder";
 }
 
 function isSaResponderCaptureFlow(
   role: string | null,
   responderAssignment: ResponderAssignment | null,
 ): boolean {
-  if (responderAssignment === "sa_responder") {
+  if (role === "sa_responder") {
     return true;
   }
 
-  if (responderAssignment === "field_responder") {
+  if (role === "field_responder") {
     return false;
   }
 
-  return role === "sa_responder";
+  return role === "responder" && responderAssignment === "sa_responder";
 }
 
 function isHealthcareDocumenterCaptureFlow(role: string | null): boolean {
@@ -4897,15 +4912,17 @@ function DatePickerSheet({
 }
 
 export default function AddCasualtyScreen() {
-  const { editId, incidentId, incidentName, focusStep } =
+  const { editId, incidentId, incidentName, focusStep, draftId } =
     useLocalSearchParams<{
     editId?: string;
     incidentId?: string;
     incidentName?: string;
     focusStep?: string;
+    draftId?: string;
   }>();
 
   const casualtyId = Array.isArray(editId) ? editId[0] : editId;
+  const draftIdParam = Array.isArray(draftId) ? draftId[0] : draftId;
   const requestedFocusStep = Array.isArray(focusStep)
     ? focusStep[0]
     : focusStep;
@@ -4952,6 +4969,10 @@ export default function AddCasualtyScreen() {
   const [initialTreatmentSignature, setInitialTreatmentSignature] =
     useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [loadedDraftId, setLoadedDraftId] = useState<string | null>(
+    null,
+  );
   const [hasAppliedFocusStep, setHasAppliedFocusStep] =
     useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -5166,6 +5187,74 @@ const [
     !form.incidentId &&
     incidents.length === 0 &&
     Boolean(incidentError);
+
+  useEffect(() => {
+    if (
+      !draftIdParam ||
+      isEditing ||
+      isLoadingUserContext ||
+      loadedDraftId
+    ) {
+      return;
+    }
+
+    let isMounted = true;
+
+    async function loadDraft() {
+      try {
+        const draft = await getLocalFormDraft(draftIdParam);
+
+        if (!isMounted || !draft) {
+          return;
+        }
+
+        const payload = draft.payload as {
+          form?: Partial<FormState>;
+          selectedPhoto?: SelectedPhoto | null;
+          currentStep?: number;
+        };
+        const draftForm =
+          payload.form && typeof payload.form === "object"
+            ? payload.form
+            : (draft.payload as Partial<FormState>);
+        const savedStep =
+          typeof payload.currentStep === "number"
+            ? payload.currentStep
+            : 0;
+
+        setForm((current) => ({
+          ...current,
+          ...draftForm,
+        }));
+        setSelectedPhoto(payload.selectedPhoto ?? null);
+        setCurrentStep(
+          Math.min(
+            Math.max(savedStep, 0),
+            Math.max(activeSteps.length - 1, 0),
+          ),
+        );
+        setLoadedDraftId(draft.id);
+      } catch (error) {
+        console.error("Failed to load casualty draft:", error);
+        Alert.alert(
+          "Unable to load draft",
+          "The saved draft could not be opened. Please try again from Drafts.",
+        );
+      }
+    }
+
+    void loadDraft();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    activeSteps.length,
+    draftIdParam,
+    isEditing,
+    isLoadingUserContext,
+    loadedDraftId,
+  ]);
 
   function getAllowedTriageSystemOptions(
     triageStage: string,
@@ -6803,6 +6892,70 @@ const victimCodeAlreadyExists = useMemo(() => {
 
     if (feedback?.resetOnClose !== false) {
       resetForNextCasualty();
+    }
+  }
+
+  function getCasualtyDraftTitle(): string {
+    const roleLabel = isFieldResponderFlow
+      ? "Field Responder"
+      : isSaResponderFlow
+        ? "SAR"
+        : isHealthcareDocumenterFlow
+          ? "HCFD"
+          : "Casualty";
+    const recordLabel =
+      form.victimCode.trim() ||
+      form.idNumber.trim() ||
+      form.incidentName.trim() ||
+      "Untitled";
+
+    return `${roleLabel} casualty - ${recordLabel}`;
+  }
+
+  async function clearLoadedDraftAfterSave() {
+    if (!loadedDraftId) {
+      return;
+    }
+
+    try {
+      await deleteLocalFormDraft(loadedDraftId);
+      setLoadedDraftId(null);
+    } catch (error) {
+      console.warn("Unable to remove submitted draft:", error);
+    }
+  }
+
+  async function handleSaveDraft() {
+    try {
+      setIsSavingDraft(true);
+
+      await saveLocalFormDraft({
+        id: loadedDraftId,
+        formType: "casualty",
+        title: getCasualtyDraftTitle(),
+        payload: {
+          form,
+          selectedPhoto,
+          currentStep,
+        },
+      });
+
+      setLoadedDraftId(null);
+      resetForNextCasualty();
+      Alert.alert(
+        "Saved as draft",
+        "This casualty form was saved on this device. Open Drafts to continue it later.",
+      );
+    } catch (error) {
+      console.error("Failed to save casualty draft:", error);
+      Alert.alert(
+        "Unable to save draft",
+        error instanceof Error
+          ? error.message
+          : "Please try saving the draft again.",
+      );
+    } finally {
+      setIsSavingDraft(false);
     }
   }
 
@@ -10367,6 +10520,7 @@ if (
           setIsSubmitting(true);
 
           await queueCurrentCasualtySubmission();
+          await clearLoadedDraftAfterSave();
 
           if (shouldResetPendingDepartureForm) {
             resetForNextCasualty();
@@ -10398,6 +10552,7 @@ if (
             setIsSubmitting(true);
 
             await queueCurrentCasualtySubmission();
+            await clearLoadedDraftAfterSave();
 
             if (shouldResetPendingDepartureForm) {
               resetForNextCasualty();
@@ -10481,6 +10636,7 @@ if (
 
         const photoUploadError =
           await uploadSelectedPhoto(createdRecordId);
+        await clearLoadedDraftAfterSave();
 
         if (shouldResetPendingDepartureForm) {
           resetForNextCasualty();
@@ -10498,6 +10654,7 @@ if (
 
         if (isNetworkSubmissionError(error)) {
           await queueCurrentCasualtySubmission();
+          await clearLoadedDraftAfterSave();
 
           if (shouldResetPendingDepartureForm) {
             resetForNextCasualty();
@@ -10514,6 +10671,7 @@ if (
 
         if (isAuthenticationTokenError(error)) {
           await queueCurrentCasualtySubmission();
+          await clearLoadedDraftAfterSave();
 
           if (shouldResetPendingDepartureForm) {
             resetForNextCasualty();
@@ -10550,6 +10708,7 @@ if (
 
       const response = await updateCasualty(casualtyId, updatePayload);
       const photoUploadError = await uploadSelectedPhoto(casualtyId);
+      await clearLoadedDraftAfterSave();
       const responseMessage =
         response.message ||
         "The casualty record has been saved successfully.";
@@ -11333,6 +11492,8 @@ function confirmExitAddCasualty() {
           />
         </View>
       ) : null}
+
+      {renderCasualtyPhotoAttachmentCard()}
     </>
   );
 }
@@ -12975,6 +13136,8 @@ function confirmExitAddCasualty() {
               Did you mark your victims with their victim code including your own user code?
             </Text>
           </Pressable>
+
+          {renderCasualtyPhotoAttachmentCard()}
         </>
       );
     }
@@ -13483,42 +13646,7 @@ function confirmExitAddCasualty() {
           }
         />
 
-        <Pressable
-          onPress={() => {
-            void handlePickPhoto();
-          }}
-          style={({ pressed }) => [
-            styles.uploadCard,
-            pressed && styles.pressed,
-          ]}
-        >
-          <View style={styles.uploadIcon}>
-            <Ionicons
-              name="camera-outline"
-              size={25}
-              color={COLORS.maroon}
-            />
-          </View>
-
-          <View style={styles.uploadTextWrapper}>
-            <Text style={styles.uploadTitle}>
-              {selectedPhoto
-                ? "Casualty photo selected"
-                : "Add casualty photo"}
-            </Text>
-            <Text style={styles.uploadDescription}>
-              {selectedPhoto
-                ? `${selectedPhoto.fileName} - uploads when saved.`
-                : "Select or capture a photo to upload with this record."}
-            </Text>
-          </View>
-
-          <Ionicons
-            name="chevron-forward-outline"
-            size={20}
-            color={COLORS.secondaryText}
-          />
-        </Pressable>
+        {renderCasualtyPhotoAttachmentCard()}
 
         <View style={styles.reviewCard}>
           <Ionicons
@@ -13534,6 +13662,47 @@ function confirmExitAddCasualty() {
           </Text>
         </View>
       </>
+    );
+  }
+
+  function renderCasualtyPhotoAttachmentCard() {
+    return (
+      <Pressable
+        onPress={() => {
+          void handlePickPhoto();
+        }}
+        style={({ pressed }) => [
+          styles.uploadCard,
+          pressed && styles.pressed,
+        ]}
+      >
+        <View style={styles.uploadIcon}>
+          <Ionicons
+            name="camera-outline"
+            size={25}
+            color={COLORS.maroon}
+          />
+        </View>
+
+        <View style={styles.uploadTextWrapper}>
+          <Text style={styles.uploadTitle}>
+            {selectedPhoto
+              ? "Casualty photo selected"
+              : "Add casualty photo"}
+          </Text>
+          <Text style={styles.uploadDescription}>
+            {selectedPhoto
+              ? `${selectedPhoto.fileName} - uploads when saved.`
+              : "Select or capture a photo to upload with this record."}
+          </Text>
+        </View>
+
+        <Ionicons
+          name="chevron-forward-outline"
+          size={20}
+          color={COLORS.secondaryText}
+        />
+      </Pressable>
     );
   }
 
@@ -13835,6 +14004,25 @@ function confirmExitAddCasualty() {
               >
                 <Text style={styles.secondaryButtonText}>
                   Previous
+                </Text>
+              </Pressable>
+            ) : null}
+
+            {!isEditing ? (
+              <Pressable
+                onPress={() => {
+                  void handleSaveDraft();
+                }}
+                disabled={isSubmitting || isSavingDraft}
+                style={({ pressed }) => [
+                  styles.secondaryButton,
+                  (isSubmitting || isSavingDraft) &&
+                    styles.disabledButton,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.secondaryButtonText}>
+                  {isSavingDraft ? "Saving..." : "Save Draft"}
                 </Text>
               </Pressable>
             ) : null}

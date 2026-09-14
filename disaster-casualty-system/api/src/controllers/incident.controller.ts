@@ -252,6 +252,14 @@ function normalizeAnalyticsTriageCategory(
   return "unknown";
 }
 
+function normalizeAnalyticsTriageSystem(value: unknown): string {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
 function getAnalyticsTriageCategory(
   row: TriageAssessmentRow | undefined,
 ): AnalyticsTriageCategory {
@@ -450,6 +458,16 @@ const secondaryTriageSystems = new Set([
   "smart",
   "urgent_non_urgent",
 ]);
+
+const tertiaryTriageSystemLabels: Record<string, string> = {
+  esi: "ESI",
+  metts: "METTS",
+  ed_triage: "ED Triage",
+};
+
+const tertiaryTriageSystems = new Set(
+  Object.keys(tertiaryTriageSystemLabels),
+);
 
 const incidentTimelineSelect = `
   id,
@@ -2244,7 +2262,7 @@ export async function getIncidentOnsiteTriageSummary(
         : "incident_started_at";
 
     const totalSurvivors = casualtyIncidentIds.length;
-    const intervalMinutes = [1, 5, 10, 15, 30, 60];
+    const intervalMinutes = [15, 30, 60, 120, 180];
     const responseInitiatedDate = responseInitiatedAt
       ? new Date(responseInitiatedAt)
       : null;
@@ -4245,7 +4263,7 @@ export async function getIncidentAnalyticsSummary(
         ? await supabase
             .from("casualty_triage_assessments")
             .select(
-              "casualty_incident_id, triage_system, triage_category, responder_category, calculated_category, triage_stage, triaged_at",
+              "casualty_incident_id, triage_system, triage_category, responder_category, calculated_category, triage_stage, triaged_at, assessment_answers",
             )
             .in("casualty_incident_id", casualtyIncidentIds)
             .order("triaged_at", { ascending: true })
@@ -4344,12 +4362,19 @@ export async function getIncidentAnalyticsSummary(
     const isSecondaryTriage = (row: TriageAssessmentRow) =>
       row.triage_stage === "reassessment" ||
       secondaryTriageSystems.has(row.triage_system ?? "");
+    const isFacilityTriage = (row: TriageAssessmentRow) =>
+      row.triage_stage === "facility_arrival" ||
+      tertiaryTriageSystems.has(
+        normalizeAnalyticsTriageSystem(row.triage_system),
+      );
     const primaryTriageRows = triageRows.filter(isPrimaryTriage);
     const secondaryTriageRows = triageRows.filter(isSecondaryTriage);
-    const facilityTriageRows = triageRows.filter(
-      (row) => row.triage_stage === "facility_arrival",
-    );
+    const facilityTriageRows = triageRows.filter(isFacilityTriage);
     const latestTriageByCasualty = new Map<string, TriageAssessmentRow>();
+    const latestFacilityTriageByCasualty = new Map<
+      string,
+      TriageAssessmentRow
+    >();
 
     for (const row of [...triageRows].reverse()) {
       if (!latestTriageByCasualty.has(row.casualty_incident_id)) {
@@ -4357,10 +4382,43 @@ export async function getIncidentAnalyticsSummary(
       }
     }
 
+    for (const row of [...facilityTriageRows].reverse()) {
+      if (!latestFacilityTriageByCasualty.has(row.casualty_incident_id)) {
+        latestFacilityTriageByCasualty.set(
+          row.casualty_incident_id,
+          row,
+        );
+      }
+    }
+
     const categoryForCasualty = (casualtyIncidentId: string) =>
       getAnalyticsTriageCategory(
         latestTriageByCasualty.get(casualtyIncidentId),
       );
+    const facilityCategoryForCasualty = (casualtyIncidentId: string) =>
+      getAnalyticsTriageCategory(
+        latestFacilityTriageByCasualty.get(casualtyIncidentId) ??
+          latestTriageByCasualty.get(casualtyIncidentId),
+      );
+    const countTriageRowsByCategory = (rows: TriageAssessmentRow[]) =>
+      countBy(rows, (row) => getAnalyticsTriageCategory(row));
+    const buildTertiaryTriageSystemCharts = () =>
+      Object.entries(tertiaryTriageSystemLabels).reduce<
+        Record<string, { label: string; counts: CountMap; total: number }>
+      >((charts, [systemKey, label]) => {
+        const systemRows = facilityTriageRows.filter(
+          (row) =>
+            normalizeAnalyticsTriageSystem(row.triage_system) === systemKey,
+        );
+
+        charts[systemKey] = {
+          label,
+          counts: countTriageRowsByCategory(systemRows),
+          total: systemRows.length,
+        };
+
+        return charts;
+      }, {});
     const categoryRows = (
       rows: Array<{
         casualty_incident_id: string;
@@ -4428,7 +4486,8 @@ export async function getIncidentAnalyticsSummary(
       const minutes = arrivalEvents
         .filter(
           (row) =>
-            categoryForCasualty(row.casualty_incident_id) === category &&
+            facilityCategoryForCasualty(row.casualty_incident_id) ===
+              category &&
             row.occurred_at,
         )
         .map((row) =>
@@ -4448,7 +4507,9 @@ export async function getIncidentAnalyticsSummary(
     >((values, category) => {
       const minutes = encounterRows
         .filter(
-          (row) => categoryForCasualty(row.casualty_incident_id) === category,
+          (row) =>
+            facilityCategoryForCasualty(row.casualty_incident_id) ===
+            category,
         )
         .map((row) => {
           const start = row.hospital_admitted_at ?? row.arrived_at;
@@ -4482,11 +4543,12 @@ const unsafeResponders = responderSafetyResponses.filter(
       (values, category) => {
         const total = casualtyIncidentIds.filter(
           (casualtyIncidentId) =>
-            categoryForCasualty(casualtyIncidentId) === category,
+            facilityCategoryForCasualty(casualtyIncidentId) === category,
         ).length;
         const count = encounterRows.filter(
           (row) =>
-            categoryForCasualty(row.casualty_incident_id) === category &&
+            facilityCategoryForCasualty(row.casualty_incident_id) ===
+              category &&
             soughtEdCare(row),
         ).length;
 
@@ -4640,11 +4702,15 @@ const unsafeResponders = responderSafetyResponses.filter(
         barGraphs: {
           primaryTriageByCategory: countBy(
             primaryTriageRows,
-            (row) => row.triage_category,
+            (row) => getAnalyticsTriageCategory(row),
           ),
           secondaryTriageByCategory: countBy(
             secondaryTriageRows,
-            (row) => row.triage_category,
+            (row) => getAnalyticsTriageCategory(row),
+          ),
+          tertiaryTriageBySystem: buildTertiaryTriageSystemCharts(),
+          facilityTriageByCategory: countTriageRowsByCategory(
+            facilityTriageRows,
           ),
           stabilizationStrategies: countBy(
             treatmentRows,

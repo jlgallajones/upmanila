@@ -36,7 +36,7 @@ type RegisterUnitUserRequest = {
   fullName: string;
   email: string;
   password: string;
-  role: "responder" | "documenter";
+  role: UnitUserRole;
   phoneNumber?: string;
   assignedMunicipality?: string;
   assignedBarangay?: string;
@@ -46,7 +46,7 @@ type UpdateUnitUserRequest = {
   fullName?: string;
   email?: string;
   password?: string;
-  role?: "responder" | "documenter";
+  role?: UnitUserRole;
   phoneNumber?: string;
   assignedMunicipality?: string;
   assignedBarangay?: string;
@@ -74,6 +74,25 @@ type BulkRegisterAdminRequest = {
 type BulkRegisterUnitUserRequest = {
   rows?: RegisterUnitUserRequest[];
 };
+
+type UnitUserRole =
+  | "responder"
+  | "field_responder"
+  | "sa_responder"
+  | "documenter"
+  | "medical_personnel";
+
+const unitUserRoles: UnitUserRole[] = [
+  "responder",
+  "field_responder",
+  "sa_responder",
+  "documenter",
+  "medical_personnel",
+];
+
+function isUnitUserRole(role: string | null | undefined): role is UnitUserRole {
+  return unitUserRoles.includes(role as UnitUserRole);
+}
 
 const userSelect = `
   id,
@@ -875,16 +894,27 @@ export async function getManagedAccounts(
 }
 
 function getUnitUserContext(
-  role: RegisterUnitUserRequest["role"],
+  role: UnitUserRole,
 ): {
   role: string;
   reportingContext: string;
 } {
   switch (role) {
     case "documenter":
+    case "medical_personnel":
       return {
-        role: "documenter",
+        role,
         reportingContext: "receiving_facility_ed",
+      };
+    case "sa_responder":
+      return {
+        role: "sa_responder",
+        reportingContext: "transport",
+      };
+    case "field_responder":
+      return {
+        role: "field_responder",
+        reportingContext: "scene",
       };
     case "responder":
     default:
@@ -943,10 +973,11 @@ export async function registerUnitUser(
       return;
     }
 
-    if (!["responder", "documenter"].includes(requestedRole)) {
+    if (!isUnitUserRole(requestedRole)) {
       response.status(400).json({
         success: false,
-        message: "Admins can only create responder or documenter accounts.",
+        message:
+          "Admins can only create FR, SAR, or healthcare facility documenter accounts.",
       });
       return;
     }
@@ -1150,11 +1181,11 @@ export async function bulkRegisterUnitUsers(
           continue;
         }
 
-        if (!["responder", "documenter"].includes(requestedRole)) {
+        if (!isUnitUserRole(requestedRole)) {
           results.push(
             rowError(
               rowNumber,
-              "Admins can only create responder or documenter accounts.",
+              "Admins can only create FR, SAR, or healthcare facility documenter accounts.",
             ),
           );
           continue;
@@ -1304,7 +1335,7 @@ export async function getUnitUsers(
     const { data, error } = await supabase
       .from("users")
       .select(unitUserSelect)
-      .in("role", ["responder", "documenter"])
+      .in("role", unitUserRoles)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -1946,7 +1977,7 @@ export async function updateUnitUser(
       throw new Error(`Unable to retrieve unit user: ${existingError.message}`);
     }
 
-    if (!existingUser || !["responder", "documenter"].includes(existingUser.role)) {
+    if (!existingUser || !isUnitUserRole(existingUser.role)) {
       response.status(404).json({
         success: false,
         message: "Unit user account was not found.",
@@ -1990,10 +2021,11 @@ export async function updateUnitUser(
 
     const requestedRole = request.body.role ?? existingUser.role;
 
-    if (!["responder", "documenter"].includes(requestedRole)) {
+    if (!isUnitUserRole(requestedRole)) {
       response.status(400).json({
         success: false,
-        message: "Admins can only assign responder or documenter roles.",
+        message:
+          "Admins can only assign FR, SAR, or healthcare facility documenter roles.",
       });
       return;
     }
@@ -2114,10 +2146,11 @@ export async function deleteUnitUser(
       throw new Error(`Unable to retrieve unit user: ${existingError.message}`);
     }
 
-    if (!existingUser || !["responder", "documenter"].includes(existingUser.role)) {
+    if (!existingUser || !isUnitUserRole(existingUser.role)) {
       response.status(404).json({
         success: false,
-        message: "Only responder and documenter accounts can be deleted here.",
+        message:
+          "Only FR, SAR, healthcare facility documenter, and legacy responder accounts can be deleted here.",
       });
       return;
     }

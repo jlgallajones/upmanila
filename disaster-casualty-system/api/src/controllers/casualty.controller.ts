@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import { randomUUID } from "node:crypto";
 
 import { supabase } from "../config/supabase.js";
 import { getAuthenticatedUser } from "../middleware/auth.js";
@@ -148,6 +149,15 @@ function isObject(
 
 type VerificationStatus = (typeof verificationStatuses)[number];
 
+const caseMatchRoleBuckets = [
+  "field_responder",
+  "sa_responder",
+  "documenter",
+  "responder",
+] as const;
+
+type CaseMatchRoleBucket = (typeof caseMatchRoleBuckets)[number];
+
 const casualtyDataEntryRoles = new Set([
   "responder",
   "field_responder",
@@ -164,6 +174,23 @@ const casualtyAdminScopeRoles = new Set([
 
 function shouldScopeToOwnCasualties(role: string): boolean {
   return casualtyDataEntryRoles.has(role);
+}
+
+function getCaseMatchRoleBucket(
+  role: string | null | undefined,
+): CaseMatchRoleBucket {
+  switch (role) {
+    case "field_responder":
+      return "field_responder";
+    case "sa_responder":
+      return "sa_responder";
+    case "documenter":
+    case "medical_personnel":
+      return "documenter";
+    case "responder":
+    default:
+      return "responder";
+  }
 }
 
 function getRelationRecord(
@@ -2084,6 +2111,365 @@ export async function getCasualties(
       success: true,
       count: recordsWithSummaries.length,
       data: recordsWithSummaries,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+type CasualtyCaseLinkRow = {
+  id: string;
+  case_id: string;
+  casualty_incident_id: string;
+  incident_id: string;
+  role: CaseMatchRoleBucket;
+  linked_by: string | null;
+  notes: string | null;
+  linked_at: string;
+  created_at: string;
+};
+
+type CaseMatchRecordRow = {
+  id: string;
+  incident_id: string;
+  encoded_by: string;
+  casualty?: {
+    id_number?: string | null;
+  } | null;
+  incident?: {
+    incident_name?: string | null;
+  } | null;
+  encoder?: {
+    role?: string | null;
+  } | null;
+};
+
+async function getAccessibleCasualtyIncidentIds(user: {
+  id: string;
+  role: string;
+}): Promise<string[] | null> {
+  const scopedEncoderIds = await getCasualtyScopeEncoderIds(user);
+
+  if (!scopedEncoderIds) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("casualty_incidents")
+    .select("id")
+    .in("encoded_by", scopedEncoderIds)
+    .is("deleted_at", null);
+
+  if (error) {
+    throw new Error(
+      `Unable to retrieve accessible casualty records: ${error.message}`,
+    );
+  }
+
+  return (data ?? [])
+    .map((record) => record.id)
+    .filter(
+      (id): id is string =>
+        typeof id === "string" && id.trim().length > 0,
+    );
+}
+
+async function getCaseLinksForUser(user: {
+  id: string;
+  role: string;
+}): Promise<CasualtyCaseLinkRow[]> {
+  const accessibleIds = await getAccessibleCasualtyIncidentIds(user);
+
+  if (accessibleIds && accessibleIds.length === 0) {
+    return [];
+  }
+
+  let query = supabase
+    .from("casualty_case_links")
+    .select(
+      "id, case_id, casualty_incident_id, incident_id, role, linked_by, notes, linked_at, created_at",
+    )
+    .order("linked_at", { ascending: false });
+
+  if (accessibleIds) {
+    query = query.in("casualty_incident_id", accessibleIds);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw new Error(
+      `Unable to retrieve casualty case links: ${error.message}`,
+    );
+  }
+
+  return (data ?? []) as CasualtyCaseLinkRow[];
+}
+
+async function getMatchRecordsById(
+  recordIds: string[],
+): Promise<CaseMatchRecordRow[]> {
+  const { data, error } = await supabase
+    .from("casualty_incidents")
+    .select(
+      `
+        id,
+        incident_id,
+        encoded_by,
+        casualty:casualties (
+          id_number
+        ),
+        incident:incidents (
+          incident_name
+        ),
+        encoder:users!casualty_incidents_encoded_by_fkey (
+          role
+        )
+      `,
+    )
+    .in("id", recordIds)
+    .is("deleted_at", null);
+
+  if (error) {
+    throw new Error(
+      `Unable to retrieve casualty records for matching: ${error.message}`,
+    );
+  }
+
+  return (data ?? []) as CaseMatchRecordRow[];
+}
+
+export async function getCasualtyCaseLinks(
+  request: Request,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const user = getAuthenticatedUser(request);
+    const links = await getCaseLinksForUser(user);
+
+    response.status(200).json({
+      success: true,
+      count: links.length,
+      data: links,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function matchCasualtyCaseRecords(
+  request: Request,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const user = getAuthenticatedUser(request);
+    const body = request.body as {
+      casualtyIncidentIds?: unknown;
+      notes?: unknown;
+    };
+    const recordIds = Array.from(
+      new Set(
+        Array.isArray(body.casualtyIncidentIds)
+          ? body.casualtyIncidentIds
+              .map((id) =>
+                typeof id === "string" ? id.trim() : "",
+              )
+              .filter(Boolean)
+          : [],
+      ),
+    );
+    const notes =
+      typeof body.notes === "string" && body.notes.trim().length > 0
+        ? body.notes.trim()
+        : null;
+
+    if (recordIds.length !== 3) {
+      response.status(400).json({
+        success: false,
+        message:
+          "Select one Field Responder, one SAR, and one HCFD record to match.",
+      });
+      return;
+    }
+
+    const accessibleIds = await getAccessibleCasualtyIncidentIds(user);
+    const records = await getMatchRecordsById(recordIds);
+
+    if (records.length !== recordIds.length) {
+      response.status(404).json({
+        success: false,
+        message: "One or more selected casualty records were not found.",
+      });
+      return;
+    }
+
+    if (
+      accessibleIds &&
+      records.some((record) => !accessibleIds.includes(record.id))
+    ) {
+      response.status(403).json({
+        success: false,
+        message:
+          "One or more selected casualty records are outside your admin scope.",
+      });
+      return;
+    }
+
+    const incidentIds = new Set(records.map((record) => record.incident_id));
+
+    if (incidentIds.size !== 1) {
+      response.status(400).json({
+        success: false,
+        message: "Only records from the same incident can be matched.",
+      });
+      return;
+    }
+
+    const roleBuckets = records.map((record) =>
+      getCaseMatchRoleBucket(record.encoder?.role),
+    );
+    const requiredRoles: CaseMatchRoleBucket[] = [
+      "field_responder",
+      "sa_responder",
+      "documenter",
+    ];
+
+    if (new Set(roleBuckets).size !== roleBuckets.length) {
+      response.status(400).json({
+        success: false,
+        message:
+          "A matched case can only contain one record per role slot.",
+      });
+      return;
+    }
+
+    const missingRole = requiredRoles.find(
+      (role) => !roleBuckets.includes(role),
+    );
+
+    if (missingRole) {
+      response.status(400).json({
+        success: false,
+        message: `Matched cases require a ${roleLabelForError(missingRole)} record.`,
+      });
+      return;
+    }
+
+    const { data: existingLinks, error: existingError } = await supabase
+      .from("casualty_case_links")
+      .select(
+        "id, case_id, casualty_incident_id, incident_id, role, linked_by, notes, linked_at, created_at",
+      )
+      .in("casualty_incident_id", recordIds);
+
+    if (existingError) {
+      throw new Error(
+        `Unable to retrieve existing case links: ${existingError.message}`,
+      );
+    }
+
+    const existingCaseIds = new Set(
+      (existingLinks ?? []).map((link) => link.case_id),
+    );
+
+    if ((existingLinks ?? []).length > 0 || existingCaseIds.size > 0) {
+      response.status(409).json({
+        success: false,
+        message:
+          "One or more selected records already belong to a matched case.",
+      });
+      return;
+    }
+
+    const caseId = randomUUID();
+    const rowsToInsert = records.map((record) => ({
+      case_id: caseId,
+      casualty_incident_id: record.id,
+      incident_id: record.incident_id,
+      role: getCaseMatchRoleBucket(record.encoder?.role),
+      linked_by: user.id,
+      notes,
+    }));
+
+    if (rowsToInsert.length > 0) {
+      const { error: insertError } = await supabase
+        .from("casualty_case_links")
+        .insert(rowsToInsert);
+
+      if (insertError) {
+        throw new Error(
+          `Unable to create matched case links: ${insertError.message}`,
+        );
+      }
+    }
+
+    const { data: updatedLinks, error: updatedError } = await supabase
+      .from("casualty_case_links")
+      .select(
+        "id, case_id, casualty_incident_id, incident_id, role, linked_by, notes, linked_at, created_at",
+      )
+      .eq("case_id", caseId)
+      .order("linked_at", { ascending: true });
+
+    if (updatedError) {
+      throw new Error(
+        `Unable to retrieve updated matched case: ${updatedError.message}`,
+      );
+    }
+
+    await recordAuditLog({
+      actor: {
+        id: user.id,
+        fullName: user.fullName,
+        role: user.role,
+      },
+      action: "casualty.case_matched",
+      entityType: "casualty_case",
+      entityId: caseId,
+      entityLabel:
+        records[0]?.incident?.incident_name ?? "Matched casualty case",
+      metadata: {
+        casualtyIncidentIds: recordIds,
+        roles: roleBuckets,
+        notes,
+      },
+    });
+
+    response.status(200).json({
+      success: true,
+      data: updatedLinks ?? [],
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+function roleLabelForError(role: CaseMatchRoleBucket): string {
+  switch (role) {
+    case "field_responder":
+      return "Field Responder";
+    case "sa_responder":
+      return "SAR";
+    case "documenter":
+      return "HCFD";
+    case "responder":
+    default:
+      return "legacy responder";
+  }
+}
+
+export async function unmatchCasualtyCaseRecord(
+  request: Request<{ id: string }>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    response.status(409).json({
+      success: false,
+      message:
+        "Matched cases are locked after submission and cannot be undone.",
     });
   } catch (error) {
     next(error);

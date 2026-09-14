@@ -113,9 +113,14 @@ export function buildCumulativeIntervalRows({
           }).length;
     const boundedCount = Math.min(count, denominator);
 
+    const label =
+      minutes >= 60
+        ? `${minutes / 60} ${minutes === 60 ? "hour" : "hours"}`
+        : `${minutes} minutes`;
+
     return {
       minutes,
-      label: minutes === 60 ? "1 hour" : `${minutes} minutes`,
+      label,
       cutoffAt: cutoff?.toISOString() ?? null,
       count: boundedCount,
       total: denominator,

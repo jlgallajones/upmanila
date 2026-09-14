@@ -397,6 +397,7 @@ export default function ProfileScreen() {
 
   const user = profile?.user;
   const isResponderAccount = isResponderRole(user?.role);
+  const isLegacyResponderAccount = user?.role === "responder";
   const effectiveResponderAssignment =
     selectedResponderAssignment ??
     getDefaultResponderAssignment(user?.role);
@@ -448,11 +449,14 @@ export default function ProfileScreen() {
       </Text>
 
       <Text style={styles.assignmentHelpText}>
-        Choose which responder window this account should use when adding casualties.
+        {isLegacyResponderAccount
+          ? "Choose which responder window this legacy account should use when adding casualties."
+          : "This account's responder function is assigned by the admin account role."}
       </Text>
 
       <View style={styles.assignmentOptions}>
         <Pressable
+          disabled={!isLegacyResponderAccount}
           onPress={() =>
             void handleResponderAssignmentChange(
               "field_responder",
@@ -464,6 +468,7 @@ export default function ProfileScreen() {
               "field_responder" &&
               styles.assignmentOptionSelected,
             pressed && styles.assignmentOptionPressed,
+            !isLegacyResponderAccount && styles.assignmentOptionDisabled,
           ]}
         >
           <View style={styles.assignmentOptionIcon}>
@@ -504,6 +509,7 @@ export default function ProfileScreen() {
         </Pressable>
 
         <Pressable
+          disabled={!isLegacyResponderAccount}
           onPress={() =>
             void handleResponderAssignmentChange(
               "sa_responder",
@@ -515,6 +521,7 @@ export default function ProfileScreen() {
               "sa_responder" &&
               styles.assignmentOptionSelected,
             pressed && styles.assignmentOptionPressed,
+            !isLegacyResponderAccount && styles.assignmentOptionDisabled,
           ]}
         >
           <View style={styles.assignmentOptionIcon}>
@@ -1465,6 +1472,10 @@ const styles = StyleSheet.create({
   assignmentOptionPressed: {
     opacity: 0.82,
     transform: [{ scale: 0.99 }],
+  },
+
+  assignmentOptionDisabled: {
+    opacity: 0.74,
   },
 
   assignmentOptionIcon: {

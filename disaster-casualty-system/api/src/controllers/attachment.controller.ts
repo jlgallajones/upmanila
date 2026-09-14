@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 
 import { supabase } from "../config/supabase.js";
 import { getAuthenticatedUser } from "../middleware/auth.js";
+import { recordAuditLog } from "../services/audit-log.service.js";
 
 type UploadAttachmentRequest = {
   casualtyIncidentId: string;
@@ -135,6 +136,20 @@ export async function uploadAttachment(
         }`,
       );
     }
+
+    await recordAuditLog({
+      actor: user,
+      action: "attachment.uploaded",
+      entityType: "attachment",
+      entityId: attachment.id,
+      entityLabel: fileName,
+      metadata: {
+        casualtyIncidentId,
+        fileType,
+        mimeType: mimeType || null,
+        fileSizeBytes: fileSizeBytes ?? buffer.byteLength,
+      },
+    });
 
     response.status(201).json({
       success: true,

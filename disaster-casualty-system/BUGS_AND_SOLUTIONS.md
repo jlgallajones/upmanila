@@ -260,6 +260,42 @@ This document summarizes the main issues encountered during development of the D
 
 **Solution:** Incident History now uses the all-incidents dataset for the logged-in admin, including active and closed incidents. Each history row now has **View records** and **View analytics** actions. View records opens Casualty Records scoped to that incident, while View analytics opens Incident Analytics with that incident selected, including closed incidents.
 
+## 40. Responder Role Needed Separation Into FR And SAR
+
+**Problem:** The old unit account model used a generic `responder` role for both Field Responder and SAR/Stabilization workflows, while the team now needs them separated in account management and mobile behavior.
+
+**Solution:** The system now supports `field_responder`, `sa_responder`, and `documenter` as separated account roles. The web dashboard account creation and bulk import flow now creates FR, SAR, or HCFD accounts. Legacy `responder` accounts remain supported and editable so existing accounts and records are not broken. Mobile role logic now treats new FR/SAR roles as fixed assignments, while only legacy responder accounts can use the old responder-function selector. A root documentation file explains the transition.
+
+## 41. New FR/SAR Account Creation Hit Old Backend Validation
+
+**Problem:** Creating a new separated role account could show the old security message: `Admins can only create responder or documenter accounts.` This means the dashboard reached an API build from before the FR/SAR/HCFD separation.
+
+**Solution:** The current API source accepts `field_responder`, `sa_responder`, and `documenter`. The web dashboard now converts that old backend message into a clearer deployment/runtime warning. The separation documentation was updated to explain that the database migration must be applied and the API must be restarted or redeployed; redeploying only the website is not enough.
+
+## 42. Match Casing Needed Photo Clues Across All Roles
+
+**Problem:** After separating FR, SAR, and HCFD into different account roles, each role can create a separate record for the same real-world casualty. Because the role forms collect different fields and victim codes may differ per user, future Match Casing needs visual/photo clues from all role submissions. Only one flow exposed the casualty photo control.
+
+**Solution:** The mobile Add Casualty photo control is now available for all separated operational roles. Field Responder can attach a photo from the Status step, SAR keeps the existing photo attachment in Remarks, and HCFD can attach a photo from Disposition. The existing capture/import, offline queue, upload, and viewing logic is reused.
+
+## 43. Separated Role Records Needed Admin Match Casing
+
+**Problem:** FR, SAR, and HCFD now create separate role-specific casualty records. Without a matching layer, the same real-world casualty can appear as multiple partial records, and the web dashboard has no formal way to connect them.
+
+**Solution:** A Match Casing workflow was added. The new `casualty_case_links` table stores links between existing casualty records without merging, deleting, or rewriting them. The API can list matched case links and create a complete locked matched case from one FR, one SAR, and one HCFD record. The admin dashboard now has a Match Casing section for creating matches and a separate Matched Cases section for reviewing completed matches.
+
+## 44. Matched Case Link Was Not Visible From Record Details
+
+**Problem:** After matching an FR record with an HCFD or SAR record, opening the FR record still showed only that one record's own fields. This made it look like Match Casing did not sync, even though the link existed in the Match Casing section.
+
+**Solution:** The casualty record modal now includes a **Matched Case** section when the opened record belongs to a matched case. It lists the linked FR/SAR/HCFD records and provides an **Open matched record** button. The records remain separate; the modal now makes the link visible and verifiable.
+
+## 45. Matched Role Records Did Not Fill Their Role Sections
+
+**Problem:** Even after the matched case link became visible, opening an FR record matched to an HCFD or SAR record still left the HCFD/SAR sections empty because the modal rendered every role section from only the opened record.
+
+**Solution:** The casualty record modal now loads full details for every linked record in the matched case. It uses the linked FR record for the Field Responder section, the linked SAR record for the Stabilization Area Responder section, and the linked HCFD record for the Healthcare Facility Documenter section. The records remain separate in the database, but the modal combines them for review.
+
 ## Priority Improvement Areas
 
 These are the improvements that matter most based on the bugs encountered so far. They are ordered by risk to data privacy, data integrity, field usability, and presentation readiness.
@@ -371,3 +407,75 @@ Create a short checklist for the exact demo flow:
 - Demonstrate offline queue and retry using cached incidents.
 
 **Why this matters:** The system has many working parts. A rehearsed QA/demo script lowers the chance of discovering a setup issue during the presentation.
+
+## 46. Match Casing Selection Needed Clearer Role Guardrails
+
+**Problem:** Match Casing originally relied on small checkboxes, so it was easy to miss what was selected. It also did not clearly stop admins at selection time from choosing two records from the same role.
+
+**Solution:** Match Casing was redesigned into a guided three-slot workflow. Admins now fill one Field Responder box, one SAR box, and one HCFD box using role-specific picker modals. Already selected and already matched records are removed from available picker options. The match button moved below the three boxes and is enabled only when all three slots are filled.
+
+**Status:** Implemented.
+
+## 47. Matched Cases Needed To Be Locked After Submission
+
+**Problem:** The first Match Casing implementation supported unmatching, but the workflow requirement changed: once a case is matched, it should not be undone. The UI also mixed the creation workflow with already matched records.
+
+**Solution:** Matched cases are now complete-case submissions requiring all three roles: Field Responder, SAR, and HCFD. The API rejects incomplete matches, rejects records already assigned to another matched case, and no longer deletes case links through the unmatch endpoint. Completed matches now appear in a separate Matched Cases section.
+
+**Status:** Implemented.
+
+## 48. Match Casing Navigation Buttons Needed Better Placement
+
+**Problem:** The **View matched cases** and **Create match** buttons were in the page topbar, separated from the incident filter they relate to.
+
+**Solution:** Both buttons were moved beside the incident dropdown in their respective filter panels.
+
+**Status:** Implemented.
+
+## 49. Progress Submission Documentation Needed
+
+**Problem:** The project needed formal progress-submission documents separate from development notes, bug logs, and architecture scratch files.
+
+**Solution:** Created `TECHNICAL_DOCUMENTATION.md` and `USER_MANUAL.md` at the project root. The documents summarize the current architecture, roles, workflows, deployment shape, local setup, web dashboard usage, mobile/PWA usage, Match Casing, offline behavior, exports, audit logs, and troubleshooting.
+
+**Status:** Implemented.
+
+## 50. Action Logs Needed Broader Cross-Device Coverage
+
+**Problem:** Action Logs needed to reflect more than account-only activity. Admin actions such as incident creation, healthcare facility changes, record verification/rejection/deletion, Match Casing, attachment upload, and casualty submissions from mobile users needed to be visible to the correct admin scope.
+
+**Solution:** Audit logging now covers major web and mobile workflows, including casualty creation, verification, rejection, deletion, case matching, incident changes, healthcare facility creation/edit/import, attachment upload, resets, imports, account changes, and web draft actions. Admin scope is resolved through the actor and the admin who created responder/documenter accounts, so mobile submissions appear in the creator admin's Action Logs.
+
+**Status:** Implemented.
+
+## 51. Add Forms Needed Save Draft Support
+
+**Problem:** Users could lose progress when filling longer add forms, especially incident, healthcare facility, and mobile casualty workflows. There was also no Drafts folder for unfinished forms.
+
+**Solution:** A `form_drafts` backend table and `/api/drafts` routes were added for web dashboard drafts. The dashboard now has a Drafts section, and Account Creation, Incident, and Healthcare Facility forms have Save Draft and Open Drafts controls. Temporary passwords are not stored in account drafts. After a draft is saved, the active form is cleared so the user can start another entry. The mobile Add Casualty flow now supports local device drafts through AsyncStorage with a Drafts tab, resume, update, delete, and post-save form clearing.
+
+**Status:** Implemented.
+
+## 52. Admin Unit Scope Button Opened Wrong Menu
+
+**Problem:** In the admin unit scope card, the **Reported incident history** button opened the Official Incidents form/history section instead of the Incident Analytics section.
+
+**Solution:** The button target was changed from `incidents` to `incident-analytics`, and the helper text now says it opens incident analytics for records within the admin unit.
+
+**Status:** Implemented.
+
+## 53. Incident Analytics Missing KPI And HCFD Tertiary Charts
+
+**Problem:** After selecting an incident in Incident Analytics, some KPI values and the **Victims Seeking ED Care According to Triage Category** pie chart could show no data even when HCFD entries existed. The analytics query did not include `assessment_answers`, so tertiary systems that saved the visible final triage there were not being counted. The cumulative timeline also still used 1-minute, 5-minute, and 10-minute marks.
+
+**Solution:** Incident Analytics now selects `assessment_answers`, normalizes tertiary `finalTriage` values, and uses the latest HCFD/facility-arrival triage when building ED-care and facility KPI metrics. Cumulative intervals were changed to 15 minutes, 30 minutes, 1 hour, 2 hours, and 3 hours, and the frontend line chart filters out old 1-minute, 5-minute, and 10-minute points even if an older API response is still cached. New separate tertiary-system pie charts were added for ESI, METTS, and ED Triage; if a specific tertiary system has no HCFD entries, its chart shows the no-data state. Pie chart cards were widened and the legend layout was tightened so chart labels and counts no longer crowd the card.
+
+**Status:** Implemented.
+
+## 54. Casualty Records Needed Explicit Admin Filters
+
+**Problem:** The web dashboard Casualty Records page did not have a dedicated filter button and could not filter records by account type or sort submitted records ascending/descending by submitted time.
+
+**Solution:** Added account-type filtering for Field Responder, SAR, HCFD, and legacy responder records. Added a submitted-time sort control for newest-first or oldest-first ordering. Added **Filter Records** and **Clear Filters** buttons so admins can set filter choices first and then apply them intentionally.
+
+**Status:** Implemented.

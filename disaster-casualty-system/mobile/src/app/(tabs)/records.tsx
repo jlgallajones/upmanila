@@ -344,14 +344,20 @@ function isFieldResponderView(
   role: string | null,
   assignment: ResponderAssignment | null,
 ): boolean {
-  return role === "field_responder" || assignment === "field_responder";
+  return (
+    role === "field_responder" ||
+    (role === "responder" && assignment === "field_responder")
+  );
 }
 
 function isSaResponderView(
   role: string | null,
   assignment: ResponderAssignment | null,
 ): boolean {
-  return role === "sa_responder" || assignment === "sa_responder";
+  return (
+    role === "sa_responder" ||
+    (role === "responder" && assignment === "sa_responder")
+  );
 }
 
 function isHealthcareDocumenterView(
