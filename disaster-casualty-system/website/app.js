@@ -114,6 +114,7 @@ const state = {
   callDownStaff: [],
   unitUsers: [],
   auditLogs: [],
+  auditLogDateFilter: "",
   formDrafts: [],
   draftToResume: null,
   dashboard: null,
@@ -2315,6 +2316,7 @@ function bindView() {
   bindVerificationReviewFilters();
   bindScopeLinks();
   bindIncidentSearchFilters();
+  bindAuditLogsFilters();
   bindCasualtyRecordFilters();
   bindPasswordVisibilityToggles();
   bindBulkImportActions();
@@ -9373,7 +9375,16 @@ function formatAuditDetails(log) {
 }
 
 function renderAuditLogsTable() {
-  const logs = state.auditLogs || [];
+  const logs = (state.auditLogs || [])
+    .filter((log) => {
+      if (!state.auditLogDateFilter) return true;
+      return formatDateFilterValue(log.created_at) === state.auditLogDateFilter;
+    })
+    .sort(
+      (first, second) =>
+        new Date(second.created_at).getTime() -
+        new Date(first.created_at).getTime(),
+    );
 
   return `
     <section class="panel">
@@ -9381,6 +9392,20 @@ function renderAuditLogsTable() {
         <div>
           <h2>Action Logs</h2>
           <p class="panel-subtitle">${isSuperAdmin() ? "Audit trail for admin accounts only." : "Audit trail scoped to your admin unit, including responders and documenters you created."}</p>
+        </div>
+      </div>
+      <div class="form-grid two" style="margin-top:16px">
+        <label class="field">
+          <span>Filter by date</span>
+          <input
+            id="auditLogDateFilterInput"
+            type="date"
+            value="${escapeHtml(state.auditLogDateFilter)}"
+          />
+        </label>
+        <div class="field">
+          <span>Showing</span>
+          <div class="readonly-field">${logs.length} newest-first action logs</div>
         </div>
       </div>
       <div class="table-wrap">
@@ -9503,6 +9528,18 @@ function renderRecentActivity() {
       </div>
     </section>
   `;
+}
+
+function bindAuditLogsFilters() {
+  const dateInput = qs("#auditLogDateFilterInput");
+
+  if (!dateInput) return;
+
+  dateInput.addEventListener("input", () => {
+    state.auditLogDateFilter = dateInput.value;
+    renderCurrentView();
+    bindView();
+  });
 }
 
 function renderCallDownList() {

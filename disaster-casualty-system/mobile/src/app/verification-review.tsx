@@ -54,11 +54,9 @@ const COLORS = {
 const SCREEN_PADDING = 16;
 
 const filters = [
-  "Needs Review",
   "Submitted",
-  "Under Review",
+  "Approved",
   "Rejected",
-  "Verified",
   "All",
 ] as const;
 
@@ -80,7 +78,7 @@ function formatStatus(status: string | null | undefined): string {
   }
 
   if (status === "verified") {
-    return "Accepted";
+    return "Approved";
   }
 
   return status
@@ -200,20 +198,12 @@ function matchesFilter(record: CasualtyRecord, filter: FilterOption) {
   const status = record.verification_status;
 
   switch (filter) {
-    case "Needs Review":
-      return (
-        status === "submitted" ||
-        status === "under_review" ||
-        status === "rejected"
-      );
     case "Submitted":
-      return status === "submitted";
-    case "Under Review":
-      return status === "under_review";
+      return status === "submitted" || status === "under_review";
+    case "Approved":
+      return status === "verified";
     case "Rejected":
       return status === "rejected";
-    case "Verified":
-      return status === "verified";
     case "All":
       return true;
   }
@@ -230,7 +220,7 @@ export default function VerificationReviewScreen() {
   >(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] =
-    useState<FilterOption>("Needs Review");
+    useState<FilterOption>("Submitted");
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] =
@@ -247,12 +237,10 @@ export default function VerificationReviewScreen() {
     typeof params.incidentName === "string"
       ? params.incidentName
       : null;
-  const visibleFilters = canReview
-    ? filters
-    : filters.filter((filter) => filter !== "Needs Review");
+  const visibleFilters = filters;
 
   useEffect(() => {
-    if (!canReview && activeFilter === "Needs Review") {
+    if (!canReview && activeFilter === "Submitted") {
       setActiveFilter("All");
     }
   }, [activeFilter, canReview]);

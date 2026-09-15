@@ -591,3 +591,59 @@ Create a short checklist for the exact demo flow:
 **Solution:** Mobile Add Casualty now uses the existing in-app feedback modal after saving a draft. The form still clears after the draft is saved, and the modal tells the user to open Drafts to continue later.
 
 **Status:** Implemented.
+
+## 69. SAR Info Fields Appeared Before Patient Identification Choice
+
+**Problem:** In the SAR Add Casualty **Info** step, typing a victim code caused the patient identification selector and personal detail fields to appear together. Age, name, sex, birth date, and other personal details were visible before the user selected whether the patient was identified.
+
+**Solution:** The SAR Info step now always shows only Victim Code, Patient Identified, and ID Number by default. Personal detail fields appear only when **Patient Identified?** is set to **Yes**. If **No** is selected, the personal detail fields remain hidden and previous personal detail values are cleared.
+
+**Status:** Implemented.
+
+## 70. Mobile Summary Cards Looked Equally Clickable
+
+**Problem:** On the mobile home dashboard, the Active Incidents, Encoded Today, Verified Records, and Pending Review summary cards looked similar, even though only Active Incidents should behave like a navigation action.
+
+**Solution:** The Active Incidents summary card now has a distinct clickable treatment with a maroon outline and an Open affordance. Encoded Today, Verified Records, and Pending Review remain display-only metric cards.
+
+**Status:** Implemented.
+
+## 71. Mobile Add Casualty And Records Needed Workflow Cleanup
+
+**Problem:** Several mobile workflows were confusing: the SAR treatment field still said **Fill in Patient Care Report**, triage still asked for a triage location, Records did not make pending transport easy to identify, record cards showed vague unlabeled values such as location unavailable, the mobile home quick action still sent users to a separate Verification Review page, and tapping the already-selected incident could temporarily unlock responder safety.
+
+**Solution:** Updated the SAR PCR prompt to **Add photo of your currently used PCR**, removed the triage location input from Add Casualty, renamed the mobile quick action to **Records Review** and routed it to Records, added incident and transport-status filters to Records, replaced the primary location row with transport status, added explicit ID Number and Age labels on record cards, removed the casualty detail **Status Timeline** card, and prevented the selected incident action from clearing a saved responder safety lock.
+
+**Status:** Implemented.
+
+## 72. Mobile UAT Refinements For Action Logs, Victim Codes, And Detail Labels
+
+**Problem:** Action logs were overwhelming without date filtering, mobile responder action logs could show the current assignment instead of the role that encoded the record, the Add Casualty incident search prompt told responders to create incidents even though they cannot, FR victim codes still created mental load, and casualty detail/notification views used vague values such as Unknown, time-only last updated text, and internal casualty IDs.
+
+**Solution:** Added newest-first action-log filtering by date on the web dashboard and mobile app, changed mobile synced casualty logs to display the record encoder role, revised the Add Casualty incident empty-state prompt to tell responders to refer to the incident commander, made FR victim code auto-generated and read-only, replaced the FR triage-stage dropdown with a fixed Primary Triage display, added Primary to the sticky Add Casualty header for FR, changed mobile verification filters to Submitted/Approved/Rejected/All, updated casualty detail headers to show the triage category badge, full last-updated date/time, responder-facing casualty ID, and FR-specific detail text that does not show sex/age/birth date placeholders.
+
+**Status:** Implemented.
+
+## 73. Mobile Refresh Data Needed Visible Sync Feedback
+
+**Problem:** The mobile dashboard **Refresh Data** quick action could be tapped, but users did not get a clear in-app signal that syncing was running or completed, especially in the PWA build where native alerts are less consistent.
+
+**Solution:** The Refresh Data quick action now disables itself and shows a spinner with **Refreshing... / Syncing data** while the refresh runs. When the refresh finishes, the dashboard shows an in-app completion modal for successful syncs, partial sync warnings, or up-to-date/no-queued-record states.
+
+**Status:** Implemented.
+
+## 74. Field Responder Triage Stage Needed A Simple Option Button
+
+**Problem:** The Field Responder Add Casualty triage stage control was either a dropdown or a fixed read-only field, which did not match the requested Yes/No option-button interaction for choosing Primary or Secondary Triage.
+
+**Solution:** Replaced the Field Responder triage stage field with a two-option segmented control. **Yes** saves `Primary Triage`, and **No** saves `Secondary Triage`. The Field Responder flow now allows both stages, and the sticky casualty header updates to show the selected stage.
+
+**Status:** Implemented.
+
+## 75. Records Triage Filters Needed Category Colors
+
+**Problem:** Field Responder record filters were revised to Immediate, Delayed, Minor, and Expectant, but the filter controls did not visually reflect each triage category color.
+
+**Solution:** Added category-colored filter buttons for Field Responder triage filters. Immediate uses red, Delayed uses orange, Minor uses green, and Expectant uses gray. Selected filters now invert to a filled category color so active filters are easier to scan.
+
+**Status:** Implemented.

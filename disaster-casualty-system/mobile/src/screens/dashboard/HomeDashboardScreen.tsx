@@ -162,6 +162,17 @@ function SummaryCard({
 
       <Text style={styles.summaryLabel}>{label}</Text>
       <Text style={styles.summaryCaption}>{caption}</Text>
+
+      {onPress ? (
+        <View style={styles.summaryActionRow}>
+          <Text style={styles.summaryActionText}>Open</Text>
+          <Ionicons
+            name="chevron-forward"
+            size={14}
+            color={COLORS.maroon}
+          />
+        </View>
+      ) : null}
     </>
   );
 
@@ -171,6 +182,7 @@ function SummaryCard({
         onPress={onPress}
         style={({ pressed }) => [
           styles.summaryCard,
+          styles.summaryCardClickable,
           pressed && styles.pressed,
         ]}
         accessibilityRole="button"
@@ -190,6 +202,8 @@ type QuickActionProps = {
   iconColor: string;
   iconBackground: string;
   onPress: () => void;
+  disabled?: boolean;
+  loading?: boolean;
 };
 
 function QuickAction({
@@ -199,13 +213,17 @@ function QuickAction({
   iconColor,
   iconBackground,
   onPress,
+  disabled = false,
+  loading = false,
 }: QuickActionProps) {
   return (
     <Pressable
       onPress={onPress}
+      disabled={disabled}
       style={({ pressed }) => [
         styles.quickActionCard,
-        pressed && styles.pressed,
+        disabled && styles.disabledButton,
+        pressed && !disabled && styles.pressed,
       ]}
     >
       <View
@@ -216,11 +234,15 @@ function QuickAction({
           },
         ]}
       >
-        <Ionicons
-          name={icon}
-          size={24}
-          color={iconColor}
-        />
+        {loading ? (
+          <ActivityIndicator size="small" color={iconColor} />
+        ) : (
+          <Ionicons
+            name={icon}
+            size={24}
+            color={iconColor}
+          />
+        )}
       </View>
 
       <Text style={styles.quickActionLabel}>
@@ -255,6 +277,12 @@ type QuickTimePromptState = {
   fieldLabel: string;
   value: string;
   onSave: (isoValue: string) => Promise<void>;
+};
+
+type SyncFeedbackState = {
+  title: string;
+  message: string;
+  tone: "success" | "warning" | "neutral";
 };
 
 type RecentActivityCardProps = {
@@ -583,6 +611,8 @@ export default function HomeDashboardScreen() {
     useState<QuickTimePromptState | null>(null);
   const [isSavingQuickAction, setIsSavingQuickAction] =
     useState(false);
+  const [syncFeedback, setSyncFeedback] =
+    useState<SyncFeedbackState | null>(null);
 
   const loadDashboard = useCallback(async (): Promise<
     QueueSyncResult | null
@@ -712,38 +742,47 @@ export default function HomeDashboardScreen() {
       const syncResult = await loadDashboard();
 
       if (!syncResult) {
+        setSyncFeedback({
+          title: "Refresh complete",
+          message: "Dashboard data has been refreshed.",
+          tone: "neutral",
+        });
         return;
       }
 
       if (syncResult.synced > 0 && syncResult.remaining === 0) {
-        Alert.alert(
-          "Sync complete",
-          `${syncResult.synced} queued casualty record${
+        setSyncFeedback({
+          title: "Sync complete",
+          message: `${syncResult.synced} queued casualty record${
             syncResult.synced === 1 ? "" : "s"
           } uploaded successfully.`,
-        );
+          tone: "success",
+        });
         return;
       }
 
       if (syncResult.remaining > 0) {
         const firstIssue = syncResult.issues[0]?.reason;
-        Alert.alert(
-          "Sync not completed",
-          firstIssue
+        setSyncFeedback({
+          title: "Sync not completed",
+          message: firstIssue
             ? `${syncResult.remaining} casualty record${
                 syncResult.remaining === 1 ? "" : "s"
               } still waiting to sync. Reason: ${firstIssue}`
             : `${syncResult.remaining} casualty record${
                 syncResult.remaining === 1 ? "" : "s"
               } still waiting to sync.`,
-        );
+          tone: "warning",
+        });
         return;
       }
 
-      Alert.alert(
-        "No queued records",
-        "There are no offline casualty records waiting to sync.",
-      );
+      setSyncFeedback({
+        title: "Refresh complete",
+        message:
+          "Data is up to date. There are no offline casualty records waiting to sync.",
+        tone: "success",
+      });
     } finally {
       setIsRefreshing(false);
     }
@@ -1594,11 +1633,13 @@ export default function HomeDashboardScreen() {
 
           <QuickAction
             icon="sync-outline"
-            label="Refresh Data"
-            caption="Sync now"
+            label={isRefreshing ? "Refreshing..." : "Refresh Data"}
+            caption={isRefreshing ? "Syncing data" : "Sync now"}
             iconColor={COLORS.orange}
             iconBackground={COLORS.paleOrange}
             onPress={() => void handleRefresh()}
+            disabled={isRefreshing}
+            loading={isRefreshing}
           />
 
           {isResponderAccount ? (
@@ -1614,11 +1655,16 @@ export default function HomeDashboardScreen() {
 
           <QuickAction
             icon="shield-checkmark-outline"
-            label="Verification Review"
+            label="Records Review"
             caption="Review queue"
             iconColor={COLORS.orange}
             iconBackground={COLORS.paleOrange}
-            onPress={() => router.push("/verification-review" as never)}
+            onPress={() =>
+              router.push({
+                pathname: "/records",
+                params: { review: "pending" },
+              } as never)
+            }
           />
 
           {isAdminAccount ? (
@@ -1699,6 +1745,70 @@ export default function HomeDashboardScreen() {
 
         <View style={styles.bottomSpacing} />
       </ScrollView>
+
+      <Modal
+        visible={Boolean(syncFeedback)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSyncFeedback(null)}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => setSyncFeedback(null)}
+        >
+          <Pressable
+            style={styles.syncFeedbackCard}
+            onPress={(event) => event.stopPropagation()}
+          >
+            <View
+              style={[
+                styles.syncFeedbackIcon,
+                syncFeedback?.tone === "warning"
+                  ? styles.syncFeedbackIconWarning
+                  : syncFeedback?.tone === "neutral"
+                    ? styles.syncFeedbackIconNeutral
+                    : styles.syncFeedbackIconSuccess,
+              ]}
+            >
+              <Ionicons
+                name={
+                  syncFeedback?.tone === "warning"
+                    ? "alert-circle-outline"
+                    : "checkmark-circle-outline"
+                }
+                size={30}
+                color={
+                  syncFeedback?.tone === "warning"
+                    ? COLORS.orange
+                    : syncFeedback?.tone === "neutral"
+                      ? COLORS.blue
+                      : COLORS.green
+                }
+              />
+            </View>
+
+            <Text style={styles.syncFeedbackTitle}>
+              {syncFeedback?.title}
+            </Text>
+
+            <Text style={styles.syncFeedbackMessage}>
+              {syncFeedback?.message}
+            </Text>
+
+            <Pressable
+              onPress={() => setSyncFeedback(null)}
+              style={({ pressed }) => [
+                styles.syncFeedbackButton,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={styles.syncFeedbackButtonText}>
+                OK
+              </Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal
         visible={Boolean(quickTimePrompt)}
@@ -2142,6 +2252,12 @@ const styles = StyleSheet.create({
     },
   },
 
+  summaryCardClickable: {
+    borderWidth: 1,
+    borderColor: COLORS.maroon,
+    backgroundColor: "#FFF8F8",
+  },
+
   summaryIcon: {
     width: 37,
     height: 37,
@@ -2172,6 +2288,24 @@ const styles = StyleSheet.create({
     color: COLORS.secondaryText,
     fontSize: 10,
     marginTop: 6,
+  },
+
+  summaryActionRow: {
+    marginTop: 10,
+    alignSelf: "flex-start",
+    minHeight: 24,
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 999,
+    backgroundColor: COLORS.paleRed,
+    paddingHorizontal: 9,
+    gap: 3,
+  },
+
+  summaryActionText: {
+    color: COLORS.maroon,
+    fontSize: 10,
+    fontWeight: "900",
   },
 
   quickActionsRow: {
@@ -2352,6 +2486,77 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "flex-end",
     backgroundColor: "rgba(15, 22, 38, 0.38)",
+  },
+
+  syncFeedbackCard: {
+    margin: 16,
+    borderRadius: 18,
+    backgroundColor: COLORS.white,
+    padding: 20,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    shadowColor: "#1B2438",
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    shadowOffset: {
+      width: 0,
+      height: 9,
+    },
+    elevation: 7,
+  },
+
+  syncFeedbackIcon: {
+    width: 58,
+    height: 58,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+
+  syncFeedbackIconSuccess: {
+    backgroundColor: COLORS.paleGreen,
+  },
+
+  syncFeedbackIconWarning: {
+    backgroundColor: COLORS.paleOrange,
+  },
+
+  syncFeedbackIconNeutral: {
+    backgroundColor: COLORS.paleBlue,
+  },
+
+  syncFeedbackTitle: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: "900",
+    textAlign: "center",
+  },
+
+  syncFeedbackMessage: {
+    color: COLORS.secondaryText,
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: "center",
+    marginTop: 8,
+  },
+
+  syncFeedbackButton: {
+    minHeight: 44,
+    minWidth: 120,
+    borderRadius: 12,
+    backgroundColor: COLORS.maroon,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 18,
+    marginTop: 18,
+  },
+
+  syncFeedbackButtonText: {
+    color: COLORS.white,
+    fontSize: 13,
+    fontWeight: "900",
   },
 
   quickChoiceSheet: {

@@ -1204,7 +1204,7 @@ const TRIAGE_STAGE_OPTIONS = [
 type TriageStageOption = (typeof TRIAGE_STAGE_OPTIONS)[number];
 
 const TRIAGE_STAGE_OPTIONS_BY_ROLE: Record<string, TriageStageOption[]> = {
-  field_responder: ["Primary Triage"],
+  field_responder: ["Primary Triage", "Secondary Triage"],
   responder: ["Primary Triage", "Secondary Triage"],
   sa_responder: ["Secondary Triage"],
   medical_personnel: ["Tertiary Triage"],
@@ -3113,7 +3113,7 @@ function getTriageStageOptionsForRole(
   }
 
   if (role === "field_responder") {
-    return ["Primary Triage"];
+    return ["Primary Triage", "Secondary Triage"];
   }
 
   if (role === "sa_responder") {
@@ -3122,7 +3122,7 @@ function getTriageStageOptionsForRole(
 
   if (role === "responder") {
     if (responderAssignment === "field_responder") {
-      return ["Primary Triage"];
+      return ["Primary Triage", "Secondary Triage"];
     }
 
     if (responderAssignment === "sa_responder") {
@@ -3868,6 +3868,15 @@ function generateCasualtyIdNumber(
   return `CAS:${formatCasualtyIdDate(date)}:${normalizeCasualtyUserCode(
     userCode,
   )}${formatCasualtySequence(sequence)}`;
+}
+
+function generateVictimCode(
+  userCode: string,
+  sequence: number,
+): string {
+  return `${normalizeCasualtyUserCode(userCode)}${formatCasualtySequence(
+    sequence,
+  )}`;
 }
 
 function escapeRegExp(value: string): string {
@@ -4621,7 +4630,9 @@ function ChoiceSheet({
                   No options found
                 </Text>
                 <Text style={styles.choiceEmptyText}>
-                  Create a new option first, then it will appear here.
+                  {title.toLowerCase().includes("incident")
+                    ? "Refer to your incident commander first for the official incident name."
+                    : "Create a new option first, then it will appear here."}
                 </Text>
               </View>
             ) : null}
@@ -5932,6 +5943,10 @@ const victimCodeAlreadyExists = useMemo(() => {
       ...current,
       userCode:
         current.userCode || generatedUserCode,
+      victimCode:
+        isFieldResponderFlow
+          ? generateVictimCode(generatedUserCode, nextCasualtySequence)
+          : current.victimCode,
       idNumber:
         current.idNumber &&
         !isGeneratedCasualtyIdNumber(current.idNumber) &&
@@ -5952,6 +5967,7 @@ const victimCodeAlreadyExists = useMemo(() => {
     currentAssignedMunicipality,
     generatedUserCode,
     isEditing,
+    isFieldResponderFlow,
     isSaResponderFlow,
     nextCasualtySequence,
   ]);
@@ -6515,6 +6531,7 @@ const victimCodeAlreadyExists = useMemo(() => {
         return {
           ...current,
           [key]: value,
+          age: "",
           firstName: "",
           middleName: "",
           lastName: "",
@@ -10086,6 +10103,10 @@ if (
           label: incident.incident_name,
           selected: form.incidentId === incident.id,
           onSelect: () => {
+            if (form.incidentId === incident.id) {
+              return;
+            }
+
             setSelectedFieldResponderRecordId(null);
             setResponderSafetyResponse(null);
             updateField("incidentId", incident.id);
@@ -11555,7 +11576,7 @@ function confirmExitAddCasualty() {
 
   function renderSaInfoStep() {
     const showPersonalDetails =
-      form.patientIdentified !== "No";
+      form.patientIdentified === "Yes";
 
     return (
       <>
@@ -11583,55 +11604,35 @@ function confirmExitAddCasualty() {
   </View>
 ) : null}
 
-        {form.victimCode ? (
-          <SelectField
-            label="PATIENT IDENTIFIED?"
-            value={form.patientIdentified}
-            placeholder="Yes or No"
-            onPress={() => openChoiceSheet("patientIdentified")}
-          />
-        ) : null}
+        <SelectField
+          label="PATIENT IDENTIFIED?"
+          value={form.patientIdentified}
+          placeholder="Yes or No"
+          onPress={() => openChoiceSheet("patientIdentified")}
+        />
 
-        {showPersonalDetails ? (
-          <View style={styles.twoColumnRow}>
-            <View style={styles.halfColumn}>
-              <FormField
-                label="ID NUMBER"
-                value={form.idNumber}
-                placeholder="CAS-UNIT-001"
-                editable={false}
-                onChangeText={(value) =>
-                  updateField("idNumber", value)
-                }
-              />
-            </View>
-
-            <View style={styles.halfColumn}>
-              <FormField
-                label="AGE"
-                value={form.age}
-                placeholder="Age"
-                keyboardType="numeric"
-                onChangeText={(value) =>
-                  updateField("age", value)
-                }
-              />
-            </View>
-          </View>
-        ) : (
-          <FormField
-            label="ID NUMBER"
-            value={form.idNumber}
-            placeholder="CAS-UNIT-001"
-            editable={false}
-            onChangeText={(value) =>
-              updateField("idNumber", value)
-            }
-          />
-        )}
+        <FormField
+          label="ID NUMBER"
+          value={form.idNumber}
+          placeholder="CAS-UNIT-001"
+          editable={false}
+          onChangeText={(value) =>
+            updateField("idNumber", value)
+          }
+        />
 
         {showPersonalDetails ? (
           <>
+            <FormField
+              label="AGE"
+              value={form.age}
+              placeholder="Age"
+              keyboardType="numeric"
+              onChangeText={(value) =>
+                updateField("age", value)
+              }
+            />
+
             <FormField
               label="FIRST NAME"
               value={form.firstName}
@@ -11719,7 +11720,7 @@ function confirmExitAddCasualty() {
               }
             />
           </>
-        ) : (
+        ) : form.patientIdentified === "No" ? (
           <View style={styles.inlineWarning}>
             <Ionicons
               name="person-outline"
@@ -11730,7 +11731,7 @@ function confirmExitAddCasualty() {
               Personal details are hidden because this patient is marked unidentified.
             </Text>
           </View>
-        )}
+        ) : null}
       </>
     );
   }
@@ -12471,10 +12472,9 @@ function confirmExitAddCasualty() {
             <FormField
               label="VICTIM CODE"
               value={form.victimCode}
-              placeholder="Enter victim code"
-              onChangeText={(value) =>
-                updateField("victimCode", value)
-              }
+              placeholder="Auto-generated victim code"
+              editable={false}
+              onChangeText={() => undefined}
             />
 
             {victimCodeAlreadyExists ? (
@@ -12502,12 +12502,59 @@ function confirmExitAddCasualty() {
           </>
         ) : null}
 
-        <SelectField
-          label="TRIAGE STAGE"
-          value={form.triageStage}
-          placeholder="Select triage stage"
-          onPress={() => openChoiceSheet("triageStage")}
-        />
+        {isFieldResponderFlow ? (
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>TRIAGE STAGE</Text>
+            <View style={styles.triageStageToggle}>
+              {[
+                {
+                  label: "Yes",
+                  value: "Primary Triage",
+                },
+                {
+                  label: "No",
+                  value: "Secondary Triage",
+                },
+              ].map((option) => {
+                const selected = form.triageStage === option.value;
+
+                return (
+                  <Pressable
+                    key={option.value}
+                    onPress={() =>
+                      updateField("triageStage", option.value)
+                    }
+                    style={({ pressed }) => [
+                      styles.triageStageOption,
+                      selected && styles.triageStageOptionSelected,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.triageStageOptionText,
+                        selected &&
+                          styles.triageStageOptionTextSelected,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Text style={styles.triageStageHint}>
+              Yes = Primary Triage, No = Secondary Triage
+            </Text>
+          </View>
+        ) : (
+          <SelectField
+            label="TRIAGE STAGE"
+            value={form.triageStage}
+            placeholder="Select triage stage"
+            onPress={() => openChoiceSheet("triageStage")}
+          />
+        )}
 
         <SelectField
           label="TRIAGE SYSTEM"
@@ -12578,15 +12625,6 @@ function confirmExitAddCasualty() {
                   "triageTime",
                   formatDateTimeForInput(new Date()),
                 )
-              }
-            />
-
-            <FormField
-              label="TRIAGE LOCATION"
-              value={form.triageLocation}
-              placeholder="Where triage was performed"
-              onChangeText={(value) =>
-                updateField("triageLocation", value)
               }
             />
 
@@ -13300,7 +13338,7 @@ function confirmExitAddCasualty() {
         />
 
         <SelectField
-          label="FILL IN PATIENT CARE REPORT?"
+          label="ADD PHOTO OF YOUR CURRENTLY USED PCR?"
           value={form.fillPatientCareReport}
           placeholder="Yes or No"
           onPress={() => openChoiceSheet("fillPatientCareReport")}
@@ -13958,6 +13996,19 @@ function confirmExitAddCasualty() {
           "—"}
       </Text>
     </View>
+    {isFieldResponderFlow ? (
+      <View style={styles.victimUserCodeGroup}>
+        <Text style={styles.victimNumberStickyLabel}>
+          TRIAGE STAGE
+        </Text>
+
+        <Text style={styles.victimUserCodeValue}>
+          {form.triageStage === "Secondary Triage"
+            ? "Secondary"
+            : "Primary"}
+        </Text>
+      </View>
+    ) : null}
   </View>
 ) : null}
 
@@ -14758,6 +14809,44 @@ victimUserCodeValue: {
   },
   fieldGroup: {
     marginBottom: 17,
+  },
+  triageStageToggle: {
+    minHeight: 50,
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: COLORS.fieldBorder,
+    borderRadius: 14,
+    backgroundColor: COLORS.fieldBackground,
+    padding: 4,
+    gap: 4,
+  },
+  triageStageOption: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  triageStageOptionSelected: {
+    backgroundColor: COLORS.maroon,
+    borderColor: COLORS.maroon,
+  },
+  triageStageOptionText: {
+    color: COLORS.secondaryText,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  triageStageOptionTextSelected: {
+    color: COLORS.white,
+  },
+  triageStageHint: {
+    color: COLORS.secondaryText,
+    fontSize: 11,
+    fontWeight: "700",
+    marginTop: 7,
   },
   selectedIncidentBanner: {
     minHeight: 64,

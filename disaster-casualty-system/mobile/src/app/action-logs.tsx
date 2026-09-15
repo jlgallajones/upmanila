@@ -11,6 +11,7 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -105,6 +106,18 @@ function formatResponderRole(
   }
 
   return "Responder";
+}
+
+function formatRecordResponderRole(record: CasualtyRecord): string {
+  if (record.encoder.role === "field_responder") {
+    return "Field Responder";
+  }
+
+  if (record.encoder.role === "sa_responder") {
+    return "Stabilization Area Responder";
+  }
+
+  return formatResponderRole(record.encoder.role, null);
 }
 
 function formatStatus(status: string | null | undefined): string {
@@ -299,6 +312,20 @@ function formatTimestamp(value: string): string {
   }).format(date);
 }
 
+function formatDateFilterValue(value: string): string {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
 function getCasualtyLoggedAt(
   log: CasualtyVerificationActionLogItem,
 ): string {
@@ -359,7 +386,6 @@ function toAdminDisplayLog(
 function toResponderDisplayLog(
   record: CasualtyRecord,
   user: ProfileUser,
-  assignment: ResponderAssignment | null,
 ): DisplayActionLog {
   const idNumber =
     record.casualty.id_number?.trim() ||
@@ -370,7 +396,7 @@ function toResponderDisplayLog(
     id: record.id,
     fullName: user.full_name,
     email: user.email,
-    role: formatResponderRole(user.role, assignment),
+    role: formatRecordResponderRole(record),
     unitAssignment: buildUnitAssignment(
       user.assigned_barangay,
       user.assigned_municipality,
@@ -666,6 +692,7 @@ export default function ActionLogsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [dateFilter, setDateFilter] = useState("");
 
   const loadLogs = useCallback(async () => {
     try {
@@ -686,7 +713,7 @@ export default function ActionLogsScreen() {
         setScreenEyebrow("RESPONDER");
         setLogs([
           ...syncedRecords.map((record) =>
-            toResponderDisplayLog(record, user, assignment),
+            toResponderDisplayLog(record, user),
           ),
           ...queuedRecords.map((item) =>
             toQueuedResponderDisplayLog(item, user, assignment),
@@ -730,6 +757,20 @@ export default function ActionLogsScreen() {
     [logs],
   );
 
+  const visibleLogs = useMemo(
+    () =>
+      sortedLogs.filter((log) => {
+        const normalizedFilter = dateFilter.trim();
+
+        if (!normalizedFilter) {
+          return true;
+        }
+
+        return formatDateFilterValue(log.actionAt) === normalizedFilter;
+      }),
+    [dateFilter, sortedLogs],
+  );
+
   const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
     void loadLogs();
@@ -761,7 +802,7 @@ export default function ActionLogsScreen() {
         </View>
       ) : (
         <FlatList
-          data={sortedLogs}
+          data={visibleLogs}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <ActionLogListItem
@@ -778,16 +819,44 @@ export default function ActionLogsScreen() {
             />
           }
           ListHeaderComponent={
-            errorMessage ? (
-              <View style={styles.errorBox}>
-                <Ionicons
-                  name="alert-circle-outline"
-                  size={20}
-                  color={COLORS.red}
-                />
-                <Text style={styles.errorText}>{errorMessage}</Text>
+            <>
+              <View style={styles.filterCard}>
+                <Text style={styles.filterLabel}>Filter by date</Text>
+                <View style={styles.filterInputRow}>
+                  <TextInput
+                    value={dateFilter}
+                    onChangeText={setDateFilter}
+                    placeholder="YYYY-MM-DD"
+                    placeholderTextColor={COLORS.secondaryText}
+                    style={styles.filterInput}
+                    autoCapitalize="none"
+                  />
+                  {dateFilter.trim() ? (
+                    <Pressable
+                      onPress={() => setDateFilter("")}
+                      style={styles.clearFilterButton}
+                    >
+                      <Text style={styles.clearFilterText}>Clear</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+                <Text style={styles.filterHint}>
+                  Showing {visibleLogs.length} newest-first action log
+                  {visibleLogs.length === 1 ? "" : "s"}.
+                </Text>
               </View>
-            ) : null
+
+              {errorMessage ? (
+                <View style={styles.errorBox}>
+                  <Ionicons
+                    name="alert-circle-outline"
+                    size={20}
+                    color={COLORS.red}
+                  />
+                  <Text style={styles.errorText}>{errorMessage}</Text>
+                </View>
+              ) : null}
+            </>
           }
           ListEmptyComponent={
             <View style={styles.emptyState}>
@@ -856,6 +925,56 @@ const styles = StyleSheet.create({
     padding: 14,
     paddingBottom: 36,
     gap: 12,
+  },
+  filterCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 12,
+    gap: 8,
+  },
+  filterLabel: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  filterInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  filterInput: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.fieldBackground,
+    paddingHorizontal: 12,
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  clearFilterButton: {
+    minHeight: 44,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.white,
+  },
+  clearFilterText: {
+    color: COLORS.maroon,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  filterHint: {
+    color: COLORS.secondaryText,
+    fontSize: 12,
+    fontWeight: "700",
   },
   listItem: {
     flexDirection: "row",

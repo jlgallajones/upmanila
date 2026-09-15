@@ -118,6 +118,13 @@ const healthcareDocumenterLocationFilters = [
   "Discharged",
 ] as const;
 
+const transportStatusFilters = [
+  "All Transport",
+  "Pending Transport",
+  "Transport Required",
+  "Transport Not Required",
+] as const;
+
 const incidentFilters = [
   "All Incidents",
   "Active Incidents",
@@ -137,6 +144,8 @@ type HealthcareDocumenterTriageFilter =
   (typeof healthcareDocumenterTriageFilters)[number];
 type HealthcareDocumenterLocationFilter =
   (typeof healthcareDocumenterLocationFilters)[number];
+type TransportStatusFilter =
+  (typeof transportStatusFilters)[number];
 
 function getFullName(record: CasualtyRecord): string {
   const parts = [
@@ -217,7 +226,48 @@ function getLocation(record: CasualtyRecord): string {
     return parts.join(", ");
   }
 
-  return record.current_location?.trim() || "Location unavailable";
+  return record.current_location?.trim() || "Unavailable";
+}
+
+function getRecordTransportStatusFilter(
+  record: CasualtyRecord,
+): TransportStatusFilter {
+  const transport = record.latest_transport_record;
+
+  if (!transport) {
+    return "Pending Transport";
+  }
+
+  if (transport.transport_required === "no") {
+    return "Transport Not Required";
+  }
+
+  if (transport.transport_required === "yes") {
+    return "Transport Required";
+  }
+
+  return "Pending Transport";
+}
+
+function getRecordTransportStatusLabel(record: CasualtyRecord): string {
+  const transport = record.latest_transport_record;
+
+  if (!transport) {
+    return "Transport: Pending";
+  }
+
+  if (transport.transport_required === "no") {
+    return "Transport: Not required";
+  }
+
+  if (transport.transport_required === "yes") {
+    const mode = transport.transport_mode?.trim();
+    return mode
+      ? `Transport: Required (${mode})`
+      : "Transport: Required";
+  }
+
+  return "Transport: Pending";
 }
 
 function getIncidentLocation(incident: Incident): string {
@@ -333,6 +383,37 @@ function getStatusStyle(status: string) {
         backgroundColor: COLORS.paleGray,
         color: COLORS.gray,
       };
+  }
+}
+
+function getTriageFilterStyle(filter: FieldResponderTriageFilter) {
+  switch (filter) {
+    case "Immediate":
+      return {
+        backgroundColor: COLORS.paleRed,
+        borderColor: COLORS.red,
+        color: COLORS.red,
+      };
+    case "Delayed":
+      return {
+        backgroundColor: COLORS.paleOrange,
+        borderColor: COLORS.orange,
+        color: COLORS.orange,
+      };
+    case "Minor":
+      return {
+        backgroundColor: COLORS.paleGreen,
+        borderColor: COLORS.green,
+        color: COLORS.green,
+      };
+    case "Expectant":
+      return {
+        backgroundColor: COLORS.paleGray,
+        borderColor: COLORS.gray,
+        color: COLORS.gray,
+      };
+    default:
+      return null;
   }
 }
 
@@ -577,6 +658,7 @@ function CasualtyCard({
 }) {
   const fullName = getFullName(item);
   const location = getLocation(item);
+  const transportStatus = getRecordTransportStatusLabel(item);
   const statusLabel = formatStatus(item.current_status);
   const statusStyle = getStatusStyle(item.current_status);
   const synced = isRecordSynced(item);
@@ -618,9 +700,9 @@ function CasualtyCard({
           </Text>
 
           <Text style={styles.recordMeta} numberOfLines={1}>
-            {item.casualty.id_number ?? "No ID"}
+            ID Number: {item.casualty.id_number ?? "Unavailable"}
             {" · "}
-            Age {item.casualty.estimated_age ?? "Unknown"}
+            Age: {item.casualty.estimated_age ?? "Unavailable"}
           </Text>
         </View>
 
@@ -650,7 +732,7 @@ function CasualtyCard({
       <View style={styles.recordBottomRow}>
         <View style={styles.locationRow}>
           <Ionicons
-            name="location-outline"
+            name="car-outline"
             size={14}
             color={COLORS.secondaryText}
           />
@@ -659,7 +741,7 @@ function CasualtyCard({
             style={styles.locationText}
             numberOfLines={1}
           >
-            {location}
+            {transportStatus}
           </Text>
         </View>
 
@@ -1103,30 +1185,51 @@ function FilterCheckbox({
   label,
   selected,
   onPress,
+  accent,
 }: {
   label: string;
   selected: boolean;
   onPress: () => void;
+  accent?: {
+    backgroundColor: string;
+    borderColor: string;
+    color: string;
+  } | null;
 }) {
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [
         styles.checkboxRow,
+        accent && styles.checkboxRowAccent,
+        accent && {
+          backgroundColor: selected
+            ? accent.color
+            : accent.backgroundColor,
+          borderColor: accent.borderColor,
+        },
         pressed && styles.pressed,
       ]}
     >
       <View
         style={[
           styles.checkboxBox,
+          accent && {
+            borderColor: selected ? COLORS.white : accent.color,
+          },
           selected && styles.checkboxBoxSelected,
+          accent &&
+            selected && {
+              borderColor: COLORS.white,
+              backgroundColor: COLORS.white,
+            },
         ]}
       >
         {selected ? (
           <Ionicons
             name="checkmark"
             size={13}
-            color={COLORS.maroon}
+            color={accent ? accent.color : COLORS.maroon}
           />
         ) : null}
       </View>
@@ -1134,7 +1237,14 @@ function FilterCheckbox({
       <Text
         style={[
           styles.checkboxLabel,
+          accent && {
+            color: selected ? COLORS.white : accent.color,
+          },
           selected && styles.checkboxLabelSelected,
+          accent &&
+            selected && {
+              color: COLORS.white,
+            },
         ]}
       >
         {label}
@@ -1164,6 +1274,14 @@ export default function RecordsScreen() {
     useState<FilterOption>("All");
   const [activeIncidentFilter, setActiveIncidentFilter] =
     useState<IncidentFilterOption>("All Incidents");
+  const [selectedRecordIncidentId, setSelectedRecordIncidentId] =
+    useState("all");
+  const [activeTransportFilter, setActiveTransportFilter] =
+    useState<TransportStatusFilter>("All Transport");
+  const [isRecordIncidentPickerVisible, setIsRecordIncidentPickerVisible] =
+    useState(false);
+  const [isTransportFilterPickerVisible, setIsTransportFilterPickerVisible] =
+    useState(false);
   const [
     activeReviewFilters,
     setActiveReviewFilters,
@@ -1572,7 +1690,13 @@ export default function RecordsScreen() {
       const idNumber =
         record.casualty.id_number?.toLowerCase() ?? "";
       const location = getLocation(record).toLowerCase();
+      const transportStatus =
+        getRecordTransportStatusLabel(record).toLowerCase();
+      const incidentName =
+        record.incident?.incident_name?.toLowerCase() ?? "";
       const status = formatStatus(record.current_status);
+      const recordTransportFilter =
+        getRecordTransportStatusFilter(record);
 
       let matchesFilter =
   activeFilter === "All" ||
@@ -1624,14 +1748,31 @@ matchesFilter =
         normalizedSearch.length === 0 ||
         fullName.includes(normalizedSearch) ||
         idNumber.includes(normalizedSearch) ||
-        location.includes(normalizedSearch);
+        location.includes(normalizedSearch) ||
+        transportStatus.includes(normalizedSearch) ||
+        incidentName.includes(normalizedSearch);
 
-      return matchesFilter && matchesSearch;
+      const matchesIncident =
+        selectedRecordIncidentId === "all" ||
+        record.incident?.id === selectedRecordIncidentId;
+
+      const matchesTransport =
+        activeTransportFilter === "All Transport" ||
+        recordTransportFilter === activeTransportFilter;
+
+      return (
+        matchesFilter &&
+        matchesSearch &&
+        matchesIncident &&
+        matchesTransport
+      );
     });
   }, [
     activeFilter,
     activeReviewFilters,
+    activeTransportFilter,
     activeTriageFilters,
+    selectedRecordIncidentId,
     records,
     searchQuery,
     useResponderFunctionFilters,
@@ -1680,6 +1821,44 @@ matchesFilter =
       ),
     [incidents],
   );
+  const recordIncidentOptions = useMemo(() => {
+    const incidentMap = new Map<string, Incident>();
+
+    incidents.forEach((incident) => {
+      incidentMap.set(incident.id, incident);
+    });
+
+    records.forEach((record) => {
+      if (record.incident?.id && !incidentMap.has(record.incident.id)) {
+        incidentMap.set(record.incident.id, {
+          id: record.incident.id,
+          incident_name:
+            record.incident.incident_name ?? "Unknown incident",
+          incident_code: "",
+          disaster_type: "",
+          description: null,
+          province: null,
+          municipality: null,
+          barangay: null,
+          started_at: record.reported_at,
+          ended_at: null,
+          status: "active",
+          created_at: record.reported_at,
+          updated_at: record.reported_at,
+        } as Incident);
+      }
+    });
+
+    return Array.from(incidentMap.values()).sort((first, second) =>
+      first.incident_name.localeCompare(second.incident_name),
+    );
+  }, [incidents, records]);
+  const selectedRecordIncidentLabel =
+    selectedRecordIncidentId === "all"
+      ? "All incidents"
+      : recordIncidentOptions.find(
+          (incident) => incident.id === selectedRecordIncidentId,
+        )?.incident_name ?? "Selected incident";
   const assigningQueuedSubmission = queuedSubmissions.find(
     (item) => item.id === assigningIncidentQueueId,
   );
@@ -1855,23 +2034,13 @@ function toggleHealthcareLocationFilter(
   }
 
   function handleCasualtySummary(incident: Incident) {
-    router.push({
-      pathname: "/verification-review",
-      params: {
-        incidentId: incident.id,
-        incidentName: incident.incident_name,
-      },
-    } as never);
+    setSelectedRecordIncidentId(incident.id);
+    setActiveTransportFilter("All Transport");
   }
 
   function handleManageReports(incident: Incident) {
-    router.push({
-      pathname: "/verification-review",
-      params: {
-        incidentId: incident.id,
-        incidentName: incident.incident_name,
-      },
-    } as never);
+    setSelectedRecordIncidentId(incident.id);
+    setActiveTransportFilter("All Transport");
   }
 
   function handleCloseIncidentRecord(incident: Incident) {
@@ -2413,6 +2582,58 @@ function toggleHealthcareLocationFilter(
       </SafeAreaView>
 
       <View style={styles.filterSection}>
+        <View style={styles.recordFilterSelectRow}>
+          <Pressable
+            onPress={() => setIsRecordIncidentPickerVisible(true)}
+            style={({ pressed }) => [
+              styles.recordFilterSelect,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Ionicons
+              name="warning-outline"
+              size={15}
+              color={COLORS.maroon}
+            />
+            <Text
+              style={styles.recordFilterSelectText}
+              numberOfLines={1}
+            >
+              {selectedRecordIncidentLabel}
+            </Text>
+            <Ionicons
+              name="chevron-down-outline"
+              size={15}
+              color={COLORS.secondaryText}
+            />
+          </Pressable>
+
+          <Pressable
+            onPress={() => setIsTransportFilterPickerVisible(true)}
+            style={({ pressed }) => [
+              styles.recordFilterSelect,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Ionicons
+              name="car-outline"
+              size={15}
+              color={COLORS.maroon}
+            />
+            <Text
+              style={styles.recordFilterSelectText}
+              numberOfLines={1}
+            >
+              {activeTransportFilter}
+            </Text>
+            <Ionicons
+              name="chevron-down-outline"
+              size={15}
+              color={COLORS.secondaryText}
+            />
+          </Pressable>
+        </View>
+
         {useSpecialRecordFilters ? (
           <>
             <Pressable
@@ -2495,6 +2716,7 @@ function toggleHealthcareLocationFilter(
                             onPress={() =>
                               toggleTriageFilter(item)
                             }
+                            accent={getTriageFilterStyle(item)}
                           />
                         ),
                       )}
@@ -2750,6 +2972,114 @@ function toggleHealthcareLocationFilter(
                 Cancel
               </Text>
             </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={isRecordIncidentPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsRecordIncidentPickerVisible(false)}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => setIsRecordIncidentPickerVisible(false)}
+        >
+          <Pressable
+            style={styles.incidentAssignSheet}
+            onPress={(event) => event.stopPropagation()}
+          >
+            <View style={styles.sheetHandle} />
+            <Text style={styles.incidentAssignTitle}>
+              Filter by Incident
+            </Text>
+            <View style={styles.incidentAssignList}>
+              <Pressable
+                onPress={() => {
+                  setSelectedRecordIncidentId("all");
+                  setIsRecordIncidentPickerVisible(false);
+                }}
+                style={({ pressed }) => [
+                  styles.incidentAssignOption,
+                  selectedRecordIncidentId === "all" &&
+                    styles.recordFilterOptionActive,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.incidentAssignOptionTitle}>
+                  All incidents
+                </Text>
+              </Pressable>
+
+              {recordIncidentOptions.map((incident) => (
+                <Pressable
+                  key={incident.id}
+                  onPress={() => {
+                    setSelectedRecordIncidentId(incident.id);
+                    setIsRecordIncidentPickerVisible(false);
+                  }}
+                  style={({ pressed }) => [
+                    styles.incidentAssignOption,
+                    selectedRecordIncidentId === incident.id &&
+                      styles.recordFilterOptionActive,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <View style={styles.incidentAssignOptionText}>
+                    <Text style={styles.incidentAssignOptionTitle}>
+                      {incident.incident_name}
+                    </Text>
+                    <Text style={styles.incidentAssignOptionMeta}>
+                      {incident.incident_code || "Incident"}
+                    </Text>
+                  </View>
+                </Pressable>
+              ))}
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={isTransportFilterPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsTransportFilterPickerVisible(false)}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => setIsTransportFilterPickerVisible(false)}
+        >
+          <Pressable
+            style={styles.incidentAssignSheet}
+            onPress={(event) => event.stopPropagation()}
+          >
+            <View style={styles.sheetHandle} />
+            <Text style={styles.incidentAssignTitle}>
+              Filter by Transport
+            </Text>
+            <View style={styles.incidentAssignList}>
+              {transportStatusFilters.map((filter) => (
+                <Pressable
+                  key={filter}
+                  onPress={() => {
+                    setActiveTransportFilter(filter);
+                    setIsTransportFilterPickerVisible(false);
+                  }}
+                  style={({ pressed }) => [
+                    styles.incidentAssignOption,
+                    activeTransportFilter === filter &&
+                      styles.recordFilterOptionActive,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={styles.incidentAssignOptionTitle}>
+                    {filter}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
           </Pressable>
         </Pressable>
       </Modal>
@@ -3062,6 +3392,35 @@ const styles = StyleSheet.create({
     gap: 8,
   },
 
+  recordFilterSelectRow: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: SCREEN_PADDING,
+    paddingTop: 12,
+    paddingBottom: 6,
+  },
+
+  recordFilterSelect: {
+    flex: 1,
+    minHeight: 39,
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    backgroundColor: "#F8FAFC",
+    paddingHorizontal: 10,
+    gap: 6,
+  },
+
+  recordFilterSelectText: {
+    flex: 1,
+    minWidth: 0,
+    color: COLORS.text,
+    fontSize: 11,
+    fontWeight: "900",
+  },
+
   filterToggle: {
     minHeight: 54,
     flexDirection: "row",
@@ -3119,6 +3478,14 @@ const styles = StyleSheet.create({
     minHeight: 24,
     flexDirection: "row",
     alignItems: "center",
+  },
+
+  checkboxRowAccent: {
+    minHeight: 34,
+    borderWidth: 1,
+    borderRadius: 17,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
 
   checkboxBox: {
@@ -3336,6 +3703,11 @@ const styles = StyleSheet.create({
   incidentAssignOptionText: {
     flex: 1,
     minWidth: 0,
+  },
+
+  recordFilterOptionActive: {
+    borderColor: COLORS.maroon,
+    backgroundColor: COLORS.paleRed,
   },
 
   incidentAssignOptionTitle: {

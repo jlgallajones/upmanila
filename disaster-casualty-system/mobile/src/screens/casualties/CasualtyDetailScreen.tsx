@@ -357,6 +357,34 @@ function formatStatus(status: string | null | undefined): string {
     .join(" ");
 }
 
+function formatCasualtyDisplayId(
+  idNumber: string | null | undefined,
+  clientRecordId: string | null | undefined,
+  fallbackId: string,
+): string {
+  const id = idNumber?.trim();
+
+  if (id) {
+    const generatedMatch = /^CAS:\d{6}:([A-Z0-9]+)$/i.exec(id);
+
+    if (generatedMatch) {
+      return generatedMatch[1].toUpperCase();
+    }
+
+    if (!/^CAS-/i.test(id) && !/^CAS-SYNC-/i.test(id)) {
+      return id;
+    }
+  }
+
+  const clientId = clientRecordId?.trim();
+
+  if (clientId && !/^CAS-/i.test(clientId)) {
+    return clientId;
+  }
+
+  return fallbackId.slice(0, 8);
+}
+
 function getVerificationPalette(status: string | null | undefined) {
   switch (status) {
     case "verified":
@@ -485,6 +513,46 @@ function formatEmsUnitType(value: string | null | undefined): string {
       return "Unknown";
     default:
       return "Unavailable";
+  }
+}
+
+function getTriagePalette(category: string | null | undefined) {
+  switch (category?.toLowerCase()) {
+    case "immediate":
+    case "red":
+      return {
+        color: COLORS.red,
+        backgroundColor: COLORS.redBackground,
+        borderColor: "#F2B6B8",
+      };
+    case "delayed":
+    case "yellow":
+      return {
+        color: COLORS.orange,
+        backgroundColor: COLORS.orangeBackground,
+        borderColor: COLORS.orangeBorder,
+      };
+    case "minor":
+    case "minimal":
+    case "green":
+      return {
+        color: COLORS.green,
+        backgroundColor: COLORS.greenBackground,
+        borderColor: "#A9E7C2",
+      };
+    case "expectant":
+    case "black":
+      return {
+        color: COLORS.text,
+        backgroundColor: COLORS.grayBackground,
+        borderColor: COLORS.border,
+      };
+    default:
+      return {
+        color: COLORS.blue,
+        backgroundColor: COLORS.blueBackground,
+        borderColor: "#A8D7F4",
+      };
   }
 }
 
@@ -739,7 +807,11 @@ export default function CasualtyDetailScreen() {
     );
 
     return {
-      id: record.casualty.id_number ?? record.id.slice(0, 8),
+      id: formatCasualtyDisplayId(
+        record.casualty.id_number,
+        record.client_record_id,
+        record.id,
+      ),
       recordId: record.id,
       encoderId: record.encoder.id,
       fullName,
@@ -772,7 +844,7 @@ export default function CasualtyDetailScreen() {
         notes.length > 0
           ? notes.join("\n")
           : "No medical notes recorded.",
-      lastUpdated: formatTime(record.updated_at),
+      lastUpdated: formatDateTime(record.updated_at),
       verified: record.verification_status === "verified",
       encoderName: record.encoder.full_name,
       latestTriage: triageHistory[0],
@@ -886,6 +958,12 @@ export default function CasualtyDetailScreen() {
     );
   }
 
+  const triageCategory =
+    casualty.latestTriage?.triage_category ??
+    record?.latest_triage_assessment?.triage_category ??
+    casualty.status;
+  const triageCategoryLabel = formatStatus(triageCategory);
+  const triagePalette = getTriagePalette(triageCategory);
   const statusPalette = getStatusPalette(casualty.status);
   const verificationPalette = getVerificationPalette(
     casualty.verificationStatusRaw,
@@ -939,15 +1017,15 @@ export default function CasualtyDetailScreen() {
               style={[
                 styles.headerStatusBadge,
                 {
-                  backgroundColor: statusPalette.color,
-                  borderColor: statusPalette.borderColor,
+                  backgroundColor: triagePalette.color,
+                  borderColor: triagePalette.borderColor,
                 },
               ]}
             >
               <View style={styles.headerStatusDot} />
 
               <Text style={styles.headerStatusText}>
-                {casualty.status}
+                {triageCategoryLabel}
               </Text>
             </View>
 
@@ -972,8 +1050,9 @@ export default function CasualtyDetailScreen() {
             </Text>
 
             <Text style={styles.identityDescription}>
-              {casualty.sex} - {casualty.age} years old -{" "}
-              {casualty.dateOfBirth}
+              {showFieldResponderDetails
+                ? `Triage Category: ${triageCategoryLabel}`
+                : `Sex: ${casualty.sex} - Age: ${casualty.age} - Date of Birth: ${casualty.dateOfBirth}`}
             </Text>
 
             <View style={styles.identityBadges}>
@@ -1908,49 +1987,6 @@ export default function CasualtyDetailScreen() {
         </SectionCard>
           </>
         )}
-
-        <SectionCard title="STATUS TIMELINE">
-          {statusHistory.length > 0
-            ? statusHistory.map((history, index) => {
-                const palette = getStatusPalette(history.new_status);
-                const oldStatus = history.old_status
-                  ? `${formatStatus(history.old_status)} to `
-                  : "";
-
-                return (
-                  <TimelineItem
-                    key={history.id}
-                    title={`${oldStatus}${formatStatus(history.new_status)}`}
-                    time={formatDateTime(history.created_at)}
-                    user={
-                      history.changed_by_user?.full_name ??
-                      "System"
-                    }
-                    color={palette.color}
-                    backgroundColor={palette.backgroundColor}
-                    isLast={false}
-                  />
-                );
-              })
-            : null}
-
-          <TimelineItem
-            title="Reported"
-            time={casualty.dateTime}
-            user={casualty.encoderName}
-            color={COLORS.blue}
-            backgroundColor={COLORS.blueBackground}
-          />
-
-          <TimelineItem
-            title="Encoded"
-            time={formatDateTime(record?.created_at)}
-            user={casualty.encoderName}
-            color={COLORS.green}
-            backgroundColor={COLORS.greenBackground}
-            isLast
-          />
-        </SectionCard>
 
         <SectionCard title="ATTACHMENTS">
           {attachments.length > 0 ? (
