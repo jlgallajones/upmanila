@@ -143,6 +143,7 @@ export type ResponderSafetyResponseRecord = {
   responder_role: string | null;
   responder_function: string | null;
   safety_status: ResponderSafetyStatus;
+  responder_arrived_at: string | null;
   ppe_used_at: string;
   recorded_at: string;
   updated_at: string;
@@ -150,6 +151,7 @@ export type ResponderSafetyResponseRecord = {
 
 export type ResponderSafetyResponsePayload = {
   safetyStatus: ResponderSafetyStatus;
+  responderArrivalAt: string;
   ppeUsedAt: string;
   responderFunction?: string | null;
 };

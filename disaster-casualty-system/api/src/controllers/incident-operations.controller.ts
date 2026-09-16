@@ -2340,6 +2340,7 @@ export async function saveResponderSafetyResponse(
     }
 
     let safetyStatus: string | null | undefined;
+    let responderArrivalAt: string | null | undefined;
     let ppeUsedAt: string | null | undefined;
 
     try {
@@ -2347,6 +2348,12 @@ export async function saveResponderSafetyResponse(
         request.body.safetyStatus,
         "safetyStatus",
       );
+
+      responderArrivalAt = parseNullableDate(
+        request.body.responderArrivalAt,
+        "responderArrivalAt",
+      );
+
       ppeUsedAt = parseNullableDate(
         request.body.ppeUsedAt,
         "ppeUsedAt",
@@ -2370,6 +2377,14 @@ export async function saveResponderSafetyResponse(
       return;
     }
 
+    if (!responderArrivalAt) {
+      response.status(400).json({
+        success: false,
+        message: "responderArrivalAt is required.",
+      });
+      return;
+    }
+
     if (!ppeUsedAt) {
       response.status(400).json({
         success: false,
@@ -2388,8 +2403,11 @@ export async function saveResponderSafetyResponse(
         typeof request.body.responderFunction === "string"
           ? request.body.responderFunction.trim() || null
           : null,
+
       safety_status: safetyStatus,
+      responder_arrived_at: responderArrivalAt,
       ppe_used_at: ppeUsedAt,
+
       recorded_at: now,
       updated_at: now,
     };

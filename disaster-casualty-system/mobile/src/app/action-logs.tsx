@@ -312,6 +312,45 @@ function formatTimestamp(value: string): string {
   }).format(date);
 }
 
+function formatDateFilterInput(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+
+  if (digits.length <= 2) {
+    return digits;
+  }
+
+  if (digits.length <= 4) {
+    return `${digits.slice(0, 2)}-${digits.slice(2)}`;
+  }
+
+  return `${digits.slice(0, 2)}-${digits.slice(2, 4)}-${digits.slice(4)}`;
+}
+
+function isValidDateFilterInput(value: string): boolean {
+  if (!/^\d{2}-\d{2}-\d{4}$/.test(value)) {
+    return false;
+  }
+
+  const [monthText, dayText, yearText] =
+    value.split("-");
+
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const year = Number(yearText);
+
+  const date = new Date(
+    year,
+    month - 1,
+    day,
+  );
+
+  return (
+    date.getFullYear() === year &&
+    date.getMonth() === month - 1 &&
+    date.getDate() === day
+  );
+}
+
 function formatDateFilterValue(value: string): string {
   const date = new Date(value);
 
@@ -323,7 +362,7 @@ function formatDateFilterValue(value: string): string {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
 
-  return `${year}-${month}-${day}`;
+  return `${month}-${day}-${year}`;
 }
 
 function getCasualtyLoggedAt(
@@ -352,7 +391,7 @@ function toAdminDisplayLog(
       email: reviewer?.email || "No email",
       role: formatRole(reviewer?.role),
       unitAssignment: getUnitAssignment(log),
-      actionPerformed: `Added casualty record ${idNumber}`,
+      actionPerformed: `Added victim record ${idNumber}`,
       previousStatus: "-",
       newStatus: formatResponderNewStatus(log.new_status, false),
       rejectionReason: null,
@@ -401,7 +440,7 @@ function toResponderDisplayLog(
       user.assigned_barangay,
       user.assigned_municipality,
     ),
-    actionPerformed: `Added casualty record ${idNumber}`,
+    actionPerformed: `Added victim record ${idNumber}`,
     previousStatus: "-",
     newStatus: formatResponderNewStatus(
       record.verification_status,
@@ -436,7 +475,7 @@ function toQueuedResponderDisplayLog(
       user.assigned_barangay,
       user.assigned_municipality,
     ),
-    actionPerformed: `Added casualty record ${idNumber}`,
+    actionPerformed: `Added victim record ${idNumber}`,
     previousStatus: "-",
     newStatus: formatResponderNewStatus(null, true),
     rejectionReason: null,
@@ -669,7 +708,7 @@ function ActionLogDetailsModal({
                 value={formatTimestamp(item.actionAt)}
               />
               <DetailRow
-                label="Logged Casualty Date/Time"
+                label="Logged Victim Date/Time"
                 value={formatTimestamp(item.casualtyLoggedAt)}
               />
               <DetailRow label="Location" value={item.location} />
@@ -693,6 +732,14 @@ export default function ActionLogsScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [dateFilter, setDateFilter] = useState("");
+  const showInvalidDate =
+  dateFilter.length === 10 &&
+  !isValidDateFilterInput(dateFilter);
+  const [isDatePickerVisible, setIsDatePickerVisible] =
+  useState(false);
+
+  const [datePickerMonth, setDatePickerMonth] =
+  useState(() => new Date());
 
   const loadLogs = useCallback(async () => {
     try {
@@ -708,7 +755,7 @@ export default function ActionLogsScreen() {
           ]);
 
         setScreenSubtitle(
-          "Casualty records added by the logged in responder",
+          "Victim records added by the logged in responder",
         );
         setScreenEyebrow("RESPONDER");
         setLogs([
@@ -760,16 +807,153 @@ export default function ActionLogsScreen() {
   const visibleLogs = useMemo(
     () =>
       sortedLogs.filter((log) => {
-        const normalizedFilter = dateFilter.trim();
+        const normalizedFilter =
+          dateFilter.trim();
 
         if (!normalizedFilter) {
           return true;
         }
 
-        return formatDateFilterValue(log.actionAt) === normalizedFilter;
+        if (
+          !isValidDateFilterInput(
+            normalizedFilter,
+          )
+        ) {
+          return true;
+        }
+
+        return (
+          formatDateFilterValue(log.actionAt) ===
+          normalizedFilter
+        );
       }),
     [dateFilter, sortedLogs],
   );
+
+  const datePickerMonthDays = useMemo(() => {
+  const year = datePickerMonth.getFullYear();
+  const month = datePickerMonth.getMonth();
+
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(
+    year,
+    month + 1,
+    0,
+  ).getDate();
+
+  return [
+    ...Array.from(
+      { length: firstDay },
+      () => null,
+    ),
+    ...Array.from(
+      { length: daysInMonth },
+      (_, index) => index + 1,
+    ),
+  ];
+}, [datePickerMonth]);
+
+const datePickerMonthLabel = useMemo(
+  () =>
+    new Intl.DateTimeFormat("en-US", {
+      month: "long",
+      year: "numeric",
+    }).format(datePickerMonth),
+  [datePickerMonth],
+);
+
+function changeDatePickerMonth(offset: number) {
+  setDatePickerMonth(
+    (current) =>
+      new Date(
+        current.getFullYear(),
+        current.getMonth() + offset,
+        1,
+      ),
+  );
+}
+
+function selectDatePickerDay(day: number) {
+  const selectedDate = new Date(
+    datePickerMonth.getFullYear(),
+    datePickerMonth.getMonth(),
+    day,
+  );
+
+  const month = String(
+    selectedDate.getMonth() + 1,
+  ).padStart(2, "0");
+
+  const formattedDay = String(
+    selectedDate.getDate(),
+  ).padStart(2, "0");
+
+  const year = selectedDate.getFullYear();
+
+  setDateFilter(
+    `${month}-${formattedDay}-${year}`,
+  );
+  
+
+  setIsDatePickerVisible(false);
+}
+
+function isDatePickerDaySelected(day: number): boolean {
+  const selectedDate = new Date(
+    datePickerMonth.getFullYear(),
+    datePickerMonth.getMonth(),
+    day,
+  );
+
+  const month = String(
+    selectedDate.getMonth() + 1,
+  ).padStart(2, "0");
+
+  const formattedDay = String(
+    selectedDate.getDate(),
+  ).padStart(2, "0");
+
+  const year = selectedDate.getFullYear();
+
+  return (
+    dateFilter.trim() ===
+    `${month}-${formattedDay}-${year}`
+  );
+}
+
+function openDatePicker() {
+  const parts = dateFilter.trim().split("-");
+
+  if (parts.length === 3) {
+    const month = Number(parts[0]);
+    const day = Number(parts[1]);
+    const year = Number(parts[2]);
+
+    const selectedDate = new Date(
+      year,
+      month - 1,
+      day,
+    );
+
+    const isValidDate =
+      !Number.isNaN(selectedDate.getTime()) &&
+      selectedDate.getFullYear() === year &&
+      selectedDate.getMonth() === month - 1 &&
+      selectedDate.getDate() === day;
+
+    if (isValidDate) {
+      setDatePickerMonth(
+        new Date(year, month - 1, 1),
+      );
+    }
+  } else {
+    setDatePickerMonth(new Date());
+  }
+
+  setIsDatePickerVisible(true);
+}
+
+
 
   const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
@@ -821,25 +1005,60 @@ export default function ActionLogsScreen() {
           ListHeaderComponent={
             <>
               <View style={styles.filterCard}>
-                <Text style={styles.filterLabel}>Filter by date</Text>
+                <Pressable
+                  onPress={openDatePicker}
+                  style={({ pressed }) => [
+                    pressed && { opacity: 0.7 },
+                  ]}
+                >
+                  <Text style={styles.filterLabel}>
+                    Filter by date
+                  </Text>
+                </Pressable>
                 <View style={styles.filterInputRow}>
                   <TextInput
                     value={dateFilter}
-                    onChangeText={setDateFilter}
-                    placeholder="YYYY-MM-DD"
+                    onChangeText={(value) =>
+                      setDateFilter(formatDateFilterInput(value))
+                    }
+                    placeholder="MM-DD-YYYY"
                     placeholderTextColor={COLORS.secondaryText}
                     style={styles.filterInput}
                     autoCapitalize="none"
+                    keyboardType="numeric"
+                    maxLength={10}
                   />
+
+                  <Pressable
+                    onPress={openDatePicker}
+                    style={({ pressed }) => [
+                      styles.calendarButton,
+                      pressed && styles.calendarButtonPressed,
+                    ]}
+                  >
+                    <Ionicons
+                      name="calendar-outline"
+                      size={20}
+                      color={COLORS.maroon}
+                    />
+                  </Pressable>
+
                   {dateFilter.trim() ? (
                     <Pressable
                       onPress={() => setDateFilter("")}
                       style={styles.clearFilterButton}
                     >
-                      <Text style={styles.clearFilterText}>Clear</Text>
+                      <Text style={styles.clearFilterText}>
+                        Clear
+                      </Text>
                     </Pressable>
                   ) : null}
                 </View>
+                {showInvalidDate ? (
+                  <Text style={styles.dateFilterError}>
+                    Enter a valid date in MM-DD-YYYY format.
+                  </Text>
+                ) : null}
                 <Text style={styles.filterHint}>
                   Showing {visibleLogs.length} newest-first action log
                   {visibleLogs.length === 1 ? "" : "s"}.
@@ -867,13 +1086,136 @@ export default function ActionLogsScreen() {
               />
               <Text style={styles.emptyTitle}>No action logs yet</Text>
               <Text style={styles.emptyText}>
-                Added casualty records and verification decisions will appear
+                Added victim records and verification decisions will appear
                 here when this account performs actions.
               </Text>
             </View>
           }
         />
       )}
+
+      <Modal
+  visible={isDatePickerVisible}
+  transparent
+  animationType="fade"
+  onRequestClose={() =>
+    setIsDatePickerVisible(false)
+  }
+>
+  <Pressable
+    style={styles.datePickerOverlay}
+    onPress={() =>
+      setIsDatePickerVisible(false)
+    }
+  >
+    <Pressable
+      style={styles.datePickerCard}
+      onPress={(event) =>
+        event.stopPropagation()
+      }
+    >
+      <View style={styles.datePickerHeader}>
+        <Pressable
+          onPress={() =>
+            changeDatePickerMonth(-1)
+          }
+          style={styles.datePickerNavButton}
+        >
+          <Ionicons
+            name="chevron-back"
+            size={20}
+            color={COLORS.maroon}
+          />
+        </Pressable>
+
+        <Text style={styles.datePickerTitle}>
+          {datePickerMonthLabel}
+        </Text>
+
+        <Pressable
+          onPress={() =>
+            changeDatePickerMonth(1)
+          }
+          style={styles.datePickerNavButton}
+        >
+          <Ionicons
+            name="chevron-forward"
+            size={20}
+            color={COLORS.maroon}
+          />
+        </Pressable>
+      </View>
+
+      <View style={styles.datePickerWeekRow}>
+        {[
+          "Sun",
+          "Mon",
+          "Tue",
+          "Wed",
+          "Thu",
+          "Fri",
+          "Sat",
+        ].map((day) => (
+          <Text
+            key={day}
+            style={styles.datePickerWeekday}
+          >
+            {day}
+          </Text>
+        ))}
+      </View>
+
+      <View style={styles.datePickerGrid}>
+        {datePickerMonthDays.map(
+          (day, index) =>
+            day === null ? (
+              <View
+                key={`blank-${index}`}
+                style={styles.datePickerDaySpacer}
+              />
+            ) : (
+              <Pressable
+                key={day}
+                onPress={() =>
+                  selectDatePickerDay(day)
+                }
+                style={({ pressed }) => [
+                  styles.datePickerDay,
+                  isDatePickerDaySelected(day) &&
+                    styles.datePickerDaySelected,
+                  pressed &&
+                    styles.datePickerDayPressed,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.datePickerDayText,
+                    isDatePickerDaySelected(day) &&
+                      styles.datePickerDayTextSelected,
+                  ]}
+                >
+                  {day}
+                </Text>
+              </Pressable>
+            ),
+        )}
+      </View>
+
+      <Pressable
+        onPress={() =>
+          setIsDatePickerVisible(false)
+        }
+        style={styles.datePickerCancel}
+      >
+        <Text
+          style={styles.datePickerCancelText}
+        >
+          Cancel
+        </Text>
+      </Pressable>
+    </Pressable>
+  </Pressable>
+</Modal>
 
       <ActionLogDetailsModal
         item={selectedLog}
@@ -884,6 +1226,131 @@ export default function ActionLogsScreen() {
 }
 
 const styles = StyleSheet.create({
+
+  dateFilterError: {
+  color: COLORS.red,
+  fontSize: 11,
+  fontWeight: "700",
+},
+
+  datePickerDaySelected: {
+  backgroundColor: COLORS.maroon,
+},
+
+datePickerDayTextSelected: {
+  color: COLORS.white,
+},
+
+  datePickerOverlay: {
+  flex: 1,
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 18,
+  backgroundColor: "rgba(8, 12, 24, 0.48)",
+},
+
+datePickerCard: {
+  width: "100%",
+  maxWidth: 390,
+  padding: 18,
+  borderRadius: 14,
+  backgroundColor: COLORS.white,
+  borderWidth: 1,
+  borderColor: COLORS.border,
+},
+
+datePickerHeader: {
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+  marginBottom: 16,
+},
+
+datePickerTitle: {
+  color: COLORS.text,
+  fontSize: 17,
+  fontWeight: "900",
+},
+
+datePickerNavButton: {
+  width: 38,
+  height: 38,
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: 8,
+  backgroundColor: COLORS.paleRed,
+},
+
+datePickerWeekRow: {
+  flexDirection: "row",
+  marginBottom: 8,
+},
+
+datePickerWeekday: {
+  flex: 1,
+  color: COLORS.secondaryText,
+  fontSize: 11,
+  fontWeight: "800",
+  textAlign: "center",
+},
+
+datePickerGrid: {
+  flexDirection: "row",
+  flexWrap: "wrap",
+},
+
+datePickerDaySpacer: {
+  width: "14.28%",
+  aspectRatio: 1,
+},
+
+datePickerDay: {
+  width: "14.28%",
+  aspectRatio: 1,
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: 8,
+},
+
+datePickerDayPressed: {
+  backgroundColor: COLORS.paleRed,
+},
+
+datePickerDayText: {
+  color: COLORS.text,
+  fontSize: 13,
+  fontWeight: "800",
+},
+
+datePickerCancel: {
+  minHeight: 42,
+  alignItems: "center",
+  justifyContent: "center",
+  marginTop: 14,
+  borderRadius: 8,
+  backgroundColor: COLORS.fieldBackground,
+},
+
+datePickerCancelText: {
+  color: COLORS.maroon,
+  fontSize: 13,
+  fontWeight: "900",
+},
+
+  calendarButton: {
+  width: 44,
+  height: 44,
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: 8,
+  borderWidth: 1,
+  borderColor: COLORS.border,
+  backgroundColor: COLORS.white,
+},
+
+calendarButtonPressed: {
+  opacity: 0.75,
+},
   safeArea: {
     flex: 1,
     backgroundColor: COLORS.background,

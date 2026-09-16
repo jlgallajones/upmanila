@@ -1209,9 +1209,12 @@ const TRIAGE_STAGE_OPTIONS = [
 ] as const;
 
 type TriageStageOption = (typeof TRIAGE_STAGE_OPTIONS)[number];
+type TriageAssistanceMode =
+  | "assisted"
+  | "unassisted";
 
 const TRIAGE_STAGE_OPTIONS_BY_ROLE: Record<string, TriageStageOption[]> = {
-  field_responder: ["Primary Triage", "Secondary Triage"],
+  field_responder: ["Primary Triage"],
   responder: ["Primary Triage", "Secondary Triage"],
   sa_responder: ["Secondary Triage"],
   medical_personnel: ["Tertiary Triage"],
@@ -1385,6 +1388,8 @@ const MONTH_NAMES = [
 
 type FormState = {
   responderSafetyStatus: string;
+  responderArrivalTime: string;
+  responderArrivalTimeLocked: boolean;
   ppeUseTime: string;
   victimCodeMarked: string;
 
@@ -1430,6 +1435,8 @@ type FormState = {
   triageNotes: string;
   triageSystemOther: string;
   triageAssessmentAnswers: Record<string, string>;
+  triageAssistanceMode: TriageAssistanceMode;
+  triageAssistanceLocked: boolean;
 
   transportRequired: string;
   patientFor: string;
@@ -1536,6 +1543,8 @@ type HealthcareFacilityLabelSource = Pick<
 
 const initialForm: FormState = {
   responderSafetyStatus: "",
+  responderArrivalTime: "",
+  responderArrivalTimeLocked: false,
   ppeUseTime: "",
   victimCodeMarked: "",
 
@@ -1581,6 +1590,8 @@ const initialForm: FormState = {
   triageNotes: "",
   triageSystemOther: "",
   triageAssessmentAnswers: {},
+  triageAssistanceMode: "assisted",
+  triageAssistanceLocked: false,
 
   transportRequired: "",
   patientFor: "",
@@ -3131,7 +3142,7 @@ function getTriageStageOptionsForRole(
   }
 
   if (role === "field_responder") {
-    return ["Primary Triage", "Secondary Triage"];
+    return ["Primary Triage"];
   }
 
   if (role === "sa_responder") {
@@ -3586,10 +3597,66 @@ function coerceAppendixAnswer(
 function buildTriageAssessmentAnswers(
   form: FormState,
 ): Record<string, unknown> | undefined {
-  return buildTriageAssessmentAnswersFromRaw(
-    form.triageSystem,
-    form.triageAssessmentAnswers,
-  );
+  // Assisted:
+  // use the existing automatic calculation.
+  if (form.triageAssistanceMode === "assisted") {
+    const answers =
+      buildTriageAssessmentAnswersFromRaw(
+        form.triageSystem,
+        form.triageAssessmentAnswers,
+      );
+
+    if (!answers) {
+      return undefined;
+    }
+
+    return {
+      ...answers,
+      triageAssistanceMode: "assisted",
+    };
+  }
+
+  // Unassisted:
+  // preserve the responder's answers and
+  // manually selected Final Triage.
+  const questions =
+    getAppendixQuestionsForSystem(
+      form.triageSystem,
+    );
+
+  if (questions.length === 0) {
+    return undefined;
+  }
+
+  const answers =
+    questions.reduce<Record<string, unknown>>(
+      (currentAnswers, question) => {
+        const answer =
+          form.triageAssessmentAnswers[
+            question.key
+          ];
+
+        if (answer) {
+          currentAnswers[question.key] =
+            coerceAppendixAnswer(
+              question.key,
+              answer,
+            );
+        }
+
+        return currentAnswers;
+      },
+      {},
+    );
+
+  if (Object.keys(answers).length === 0) {
+    return undefined;
+  }
+
+  return {
+    ...answers,
+    triageAssistanceMode: "unassisted",
+  };
 }
 
 function buildTriageAssessmentAnswersFromRaw(
@@ -3839,7 +3906,8 @@ function generateVictimCode(
   userCode: string,
   sequence: number,
 ): string {
-  return `${normalizeCasualtyUserCode(userCode)}${formatCasualtySequence(
+  return `${normalizeCasualtyUserCode(userCode)}${Math.max(
+    1,
     sequence,
   )}`;
 }
@@ -3965,6 +4033,8 @@ function mapRecordToForm(
 ): FormState {
   return {
     responderSafetyStatus: "",
+    responderArrivalTime: "",
+    responderArrivalTimeLocked: false,
     ppeUseTime: "",
     victimCodeMarked: "",
 
@@ -4020,18 +4090,38 @@ function mapRecordToForm(
     triageLocation: valueOrEmpty(latestTriage?.location),
     triageNotes: valueOrEmpty(latestTriage?.notes),
     triageSystemOther: "",
-    triageAssessmentAnswers: Object.fromEntries(
-      Object.entries(latestTriage?.assessment_answers ?? {}).map(
-        ([key, value]) => [
-          key,
-          typeof value === "boolean"
-            ? value
-              ? "yes"
-              : "no"
-            : String(value),
-        ],
-      ),
+
+triageAssessmentAnswers: Object.fromEntries(
+  Object.entries(
+    latestTriage?.assessment_answers ?? {},
+  )
+    .filter(
+      ([key]) =>
+        key !== "triageAssistanceMode",
+    )
+    .map(
+      ([key, value]) => [
+        key,
+        typeof value === "boolean"
+          ? value
+            ? "yes"
+            : "no"
+          : String(value),
+      ],
     ),
+),
+
+triageAssistanceMode:
+  latestTriage?.assessment_answers?.[
+    "triageAssistanceMode"
+  ] === "unassisted"
+    ? "unassisted"
+    : "assisted",
+
+    triageAssistanceLocked:
+  latestTriage?.assessment_answers?.[
+    "triageAssistanceMode"
+  ] === "assisted",
 
     transportRequired: formatTransportRequired(
       latestTransport?.transport_required,
@@ -5218,7 +5308,7 @@ const [
         );
         setLoadedDraftId(draft.id);
       } catch (error) {
-        console.error("Failed to load casualty draft:", error);
+        console.error("Failed to load victim draft:", error);
         Alert.alert(
           "Unable to load draft",
           "The saved draft could not be opened. Please try again from Drafts.",
@@ -5394,12 +5484,20 @@ const victimCodeAlreadyExists = useMemo(() => {
     const assessmentAnswers = buildTriageAssessmentAnswers(form);
 
     return {
-      triageSystem: normalizeTriageSystem(form.triageSystem),
-      triageCategory: calculateMobileTriageCategory(
-        form.triageSystem,
-        assessmentAnswers,
-      ),
-      triageStage: normalizeTriageStage(form.triageStage),
+  triageSystem: normalizeTriageSystem(form.triageSystem),
+
+  triageCategory:
+    form.triageAssistanceMode === "assisted"
+      ? calculateMobileTriageCategory(
+          form.triageSystem,
+          assessmentAnswers,
+        )
+      : triageFinalAnswerToCategory(
+          form.triageSystem,
+          form.triageAssessmentAnswers.finalTriage,
+        ),
+
+  triageStage: normalizeTriageStage(form.triageStage),
       triagedAt: parseDateTimeInput(form.triageTime),
       location: form.triageLocation || form.currentLocation,
       notes: isHealthcareDocumenterFlow
@@ -5768,7 +5866,7 @@ const victimCodeAlreadyExists = useMemo(() => {
           await saveCurrentUser(profile.user);
         } catch (error) {
           console.warn(
-            "Unable to refresh user profile before add casualty:",
+            "Unable to refresh user profile before add victim:",
             error,
           );
         }
@@ -5902,7 +6000,7 @@ const victimCodeAlreadyExists = useMemo(() => {
             serverNextSequence - 1,
           );
         } catch (error) {
-          console.warn("Unable to count synced casualty IDs:", error);
+          console.warn("Unable to count synced victim IDs:", error);
         }
       }
 
@@ -6131,21 +6229,38 @@ const victimCodeAlreadyExists = useMemo(() => {
           setResponderSafetyResponse(response);
 
           if (response) {
-            setForm((current) => ({
-              ...current,
-              responderSafetyStatus: formatResponderSafetyStatusForForm(
-                response.safety_status,
-              ),
-              ppeUseTime: response.ppe_used_at
-                ? formatDateTimeForInput(new Date(response.ppe_used_at))
-                : current.ppeUseTime,
-            }));
+  setForm((current) => ({
+    ...current,
+
+    responderSafetyStatus:
+      formatResponderSafetyStatusForForm(
+        response.safety_status,
+      ),
+
+    responderArrivalTime:
+      response.responder_arrived_at
+        ? formatDateTimeForInput(
+            new Date(response.responder_arrived_at),
+          )
+        : current.responderArrivalTime,
+
+    responderArrivalTimeLocked:
+      Boolean(response.responder_arrived_at),
+
+    ppeUseTime: response.ppe_used_at
+      ? formatDateTimeForInput(
+          new Date(response.ppe_used_at),
+        )
+      : current.ppeUseTime,
+  }));
           } else {
             setForm((current) => ({
-              ...current,
-              responderSafetyStatus: "",
-              ppeUseTime: "",
-            }));
+            ...current,
+            responderSafetyStatus: "",
+            responderArrivalTime: "",
+            responderArrivalTimeLocked: false,
+            ppeUseTime: "",
+          }));
           }
         }
       } catch (error) {
@@ -6428,13 +6543,13 @@ const victimCodeAlreadyExists = useMemo(() => {
           );
         }
       } catch (error) {
-        console.error("Failed to load casualty for editing:", error);
+        console.error("Failed to load victim for editing:", error);
 
         if (isMounted) {
           setLoadError(
             error instanceof Error
               ? error.message
-              : "Unable to load casualty for editing.",
+              : "Unable to load victim for editing.",
           );
         }
       } finally {
@@ -6450,6 +6565,26 @@ const victimCodeAlreadyExists = useMemo(() => {
       isMounted = false;
     };
   }, [casualtyId]);
+
+  function updateResponderArrivalTime(value: string) {
+  setForm((current) => {
+    if (current.responderArrivalTimeLocked) {
+      return current;
+    }
+
+    const isValidArrivalTime =
+      getValidDateTimeInput(value) !== null;
+
+    return {
+      ...current,
+      responderArrivalTime: value,
+      responderArrivalTimeLocked:
+        isValidArrivalTime
+          ? true
+          : current.responderArrivalTimeLocked,
+    };
+  });
+}
 
   function updateField<K extends keyof FormState>(
     key: K,
@@ -6468,13 +6603,20 @@ const victimCodeAlreadyExists = useMemo(() => {
       }
 
       if (key === "triageSystem") {
-        return {
-          ...current,
-          [key]: value,
-          triageSystemOther: value === "Other" ? current.triageSystemOther : "",
-          triageAssessmentAnswers: {},
-        };
-      }
+  return {
+    ...current,
+    [key]: value,
+
+    triageSystemOther:
+      value === "Other"
+        ? current.triageSystemOther
+        : "",
+
+    triageAssessmentAnswers: {},
+    triageAssistanceMode: "assisted",
+    triageAssistanceLocked: false,
+  };
+}
 
       if (key === "triageStage") {
         const nextStage = String(value);
@@ -6493,9 +6635,9 @@ const victimCodeAlreadyExists = useMemo(() => {
             currentSystemIsAllowed && current.triageSystem === "Other"
               ? current.triageSystemOther
               : "",
-          triageAssessmentAnswers: currentSystemIsAllowed
-            ? current.triageAssessmentAnswers
-            : {},
+          triageAssessmentAnswers: {},
+          triageAssistanceMode: "assisted",
+          triageAssistanceLocked: false,
         };
       }
 
@@ -6770,32 +6912,175 @@ const victimCodeAlreadyExists = useMemo(() => {
     });
   }
 
-  function updateTriageAssessmentAnswer(
-    key: string,
-    value: string,
-  ) {
-    if (key === "finalTriage") {
+  function changeTriageAssistanceMode(
+  nextMode: TriageAssistanceMode,
+) {
+if (
+  nextMode === "unassisted" &&
+  form.triageAssistanceLocked
+) {
+  return;
+}
+
+  if (nextMode === form.triageAssistanceMode) {
+    return;
+  }
+
+  const hasExistingAnswers = Object.values(
+    form.triageAssessmentAnswers,
+  ).some(Boolean);
+
+  if (
+  form.triageAssistanceMode === "unassisted" &&
+  nextMode === "assisted" &&
+  hasExistingAnswers
+) {
+  if (Platform.OS === "web") {
+    const confirmed = window.confirm(
+      "Switch to Assisted Triage?\n\n" +
+        "Your current assessment answers will be cleared before switching to Assisted mode.",
+    );
+
+    if (!confirmed) {
       return;
     }
 
-    setForm((current) => {
-      const nextAnswers = { ...current.triageAssessmentAnswers };
+    setForm((current) => ({
+  ...current,
+  triageAssistanceMode: "assisted",
+  triageAssistanceLocked: true,
+  triageAssessmentAnswers: {},
+}));
 
-      if (value) {
-        nextAnswers[key] = value;
-      } else {
-        delete nextAnswers[key];
-      }
-
-      return {
-        ...current,
-        triageAssessmentAnswers: syncCalculatedFinalTriageAnswer(
-          current.triageSystem,
-          nextAnswers,
-        ),
-      };
-    });
+    return;
   }
+
+  Alert.alert(
+    "Switch to Assisted Triage?",
+    "Your current assessment answers will be cleared before switching to Assisted mode.",
+    [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Switch & Reset",
+        style: "destructive",
+        onPress: () => {
+          setForm((current) => ({
+  ...current,
+  triageAssistanceMode: "assisted",
+  triageAssistanceLocked: true,
+  triageAssessmentAnswers: {},
+}));
+        },
+      },
+    ],
+  );
+
+  return;
+}
+
+  setForm((current) => {
+    const nextAnswers = {
+      ...current.triageAssessmentAnswers,
+    };
+
+    if (nextMode === "unassisted") {
+      delete nextAnswers.finalTriage;
+    }
+
+    return {
+  ...current,
+  triageAssistanceMode: nextMode,
+
+  triageAssistanceLocked:
+    nextMode === "assisted"
+      ? true
+      : current.triageAssistanceLocked,
+
+  triageAssessmentAnswers: nextAnswers,
+};
+  });
+}
+
+function handleTriageAssessmentDone() {
+  if (
+    form.triageAssistanceMode === "unassisted" &&
+    !form.triageAssessmentAnswers.finalTriage
+  ) {
+    const message =
+      "Select a Final Triage before completing the unassisted assessment.";
+
+    if (Platform.OS === "web") {
+      window.alert(
+        `Final triage required\n\n${message}`,
+      );
+    } else {
+      Alert.alert(
+        "Final triage required",
+        message,
+      );
+    }
+
+    return;
+  }
+
+  setIsTriageAssessmentVisible(false);
+}
+
+  function updateTriageAssessmentAnswer(
+  key: string,
+  value: string,
+) {
+  setForm((current) => {
+    // Assisted mode must not allow the user
+    // to manually select Final Triage.
+    if (
+      key === "finalTriage" &&
+      current.triageAssistanceMode === "assisted"
+    ) {
+      return current;
+    }
+
+    const nextAnswers = {
+      ...current.triageAssessmentAnswers,
+    };
+
+    if (value) {
+      nextAnswers[key] = value;
+    } else {
+      delete nextAnswers[key];
+    }
+
+    // Assisted:
+    // automatically calculate Final Triage.
+    if (
+  current.triageAssistanceMode === "assisted"
+) {
+  return {
+    ...current,
+
+    triageAssistanceLocked:
+      current.triageAssistanceLocked ||
+      Boolean(value),
+
+    triageAssessmentAnswers:
+      syncCalculatedFinalTriageAnswer(
+        current.triageSystem,
+        nextAnswers,
+      ),
+  };
+}
+
+    // Unassisted:
+    // keep exactly what the user selected.
+    return {
+      ...current,
+      triageAssessmentAnswers: nextAnswers,
+    };
+  });
+}
 
   function getDefaultTriageStageForCurrentFlow(): TriageStageOption {
     if (isHealthcareDocumenterFlow) {
@@ -6819,19 +7104,38 @@ const victimCodeAlreadyExists = useMemo(() => {
     sequence = nextCasualtySequence,
   ): FormState {
     return {
-      ...initialForm,
-      responderSafetyStatus:
-        hasSavedResponderSafetyResponse
-          ? formatResponderSafetyStatusForForm(
-              responderSafetyResponse.safety_status,
-            )
-          : "",
-      ppeUseTime:
-        hasSavedResponderSafetyResponse && responderSafetyResponse.ppe_used_at
-          ? formatDateTimeForInput(
-              new Date(responderSafetyResponse.ppe_used_at),
-            )
-          : "",
+  ...initialForm,
+
+  responderSafetyStatus:
+    hasSavedResponderSafetyResponse
+      ? formatResponderSafetyStatusForForm(
+          responderSafetyResponse.safety_status,
+        )
+      : "",
+
+  responderArrivalTime:
+    hasSavedResponderSafetyResponse &&
+    responderSafetyResponse.responder_arrived_at
+      ? formatDateTimeForInput(
+          new Date(
+            responderSafetyResponse.responder_arrived_at,
+          ),
+        )
+      : "",
+
+  responderArrivalTimeLocked:
+    hasSavedResponderSafetyResponse &&
+    Boolean(
+      responderSafetyResponse.responder_arrived_at,
+    ),
+
+  ppeUseTime:
+    hasSavedResponderSafetyResponse &&
+    responderSafetyResponse.ppe_used_at
+      ? formatDateTimeForInput(
+          new Date(responderSafetyResponse.ppe_used_at),
+        )
+      : "",
       idNumber: isSaResponderFlow
         ? generateCasualtyUnitIdNumber(
             currentAssignedMunicipality,
@@ -6949,11 +7253,11 @@ const victimCodeAlreadyExists = useMemo(() => {
       setSubmissionFeedback({
         title: "Saved as draft",
         message:
-          "This casualty form was saved on this device. Open Drafts to continue it later.",
+          "This victim form was saved on this device. Open Drafts to continue it later.",
         resetOnClose: false,
       });
     } catch (error) {
-      console.error("Failed to save casualty draft:", error);
+      console.error("Failed to save victim draft:", error);
       Alert.alert(
         "Unable to save draft",
         error instanceof Error
@@ -7137,15 +7441,28 @@ const victimCodeAlreadyExists = useMemo(() => {
       return true;
     }
 
-    if (hasTriageAssessmentAnswer()) {
-      return true;
-    }
+    if (!hasTriageAssessmentAnswer()) {
+  Alert.alert(
+    "Assessment answer required",
+    "Answer at least one triage assessment item before continuing.",
+  );
 
-    Alert.alert(
-      "Assessment answer required",
-      "Answer at least one triage assessment item before continuing.",
-    );
-    return false;
+  return false;
+}
+
+if (
+  form.triageAssistanceMode === "unassisted" &&
+  !form.triageAssessmentAnswers.finalTriage
+) {
+  Alert.alert(
+    "Final triage required",
+    "Select a Final Triage before continuing with an unassisted assessment.",
+  );
+
+  return false;
+}
+
+return true;
   }
 
   function validatePartialCurrentStep(): boolean {
@@ -7159,7 +7476,7 @@ const victimCodeAlreadyExists = useMemo(() => {
         ) {
           Alert.alert(
             "Incident required",
-            "Select the active incident before submitting this casualty.",
+            "Select the active incident before submitting this victim.",
           );
           openChoiceSheet("incident");
           return false;
@@ -7185,6 +7502,24 @@ const victimCodeAlreadyExists = useMemo(() => {
           return false;
         }
 
+        if (!form.responderArrivalTime.trim()) {
+  Alert.alert(
+    "Responder arrival time required",
+    "Enter the Time of Arrival of Responder on Scene before continuing.",
+  );
+  return false;
+}
+
+if (
+  !validateOptionalDateTime(
+    form.responderArrivalTime,
+    "Invalid responder arrival time",
+    "Time of Arrival of Responder on Scene",
+  )
+) {
+  return false;
+}
+
         if (!form.ppeUseTime.trim()) {
           Alert.alert(
             "PPE time required",
@@ -7209,7 +7544,7 @@ const victimCodeAlreadyExists = useMemo(() => {
         ) {
           Alert.alert(
             "Incident required",
-            "Select the incident before submitting this casualty.",
+            "Select the incident before submitting this victim.",
           );
           return false;
         }
@@ -7709,8 +8044,8 @@ if (
           !selectedPhoto
         ) {
           return failValidation(
-            "Casualty photo required",
-            "Attach or capture a casualty photo before submitting.",
+            "Victim photo required",
+            "Attach or capture a victim photo before submitting.",
           );
         }
 
@@ -7738,8 +8073,8 @@ if (
             !selectedPhoto
           ) {
             return failValidation(
-              "Casualty photo required",
-              "Attach or capture a casualty photo before submitting.",
+              "Victim photo required",
+              "Attach or capture a victim photo before submitting.",
             );
           }
 
@@ -7958,7 +8293,7 @@ if (
         if (!form.sex.trim()) {
           Alert.alert(
             "Sex required",
-            "Select the casualty sex before continuing.",
+            "Select the victim sex before continuing.",
           );
           return false;
         }
@@ -8074,7 +8409,7 @@ if (
         if (!form.sex.trim()) {
           Alert.alert(
             "Sex required",
-            "Select the casualty sex before continuing.",
+            "Select the victim sex before continuing.",
           );
           return false;
         }
@@ -8128,7 +8463,7 @@ if (
         if (!form.currentLocation.trim()) {
           Alert.alert(
             "Current location required",
-            "Enter where the casualty was found before continuing.",
+            "Enter where the victim was found before continuing.",
           );
           return false;
         }
@@ -8155,7 +8490,7 @@ if (
         if (!form.triageSystem.trim()) {
           Alert.alert(
             "Triage system required",
-            "Select the triage system used for this casualty.",
+            "Select the triage system used for this victim.",
           );
           return false;
         }
@@ -8644,7 +8979,7 @@ if (
         if (!form.transportRequired.trim()) {
           Alert.alert(
             "Transport status required",
-            "Select whether this casualty requires transport.",
+            "Select whether this victim requires transport.",
           );
           return false;
         }
@@ -8805,8 +9140,8 @@ if (
       case "Status": {
         if (!form.casualtyStatus.trim()) {
           Alert.alert(
-            "Casualty status required",
-            "Select the casualty status before continuing.",
+            "Victim status required",
+            "Select the victim status before continuing.",
           );
           return false;
         }
@@ -8857,7 +9192,7 @@ if (
         ) {
           Alert.alert(
             "Stabilized time required",
-            "Enter the time this casualty was stabilized in the treatment area.",
+            "Enter the time this victim was stabilized in the treatment area.",
           );
           return false;
         }
@@ -8884,7 +9219,7 @@ if (
         ) {
           Alert.alert(
             "Transfer status required",
-            "Select whether this casualty was transferred out of the hospital, or choose Unknown.",
+            "Select whether this victim was transferred out of the hospital, or choose Unknown.",
           );
           return false;
         }
@@ -8999,7 +9334,7 @@ if (
         ) {
           Alert.alert(
             "Death status required",
-            "Set Died to Yes when the casualty status is Deceased.",
+            "Set Died to Yes when the victim status is Deceased.",
           );
           return false;
         }
@@ -9113,7 +9448,7 @@ if (
         ) {
           Alert.alert(
             "Stabilized time required",
-            "Enter the time this casualty was stabilized in the treatment area.",
+            "Enter the time this victim was stabilized in the treatment area.",
           );
           return false;
         }
@@ -9338,7 +9673,7 @@ if (
 
       Alert.alert(
         "Incident ready",
-        "The disaster incident has been added and selected for this casualty.",
+        "The disaster incident has been added and selected for this victim.",
       );
     } catch (error) {
       console.error("Failed to create incident:", error);
@@ -9424,7 +9759,7 @@ if (
 
       Alert.alert(
         "Evacuation center ready",
-        "The evacuation center has been added and selected for this casualty.",
+        "The evacuation center has been added and selected for this victim.",
       );
     } catch (error) {
       console.error("Failed to create evacuation center:", error);
@@ -9504,7 +9839,7 @@ if (
 
       Alert.alert(
         "Healthcare facility ready",
-        "The healthcare facility has been added and selected for this casualty.",
+        "The healthcare facility has been added and selected for this victim.",
       );
     } catch (error) {
       console.error("Failed to create healthcare facility:", error);
@@ -9567,7 +9902,7 @@ if (
     if (!permission.granted) {
       Alert.alert(
         "Photo permission needed",
-        "Allow photo library access to attach a casualty photo.",
+        "Allow photo library access to attach a victim photo.",
       );
       return;
     }
@@ -9723,7 +10058,7 @@ if (
         "Camera permission needed",
         error instanceof Error
           ? error.message
-          : "Allow camera access to capture a casualty photo.",
+          : "Allow camera access to capture a victim photo.",
       );
     }
   }
@@ -9739,7 +10074,7 @@ if (
     if (!permission.granted) {
       Alert.alert(
         "Camera permission needed",
-        "Allow camera access to capture a casualty photo.",
+        "Allow camera access to capture a victim photo.",
       );
       return;
     }
@@ -9881,7 +10216,7 @@ if (
 
   if (selectedPhoto) {
     photos.push({
-      label: "vicitm photo",
+      label: "victim photo",
       photo: selectedPhoto,
     });
   }
@@ -10068,7 +10403,7 @@ if (
       case "finalDisposition":
         return "Final Disposition";
       case "casualtyStatus":
-        return "Select Casualty Status";
+        return "Select Victim Status";
       case "severity":
         return "Select Severity";
       default:
@@ -10681,39 +11016,74 @@ if (
     }
   }
 
-  async function ensureResponderSafetyResponseSaved() {
-    if (
-      isEditing ||
-      (!isFieldResponderFlow && !isSaResponderFlow) ||
-      hasSavedResponderSafetyResponse
-    ) {
-      return;
-    }
-
-    if (!currentUserId || !form.incidentId) {
-      return;
-    }
-
-    const ppeUsedAt = parseDateTimeInput(form.ppeUseTime);
-
-    if (!ppeUsedAt) {
-      throw new Error("Time of PPE Use is required.");
-    }
-
-    const response = await saveResponderSafetyResponse(form.incidentId, {
-      safetyStatus: normalizeResponderSafetyStatusForApi(
-        form.responderSafetyStatus,
-      ),
-      ppeUsedAt,
-      responderFunction: isFieldResponderFlow
-        ? "field_responder"
-        : isSaResponderFlow
-          ? "sa_responder"
-          : null,
-    });
-
-    setResponderSafetyResponse(response);
+async function ensureResponderSafetyResponseSaved() {
+  if (
+    isEditing ||
+    (!isFieldResponderFlow && !isSaResponderFlow)
+  ) {
+    return;
   }
+
+  if (!currentUserId || !form.incidentId) {
+    return;
+  }
+
+  // If this responder already has a saved arrival time
+  // for this incident, there is nothing more to save.
+  if (
+    hasSavedResponderSafetyResponse &&
+    responderSafetyResponse?.responder_arrived_at
+  ) {
+    return;
+  }
+
+  const responderArrivalAt =
+    parseDateTimeInput(
+      form.responderArrivalTime,
+    );
+
+  if (!responderArrivalAt) {
+    throw new Error(
+      "Time of Arrival of Responder on Scene is required.",
+    );
+  }
+
+  const ppeUsedAt =
+    parseDateTimeInput(form.ppeUseTime);
+
+  if (!ppeUsedAt) {
+    throw new Error(
+      "Time of PPE Use is required.",
+    );
+  }
+
+  const response =
+    await saveResponderSafetyResponse(
+      form.incidentId,
+      {
+        safetyStatus:
+          normalizeResponderSafetyStatusForApi(
+            form.responderSafetyStatus,
+          ),
+
+        responderArrivalAt,
+        ppeUsedAt,
+
+        responderFunction: isFieldResponderFlow
+          ? "field_responder"
+          : isSaResponderFlow
+            ? "sa_responder"
+            : null,
+      },
+    );
+
+  setResponderSafetyResponse(response);
+
+  setForm((current) => ({
+    ...current,
+    responderArrivalTimeLocked: true,
+  }));
+}
 
   async function handleSubmit() {
     const shouldResetPendingDepartureForm =
@@ -10771,7 +11141,7 @@ if (
           setSubmissionFeedback({
             title: "Saved on this device",
             message:
-              "The casualty record was saved locally. Log in from Profile later to sync records to DCMS.",
+              "The victim record was saved locally. Log in from Profile later to sync records to DCMS.",
             resetOnClose: shouldResetPendingDepartureForm ? false : undefined,
           });
         } catch (error) {
@@ -10803,7 +11173,7 @@ if (
             setSubmissionFeedback({
               title: "Saved offline",
               message:
-                "No incident list is available on this device yet, so the casualty was saved locally. When internet returns, open Records, assign the queued casualty to an active incident, then retry sync.",
+                "No incident list is available on this device yet, so the victim was saved locally. When internet returns, open Records, assign the queued victim to an active incident, then retry sync.",
               resetOnClose: shouldResetPendingDepartureForm
                 ? false
                 : undefined,
@@ -10824,7 +11194,7 @@ if (
 
         Alert.alert(
           "Select a disaster incident",
-          "Choose or create a disaster incident before submitting this casualty.",
+          "Choose or create a disaster incident before submitting this victim.",
         );
         const incidentStepIndex = activeSteps.indexOf("Incident");
         setCurrentStep(incidentStepIndex >= 0 ? incidentStepIndex : 0);
@@ -10892,7 +11262,7 @@ if (
           resetOnClose: shouldResetPendingDepartureForm ? false : undefined,
         });
       } catch (error) {
-        console.error("Failed to submit casualty:", error);
+        console.error("Failed to submit victim:", error);
 
         if (isNetworkSubmissionError(error)) {
           await queueCurrentCasualtySubmission();
@@ -10905,7 +11275,7 @@ if (
           setSubmissionFeedback({
             title: "Saved offline",
             message:
-              "The casualty record was saved on this device and will sync when the connection is available.",
+              "The victim record was saved on this device and will sync when the connection is available.",
             resetOnClose: shouldResetPendingDepartureForm ? false : undefined,
           });
           return;
@@ -10921,7 +11291,7 @@ if (
 
           Alert.alert(
             "Session expired",
-            "The casualty record was saved on this device. Please log in again from Profile, then sync queued records.",
+            "The victim record was saved on this device. Please log in again from Profile, then sync queued records.",
             [
               {
                 text: "OK",
@@ -10933,7 +11303,7 @@ if (
         }
 
         Alert.alert(
-          "Unable to submit casualty",
+          "Unable to submit victim",
           error instanceof Error
             ? error.message
             : "Please review the record and try again.",
@@ -10961,20 +11331,20 @@ if (
       setSubmissionFeedback({
         title: returnedForReview
           ? "Returned for admin review"
-          : "Casualty updated",
+          : "Victim updated",
         message: photoUploadError
-          ? `The casualty record was saved, but the photo upload failed: ${photoUploadError}`
+          ? `The victim record was saved, but the photo upload failed: ${photoUploadError}`
           : responseMessage,
         onCloseRoute: `/casualty/${encodeURIComponent(casualtyId)}`,
         resetOnClose: false,
       });
     } catch (error) {
-      console.error("Failed to update casualty:", error);
+      console.error("Failed to update victim:", error);
 
       if (isAuthenticationTokenError(error)) {
         Alert.alert(
           "Session expired",
-          "Please log in again from Profile, then try saving the casualty update again.",
+          "Please log in again from Profile, then try saving the victim update again.",
           [
             {
               text: "OK",
@@ -11210,7 +11580,7 @@ if (
         isFieldResponderFlow &&
         !selectedPhoto
       ) {
-        return "Casualty Photo is required.";
+        return "Victim Photo is required.";
       }
 
       return null;
@@ -11221,7 +11591,7 @@ if (
         isSaResponderFlow &&
         !selectedPhoto
       ) {
-        return "Casualty Photo is required.";
+        return "Victim Photo is required.";
       }
 
       return null;
@@ -11402,6 +11772,24 @@ function confirmExitAddCasualty() {
             })}
           </View>
         </View>
+        <CurrentTimeField
+          label="TIME OF ARRIVAL OF RESPONDER ON SCENE"
+          value={form.responderArrivalTime}
+          placeholder="mm/dd/yyyy hh:mm AM/PM"
+          buttonLabel="Use current time"
+          icon="time-outline"
+          disabled={
+            isLoadingResponderSafetyResponse ||
+            form.responderArrivalTimeLocked
+          }
+          onChangeText={updateResponderArrivalTime}
+          onUseCurrent={() =>
+            updateField(
+              "responderArrivalTime",
+              formatDateTimeForInput(new Date()),
+            )
+          }
+        />
 
         <CurrentTimeField
           label="TIME OF PPE USE"
@@ -12505,7 +12893,7 @@ function confirmExitAddCasualty() {
         <FormField
           label="CURRENT LOCATION"
           value={form.currentLocation}
-          placeholder="Where the casualty was found"
+          placeholder="Where the victim was found"
           onChangeText={(value) =>
             updateField("currentLocation", value)
           }
@@ -12696,111 +13084,169 @@ function confirmExitAddCasualty() {
     );
   }
 
-  function renderAppendixQuestion(question: AppendixQuestion) {
-    const isFinalTriageQuestion = question.key === "finalTriage";
-    const selectedValue = isFinalTriageQuestion
+function renderAppendixQuestion(question: AppendixQuestion) {
+  const isFinalTriageQuestion =
+    question.key === "finalTriage";
+
+  const isAssistedMode =
+    form.triageAssistanceMode === "assisted";
+
+  const selectedValue =
+    isFinalTriageQuestion && isAssistedMode
       ? getCalculatedFinalTriageAnswer(
           form.triageSystem,
           buildTriageAssessmentAnswers(form),
         )
       : form.triageAssessmentAnswers[question.key] ?? "";
-    const finalTriageIsCalculated =
-      isFinalTriageQuestion && selectedValue.length > 0;
 
-    if (question.inputType === "numeric") {
-      return (
-        <View key={question.key} style={styles.appendixQuestion}>
-          <Text style={styles.appendixQuestionLabel}>
-            {question.label}
-          </Text>
+  const finalTriageIsCalculated =
+    isFinalTriageQuestion &&
+    isAssistedMode &&
+    selectedValue.length > 0;
 
-          <TextInput
-            value={selectedValue}
-            placeholder="Numbers only"
-            placeholderTextColor={COLORS.muted}
-            keyboardType="number-pad"
-            inputMode="numeric"
-            onChangeText={(value) =>
-              updateTriageAssessmentAnswer(
-                question.key,
-                value.replace(/[^0-9]/g, ""),
-              )
-            }
-            style={styles.appendixNumericInput}
-          />
-        </View>
-      );
-    }
-
+  if (question.inputType === "numeric") {
     return (
-      <View key={question.key} style={styles.appendixQuestion}>
+      <View
+        key={question.key}
+        style={styles.appendixQuestion}
+      >
         <Text style={styles.appendixQuestionLabel}>
           {question.label}
         </Text>
-        {isFinalTriageQuestion ? (
-          <Text style={styles.appendixQuestionHint}>
-            {finalTriageIsCalculated
-              ? "Automatically selected from the assessment formula."
-              : "Answer assessment items to calculate the final triage."}
-          </Text>
-        ) : null}
-        <View style={styles.appendixOptionGrid}>
-          {(question.options ?? []).map((option) => {
-            const selected = selectedValue === option.value;
-            const finalTriageColorStyle = isFinalTriageQuestion
-              ? getTriageColorButtonStyle(option.value)
-              : null;
 
-            return (
-              <Pressable
-                key={option.value}
-                disabled={isFinalTriageQuestion}
-                onPress={() =>
-                  updateTriageAssessmentAnswer(
-                    question.key,
-                    selected ? "" : option.value,
-                  )
-                }
-                style={({ pressed }) => [
-                  styles.appendixOption,
-                  isFinalTriageQuestion &&
-                    styles.finalTriageOption,
-                  selected && styles.appendixOptionSelected,
-                  finalTriageColorStyle,
-                  isFinalTriageQuestion &&
-                    !selected &&
-                    finalTriageColorStyle &&
-                    styles.finalTriageOptionInactive,
-                  isFinalTriageQuestion &&
-                    selected &&
-                    finalTriageColorStyle &&
-                    styles.finalTriageOptionSelected,
-                  pressed && !isFinalTriageQuestion && styles.pressed,
-                ]}
-              >
-                <Text
-                  numberOfLines={2}
-                  style={[
-                    styles.appendixOptionText,
-                    isFinalTriageQuestion &&
-                      finalTriageColorStyle &&
-                      getTriageColorTextStyle(option.value),
-                    selected && styles.appendixOptionTextSelected,
-                    isFinalTriageQuestion &&
-                      selected &&
-                      finalTriageColorStyle &&
-                      getTriageColorTextStyle(option.value),
-                  ]}
-                >
-                  {option.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <TextInput
+          value={selectedValue}
+          placeholder="Numbers only"
+          placeholderTextColor={COLORS.muted}
+          keyboardType="number-pad"
+          inputMode="numeric"
+          onChangeText={(value) =>
+            updateTriageAssessmentAnswer(
+              question.key,
+              value.replace(/[^0-9]/g, ""),
+            )
+          }
+          style={styles.appendixNumericInput}
+        />
       </View>
     );
   }
+
+  return (
+    <View
+      key={question.key}
+      style={styles.appendixQuestion}
+    >
+      <Text style={styles.appendixQuestionLabel}>
+        {question.label}
+      </Text>
+
+      {isFinalTriageQuestion ? (
+        <Text style={styles.appendixQuestionHint}>
+          {isAssistedMode
+            ? finalTriageIsCalculated
+              ? "Automatically selected from the assessment formula."
+              : "Answer assessment items to calculate the final triage."
+            : "Select the final triage manually."}
+        </Text>
+      ) : null}
+
+      <View style={styles.appendixOptionGrid}>
+        {(question.options ?? []).map((option) => {
+          const selected =
+            selectedValue === option.value;
+
+          const finalTriageColorStyle =
+            isFinalTriageQuestion
+              ? getTriageColorButtonStyle(
+                  option.value,
+                )
+              : null;
+
+          const finalTriageDisabled =
+            isFinalTriageQuestion &&
+            isAssistedMode;
+
+          return (
+            <Pressable
+              key={option.value}
+              disabled={finalTriageDisabled}
+              onPress={() =>
+                updateTriageAssessmentAnswer(
+                  question.key,
+                  selected ? "" : option.value,
+                )
+              }
+              style={({ pressed }) => [
+                styles.appendixOption,
+
+                isFinalTriageQuestion &&
+                  styles.finalTriageOption,
+
+                selected &&
+                  styles.appendixOptionSelected,
+
+                finalTriageColorStyle,
+
+                finalTriageDisabled &&
+                  !selected &&
+                  finalTriageColorStyle &&
+                  styles.finalTriageOptionInactive,
+
+                isFinalTriageQuestion &&
+                  selected &&
+                  finalTriageColorStyle &&
+                  styles.finalTriageOptionSelected,
+
+                pressed &&
+                  !finalTriageDisabled &&
+                  styles.pressed,
+              ]}
+            >
+              <Text
+                numberOfLines={2}
+                style={[
+                  styles.appendixOptionText,
+
+                  isFinalTriageQuestion &&
+                    finalTriageColorStyle &&
+                    getTriageColorTextStyle(
+                      option.value,
+                    ),
+
+                  selected &&
+                    styles.appendixOptionTextSelected,
+
+                  isFinalTriageQuestion &&
+                    selected &&
+                    finalTriageColorStyle &&
+                    getTriageColorTextStyle(
+                      option.value,
+                    ),
+                ]}
+              >
+                {option.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+function getCurrentFinalTriageAnswer(): string {
+  if (form.triageAssistanceMode === "unassisted") {
+    return (
+      form.triageAssessmentAnswers.finalTriage ?? ""
+    );
+  }
+
+  return getCalculatedFinalTriageAnswer(
+    form.triageSystem,
+    buildTriageAssessmentAnswers(form),
+  );
+}
 
   function getTriageAssessmentSummary(): string {
     const questions = getAppendixQuestionsForSystem(form.triageSystem);
@@ -12815,10 +13261,8 @@ function confirmExitAddCasualty() {
     const answeredCount = manualQuestions.filter(
       (question) => form.triageAssessmentAnswers[question.key],
     ).length;
-    const calculatedFinalTriage = getCalculatedFinalTriageAnswer(
-      form.triageSystem,
-      buildTriageAssessmentAnswers(form),
-    );
+    const calculatedFinalTriage =
+    getCurrentFinalTriageAnswer();
     const isEsiTriage =
       normalizeTriageSystem(form.triageSystem) === "esi";
 
@@ -12834,9 +13278,24 @@ function confirmExitAddCasualty() {
           )}`
       : "";
 
-    if (answeredCount === manualQuestions.length) {
-      return `Complete (${answeredCount}/${manualQuestions.length})${resultSuffix}`;
-    }
+    const hasRequiredFinalTriage =
+  form.triageAssistanceMode === "assisted" ||
+  Boolean(form.triageAssessmentAnswers.finalTriage);
+
+if (
+  answeredCount === manualQuestions.length &&
+  hasRequiredFinalTriage
+) {
+  return `Complete (${answeredCount}/${manualQuestions.length})${resultSuffix}`;
+}
+
+if (
+  form.triageAssistanceMode === "unassisted" &&
+  answeredCount === manualQuestions.length &&
+  !form.triageAssessmentAnswers.finalTriage
+) {
+  return `Ready (${answeredCount}/${manualQuestions.length} answered) - Select final triage`;
+}
 
     return answeredCount > 0
       ? `Ready (${answeredCount}/${manualQuestions.length} answered)${resultSuffix}`
@@ -12887,6 +13346,71 @@ function confirmExitAddCasualty() {
               </Pressable>
             </View>
 
+            <View style={styles.triageModeSection}>
+  <Text style={styles.triageModeLabel}>
+    ASSESSMENT MODE
+  </Text>
+
+  <View style={styles.triageModeToggle}>
+    <Pressable
+      onPress={() =>
+        changeTriageAssistanceMode("assisted")
+      }
+      style={({ pressed }) => [
+        styles.triageModeOption,
+        form.triageAssistanceMode === "assisted" &&
+          styles.triageModeOptionSelected,
+        pressed && styles.pressed,
+      ]}
+    >
+      <Text
+        style={[
+          styles.triageModeOptionText,
+          form.triageAssistanceMode === "assisted" &&
+            styles.triageModeOptionTextSelected,
+        ]}
+      >
+        Assisted
+      </Text>
+    </Pressable>
+
+    <Pressable
+  disabled={form.triageAssistanceLocked}
+  onPress={() =>
+    changeTriageAssistanceMode("unassisted")
+  }
+  style={({ pressed }) => [
+    styles.triageModeOption,
+
+    form.triageAssistanceMode === "unassisted" &&
+      styles.triageModeOptionSelected,
+
+    form.triageAssistanceLocked &&
+      styles.triageModeOptionDisabled,
+
+    pressed &&
+      !form.triageAssistanceLocked &&
+      styles.pressed,
+  ]}
+>
+      <Text
+        style={[
+          styles.triageModeOptionText,
+          form.triageAssistanceMode === "unassisted" &&
+            styles.triageModeOptionTextSelected,
+        ]}
+      >
+        Unassisted
+      </Text>
+    </Pressable>
+  </View>
+  {form.triageAssistanceLocked &&
+form.triageAssistanceMode === "assisted" ? (
+  <Text style={styles.triageModeLockedHint}>
+    Assisted mode is locked for this assessment.
+  </Text>
+) : null}
+</View>
             <ScrollView
               contentContainerStyle={styles.assessmentList}
               showsVerticalScrollIndicator={false}
@@ -12895,7 +13419,7 @@ function confirmExitAddCasualty() {
             </ScrollView>
 
             <Pressable
-              onPress={() => setIsTriageAssessmentVisible(false)}
+              onPress={handleTriageAssessmentDone}
               style={({ pressed }) => [
                 styles.assessmentDoneButton,
                 pressed && styles.primaryButtonPressed,
@@ -12912,10 +13436,8 @@ function confirmExitAddCasualty() {
   }
 
   function renderTriageStep() {
-  const selectedFinalTriage = getCalculatedFinalTriageAnswer(
-    form.triageSystem,
-    buildTriageAssessmentAnswers(form),
-  );
+  const selectedFinalTriage =
+  getCurrentFinalTriageAnswer();
 
   const isEsiTriage =
     normalizeTriageSystem(form.triageSystem) === "esi";
@@ -12938,94 +13460,31 @@ function confirmExitAddCasualty() {
 
     return (
       <>
-        {isFieldResponderFlow ? (
-          <>
-            <FormField
-              label="VICTIM CODE"
-              value={form.victimCode}
-              placeholder="Auto-generated victim code"
-              editable={false}
-              onChangeText={() => undefined}
+        {isFieldResponderFlow && victimCodeAlreadyExists ? (
+          <View style={styles.inlineWarning}>
+            <Ionicons
+              name="alert-circle-outline"
+              size={18}
+              color={COLORS.maroon}
             />
 
-            {victimCodeAlreadyExists ? (
-  <View style={styles.inlineWarning}>
-    <Ionicons
-      name="alert-circle-outline"
-      size={18}
-      color={COLORS.maroon}
-    />
-    <Text style={styles.inlineWarningText}>
-      Victim code {form.victimCode.trim()} already exists
-      for this incident under Advanced Medical Responder.
-      Please use a different victim code.
-    </Text>
-  </View>
-) : null}
-
-            <FormField
-              label="USER CODE"
-              value={form.userCode}
-              placeholder="Auto-generated from logged-in user"
-              editable={false}
-              onChangeText={() => undefined}
-            />
-          </>
-        ) : null}
-
-        {isFieldResponderFlow ? (
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>TRIAGE STAGE</Text>
-            <View style={styles.triageStageToggle}>
-              {[
-                {
-                  label: "Yes",
-                  value: "Primary Triage",
-                },
-                {
-                  label: "No",
-                  value: "Secondary Triage",
-                },
-              ].map((option) => {
-                const selected = form.triageStage === option.value;
-
-                return (
-                  <Pressable
-                    key={option.value}
-                    onPress={() =>
-                      updateField("triageStage", option.value)
-                    }
-                    style={({ pressed }) => [
-                      styles.triageStageOption,
-                      selected && styles.triageStageOptionSelected,
-                      pressed && styles.pressed,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.triageStageOptionText,
-                        selected &&
-                          styles.triageStageOptionTextSelected,
-                      ]}
-                    >
-                      {option.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-            <Text style={styles.triageStageHint}>
-              Yes = Primary Triage, No = Secondary Triage
+            <Text style={styles.inlineWarningText}>
+              Victim code {form.victimCode.trim()} already exists
+              for this incident under Field Responder.
             </Text>
           </View>
-        ) : (
+        ) : null}
+
+        {!isFieldResponderFlow ? (
           <SelectField
             label="TRIAGE STAGE"
             value={form.triageStage}
             placeholder="Select triage stage"
-            onPress={() => openChoiceSheet("triageStage")}
+            onPress={() =>
+              openChoiceSheet("triageStage")
+            }
           />
-        )}
+        ) : null}
 
         <SelectField
           label="TRIAGE SYSTEM"
@@ -13047,7 +13506,11 @@ function confirmExitAddCasualty() {
 
         <SelectField
           label="TRIAGE ASSESSMENT"
-          value={getTriageAssessmentSummary()}
+          value={
+            `${form.triageAssistanceMode === "assisted"
+              ? "Assisted"
+              : "Unassisted"} · ${getTriageAssessmentSummary()}`
+          }
           placeholder="Open assessment"
           icon="clipboard-outline"
           inputStyle={
@@ -13658,7 +14121,7 @@ function confirmExitAddCasualty() {
         <SectionLabel title="Clinical status" />
 
         <SelectField
-          label="CASUALTY STATUS"
+          label="VICTIM STATUS"
           value={form.casualtyStatus}
           placeholder="Select status"
           onPress={() =>
@@ -14124,7 +14587,7 @@ function confirmExitAddCasualty() {
         <FormField
           label="REMARKS"
           value={form.remarks}
-          placeholder="Additional information about the casualty"
+          placeholder="Additional information about the victim"
           multiline
           onChangeText={(value) =>
             updateField("remarks", value)
@@ -14172,8 +14635,8 @@ function confirmExitAddCasualty() {
         <View style={styles.uploadTextWrapper}>
           <Text style={styles.uploadTitle}>
             {selectedPhoto
-              ? "Casualty photo selected"
-              : "Add casualty photo"}
+              ? "Victim photo selected"
+              : "Add victim photo"}
           </Text>
           <Text style={styles.uploadDescription}>
             {selectedPhoto
@@ -14297,7 +14760,7 @@ function confirmExitAddCasualty() {
 
         <Text style={styles.centerStateText}>
           {isLoadingRecord
-            ? "Loading casualty record..."
+            ? "Loading victim record..."
             : "Loading responder profile..."}
         </Text>
       </View>
@@ -14435,7 +14898,7 @@ function confirmExitAddCasualty() {
   <View style={styles.victimNumberStickyHeader}>
     <View style={styles.victimStickyGroup}>
       <Text style={styles.victimNumberStickyLabel}>
-        VICTIM NUMBER
+        VICTIM CODE
       </Text>
 
       <Text style={styles.victimNumberStickyValue}>
@@ -14608,8 +15071,8 @@ function confirmExitAddCasualty() {
 
       <Text style={styles.feedbackTitle}>
         {isEditing
-          ? "Exit Edit Casualty?"
-          : "Exit Add Casualty?"}
+          ? "Exit Edit Victim?"
+          : "Exit Add Victim?"}
       </Text>
 
       <Text style={styles.feedbackMessage}>
@@ -14673,7 +15136,7 @@ function confirmExitAddCasualty() {
         title={
           photoTarget === "pcr"
             ? "Add PCR photo"
-            : "Add casualty photo"
+            : "Add victim photo"
         }
         options={[
           {
@@ -15277,11 +15740,11 @@ victimUserCodeValue: {
     letterSpacing: 0.4,
   },
   victimNumberStickyValue: {
-    color: COLORS.text,
-    fontSize: 16,
-    fontWeight: "900",
-    marginTop: 2,
-  },
+  color: COLORS.maroon,
+  fontSize: 16,
+  fontWeight: "900",
+  marginTop: 2,
+},
   fieldGroup: {
     marginBottom: 17,
   },
@@ -15494,6 +15957,59 @@ victimUserCodeValue: {
   appendixQuestion: {
     marginBottom: 12,
   },
+
+  triageModeLockedHint: {
+  color: COLORS.secondaryText,
+  fontSize: 11,
+  fontWeight: "700",
+  marginTop: 6,
+},
+
+
+  triageModeSection: {
+  marginBottom: 12,
+},
+triageModeOptionDisabled: {
+  opacity: 0.4,
+},
+triageModeLabel: {
+  color: COLORS.secondaryText,
+  fontSize: 10,
+  fontWeight: "800",
+  marginBottom: 6,
+},
+
+triageModeToggle: {
+  flexDirection: "row",
+  padding: 4,
+  borderRadius: 12,
+  borderWidth: 1,
+  borderColor: COLORS.fieldBorder,
+  backgroundColor: COLORS.fieldBackground,
+  gap: 4,
+},
+
+triageModeOption: {
+  flex: 1,
+  minHeight: 38,
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: 9,
+},
+
+triageModeOptionSelected: {
+  backgroundColor: COLORS.maroon,
+},
+
+triageModeOptionText: {
+  color: COLORS.secondaryText,
+  fontSize: 12,
+  fontWeight: "800",
+},
+
+triageModeOptionTextSelected: {
+  color: COLORS.white,
+},
   assessmentList: {
     paddingTop: 4,
     paddingBottom: 10,
