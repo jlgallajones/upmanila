@@ -234,7 +234,7 @@ const adminViews = [
   ["incidents", "Official Incidents"],
   ["facilities", "Healthcare Facilities"],
   ["users", "Accounts"],
-  ["records", "Casualty Records"],
+  ["records", "Victim Records"],
   ["match-casing", "Match Casing"],
   ["matched-cases", "Matched Cases"],
   ["drafts", "Drafts"],
@@ -296,10 +296,10 @@ const adminNavGroups = [
   },
   {
     id: "casualties",
-    label: "Casualties",
+    label: "Victims",
     icon: "CA",
     views: [
-      ["records", "Casualty Records"],
+      ["records", "Victim Records"],
       ["verification", "Verification Review"],
       ["match-casing", "Match Casing"],
       ["matched-cases", "Matched Cases"],
@@ -678,7 +678,7 @@ function fullCasualtyName(casualty) {
     .join(" ")
     .trim();
 
-  return name || casualty.id_number || "Unknown casualty";
+  return name || casualty.id_number || "Unknown victim";
 }
 
 function encoderUnitName(encoder) {
@@ -700,7 +700,7 @@ function compareText(a, b) {
 function casualtySortLabel(item) {
   const name = fullCasualtyName(item?.casualty);
 
-  return name === "Unknown casualty"
+  return name === "Unknown victim"
     ? item?.casualty?.id_number || name
     : name;
 }
@@ -2045,7 +2045,7 @@ function renderProfileModal() {
             <ul class="reset-safety-list">
               <li>Accounts and login access are kept.</li>
               <li>Record counts are shown before reset.</li>
-              <li>Attachment records and stored files are removed with related casualty records.</li>
+              <li>Attachment records and stored files are removed with related victim records.</li>
               <li>Typed confirmation and current password are required.</li>
             </ul>
             <button class="danger-button" type="button" id="resetOperationalDataButton">
@@ -2271,7 +2271,7 @@ function renderCurrentView(errorMessage = "") {
         incidents: "Official Incidents",
         facilities: "Healthcare Facilities",
         users: "Accounts",
-        records: "Casualty Records",
+        records: "Victim Records",
         "match-casing": "Match Casing",
         "matched-cases": "Matched Cases",
         drafts: "Drafts",
@@ -4056,11 +4056,11 @@ function renderAdminScopeCard() {
       <div class="scope-list">
         <button class="scope-item" data-view-link="users"><strong>Accounts</strong><span>Register and manage FR, AMP, and HCFD accounts in this unit.</span></button>
         <button class="scope-item" data-view-link="incident-analytics"><strong>Reported incident history</strong><span>Review incident analytics for records created within this unit.</span></button>
-        <button class="scope-item" data-view-link="records"><strong>Casualty records</strong><span>See a summary of all casualty entries.</span></button>
+        <button class="scope-item" data-view-link="records"><strong>Victim records</strong><span>See a summary of all victim entries.</span></button>
         <button class="scope-item" data-view-link="match-casing"><strong>Match Casing</strong><span>Build complete FR, AMP, and HCFD matched cases.</span></button>
-        <button class="scope-item" data-view-link="matched-cases"><strong>Matched Cases</strong><span>Review completed matched casualty case records.</span></button>
+        <button class="scope-item" data-view-link="matched-cases"><strong>Matched Cases</strong><span>Review completed matched victim case records.</span></button>
         <button class="scope-item" data-view-link="logs"><strong>Action logs</strong><span>Audit actions by users this admin created.</span></button>
-        <button class="scope-item" data-view-link="verification"><strong>Verification review</strong><span>Review casualty entries from assigned responders.</span></button>
+        <button class="scope-item" data-view-link="verification"><strong>Verification review</strong><span>Review victim entries from assigned responders.</span></button>
       </div>
     </section>
   `;
@@ -4087,7 +4087,7 @@ function renderIncidentSummaryTable() {
       <div class="panel-header">
         <div>
           <h2>Entries per incident</h2>
-          <p class="panel-subtitle">Uses current incident list and recent casualty activity.</p>
+          <p class="panel-subtitle">Uses current incident list and recent victim activity.</p>
         </div>
       </div>
       <div class="table-wrap">
@@ -4946,7 +4946,7 @@ function renderBulkImportSummary(data) {
 function bulkImportTypeLabel(type) {
   const labels = {
     adminAccounts: "admin accounts",
-    unitAccounts: "FR, SAR, and HCFD accounts",
+    unitAccounts: "FR, AMP, and HCFD accounts",
     healthcareFacilities: "healthcare facilities",
     evacuationCenters: "evacuation centers",
   };
@@ -5271,7 +5271,7 @@ function renderAdminUnitRegistration() {
   return `
     <section class="panel">
       <h2>Create account within admin unit scope</h2>
-      <p class="panel-subtitle">Create Field Responder, SAR Responder, and HCFD accounts tied to this admin unit.</p>
+      <p class="panel-subtitle">Create Field Responder, Advanced Medical Responder, and HCFD accounts tied to this admin unit.</p>
     </section>
     <section class="panel" style="margin-top:16px">
       <form id="unitUserForm" class="form-grid">
@@ -5307,7 +5307,7 @@ function renderAdminUnitRegistration() {
       ${renderBulkImportPanel(
         "unitAccounts",
         "Upload Responder/Documenter Accounts",
-        "Upload a CSV or Excel file to create multiple FR, SAR, and HCFD accounts.",
+        "Upload a CSV or Excel file to create multiple FR, AMP, and HCFD accounts.",
       )}
       <div style="margin-top:12px">
         <button
@@ -5316,7 +5316,7 @@ function renderAdminUnitRegistration() {
           data-export-download="/exports/responders-documenters.csv"
           data-export-file="dcms-responders-documenters.csv"
         >
-          Export FR/SAR/HCFD CSV
+          Export FR/AMP/HCFD CSV
         </button>
       </div>
     </section>
@@ -5330,7 +5330,7 @@ function renderAdminAccountList() {
       <div class="panel-header">
         <div>
           <h2>Accounts created by this admin</h2>
-          <p class="panel-subtitle">FR, SAR, HCFD, and legacy responder accounts that can access the mobile app.</p>
+          <p class="panel-subtitle">FR, AMP, HCFD, and legacy responder accounts that can access the mobile app.</p>
         </div>
       </div>
       <div class="table-wrap">
@@ -5362,7 +5362,7 @@ function renderAdminAccountList() {
                     </tr>
                   `;
                 })
-                .join("") || `<tr><td colspan="6"><div class="empty-state">No FR, SAR, or HCFD accounts created yet.</div></td></tr>`
+                .join("") || `<tr><td colspan="6"><div class="empty-state">No FR, AMP, or HCFD accounts created yet.</div></td></tr>`
             }
           </tbody>
         </table>
@@ -5671,12 +5671,12 @@ function renderAdminCasualtyRecords(compact = false) {
     <section class="panel">
       <div class="panel-header">
         <div>
-          <h2>Casualty Records</h2>
+          <h2>Victim Records</h2>
           <p class="panel-subtitle">
             ${
               focusedIncident
-                ? `Showing casualty records for ${escapeHtml(focusedIncident.incident_name)}.`
-                : "Select an incident to view casualty records submitted for that incident."
+                ? `Showing victim records for ${escapeHtml(focusedIncident.incident_name)}.`
+                : "Select an incident to view victim records submitted for that incident."
             }
           </p>
         </div>
@@ -5772,7 +5772,7 @@ function renderAdminCasualtyRecords(compact = false) {
                                     </strong>
 
                                     <span class="panel-subtitle">
-                                      ${group.total} casualty record${
+                                      ${group.total} victim record${
                                             group.total === 1 ? "" : "s"
                                           }
                                     </span>
@@ -5783,7 +5783,7 @@ function renderAdminCasualtyRecords(compact = false) {
                                   <table>
                                     <thead>
                                       <tr>
-                                        <th>Casualty</th>
+                                        <th>Victim</th>
                                         <th>ID Number</th>
                                         <th>Status</th>
                                         <th>Verification</th>
@@ -5889,7 +5889,7 @@ function renderAdminCasualtyRecords(compact = false) {
                 <tr>
                   <td colspan="4">
                     <div class="empty-state">
-                      ${state.casualties.length === 0 ? "No casualty records available yet." : "No casualty records match the current filters."}
+                      ${state.casualties.length === 0 ? "No victim records available yet." : "No victim records match the current filters."}
                     </div>
                   </td>
                 </tr>
@@ -5972,7 +5972,7 @@ function matchCasingRoleLabel(role) {
     case "field_responder":
       return "Field Responder";
     case "sa_responder":
-      return "SAR";
+      return "AMP";
     case "documenter":
       return "HCFD";
     case "responder":
@@ -6094,7 +6094,7 @@ function toggleMatchCasingRecordSelection(recordId) {
   const role = matchCasingRoleBucket(record);
   if (!isMatchCasingRoleEligible(role)) {
     showMatchCasingWarning(
-      "Only Field Responder, SAR, and HCFD records can be matched.",
+      "Only Field Responder, Advanced Medical Responder, and HCFD records can be matched.",
     );
     return;
   }
@@ -6198,7 +6198,7 @@ function renderMatchCasingPhotoPreview(record) {
 
   if (imageAttachment?.signed_url) {
     const fileName =
-      imageAttachment.file_name || "Casualty photo attachment";
+      imageAttachment.file_name || "Victim photo attachment";
 
     return `
       <button
@@ -6222,7 +6222,7 @@ function renderMatchCasingPhotoPreview(record) {
 
   return `
     <div class="empty-state" style="padding:14px">
-      ${attachments ? "No casualty photo attached." : "Loading photo clues..."}
+      ${attachments ? "No victim photo attached." : "Loading photo clues..."}
     </div>
   `;
 }
@@ -6492,7 +6492,7 @@ function renderMatchCasing() {
       <div>
         <span class="eyebrow">Admin Review</span>
         <h1>Match Casing</h1>
-        <p>Complete the Field Responder, SAR, and HCFD slots before matching one casualty case.</p>
+        <p>Complete the Field Responder, Advanced Medical Responder, and HCFD slots before matching one victim case.</p>
       </div>
     </div>
 
@@ -6500,7 +6500,7 @@ function renderMatchCasing() {
       <div class="panel-header">
         <div>
           <h2>Candidate filters</h2>
-          <p class="panel-subtitle">Only unmatched FR, SAR, and HCFD records are available for new case matching.</p>
+          <p class="panel-subtitle">Only unmatched FR, AMP, and HCFD records are available for new case matching.</p>
         </div>
         <span class="pill blue">${availableRecords.length} available</span>
       </div>
@@ -6530,7 +6530,7 @@ function renderMatchCasing() {
       <div class="panel-header">
         <div>
           <h2>Build matched case</h2>
-          <p class="panel-subtitle">Fill all 3 role boxes. A case cannot be matched until Field Responder, SAR, and HCFD are complete.</p>
+          <p class="panel-subtitle">Fill all 3 role boxes. A case cannot be matched until Field Responder, Advanced Medical Responder, and HCFD are complete.</p>
         </div>
         <span class="pill ${canMatch ? "green" : "orange"}">${selectedCount} / 3 filled</span>
       </div>
@@ -6565,7 +6565,7 @@ function renderMatchedCaseRecords() {
       <div>
         <span class="eyebrow">Admin Review</span>
         <h1>Matched Case Records</h1>
-        <p>Review completed FR, SAR, and HCFD case matches. Submitted matches are locked.</p>
+        <p>Review completed FR, AMP, and HCFD case matches. Submitted matches are locked.</p>
       </div>
     </div>
 
@@ -6606,7 +6606,7 @@ function renderMatchedCaseRecords() {
       </div>
 
       <div class="grid">
-        ${caseGroups.map(renderMatchedCaseGroup).join("") || `<div class="empty-state">No matched casualty cases yet.</div>`}
+        ${caseGroups.map(renderMatchedCaseGroup).join("") || `<div class="empty-state">No matched victim cases yet.</div>`}
       </div>
     </section>
   `;
@@ -6769,14 +6769,14 @@ function bindMatchCasingActions() {
 
     if (selectedRecords.length !== matchCasingRequiredRoleSlots.length) {
       showMatchCasingWarning(
-        "Complete Field Responder, SAR, and HCFD before matching.",
+        "Complete Field Responder, Advanced Medical Responder, and HCFD before matching.",
       );
       return;
     }
 
     if (selectedRoles.some((role) => !isMatchCasingRoleEligible(role))) {
       showMatchCasingWarning(
-        "Only Field Responder, SAR, and HCFD records can be matched.",
+        "Only Field Responder, Advanced Medical Responder, and HCFD records can be matched.",
       );
       return;
     }
@@ -6841,9 +6841,9 @@ function bindMatchCasingActions() {
       if (!recordId) return;
 
       const confirmed = await showDashboardConfirm({
-        title: "Unmatch casualty record?",
+        title: "Unmatch victim record?",
         message:
-          "This removes the selected role record from its matched case. The casualty record itself will not be deleted.",
+          "This removes the selected role record from its matched case. The victim record itself will not be deleted.",
         confirmLabel: "Unmatch record",
         cancelLabel: "Keep matched",
         tone: "danger",
@@ -6883,7 +6883,7 @@ function renderAdminVerificationReview() {
       <div class="panel-header">
         <div>
           <h2>Verification review</h2>
-          <p class="panel-subtitle">Casualty entries awaiting review from responder accounts in this admin unit.</p>
+          <p class="panel-subtitle">Victim entries awaiting review from responder accounts in this admin unit.</p>
         </div>
       </div>
       ${renderVerificationReviewFilters(
@@ -6893,7 +6893,7 @@ function renderAdminVerificationReview() {
       )}
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Unit</th><th>Incident</th><th>Casualty</th><th>Status</th><th>Verification</th><th>Reported</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Unit</th><th>Incident</th><th>Victim</th><th>Status</th><th>Verification</th><th>Reported</th><th>Actions</th></tr></thead>
           <tbody>
             ${
               reviewItems
@@ -7004,7 +7004,7 @@ function renderAttachmentSection(recordDetails) {
           `
           : `
             <div class="empty-state">
-              No attachments uploaded for this casualty record.
+              No attachments uploaded for this victim record.
             </div>
           `
       }
@@ -7772,7 +7772,7 @@ function renderSaTransportHistoryContent(records) {
         class="empty-state"
         style="margin-top:12px"
       >
-        No SAR transport or release record yet.
+        No AMP transport or release record yet.
       </div>
     `;
 }
@@ -7893,7 +7893,7 @@ function renderSaTreatmentHistoryContent(
         class="empty-state"
         style="margin-top:12px"
       >
-        No SAR treatment record yet.
+        No AMP treatment record yet.
       </div>
     `;
 }
@@ -8092,11 +8092,11 @@ const religion =
       <section class="record-modal" role="dialog" aria-modal="true" aria-labelledby="recordModalTitle">
         <div class="modal-header">
           <div>
-            <span class="eyebrow">Casualty Verification Record</span>
+            <span class="eyebrow">Victim Verification Record</span>
             <h2 id="recordModalTitle">${escapeHtml(fullCasualtyName(casualty))}</h2>
             <p>${escapeHtml(casualty.id_number || "No ID number")} - ${escapeHtml(incident.incident_name || "Unknown incident")}</p>
           </div>
-          <button class="icon-button" type="button" data-close-modal aria-label="Close casualty record">&times;</button>
+          <button class="icon-button" type="button" data-close-modal aria-label="Close victim record">&times;</button>
         </div>
 
         <div class="modal-status-row">
@@ -8113,7 +8113,7 @@ const religion =
             <h3>Field Responder</h3>
 
             <p class="panel-subtitle">
-              Complete Field Responder casualty record
+              Complete Field Responder victim record
             </p>
 
 
@@ -8200,7 +8200,7 @@ const religion =
             <h3>Advanced Medical Responder</h3>
 
             <p class="panel-subtitle">
-              Complete Advanced Medical Responder casualty record
+              Complete Advanced Medical Responder victim record
             </p>
 
 
@@ -8500,7 +8500,7 @@ const religion =
             <h3>Healthcare Facility Documenter</h3>
 
             <p class="panel-subtitle">
-              Complete healthcare facility casualty documentation
+              Complete healthcare facility victim documentation
             </p>
 
 
@@ -9062,7 +9062,7 @@ async function loadSingleCasualtyRecordDetails(casualtyId) {
       : existingRecord;
 
   if (!casualty) {
-    throw new Error("Casualty record could not be found.");
+    throw new Error("Victim record could not be found.");
   }
 
   return {
@@ -9177,14 +9177,14 @@ async function openCasualtyRecordModal(casualtyId) {
     bindOpenCasualtyRecord();
   } catch (error) {
     console.error(
-      "Failed to load casualty record details:",
+      "Failed to load victim record details:",
       error,
     );
 
     showDashboardToast(
       error instanceof Error
         ? error.message
-        : "Unable to load casualty record.",
+        : "Unable to load victim record.",
       "error",
     );
   }
@@ -9224,9 +9224,9 @@ function bindVerificationReviewActions() {
 
       if (status === "rejected") {
         notes = await showDashboardTextPrompt({
-          title: "Reject casualty record",
+          title: "Reject victim record",
           message:
-            "Add the reason this casualty record is being returned to the responder.",
+            "Add the reason this victim record is being returned to the responder.",
           label: "Rejection notes",
           placeholder: "Example: Missing triage details or incorrect victim code",
           confirmLabel: "Reject record",
@@ -9285,7 +9285,7 @@ function bindDeleteCasualtyActions() {
       }
 
       const confirmed = await showDashboardConfirm({
-        title: "Delete casualty record?",
+        title: "Delete victim record?",
         message:
           "This record will disappear from the web dashboard and mobile app records.",
         confirmLabel: "Delete record",
@@ -9310,11 +9310,11 @@ function bindDeleteCasualtyActions() {
         bindView();
         setMessage(
           "verificationMessage",
-          "Casualty record deleted successfully.",
+          "Victim record deleted successfully.",
           "success",
         );
         showDashboardToast(
-          "Casualty record deleted successfully.",
+          "Victim record deleted successfully.",
           "success",
         );
       } catch (error) {
@@ -9323,7 +9323,7 @@ function bindDeleteCasualtyActions() {
         const message =
           error instanceof Error
             ? error.message
-            : "Unable to delete casualty record.";
+            : "Unable to delete victim record.";
         setMessage("verificationMessage", message, "error");
         showDashboardToast(
           message,
@@ -9547,7 +9547,7 @@ function renderRecentActivity() {
   return `
     <section class="panel">
       <h2>Recent mobile activity</h2>
-      <p class="panel-subtitle">Latest casualty records from responders and documenters.</p>
+      <p class="panel-subtitle">Latest victim records from responders and documenters.</p>
       <div class="table-wrap" style="margin-top:12px">
         <table>
           <thead><tr><th>Incident</th><th>Status</th><th>Verification</th><th>Reported</th></tr></thead>
@@ -10781,7 +10781,7 @@ function renderSummarySection(title, data, fullWidth = false) {
       <div class="section-card-header">
         <div>
           <h3>${escapeHtml(title)}</h3>
-          <p class="panel-subtitle">Computed from casualty records and timeline data.</p>
+          <p class="panel-subtitle">Computed from victim records and timeline data.</p>
         </div>
       </div>
       ${data ? renderSummaryFacts(data) : `<div class="empty-state">No summary data available.</div>`}
@@ -10836,7 +10836,7 @@ function renderSitrepAndCloseSection(incident) {
       <div class="section-card-header">
         <div>
           <h3>SitRep & Close Incident</h3>
-          <p class="panel-subtitle">Generate an incident-wide situation report covering FR, SAR, and HCFD records.</p>
+          <p class="panel-subtitle">Generate an incident-wide situation report covering FR, AMP, and HCFD records.</p>
         </div>
       </div>
       <div class="selected-incident-summary">
@@ -10848,7 +10848,7 @@ function renderSitrepAndCloseSection(incident) {
         <button class="secondary-button" type="button" data-generate-sitrep="${escapeHtml(incident.id)}">Generate Selected Incident SitRep</button>
         <button class="ghost-button" type="button" data-download-sitrep="pdf" data-incident-id="${escapeHtml(incident.id)}">Download Latest PDF</button>
         <button class="ghost-button" type="button" data-download-sitrep="csv" data-incident-id="${escapeHtml(incident.id)}">Download Latest CSV</button>
-        <button class="ghost-button" type="button" data-export-download="/incidents/${escapeHtml(incident.id)}/export/casualties.csv" data-export-file="${escapeHtml(incident.incident_code || incident.id)}-casualties.csv">Download Casualty CSV</button>
+        <button class="ghost-button" type="button" data-export-download="/incidents/${escapeHtml(incident.id)}/export/casualties.csv" data-export-file="${escapeHtml(incident.incident_code || incident.id)}-casualties.csv">Download Victim CSV</button>
         <button class="ghost-button" type="button" data-export-download="/exports/incidents/${escapeHtml(incident.id)}/package.json" data-export-file="${escapeHtml(incident.incident_code || incident.id)}-incident-package.json">Download Incident Package</button>
         ${
           incident.status === "closed"
@@ -11333,9 +11333,9 @@ function draftFormLabel(formType) {
   const labels = {
     incident: "Official Incident",
     healthcare_facility: "Healthcare Facility",
-    casualty_field_responder: "Field Responder Casualty",
-    casualty_sar: "SAR Casualty",
-    casualty_hcfd: "HCFD Casualty",
+    casualty_field_responder: "Field Responder Victim",
+    casualty_sar: "AMP Victim",
+    casualty_hcfd: "HCFD Victim",
     account: "Account",
   };
 
@@ -11671,7 +11671,7 @@ function renderIncidentCreator(compact = false) {
       <div class="panel-header">
         <div>
           <h2>Add official incident</h2>
-          <p class="panel-subtitle">Created incidents sync to the mobile Add Casualty incident picker.</p>
+          <p class="panel-subtitle">Created incidents sync to the mobile Add Victim incident picker.</p>
         </div>
       </div>
       <form id="incidentForm" class="form-grid">
