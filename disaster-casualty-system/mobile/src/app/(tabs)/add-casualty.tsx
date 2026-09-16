@@ -72,10 +72,6 @@ import {
   saveCurrentUser,
 } from "../../auth/session";
 import {
-  getResponderAssignment,
-  type ResponderAssignment,
-} from "../../auth/responderAssignment";
-import {
   isNetworkSubmissionError,
   getQueuedCasualtySubmissions,
   queueCasualtySubmission,
@@ -3104,7 +3100,6 @@ function formatTriageStage(value: string | null | undefined): string {
 function getTriageStageOptionsForRole(
   role: string | null,
   reportingContext: ReportingContext | null,
-  responderAssignment: ResponderAssignment | null = null,
 ): TriageStageOption[] {
   const isAdminOverride =
     role !== null &&
@@ -3124,15 +3119,6 @@ function getTriageStageOptionsForRole(
     return ["Secondary Triage"];
   }
 
-  if (role === "responder") {
-    if (responderAssignment === "field_responder") {
-      return ["Primary Triage", "Secondary Triage"];
-    }
-
-    if (responderAssignment === "sa_responder") {
-      return ["Secondary Triage"];
-    }
-  }
 
   const roleOptions = role
     ? TRIAGE_STAGE_OPTIONS_BY_ROLE[role]
@@ -3162,60 +3148,16 @@ function getTriageStageOptionsForRole(
   return [...TRIAGE_STAGE_OPTIONS];
 }
 
-function isFieldResponderCaptureFlow(
-  role: string | null,
-  responderAssignment: ResponderAssignment | null,
-): boolean {
-  if (role === "field_responder") {
-    return true;
-  }
-
-  if (role === "sa_responder") {
-    return false;
-  }
-
-  return role === "responder" && responderAssignment === "field_responder";
+function isFieldResponderCaptureFlow(role: string | null): boolean {
+  return role === "field_responder";
 }
 
-function isSaResponderCaptureFlow(
-  role: string | null,
-  responderAssignment: ResponderAssignment | null,
-): boolean {
-  if (role === "sa_responder") {
-    return true;
-  }
-
-  if (role === "field_responder") {
-    return false;
-  }
-
-  return role === "responder" && responderAssignment === "sa_responder";
+function isSaResponderCaptureFlow(role: string | null): boolean {
+  return role === "sa_responder";
 }
 
 function isHealthcareDocumenterCaptureFlow(role: string | null): boolean {
   return role === "documenter" || role === "medical_personnel";
-}
-
-function isResponderAccountRole(role: string | null): boolean {
-  return (
-    role === "responder" ||
-    role === "field_responder" ||
-    role === "sa_responder"
-  );
-}
-
-function getDefaultResponderAssignment(
-  role: string | null,
-): ResponderAssignment | null {
-  if (role === "field_responder") {
-    return "field_responder";
-  }
-
-  if (role === "sa_responder") {
-    return "sa_responder";
-  }
-
-  return null;
 }
 
 function getTriageSystemOptionsForStage(
@@ -5097,10 +5039,6 @@ const [
   const [currentAssignedBarangay, setCurrentAssignedBarangay] =
     useState<string | null>(null);
   const [
-    currentResponderAssignment,
-    setCurrentResponderAssignment,
-  ] = useState<ResponderAssignment | null>(null);
-  const [
     responderSafetyResponse,
     setResponderSafetyResponse,
   ] = useState<ResponderSafetyResponseRecord | null>(null);
@@ -5131,11 +5069,9 @@ const [
 
   const isFieldResponderFlow = isFieldResponderCaptureFlow(
     currentUserRole,
-    currentResponderAssignment,
   );
   const isSaResponderFlow = isSaResponderCaptureFlow(
     currentUserRole,
-    currentResponderAssignment,
   );
   const isHealthcareDocumenterFlow =
     isHealthcareDocumenterCaptureFlow(currentUserRole);
@@ -5172,11 +5108,6 @@ const [
     REFERENCE_MANAGER_ROLES.includes(
       currentUserRole as (typeof REFERENCE_MANAGER_ROLES)[number],
     );
-  const needsResponderFunctionSelection =
-    !isEditing &&
-    isResponderAccountRole(currentUserRole) &&
-    !currentResponderAssignment &&
-    !getDefaultResponderAssignment(currentUserRole);
   const responderFunctionLabel = isFieldResponderFlow
     ? "Field Responder"
     : isSaResponderFlow
@@ -5806,10 +5737,6 @@ const victimCodeAlreadyExists = useMemo(() => {
         }
       }
 
-      const responderAssignment =
-        getDefaultResponderAssignment(user?.role ?? null) ??
-        (await getResponderAssignment());
-
       if (isMounted) {
         setCurrentUserId(user?.id ?? null);
         setCurrentUserFullName(user?.full_name ?? null);
@@ -5819,7 +5746,6 @@ const victimCodeAlreadyExists = useMemo(() => {
           user?.assigned_municipality ?? null,
         );
         setCurrentAssignedBarangay(user?.assigned_barangay ?? null);
-        setCurrentResponderAssignment(responderAssignment);
         setIsLoadingUserContext(false);
       }
     }
@@ -6002,7 +5928,6 @@ const victimCodeAlreadyExists = useMemo(() => {
       getTriageStageOptionsForRole(
         currentUserRole,
         currentReportingContext,
-        currentResponderAssignment,
       );
 
     setForm((current) => {
@@ -6036,7 +5961,6 @@ const victimCodeAlreadyExists = useMemo(() => {
     });
   }, [
     currentReportingContext,
-    currentResponderAssignment,
     currentUserRole,
     isEditing,
   ]);
@@ -10278,7 +10202,6 @@ if (
         return getTriageStageOptionsForRole(
           currentUserRole,
           currentReportingContext,
-          currentResponderAssignment,
         ).map((option) => ({
           label: option,
           selected:
@@ -10511,7 +10434,11 @@ if (
         form.responderSafetyStatus,
       ),
       ppeUsedAt,
-      responderFunction: currentResponderAssignment,
+      responderFunction: isFieldResponderFlow
+        ? "field_responder"
+        : isSaResponderFlow
+          ? "sa_responder"
+          : null,
     });
 
     setResponderSafetyResponse(response);
@@ -13836,37 +13763,6 @@ function confirmExitAddCasualty() {
     );
   }
 
-  if (needsResponderFunctionSelection) {
-    return (
-      <View style={styles.centerState}>
-        <Ionicons
-          name="person-circle-outline"
-          size={48}
-          color={COLORS.maroon}
-        />
-
-        <Text style={styles.centerStateTitle}>
-          Please Select Responder Function to continue
-        </Text>
-
-        <Text style={styles.centerStateText}>
-          Choose Field Responder or Stabilization Area Responder in Profile before adding a casualty.
-        </Text>
-
-        <Pressable
-          onPress={() => router.replace("/profile")}
-          style={({ pressed }) => [
-            styles.centerStateButton,
-            pressed && styles.pressed,
-          ]}
-        >
-          <Text style={styles.centerStateButtonText}>
-            Open Profile
-          </Text>
-        </Pressable>
-      </View>
-    );
-  }
 
   if (loadError) {
     return (

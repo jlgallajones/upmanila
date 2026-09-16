@@ -23,11 +23,6 @@ import {
 } from "../../api/profile";
 import { isAuthenticationTokenError } from "../../api/client";
 import { clearSession, getCurrentUserId } from "../../auth/session";
-import {
-  getResponderAssignment,
-  saveResponderAssignment,
-  type ResponderAssignment,
-} from "../../auth/responderAssignment";
 
 const COLORS = {
   maroon: "#7B1113",
@@ -181,33 +176,6 @@ function getInformationSectionTitle(
   return "ACCOUNT INFORMATION";
 }
 
-function getDefaultResponderAssignment(
-  role: string | null | undefined,
-): ResponderAssignment | null {
-  if (role === "field_responder") {
-    return "field_responder";
-  }
-
-  if (role === "sa_responder") {
-    return "sa_responder";
-  }
-
-  return null;
-}
-
-function formatResponderAssignment(
-  assignment: ResponderAssignment | null,
-): string {
-  switch (assignment) {
-    case "field_responder":
-      return "Field Responder";
-    case "sa_responder":
-      return "Stabilization Area Responder";
-    default:
-      return "Not selected";
-  }
-}
-
 function formatReportingContext(
   reportingContext: string | null | undefined,
 ): string {
@@ -281,10 +249,6 @@ export default function ProfileScreen() {
   const [lastLoadedAt, setLastLoadedAt] =
     useState<Date | null>(null);
 
-  const [
-    selectedResponderAssignment,
-    setSelectedResponderAssignment,
-  ] = useState<ResponderAssignment | null>(null);
 
   const loadProfile = useCallback(async () => {
     const currentUserId = await getCurrentUserId();
@@ -331,9 +295,6 @@ export default function ProfileScreen() {
     useCallback(() => {
       setIsLoading(true);
       void loadProfile();
-      void getResponderAssignment().then(
-        setSelectedResponderAssignment,
-      );
     }, [loadProfile]),
   );
 
@@ -388,19 +349,7 @@ export default function ProfileScreen() {
     );
   }
 
-  async function handleResponderAssignmentChange(
-    assignment: ResponderAssignment,
-  ) {
-    await saveResponderAssignment(assignment);
-    setSelectedResponderAssignment(assignment);
-  }
-
   const user = profile?.user;
-  const isResponderAccount = isResponderRole(user?.role);
-  const isLegacyResponderAccount = user?.role === "responder";
-  const effectiveResponderAssignment =
-    selectedResponderAssignment ??
-    getDefaultResponderAssignment(user?.role);
 
   const statistics = profile?.statistics ?? {
     encoded: 0,
@@ -441,128 +390,6 @@ export default function ProfileScreen() {
         hour12: true,
       }).format(lastLoadedAt)
     : "Not synced";
-
-  const responderFunctionCard = isResponderAccount ? (
-    <View style={styles.sectionCard}>
-      <Text style={styles.sectionTitle}>
-        RESPONDER FUNCTION
-      </Text>
-
-      <Text style={styles.assignmentHelpText}>
-        {isLegacyResponderAccount
-          ? "Choose which responder window this legacy account should use when adding casualties."
-          : "This account's responder function is assigned by the admin account role."}
-      </Text>
-
-      <View style={styles.assignmentOptions}>
-        <Pressable
-          disabled={!isLegacyResponderAccount}
-          onPress={() =>
-            void handleResponderAssignmentChange(
-              "field_responder",
-            )
-          }
-          style={({ pressed }) => [
-            styles.assignmentOption,
-            effectiveResponderAssignment ===
-              "field_responder" &&
-              styles.assignmentOptionSelected,
-            pressed && styles.assignmentOptionPressed,
-            !isLegacyResponderAccount && styles.assignmentOptionDisabled,
-          ]}
-        >
-          <View style={styles.assignmentOptionIcon}>
-            <Ionicons
-              name="medkit-outline"
-              size={19}
-              color={
-                effectiveResponderAssignment ===
-                "field_responder"
-                  ? COLORS.white
-                  : COLORS.maroon
-              }
-            />
-          </View>
-
-          <View style={styles.assignmentOptionTextGroup}>
-            <Text
-              style={[
-                styles.assignmentOptionTitle,
-                effectiveResponderAssignment ===
-                  "field_responder" &&
-                  styles.assignmentOptionTitleSelected,
-              ]}
-            >
-              Field Responder
-            </Text>
-            <Text
-              style={[
-                styles.assignmentOptionDescription,
-                effectiveResponderAssignment ===
-                  "field_responder" &&
-                  styles.assignmentOptionDescriptionSelected,
-              ]}
-            >
-              Add Casualty shows only Triage and Status notes.
-            </Text>
-          </View>
-        </Pressable>
-
-        <Pressable
-          disabled={!isLegacyResponderAccount}
-          onPress={() =>
-            void handleResponderAssignmentChange(
-              "sa_responder",
-            )
-          }
-          style={({ pressed }) => [
-            styles.assignmentOption,
-            effectiveResponderAssignment ===
-              "sa_responder" &&
-              styles.assignmentOptionSelected,
-            pressed && styles.assignmentOptionPressed,
-            !isLegacyResponderAccount && styles.assignmentOptionDisabled,
-          ]}
-        >
-          <View style={styles.assignmentOptionIcon}>
-            <Ionicons
-              name="bandage-outline"
-              size={19}
-              color={
-                effectiveResponderAssignment ===
-                "sa_responder"
-                  ? COLORS.white
-                  : COLORS.maroon
-              }
-            />
-          </View>
-
-          <View style={styles.assignmentOptionTextGroup}>
-            <Text
-              style={[
-                styles.assignmentOptionTitle,
-                effectiveResponderAssignment ===
-                  "sa_responder" &&
-                  styles.assignmentOptionTitleSelected,
-              ]}
-            >
-              Stabilization Area Responder
-            </Text>
-            <Text
-              style={[
-                styles.assignmentOptionDescription,
-                effectiveResponderAssignment ===
-                  "sa_responder" &&
-                  styles.assignmentOptionDescriptionSelected,
-              ]}
-            >
-              Add Casualty keeps the original full form for now.
-            </Text>
-          </View>
-        </Pressable>
-      </View>
-    </View>
-  ) : null;
 
   return (
     <View style={styles.screen}>
@@ -808,8 +635,6 @@ export default function ProfileScreen() {
           </View>
         ) : null}
 
-        {responderFunctionCard}
-
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>
             {informationSectionTitle}
@@ -875,16 +700,6 @@ export default function ProfileScreen() {
             label="Reporting Context"
             value={reportingContext}
           />
-
-          {isResponderAccount ? (
-            <InformationRow
-              icon="swap-horizontal-outline"
-              label="Responder Function"
-              value={formatResponderAssignment(
-                effectiveResponderAssignment,
-              )}
-            />
-          ) : null}
 
           <InformationRow
             icon="shield-checkmark-outline"
