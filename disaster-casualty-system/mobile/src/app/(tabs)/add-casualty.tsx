@@ -66,7 +66,11 @@ import type {
   ReportingContext,
   UserRole,
 } from "../../api/profile";
-import { getCurrentUser } from "../../auth/session";
+import { getProfile } from "../../api/profile";
+import {
+  getCurrentUser,
+  saveCurrentUser,
+} from "../../auth/session";
 import {
   getResponderAssignment,
   type ResponderAssignment,
@@ -5786,8 +5790,25 @@ const victimCodeAlreadyExists = useMemo(() => {
 
     async function loadCurrentUser() {
       setIsLoadingUserContext(true);
-      const user = await getCurrentUser();
-      const responderAssignment = await getResponderAssignment();
+      const cachedUser = await getCurrentUser();
+      let user = cachedUser;
+
+      if (cachedUser?.id) {
+        try {
+          const profile = await getProfile(cachedUser.id);
+          user = profile.user;
+          await saveCurrentUser(profile.user);
+        } catch (error) {
+          console.warn(
+            "Unable to refresh user profile before add casualty:",
+            error,
+          );
+        }
+      }
+
+      const responderAssignment =
+        getDefaultResponderAssignment(user?.role ?? null) ??
+        (await getResponderAssignment());
 
       if (isMounted) {
         setCurrentUserId(user?.id ?? null);

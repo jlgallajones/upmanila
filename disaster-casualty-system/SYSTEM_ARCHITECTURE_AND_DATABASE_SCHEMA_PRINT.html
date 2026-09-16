@@ -1,0 +1,800 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DCMS System Architecture And Database Schema</title>
+  <style>
+    :root {
+      color: #17213a;
+      background: #f4f6fa;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    body {
+      margin: 0;
+      background: #f4f6fa;
+    }
+
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 32px 22px 48px;
+    }
+
+    header {
+      border: 1px solid #d9e1ec;
+      border-left: 8px solid #7b1113;
+      background: #ffffff;
+      border-radius: 8px;
+      padding: 22px;
+      margin-bottom: 20px;
+    }
+
+    h1 {
+      margin: 0;
+      color: #7b1113;
+      font-size: 28px;
+      line-height: 1.2;
+    }
+
+    .subtitle {
+      margin: 8px 0 0;
+      color: #60708a;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    section {
+      page-break-inside: avoid;
+      border: 1px solid #d9e1ec;
+      background: #ffffff;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 18px 0;
+    }
+
+    h2 {
+      margin: 0 0 6px;
+      color: #111a2f;
+      font-size: 20px;
+      line-height: 1.25;
+    }
+
+    .section-note {
+      margin: 0 0 14px;
+      color: #60708a;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .mermaid {
+      width: 100%;
+      overflow-x: auto;
+      padding: 10px 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-size: 12px;
+    }
+
+    th,
+    td {
+      border: 1px solid #d9e1ec;
+      padding: 8px;
+      vertical-align: top;
+      text-align: left;
+    }
+
+    th {
+      color: #7b1113;
+      background: #fff3f3;
+    }
+
+    ul {
+      margin: 10px 0 0;
+      padding-left: 20px;
+      color: #26344f;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .print-help {
+      border: 1px dashed #c8d2e0;
+      background: #f8fafc;
+      border-radius: 8px;
+      padding: 12px;
+      color: #465875;
+      font-size: 13px;
+      margin-bottom: 18px;
+    }
+
+    @media print {
+      body {
+        background: #ffffff;
+      }
+
+      main {
+        max-width: none;
+        padding: 0;
+      }
+
+      header,
+      section {
+        box-shadow: none;
+        border-radius: 0;
+      }
+
+      .print-help {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>DCMS System Architecture And Database Schema</h1>
+    </header>
+    <section>
+      <h2>1. System Architecture Diagram</h2>
+      <p class="section-note">Overall relationship between web, mobile, API, Supabase services, and mobile local storage.</p>
+      <pre class="mermaid">
+flowchart TD
+  subgraph Clients["Client Layer"]
+    Web["Web Dashboard&lt;br/&gt;HTML/CSS/JS&lt;br/&gt;Admin + Super Admin"]
+    Mobile["Mobile/PWA App&lt;br/&gt;Expo React Native&lt;br/&gt;FR + SAR + HCFD"]
+  end
+
+  subgraph ApiLayer["Application Layer"]
+    API["Express API&lt;br/&gt;TypeScript Controllers + Services"]
+    AuthMiddleware["Auth Middleware&lt;br/&gt;Bearer Token Validation"]
+    RoleGuards["Role/Scope Guards&lt;br/&gt;Admin Scope + User Role"]
+    ExportService["Export / Report Services&lt;br/&gt;CSV, JSON, PDF/SitRep"]
+    AuditService["Audit Logging Service"]
+  end
+
+  subgraph Supabase["Supabase Backend"]
+    SupabaseAuth["Supabase Auth"]
+    DB[("Supabase PostgreSQL")]
+    Storage[("Supabase Storage&lt;br/&gt;Casualty Attachments")]
+    Realtime["Supabase Realtime"]
+  end
+
+  subgraph LocalMobile["Mobile Local Persistence"]
+    SecureStore["SecureStore&lt;br/&gt;Session Token"]
+    AsyncStorage["AsyncStorage&lt;br/&gt;Cached Incidents, Queue, Drafts"]
+    FileSystem["FileSystem / Image Picker&lt;br/&gt;Local Photos"]
+  end
+
+  Web -->|"fetch + Bearer Token"| API
+  Mobile -->|"Axios + Bearer Token"| API
+  Mobile --> SecureStore
+  Mobile --> AsyncStorage
+  Mobile --> FileSystem
+  API --> AuthMiddleware
+  AuthMiddleware --> SupabaseAuth
+  AuthMiddleware --> RoleGuards
+  RoleGuards --> DB
+  API --> ExportService
+  API --> AuditService
+  API --> Storage
+  API --> Realtime
+  ExportService --> DB
+  AuditService --> DB
+  DB --> Realtime
+  Realtime --> Web
+      </pre>
+    </section>
+
+    <section>
+      <h2>2. Deployment Architecture</h2>
+      <p class="section-note">Typical deployment shape for the web dashboard, PWA, API, and Supabase.</p>
+      <pre class="mermaid">
+flowchart LR
+  AdminBrowser["Admin Browser"] --> WebHost["Static Web Host&lt;br/&gt;Netlify / Static Server"]
+  MobileBrowser["Phone Browser / Installed PWA"] --> PwaHost["Static PWA Host&lt;br/&gt;Netlify / Static Server"]
+  WebHost -->|"API Base URL"| RenderAPI["Render Web Service&lt;br/&gt;Node/Express API"]
+  PwaHost -->|"EXPO_PUBLIC_API_URL"| RenderAPI
+  RenderAPI --> SupabaseAuth["Supabase Auth"]
+  RenderAPI --> SupabasePostgres[("Supabase PostgreSQL")]
+  RenderAPI --> SupabaseStorage[("Supabase Storage")]
+  SupabasePostgres --> SupabaseRealtime["Supabase Realtime"]
+  SupabaseRealtime --> AdminBrowser
+  RenderAPI --> Logs["Render Logs"]
+      </pre>
+    </section>
+
+    <section>
+      <h2>3. Backend API Module Architecture</h2>
+      <p class="section-note">How the Express API is organized from routes to controllers, services, and Supabase.</p>
+      <pre class="mermaid">
+flowchart TD
+  App["api/src/app.ts"] --> Routes["Routes"]
+  Routes --> AuthRoutes["/api/auth"]
+  Routes --> ProfileRoutes["/api/profile"]
+  Routes --> IncidentRoutes["/api/incidents"]
+  Routes --> CasualtyRoutes["/api/casualties"]
+  Routes --> AttachmentRoutes["/api/attachments"]
+  Routes --> FacilityRoutes["/api/healthcare-facilities"]
+  Routes --> DraftRoutes["/api/form-drafts"]
+  Routes --> AuditRoutes["/api/audit-logs"]
+  Routes --> ExportRoutes["/api/exports"]
+  AuthRoutes --> Controllers["Controllers"]
+  ProfileRoutes --> Controllers
+  IncidentRoutes --> Controllers
+  CasualtyRoutes --> Controllers
+  AttachmentRoutes --> Controllers
+  FacilityRoutes --> Controllers
+  DraftRoutes --> Controllers
+  AuditRoutes --> Controllers
+  ExportRoutes --> Controllers
+  Controllers --> Services["Services"]
+  Controllers --> SupabaseClient["Supabase Client"]
+  Services --> SupabaseClient
+  SupabaseClient --> DB[("PostgreSQL")]
+  SupabaseClient --> Storage[("Storage")]
+  SupabaseClient --> Auth["Auth"]
+      </pre>
+    </section>
+
+    <section>
+      <h2>4. Client Architecture</h2>
+      <p class="section-note">Main frontend layers for the web dashboard and mobile/PWA app.</p>
+      <pre class="mermaid">
+flowchart TD
+  subgraph Web["Web Dashboard"]
+    WebConfig["website/config.js&lt;br/&gt;Runtime API + Realtime Config"]
+    WebApp["website/app.js&lt;br/&gt;Dashboard Logic"]
+    WebStyles["website/styles.css&lt;br/&gt;Dashboard UI"]
+    WebConfig --> WebApp
+    WebStyles --> WebApp
+  end
+
+  subgraph Mobile["Mobile/PWA App"]
+    ExpoRouter["Expo Router&lt;br/&gt;mobile/src/app"]
+    Screens["Screens&lt;br/&gt;Dashboard, Casualty Detail"]
+    ApiClient["API Client&lt;br/&gt;mobile/src/api"]
+    Session["Session Management&lt;br/&gt;mobile/src/auth"]
+    Offline["Offline Queue&lt;br/&gt;mobile/src/offline"]
+    ExpoRouter --> Screens
+    Screens --> ApiClient
+    Screens --> Session
+    Screens --> Offline
+  end
+
+  WebApp --> API["Express API"]
+  ApiClient --> API
+      </pre>
+    </section>
+
+    <section>
+      <h2>5. Database Schema Overview</h2>
+      <p class="section-note">High-level ERD showing the main operational data stores and relationships.</p>
+      <pre class="mermaid">
+erDiagram
+  USERS ||--o{ INCIDENTS : creates
+  USERS ||--o{ CASUALTY_INCIDENTS : encodes
+  USERS ||--o{ AUDIT_LOGS : performs
+  USERS ||--o{ FORM_DRAFTS : owns
+  USERS ||--o{ NOTIFICATIONS : receives
+  INCIDENTS ||--o{ CASUALTY_INCIDENTS : contains
+  CASUALTIES ||--o{ CASUALTY_INCIDENTS : appears_in
+  CASUALTY_INCIDENTS ||--o{ CASUALTY_TRIAGE_ASSESSMENTS : has
+  CASUALTY_INCIDENTS ||--o{ CASUALTY_TRANSPORT_RECORDS : has
+  CASUALTY_INCIDENTS ||--o{ CASUALTY_TREATMENTS : has
+  CASUALTY_INCIDENTS ||--o{ FACILITY_ENCOUNTERS : has
+  CASUALTY_INCIDENTS ||--o{ CASUALTY_OUTCOMES : has
+  CASUALTY_INCIDENTS ||--o{ ATTACHMENTS : has
+  CASUALTY_INCIDENTS ||--o{ CASUALTY_STATUS_HISTORY : has
+  CASUALTY_INCIDENTS ||--o{ CASUALTY_VERIFICATION_HISTORY : has
+  INCIDENTS ||--o{ CASUALTY_CASE_LINKS : groups
+  CASUALTY_INCIDENTS ||--o{ CASUALTY_CASE_LINKS : linked_record
+  HEALTHCARE_FACILITIES ||--o{ FACILITY_ENCOUNTERS : receives
+  HEALTHCARE_FACILITIES ||--o{ CASUALTY_TRANSPORT_RECORDS : destination
+  HEALTHCARE_FACILITIES ||--o{ FACILITY_RESOURCE_SNAPSHOTS : reports
+  INCIDENTS ||--o{ INCIDENT_RESPONSE_TIMELINES : has
+  INCIDENTS ||--o{ DMMP_STAFF_CALL_DOWNS : has
+  INCIDENTS ||--o{ MEDICAL_COORDINATION_ASSESSMENTS : has
+  INCIDENTS ||--o{ RESPONDER_SAFETY_RESPONSES : has
+  INCIDENTS ||--o{ SITREPS : has
+      </pre>
+    </section>
+
+    <section>
+      <h2>6. Core Identity And Incident Tables</h2>
+      <pre class="mermaid">
+erDiagram
+  USERS {
+    uuid id PK
+    text full_name
+    text email
+    text role
+    text assigned_municipality
+    text assigned_barangay
+    text phone_number
+    boolean is_active
+    uuid created_by FK
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  INCIDENTS {
+    uuid id PK
+    text incident_code
+    text incident_name
+    text disaster_type
+    text description
+    text province
+    text municipality
+    text barangay
+    text status
+    timestamptz started_at
+    timestamptz ended_at
+    uuid created_by FK
+    text reopen_request_status
+    text reopen_request_reason
+    uuid reopen_requested_by FK
+    timestamptz reopen_requested_at
+    uuid reopen_approved_by FK
+    timestamptz reopen_approved_at
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  HEALTHCARE_FACILITIES {
+    uuid id PK
+    text facility_name
+    text facility_level
+    text address
+    text barangay
+    text municipality
+    text province
+    text contact_number
+    uuid created_by FK
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  USERS ||--o{ INCIDENTS : creates
+  USERS ||--o{ HEALTHCARE_FACILITIES : creates
+  USERS ||--o{ USERS : creates_accounts
+      </pre>
+    </section>
+
+    <section>
+      <h2>7. Casualty Record Schema</h2>
+      <pre class="mermaid">
+erDiagram
+  CASUALTIES {
+    uuid id PK
+    text id_number
+    text id_type
+    text identification_status
+    text first_name
+    text middle_name
+    text last_name
+    text suffix
+    date date_of_birth
+    integer estimated_age
+    text sex
+    text contact_number
+    text house_street
+    text barangay
+    text municipality
+    text province
+    text region
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  CASUALTY_INCIDENTS {
+    uuid id PK
+    uuid casualty_id FK
+    uuid incident_id FK
+    uuid encoder_id FK
+    text client_record_id
+    text current_status
+    text severity
+    text verification_status
+    uuid verified_by FK
+    timestamptz verified_at
+    uuid healthcare_facility_id FK
+    text current_location
+    numeric latitude
+    numeric longitude
+    text visible_injury
+    text medical_condition
+    text assistance_needed
+    text assistance_provided
+    text remarks
+    timestamptz reported_at
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  ATTACHMENTS {
+    uuid id PK
+    uuid casualty_incident_id FK
+    text file_name
+    text file_path
+    text mime_type
+    integer file_size
+    uuid uploaded_by FK
+    timestamptz created_at
+  }
+  CASUALTY_STATUS_HISTORY {
+    uuid id PK
+    uuid casualty_incident_id FK
+    text old_status
+    text new_status
+    uuid changed_by FK
+    text change_reason
+    timestamptz created_at
+  }
+  CASUALTY_VERIFICATION_HISTORY {
+    uuid id PK
+    uuid casualty_incident_id FK
+    text old_status
+    text new_status
+    uuid reviewed_by FK
+    text review_notes
+    timestamptz created_at
+  }
+  INCIDENTS ||--o{ CASUALTY_INCIDENTS : contains
+  CASUALTIES ||--o{ CASUALTY_INCIDENTS : has_incident_record
+  USERS ||--o{ CASUALTY_INCIDENTS : encodes
+  USERS ||--o{ CASUALTY_INCIDENTS : verifies
+  HEALTHCARE_FACILITIES ||--o{ CASUALTY_INCIDENTS : assigned_facility
+  CASUALTY_INCIDENTS ||--o{ ATTACHMENTS : has
+  CASUALTY_INCIDENTS ||--o{ CASUALTY_STATUS_HISTORY : status_changes
+  CASUALTY_INCIDENTS ||--o{ CASUALTY_VERIFICATION_HISTORY : review_history
+      </pre>
+    </section>
+
+    <section>
+      <h2>8. Triage, Transport, Treatment, And HCFD Schema</h2>
+      <pre class="mermaid">
+erDiagram
+  CASUALTY_TRIAGE_ASSESSMENTS {
+    uuid id PK
+    uuid casualty_incident_id FK
+    text triage_system
+    text triage_category
+    text responder_category
+    text calculated_category
+    jsonb assessment_answers
+    text algorithm_version
+    boolean is_over_triage
+    boolean is_under_triage
+    text triage_stage
+    timestamptz triaged_at
+    uuid triaged_by FK
+    text location
+    text notes
+    timestamptz created_at
+  }
+  CASUALTY_TRANSPORT_RECORDS {
+    uuid id PK
+    uuid casualty_incident_id FK
+    text transport_required
+    text transport_mode
+    text ems_unit_type
+    timestamptz arrived_scene_at
+    timestamptz departed_scene_at
+    timestamptz arrived_facility_at
+    uuid receiving_facility_id FK
+    uuid recorded_by FK
+    text notes
+    timestamptz created_at
+  }
+  CASUALTY_TREATMENTS {
+    uuid id PK
+    uuid casualty_incident_id FK
+    text treatment_strategy
+    text treatment_area_name
+    timestamptz stabilization_started_at
+    timestamptz stabilized_at
+    jsonb treatment_details
+    uuid performed_by FK
+    text notes
+    timestamptz created_at
+  }
+  FACILITY_ENCOUNTERS {
+    uuid id PK
+    uuid casualty_incident_id FK
+    uuid facility_id FK
+    timestamptz arrived_at
+    timestamptz ed_admitted_at
+    timestamptz ed_departed_at
+    boolean sought_ed_care
+    boolean admitted_to_hospital
+    boolean discharged_home
+    timestamptz hospital_admitted_at
+    timestamptz hospital_discharged_at
+    text disposition
+    uuid recorded_by FK
+    timestamptz created_at
+  }
+  CASUALTY_OUTCOMES {
+    uuid id PK
+    uuid casualty_incident_id FK
+    text outcome_status
+    text death_stage
+    timestamptz death_at
+    text final_disposition
+    uuid recorded_by FK
+    timestamptz created_at
+  }
+  CASUALTY_INCIDENTS ||--o{ CASUALTY_TRIAGE_ASSESSMENTS : has
+  CASUALTY_INCIDENTS ||--o{ CASUALTY_TRANSPORT_RECORDS : has
+  CASUALTY_INCIDENTS ||--o{ CASUALTY_TREATMENTS : has
+  CASUALTY_INCIDENTS ||--o{ FACILITY_ENCOUNTERS : has
+  CASUALTY_INCIDENTS ||--o{ CASUALTY_OUTCOMES : has
+  USERS ||--o{ CASUALTY_TRIAGE_ASSESSMENTS : triages
+  USERS ||--o{ CASUALTY_TRANSPORT_RECORDS : records
+  USERS ||--o{ CASUALTY_TREATMENTS : performs
+  USERS ||--o{ FACILITY_ENCOUNTERS : documents
+  USERS ||--o{ CASUALTY_OUTCOMES : records
+  HEALTHCARE_FACILITIES ||--o{ CASUALTY_TRANSPORT_RECORDS : receives
+  HEALTHCARE_FACILITIES ||--o{ FACILITY_ENCOUNTERS : hosts
+      </pre>
+    </section>
+
+    <section>
+      <h2>9. Match Casing Schema</h2>
+      <pre class="mermaid">
+erDiagram
+  CASUALTY_CASE_LINKS {
+    uuid id PK
+    uuid case_group_id
+    uuid incident_id FK
+    uuid casualty_incident_id FK
+    text role_type
+    uuid linked_by FK
+    timestamptz linked_at
+    timestamptz created_at
+  }
+  INCIDENTS ||--o{ CASUALTY_CASE_LINKS : has_matched_case
+  CASUALTY_INCIDENTS ||--o{ CASUALTY_CASE_LINKS : participates
+  USERS ||--o{ CASUALTY_CASE_LINKS : links
+      </pre>
+    </section>
+
+    <section>
+      <h2>10. Incident Operations Schema</h2>
+      <pre class="mermaid">
+erDiagram
+  INCIDENT_RESPONSE_TIMELINES {
+    uuid id PK
+    uuid incident_id FK
+    text event_type
+    text description
+    timestamptz event_time
+    uuid updated_by FK
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  CALL_DOWN_STAFF {
+    uuid id PK
+    text full_name
+    text role_position
+    text contact_number
+    text assigned_team_unit
+    text notes
+    uuid linked_user_id FK
+    uuid created_by FK
+    boolean is_active
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  DMMP_STAFF_CALL_DOWNS {
+    uuid id PK
+    uuid incident_id FK
+    uuid call_down_staff_id FK
+    uuid linked_user_id FK
+    text staff_name
+    text role
+    boolean contacted
+    boolean has_arrived
+    text status
+    timestamptz contacted_at
+    timestamptz arrival_time
+    uuid recorded_by FK
+    timestamptz created_at
+  }
+  MEDICAL_COORDINATION_ASSESSMENTS {
+    uuid id PK
+    uuid incident_id FK
+    text coordination_status
+    text notes
+    uuid assessed_by FK
+    timestamptz created_at
+  }
+  CONTINUITY_OF_CARE_ASSESSMENTS {
+    uuid id PK
+    uuid incident_id FK
+    text continuity_status
+    text notes
+    uuid assessed_by FK
+    timestamptz created_at
+  }
+  RESPONDER_SAFETY_RESPONSES {
+    uuid id PK
+    uuid incident_id FK
+    uuid responder_id FK
+    text safety_status
+    timestamptz ppe_used_at
+    boolean is_locked
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  INCIDENTS ||--o{ INCIDENT_RESPONSE_TIMELINES : timeline
+  INCIDENTS ||--o{ DMMP_STAFF_CALL_DOWNS : staff_call_down
+  INCIDENTS ||--o{ MEDICAL_COORDINATION_ASSESSMENTS : coordination
+  INCIDENTS ||--o{ CONTINUITY_OF_CARE_ASSESSMENTS : continuity
+  INCIDENTS ||--o{ RESPONDER_SAFETY_RESPONSES : safety_responses
+  CALL_DOWN_STAFF ||--o{ DMMP_STAFF_CALL_DOWNS : used_in_incident
+  USERS ||--o{ CALL_DOWN_STAFF : creates
+  USERS ||--o{ DMMP_STAFF_CALL_DOWNS : records
+  USERS ||--o{ RESPONDER_SAFETY_RESPONSES : submits
+      </pre>
+    </section>
+
+    <section>
+      <h2>11. Reporting, Logs, Notifications, And Drafts Schema</h2>
+      <pre class="mermaid">
+erDiagram
+  AUDIT_LOGS {
+    uuid id PK
+    text action
+    text entity_type
+    uuid entity_id
+    text entity_label
+    uuid actor_id FK
+    text actor_full_name
+    text actor_role
+    uuid scope_admin_id FK
+    jsonb metadata
+    timestamptz created_at
+  }
+  FORM_DRAFTS {
+    uuid id PK
+    uuid owner_id FK
+    text form_type
+    text title
+    jsonb payload
+    text status
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  NOTIFICATIONS {
+    uuid id PK
+    uuid user_id FK
+    text title
+    text message
+    text type
+    text entity_type
+    uuid entity_id
+    boolean is_read
+    timestamptz created_at
+  }
+  SITREPS {
+    uuid id PK
+    uuid incident_id FK
+    text report_type
+    text status
+    jsonb payload
+    uuid generated_by FK
+    uuid approved_by FK
+    timestamptz generated_at
+    timestamptz approved_at
+    timestamptz created_at
+  }
+  FACILITY_RESOURCE_SNAPSHOTS {
+    uuid id PK
+    uuid incident_id FK
+    uuid facility_id FK
+    integer bed_capacity
+    integer beds_available
+    integer icu_capacity
+    integer icu_available
+    uuid recorded_by FK
+    timestamptz recorded_at
+    timestamptz created_at
+  }
+  USERS ||--o{ AUDIT_LOGS : actor
+  USERS ||--o{ FORM_DRAFTS : owns
+  USERS ||--o{ NOTIFICATIONS : receives
+  USERS ||--o{ SITREPS : generates
+  USERS ||--o{ FACILITY_RESOURCE_SNAPSHOTS : records
+  INCIDENTS ||--o{ SITREPS : has
+  INCIDENTS ||--o{ FACILITY_RESOURCE_SNAPSHOTS : has
+  HEALTHCARE_FACILITIES ||--o{ FACILITY_RESOURCE_SNAPSHOTS : reports
+      </pre>
+    </section>
+
+    <section>
+      <h2>12. Role-Based Access Architecture</h2>
+      <pre class="mermaid">
+flowchart TD
+  Request["Incoming API Request"] --> TokenCheck["Validate Bearer Token"]
+  TokenCheck --> ProfileLoad["Load users profile row"]
+  ProfileLoad --> RoleCheck{Role}
+  RoleCheck -->|super_admin| SuperAdminAccess["System-wide admin account, backup, logs, reopen approval"]
+  RoleCheck -->|admin / administrator| AdminScope["Admin-scoped incidents, accounts, records, facilities, analytics"]
+  RoleCheck -->|field_responder| FRScope["Own FR casualty submissions and records"]
+  RoleCheck -->|sa_responder| SARScope["Own SAR casualty submissions and records"]
+  RoleCheck -->|documenter| HCFDScope["Own HCFD casualty submissions and records"]
+  RoleCheck -->|legacy responder| AssignmentCheck["Check stored responder assignment"]
+  AssignmentCheck -->|field_responder| FRScope
+  AssignmentCheck -->|sa_responder| SARScope
+  SuperAdminAccess --> Controller["Controller Operation"]
+  AdminScope --> Controller
+  FRScope --> Controller
+  SARScope --> Controller
+  HCFDScope --> Controller
+  Controller --> DB[("Supabase PostgreSQL")]
+      </pre>
+    </section>
+
+    <section>
+      <h2>13. Offline Data Architecture</h2>
+      <pre class="mermaid">
+flowchart TD
+  MobileForm["Mobile Add Casualty Form"] --> SubmitAttempt["Submit Attempt"]
+  SubmitAttempt --> OnlineCheck{API reachable?}
+  OnlineCheck -->|Yes| API["Express API"]
+  API --> DB[("Supabase DB")]
+  API --> Storage[("Supabase Storage")]
+  OnlineCheck -->|No| Queue["AsyncStorage Offline Queue"]
+  Queue --> RecordsScreen["Records Screen&lt;br/&gt;Pending/Failed Local Items"]
+  RecordsScreen --> Retry["Retry Single / Retry All / Refresh Data"]
+  Retry --> API
+  API --> SyncResult["Sync Result"]
+  SyncResult --> QueueUpdate["Remove synced items or keep failed items"]
+  QueueUpdate --> RecordsScreen
+      </pre>
+    </section>
+
+    <section>
+      <h2>14. Database Notes</h2>
+      <ul>
+        <li><strong>casualties</strong> stores person-level identity data.</li>
+        <li><strong>casualty_incidents</strong> stores incident-specific casualty records, including status, severity, encoder, location, and verification state.</li>
+        <li>FR, SAR, and HCFD records remain separate after role separation.</li>
+        <li><strong>casualty_case_links</strong> connects separate FR, SAR, and HCFD records into one matched case without merging or deleting the original records.</li>
+        <li><strong>attachments</strong> stores metadata, while Supabase Storage stores the actual files.</li>
+        <li><strong>audit_logs</strong> stores cross-device actions for traceability.</li>
+        <li><strong>form_drafts</strong> stores saved draft payloads.</li>
+        <li><strong>call_down_staff</strong> stores reusable staff contacts, including people who do not have login accounts.</li>
+        <li><strong>dmmp_staff_call_downs</strong> stores incident-specific call-down responses.</li>
+      </ul>
+    </section>
+  </main>
+
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+
+    mermaid.initialize({
+      startOnLoad: true,
+      securityLevel: "loose",
+      theme: "base",
+      themeVariables: {
+        primaryColor: "#fff3f3",
+        primaryTextColor: "#17213a",
+        primaryBorderColor: "#7b1113",
+        lineColor: "#64748b",
+        secondaryColor: "#f8fafc",
+        tertiaryColor: "#ffffff",
+        fontFamily: "Arial, Helvetica, sans-serif"
+      },
+      flowchart: {
+        htmlLabels: true,
+        curve: "basis"
+      },
+      er: {
+        layoutDirection: "TB"
+      }
+    });
+  </script>
+</body>
+</html>

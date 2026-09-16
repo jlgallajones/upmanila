@@ -647,3 +647,27 @@ Create a short checklist for the exact demo flow:
 **Solution:** Added category-colored filter buttons for Field Responder triage filters. Immediate uses red, Delayed uses orange, Minor uses green, and Expectant uses gray. Selected filters now invert to a filled category color so active filters are easier to scan.
 
 **Status:** Implemented.
+
+## 76. Project Flowchart And DFD Documentation Needed For Submission
+
+**Problem:** The project needed a submission-ready documentation file showing the system flowchart, web dashboard flow, mobile/PWA flow, DFDs, database/storage relationships, match casing flow, and offline sync flow.
+
+**Solution:** Added `PROJECT_FLOWCHART_AND_DFD.md` at the project root. It contains Mermaid diagrams for the full DCMS architecture, web dashboard flow, mobile/PWA flow, DFD Level 0, DFD Level 1 for web and mobile, database/storage data flow, casualty submission/verification sequence, match casing flow, offline sync, deployment view, and a data-store summary table. Also added `PROJECT_FLOWCHART_AND_DFD_PRINT.html` as a single browser-printable file so all flowchart and DFD diagrams can be rendered together and exported to PDF without pasting each chart one by one.
+
+**Status:** Implemented.
+
+## 77. System Architecture And Database Schema Mermaid Documentation Needed
+
+**Problem:** The project needed a separate technical documentation file for system architecture and database schema diagrams that can be rendered with Mermaid.
+
+**Solution:** Added `SYSTEM_ARCHITECTURE_AND_DATABASE_SCHEMA.md` at the project root. It includes Mermaid diagrams for system architecture, deployment architecture, backend API modules, client architecture, database schema overview, core identity/incident tables, casualty records, triage/transport/treatment/HCFD records, match casing, incident operations, logs/notifications/drafts/reporting, role-based access, and offline data architecture. Also added `SYSTEM_ARCHITECTURE_AND_DATABASE_SCHEMA_PRINT.html` as a single browser-printable file so all diagrams can be rendered together and exported to PDF without pasting each Mermaid chart one by one.
+
+**Status:** Implemented.
+
+## 78. Edited Legacy Responder Still Asked For Responder Function
+
+**Problem:** After a legacy responder account was edited in the database to `field_responder` or `sa_responder`, the mobile Add Casualty screen could still show **Please Select Responder Function**. This happened because the mobile app was reading the locally cached login profile, which could still contain the old `responder` role.
+
+**Solution:** Add Casualty now refreshes the current user profile from the API when the screen loads and saves the fresh profile back into local session storage. If the refreshed role is `field_responder` or `sa_responder`, the screen automatically uses the matching responder function and skips the legacy function-selection requirement.
+
+**Status:** Implemented.
