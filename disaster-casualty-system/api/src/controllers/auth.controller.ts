@@ -240,9 +240,7 @@ export async function forgotPassword(
       return;
     }
 
-    const redirectTo = getPasswordResetRedirectUrl(
-      request.body.redirectTo,
-    );
+    const redirectTo =   "https://dcms-upm-mobilee.netlify.app/reset-password";
 
     const { error } = await supabaseAuth.auth.resetPasswordForEmail(
       email,
