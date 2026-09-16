@@ -159,7 +159,7 @@ function getFullName(record: CasualtyRecord): string {
 
   return parts.length > 0
     ? parts.join(" ")
-    : "Unidentified Casualty";
+    : "Unidentified Victim";
 }
 
 function getQueuedCasualtyName(
@@ -177,7 +177,7 @@ function getQueuedCasualtyName(
 
   return parts.length > 0
     ? parts.join(" ")
-    : "Unidentified Casualty";
+    : "Unidentified Victim";
 }
 
 function getQueuedCasualtyLocation(
@@ -925,7 +925,7 @@ function QueuedCasualtyCard({
             color={COLORS.orange}
           />
           <Text style={styles.queuedIncidentWarningText}>
-            This casualty was encoded before an incident list was available.
+            This victim was encoded before an incident list was available.
             Assign an active incident before syncing.
           </Text>
         </View>
@@ -1138,7 +1138,7 @@ function IncidentRecordCard({
             color={COLORS.maroon}
           />
           <Text style={styles.incidentActionText}>
-            Casualty Summary
+            Victim Summary
           </Text>
         </Pressable>
 
@@ -1407,7 +1407,7 @@ export default function RecordsScreen() {
         ),
       );
     } catch (error) {
-      console.error("Failed to load casualty records:", error);
+      console.error("Failed to load victim records:", error);
 
       if (isAuthenticationTokenError(error)) {
         setRecords([]);
@@ -1419,7 +1419,7 @@ export default function RecordsScreen() {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : "Unable to load casualty records.",
+          : "Unable to load victim records.",
       );
     }
   }, [loadQueuedSubmissions]);
@@ -1479,7 +1479,7 @@ export default function RecordsScreen() {
           setErrorMessage(null);
         }
       } catch (error) {
-        console.error("Failed to initialize casualty records:", error);
+        console.error("Failed to initialize victim records:", error);
 
         if (isMounted) {
           if (isAuthenticationTokenError(error)) {
@@ -1493,7 +1493,7 @@ export default function RecordsScreen() {
           setErrorMessage(
             error instanceof Error
               ? error.message
-              : "Unable to load casualty records.",
+              : "Unable to load victim records.",
           );
         }
       } finally {
@@ -1544,17 +1544,17 @@ export default function RecordsScreen() {
 
         if (result.synced > 0) {
           setQueueMessage(
-            "Queued casualty synced successfully.",
+            "Queued victim synced successfully.",
           );
           return;
         }
 
         setQueueMessage(
           result.issues[0]?.reason ||
-            "Unable to sync this casualty. Check your connection and try again.",
+            "Unable to sync this victim. Check your connection and try again.",
         );
       } catch (error) {
-        console.error("Failed to retry queued casualty:", error);
+        console.error("Failed to retry queued victim:", error);
         setQueueMessage(
           error instanceof Error
             ? error.message
@@ -1580,7 +1580,7 @@ export default function RecordsScreen() {
 
       if (result.synced > 0 && result.remaining === 0) {
         setQueueMessage(
-          `Synced ${result.synced} queued casualty record${result.synced === 1 ? "" : "s"}.`,
+          `Synced ${result.synced} queued victim record${result.synced === 1 ? "" : "s"}.`,
         );
         return;
       }
@@ -1629,7 +1629,7 @@ export default function RecordsScreen() {
         setQueueMessage(
           error instanceof Error
             ? error.message
-            : "Unable to assign incident to queued casualty.",
+            : "Unable to assign incident to queued victim.",
         );
       }
     },
@@ -1703,46 +1703,71 @@ export default function RecordsScreen() {
   status === activeFilter;
 
 if (useHealthcareDocumenterFilters) {
-const esiFilter =
-  getRecordEsiTriageFilter(record);
+  const esiFilter =
+    getRecordEsiTriageFilter(record);
 
-const healthcareLocation =
-  getRecordHealthcareLocation(record);
+  const healthcareLocation =
+    getRecordHealthcareLocation(record);
 
-const matchesReview =
-  activeReviewFilters.length === 0 ||
-  getRecordReviewFilters(record).some(
-    (filter) =>
-      activeReviewFilters.includes(filter),
-  );
+  const matchesReview =
+    activeReviewFilters.length === 0 ||
+    getRecordReviewFilters(record).some(
+      (filter) =>
+        activeReviewFilters.includes(filter),
+    );
 
-const matchesEsi =
-  activeHealthcareTriageFilters.includes(
-    "All",
-  ) ||
-  (
-    esiFilter !== null &&
-    activeHealthcareTriageFilters.includes(
-      esiFilter,
-    )
-  );
+  const matchesEsi =
+    activeHealthcareTriageFilters.includes("All") ||
+    (
+      esiFilter !== null &&
+      activeHealthcareTriageFilters.includes(
+        esiFilter,
+      )
+    );
 
-const matchesHealthcareLocation =
-  activeHealthcareLocationFilters.includes(
-    "All",
-  ) ||
-  (
-    healthcareLocation !== null &&
-    activeHealthcareLocationFilters.includes(
-      healthcareLocation,
-    )
-  );
+  const matchesHealthcareLocation =
+    activeHealthcareLocationFilters.includes("All") ||
+    (
+      healthcareLocation !== null &&
+      activeHealthcareLocationFilters.includes(
+        healthcareLocation,
+      )
+    );
 
-matchesFilter =
-  matchesReview &&
-  matchesEsi &&
-  matchesHealthcareLocation;
-  }
+  matchesFilter =
+    matchesReview &&
+    matchesEsi &&
+    matchesHealthcareLocation;
+} else if (useResponderFunctionFilters) {
+  const recordReviewFilters =
+    getRecordReviewFilters(
+      record,
+      useSaResponderFilters,
+    );
+
+  const recordTriageFilter =
+    getRecordTriageFilter(record);
+
+  const matchesReview =
+    activeReviewFilters.length === 0 ||
+    recordReviewFilters.some(
+      (filter) =>
+        activeReviewFilters.includes(filter),
+    );
+
+  const matchesTriage =
+    activeTriageFilters.includes("All") ||
+    (
+      recordTriageFilter !== null &&
+      activeTriageFilters.includes(
+        recordTriageFilter,
+      )
+    );
+
+  matchesFilter =
+    matchesReview &&
+    matchesTriage;
+}
 
       const matchesSearch =
         normalizedSearch.length === 0 ||
@@ -1772,9 +1797,12 @@ matchesFilter =
     activeReviewFilters,
     activeTransportFilter,
     activeTriageFilters,
+    activeHealthcareTriageFilters,
+    activeHealthcareLocationFilters,
     selectedRecordIncidentId,
     records,
     searchQuery,
+    useHealthcareDocumenterFilters,
     useResponderFunctionFilters,
     useSaResponderFilters,
   ]);
@@ -2110,7 +2138,7 @@ function toggleHealthcareLocationFilter(
         />
 
         <Text style={styles.centerStateText}>
-          Loading casualty records...
+          Loading victim records...
         </Text>
       </View>
     );
@@ -2530,7 +2558,7 @@ function toggleHealthcareLocationFilter(
       >
         <View style={styles.header}>
           <Text style={styles.headerTitle}>
-            Casualty Records
+            Victim Records
           </Text>
 
           <Text style={styles.headerSubtitle}>
@@ -2850,7 +2878,7 @@ function toggleHealthcareLocationFilter(
           </View>
 
           <Text style={styles.offlineQueueMessage}>
-            These casualty records are saved on this device and will appear
+            These victim records are saved on this device and will appear
             in the dashboard after they sync.
           </Text>
 
@@ -2918,7 +2946,7 @@ function toggleHealthcareLocationFilter(
             <Text style={styles.incidentAssignSubtitle}>
               {assigningQueuedSubmission
                 ? `${getQueuedCasualtyName(assigningQueuedSubmission)} will sync under the selected active incident.`
-                : "Select the active incident for this queued casualty."}
+                : "Select the active incident for this queued victim."}
             </Text>
 
             {activeIncidentAssignmentOptions.length > 0 ? (
@@ -3116,12 +3144,12 @@ function toggleHealthcareLocationFilter(
             <Text style={styles.emptyTitle}>
               {isGuestMode
                 ? "Login required to view records"
-                : "No casualty records found"}
+                : "No victim records found"}
             </Text>
 
             <Text style={styles.emptyDescription}>
               {isGuestMode
-                ? "You can add casualties offline now. Log in from Profile to view synced database records."
+                ? "You can add victims offline now. Log in from Profile to view synced database records."
                 : "Pull down to refresh or change the search and selected status."}
             </Text>
           </View>
@@ -3135,7 +3163,7 @@ function toggleHealthcareLocationFilter(
           pressed && styles.floatingButtonPressed,
         ]}
         accessibilityRole="button"
-        accessibilityLabel="Add casualty"
+        accessibilityLabel="Add victim"
       >
         <Ionicons
           name="add"

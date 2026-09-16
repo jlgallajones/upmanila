@@ -65,6 +65,8 @@ export default function ResetPasswordScreen() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [successMessage, setSuccessMessage] =
+  useState<string | null>(null);
 
   async function handleResetPassword() {
     if (!accessToken) {
@@ -95,16 +97,26 @@ export default function ResetPasswordScreen() {
       setIsSubmitting(true);
       const message = await recoverPassword(accessToken, password);
 
-      Alert.alert(
-        "Password updated",
-        message || "You can now sign in with your new password.",
-        [
-          {
-            text: "Sign in",
-            onPress: () => router.replace("/login"),
-          },
-        ],
-      );
+      const successText =
+        message || "Your password has been changed successfully.";
+
+      setPassword("");
+      setConfirmPassword("");
+      setShowPassword(false);
+      setSuccessMessage(successText);
+
+      if (Platform.OS !== "web") {
+        Alert.alert(
+          "Password updated",
+          successText,
+          [
+            {
+              text: "Sign in",
+              onPress: () => router.replace("/login"),
+            },
+          ],
+        );
+      }
     } catch (error) {
       logUiError("Password recovery failed", error);
       Alert.alert(
@@ -135,6 +147,20 @@ export default function ResetPasswordScreen() {
         <Text style={styles.subtitle}>
           Enter a new password for your DCMS account.
         </Text>
+
+        {successMessage ? (
+        <View style={styles.successCard}>
+          <Ionicons
+            name="checkmark-circle-outline"
+            size={20}
+            color="#2E7D4F"
+          />
+
+          <Text style={styles.successText}>
+            {successMessage}
+          </Text>
+        </View>
+      ) : null}
 
         {!accessToken ? (
           <View style={styles.warningCard}>
@@ -216,6 +242,24 @@ export default function ResetPasswordScreen() {
 }
 
 const styles = StyleSheet.create({
+  successCard: {
+  flexDirection: "row",
+  alignItems: "flex-start",
+  gap: 9,
+  padding: 12,
+  borderRadius: 12,
+  borderWidth: 1,
+  borderColor: "#B9DEC5",
+  backgroundColor: "#EFF8F2",
+},
+
+successText: {
+  flex: 1,
+  color: "#2E7D4F",
+  fontSize: 13,
+  lineHeight: 18,
+  fontWeight: "700",
+},
   screen: {
     flex: 1,
     justifyContent: "center",
