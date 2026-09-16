@@ -418,7 +418,7 @@ function roleLabel(role) {
   const labels = {
     responder: "Legacy Responder",
     field_responder: "Field Responder",
-    sa_responder: "SAR Responder",
+    sa_responder: "AMP Responder",
     documenter: "Healthcare Facility Documenter",
     medical_personnel: "Legacy Medical Personnel",
   };
@@ -979,7 +979,7 @@ function getUserFriendlyMessage(
     normalizedMessage.includes("only create responder or documenter accounts") ||
     normalizedMessage.includes("only assign responder or documenter")
   ) {
-    return "The dashboard is reaching an older API version that does not support separated FR/SAR/HCFD roles yet. Restart or redeploy the API after applying the role-separation update.";
+    return "The dashboard is reaching an older API version that does not support separated FR/AMP/HCFD roles yet. Restart or redeploy the API after applying the role-separation update.";
   }
 
   if (
@@ -2452,7 +2452,7 @@ function renderCasualtyRecordFilters(resultCount, totalCount) {
   const accountTypeOptions = [
     ["all", "All account types"],
     ["field_responder", "Field Responder"],
-    ["sa_responder", "SAR"],
+    ["sa_responder", "AMP Responder"],
     ["documenter", "HCFD"],
     ["responder", "Legacy Responder"],
   ];
@@ -4054,10 +4054,10 @@ function renderAdminScopeCard() {
         </div>
       </div>
       <div class="scope-list">
-        <button class="scope-item" data-view-link="users"><strong>Accounts</strong><span>Register and manage FR, SAR, and HCFD accounts in this unit.</span></button>
+        <button class="scope-item" data-view-link="users"><strong>Accounts</strong><span>Register and manage FR, AMP, and HCFD accounts in this unit.</span></button>
         <button class="scope-item" data-view-link="incident-analytics"><strong>Reported incident history</strong><span>Review incident analytics for records created within this unit.</span></button>
         <button class="scope-item" data-view-link="records"><strong>Casualty records</strong><span>See a summary of all casualty entries.</span></button>
-        <button class="scope-item" data-view-link="match-casing"><strong>Match Casing</strong><span>Build complete FR, SAR, and HCFD matched cases.</span></button>
+        <button class="scope-item" data-view-link="match-casing"><strong>Match Casing</strong><span>Build complete FR, AMP, and HCFD matched cases.</span></button>
         <button class="scope-item" data-view-link="matched-cases"><strong>Matched Cases</strong><span>Review completed matched casualty case records.</span></button>
         <button class="scope-item" data-view-link="logs"><strong>Action logs</strong><span>Audit actions by users this admin created.</span></button>
         <button class="scope-item" data-view-link="verification"><strong>Verification review</strong><span>Review casualty entries from assigned responders.</span></button>
@@ -4207,8 +4207,8 @@ const bulkImportConfigs = {
         state.user?.assigned_barangay || "Ermita",
       ],
       [
-        "SAR Responder One",
-        "sar@example.com",
+        "Advanced Medical Responder One",
+        "amp@example.com",
         "Temporary123",
         "sa_responder",
         "09171234568",
@@ -4847,7 +4847,7 @@ function normalizeBulkRows(rows) {
         ) {
           normalized[mappedKey] = "documenter";
         } else if (
-          normalizedRole.includes("sar") ||
+          normalizedRole.includes("advanced medical responder") ||
           normalizedRole.includes("stabilization") ||
           normalizedRole === "sa_responder"
         ) {
@@ -7183,6 +7183,11 @@ function getCasualtyVictimCode(
     const saVictimCode =
       extractRecordSectionValue(
         text,
+        "Advanced Medical Responder Details",
+        "Victim code",
+      ) ||
+      extractRecordSectionValue(
+        text,
         "SA Responder Details",
         "Victim code",
       );
@@ -8049,6 +8054,11 @@ const healthcareIsOtherUnit =
 const newborn =
   extractRecordSectionValue(
     saItem.remarks,
+    "Advanced Medical Responder Details",
+    "Newborn",
+  ) ||
+  extractRecordSectionValue(
+    saItem.remarks,
     "SA Responder Details",
     "Newborn",
   );
@@ -8056,11 +8066,21 @@ const newborn =
 const pregnant =
   extractRecordSectionValue(
     saItem.remarks,
+    "Advanced Medical Responder Details",
+    "Pregnant",
+  ) ||
+  extractRecordSectionValue(
+    saItem.remarks,
     "SA Responder Details",
     "Pregnant",
   );
 
 const religion =
+  extractRecordSectionValue(
+    saItem.remarks,
+    "Advanced Medical Responder Details",
+    "Religion",
+  ) ||
   extractRecordSectionValue(
     saItem.remarks,
     "SA Responder Details",
@@ -8177,10 +8197,10 @@ const religion =
           </section>
 
           <section class="record-section">
-            <h3>Stabilization Area Responder</h3>
+            <h3>Advanced Medical Responder</h3>
 
             <p class="panel-subtitle">
-              Complete Stabilization Area Responder casualty record
+              Complete Advanced Medical Responder casualty record
             </p>
 
 
@@ -8229,36 +8249,57 @@ const religion =
                   "Witness Present",
                   extractRecordSectionValue(
                     saItem.remarks,
-                    "SA Responder Details",
+                    "Advanced Medical Responder Details",
                     "Witness present",
-                  ),
+                  ) ||
+                    extractRecordSectionValue(
+                      saItem.remarks,
+                      "SA Responder Details",
+                      "Witness present",
+                    ),
                 )}
 
                 ${detailItem(
                   "Other Witness",
                   extractRecordSectionValue(
                     saItem.remarks,
-                    "SA Responder Details",
+                    "Advanced Medical Responder Details",
                     "Witness other",
-                  ),
+                  ) ||
+                    extractRecordSectionValue(
+                      saItem.remarks,
+                      "SA Responder Details",
+                      "Witness other",
+                    ),
                 )}
 
                 ${detailItem(
                   "Witness Response",
                   extractRecordSectionValue(
                     saItem.remarks,
-                    "SA Responder Details",
+                    "Advanced Medical Responder Details",
                     "Witness response",
-                  ),
+                  ) ||
+                    extractRecordSectionValue(
+                      saItem.remarks,
+                      "SA Responder Details",
+                      "Witness response",
+                    ),
                 )}
 
                 ${detailItem(
                   "CPR Type",
                   extractRecordSectionValue(
                     saItem.remarks,
-                    "SA Responder Details",
+                    "Advanced Medical Responder Details",
                     "CPR type",
-                  ),
+                  ) ||
+                    extractRecordSectionValue(
+                      saItem.remarks,
+                      "SA Responder Details",
+                      "CPR type",
+                    ),
+                )}
                 )}
               </div>
             </div>

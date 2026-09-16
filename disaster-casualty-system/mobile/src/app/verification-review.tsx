@@ -99,7 +99,7 @@ function getFullName(record: CasualtyRecord): string {
 
   return parts.length > 0
     ? parts.join(" ")
-    : "Unidentified Casualty";
+    : "Unidentified Victim";
 }
 
 function getUnitName(record: CasualtyRecord): string {

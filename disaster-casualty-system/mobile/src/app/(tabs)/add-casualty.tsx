@@ -5,7 +5,8 @@ import {
   useFocusEffect,
   useLocalSearchParams,
 } from "expo-router";
-import * as FileSystem from "expo-file-system";
+
+import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -96,6 +97,12 @@ const COLORS = {
   muted: "#A5ADBB",
   green: "#2E7D4F",
 };
+
+const AMP_RESPONDER_FULL_LABEL =
+  "Advanced Medical Responder";
+
+const AMP_RESPONDER_SHORT_LABEL =
+  "AMP Responder";
 
 const DEFAULT_STEPS = [
   "Personal",
@@ -1515,6 +1522,8 @@ type SelectedPhoto = {
   base64Data?: string;
 };
 
+type PhotoTarget = "casualty" | "pcr";
+
 type EvacuationCenterLabelSource = Pick<
   EvacuationCenter,
   "center_name" | "barangay" | "municipality"
@@ -1786,11 +1795,21 @@ function extractSaResponderVictimCode(
   record: CasualtyRecord,
 ): string {
   const remarks = record.remarks ?? "";
+  const normalizedRemarks = remarks.toLowerCase();
+
+  const hasAmpResponderDetails =
+    normalizedRemarks.includes(
+      "[advanced medical responder details]",
+    );
+
+  const hasLegacySaResponderDetails =
+    normalizedRemarks.includes(
+      "[sa responder details]",
+    );
 
   if (
-    !remarks
-      .toLowerCase()
-      .includes("[sa responder details]")
+    !hasAmpResponderDetails &&
+    !hasLegacySaResponderDetails
   ) {
     return "";
   }
@@ -4191,7 +4210,7 @@ function appendSectionNote(
 }
 
 function buildSaResponderRemarks(form: FormState): string {
-  return appendSectionNote(buildResponderSafetyRemarks(form), "SA Responder Details", [
+  return appendSectionNote(buildResponderSafetyRemarks(form), `${AMP_RESPONDER_FULL_LABEL} Details`, [
     ["Victim code", form.victimCode],
     ["Patient identified", form.patientIdentified],
     ["Witness present", form.witnessPresent],
@@ -4220,7 +4239,7 @@ function buildFieldResponderTriageNotes(form: FormState): string {
 
 function buildSaResponderTreatmentNotes(form: FormState): string {
   return appendSectionNote(form.treatmentNotes, "Patient Care Report", [
-    ["Fill in Patient Care Report", form.fillPatientCareReport],
+    ["PCR photo attached", form.fillPatientCareReport],
     ["Stabilized time", form.stabilizedTime],
   ]);
 }
@@ -4232,7 +4251,7 @@ function buildSaResponderTransportNotes(form: FormState): string {
       ? RELEASE_OF_LIABILITY_TEXT
       : "";
 
-  return appendSectionNote(form.transportNotes, "SA Transport / Release", [
+  return appendSectionNote(form.transportNotes, `${AMP_RESPONDER_FULL_LABEL} Transport / Release`, [
     ["Patient for", form.patientFor],
     ["Condition before release", form.conditionBeforeRelease],
     ["Medical contact if dead", form.releaseMedicalContact],
@@ -4868,6 +4887,14 @@ function DatePickerSheet({
   );
 }
 
+function useVictimTerminology(value: string): string {
+  return value
+    .replace(/\bCasualties\b/g, "Victims")
+    .replace(/\bcasualties\b/g, "victims")
+    .replace(/\bCasualty\b/g, "Victim")
+    .replace(/\bcasualty\b/g, "victim");
+}
+
 export default function AddCasualtyScreen() {
   const { editId, incidentId, incidentName, focusStep, draftId } =
     useLocalSearchParams<{
@@ -5056,6 +5083,11 @@ const [
     useState(true);
   const [selectedPhoto, setSelectedPhoto] =
     useState<SelectedPhoto | null>(null);
+  const [selectedPcrPhoto, setSelectedPcrPhoto] =
+  useState<SelectedPhoto | null>(null);
+
+  const [photoTarget, setPhotoTarget] =
+  useState<PhotoTarget>("casualty");
   const [
     isPhotoSourceSheetVisible,
     setIsPhotoSourceSheetVisible,
@@ -5064,6 +5096,9 @@ const [
     useState(false);
   const [submissionFeedback, setSubmissionFeedback] =
     useState<SubmissionFeedback | null>(null);
+
+  const [validationWarning, setValidationWarning] =
+  useState<string | null>(null);
 
   const [isExitConfirmVisible, setIsExitConfirmVisible,] = useState(false);
 
@@ -5093,10 +5128,10 @@ const [
   const isResponderTransportFocusedEdit =
     isResponderEditFlow &&
     requestedFocusStep?.toLowerCase() === "transport";
-  const screenTitle = isEditing ? "Edit Casualty" : "Add Casualty";
+  const screenTitle = isEditing ? "Edit Victim" : "Add Victim";
   const finalActionLabel = isEditing
     ? "Save Changes"
-    : "Submit Casualty";
+    : "Submit Victim";
   const hasGpsCoordinates =
     form.latitude.trim().length > 0 &&
     form.longitude.trim().length > 0;
@@ -5111,7 +5146,7 @@ const [
   const responderFunctionLabel = isFieldResponderFlow
     ? "Field Responder"
     : isSaResponderFlow
-      ? "Stabilization Area Responder"
+      ? AMP_RESPONDER_FULL_LABEL
       : null;
   const showVictimNumberStickyHeader =
   (
@@ -5157,6 +5192,7 @@ const [
         const payload = draft.payload as {
           form?: Partial<FormState>;
           selectedPhoto?: SelectedPhoto | null;
+          selectedPcrPhoto?: SelectedPhoto | null;
           currentStep?: number;
         };
         const draftForm =
@@ -5173,6 +5209,7 @@ const [
           ...draftForm,
         }));
         setSelectedPhoto(payload.selectedPhoto ?? null);
+        setSelectedPcrPhoto(payload.selectedPcrPhoto ?? null);
         setCurrentStep(
           Math.min(
             Math.max(savedStep, 0),
@@ -6833,12 +6870,16 @@ const victimCodeAlreadyExists = useMemo(() => {
     const nextSequence = nextCasualtySequence + 1;
     setNextCasualtySequence(nextSequence);
     setCurrentStep(0);
+
     setSelectedPhoto(null);
+    setSelectedPcrPhoto(null);
+
     setSelectedFieldResponderRecordId(null);
     setActiveChoiceSheet(null);
     setChoiceSearchQuery("");
     setIsTriageAssessmentVisible(false);
     setIsDatePickerVisible(false);
+
     setForm((current) => buildFreshCreateForm(current, nextSequence));
   }
 
@@ -6861,17 +6902,17 @@ const victimCodeAlreadyExists = useMemo(() => {
     const roleLabel = isFieldResponderFlow
       ? "Field Responder"
       : isSaResponderFlow
-        ? "SAR"
+        ? AMP_RESPONDER_SHORT_LABEL
         : isHealthcareDocumenterFlow
           ? "HCFD"
-          : "Casualty";
+          : "Victim";
     const recordLabel =
       form.victimCode.trim() ||
       form.idNumber.trim() ||
       form.incidentName.trim() ||
       "Untitled";
 
-    return `${roleLabel} casualty - ${recordLabel}`;
+    return `${roleLabel} victim - ${recordLabel}`;
   }
 
   async function clearLoadedDraftAfterSave() {
@@ -6898,6 +6939,7 @@ const victimCodeAlreadyExists = useMemo(() => {
         payload: {
           form,
           selectedPhoto,
+          selectedPcrPhoto,
           currentStep,
         },
       });
@@ -7048,6 +7090,20 @@ const victimCodeAlreadyExists = useMemo(() => {
       activeChoiceSheet === "disasterType"
     );
   }
+
+  function failValidation(
+  title: string,
+  message: string,
+): false {
+  setValidationWarning(message);
+
+  Alert.alert(
+    title,
+    message,
+  );
+
+  return false;
+}
 
   function validateOptionalDateTime(
     value: string,
@@ -7215,7 +7271,7 @@ if (
 ) {
   Alert.alert(
     "Victim code already exists",
-    `Victim code ${form.victimCode.trim()} already exists for this incident under Stabilization Area Responder. Please use a different victim code.`,
+    `Victim code ${form.victimCode.trim()} already exists for this incident under ${AMP_RESPONDER_FULL_LABEL}. Please use a different victim code.`,
   );
   return false;
 }
@@ -7594,8 +7650,70 @@ if (
         return true;
       }
 
-      case "Treatment":
-      case "Status":
+      case "Treatment": {
+        if (!form.treatmentStrategy.trim()) {
+          Alert.alert(
+            "Treatment required",
+            "Select the treatment type.",
+          );
+          return false;
+        }
+
+        if (
+          !validateOptionalDateTime(
+            form.stabilizedTime,
+            "Invalid stabilized time",
+            "stabilized time",
+          )
+        ) {
+          return false;
+        }
+
+        if (!form.fillPatientCareReport.trim()) {
+          Alert.alert(
+            "PCR selection required",
+            "Select whether you want to add a photo of the currently used PCR.",
+          );
+          return false;
+        }
+
+        if (
+          form.fillPatientCareReport === "Yes" &&
+          !selectedPcrPhoto
+        ) {
+          Alert.alert(
+            "PCR photo required",
+            "Attach or capture a photo of the currently used Patient Care Report before continuing.",
+          );
+          return false;
+        }
+
+        return true;
+      }
+
+      case "Status": {
+        if (
+          !isEditing &&
+          isFieldResponderFlow &&
+          form.victimCodeMarked !== "Yes"
+        ) {
+          return failValidation(
+            "Victim marking required",
+            'Confirm "Did you mark your victims?" before submitting.',
+          );
+        }
+
+        if (
+          !isEditing &&
+          isFieldResponderFlow &&
+          !selectedPhoto
+        ) {
+          return failValidation(
+            "Casualty photo required",
+            "Attach or capture a casualty photo before submitting.",
+          );
+        }
+
         return (
           validateOptionalDateTime(
             form.stabilizationStartedTime,
@@ -7608,16 +7726,30 @@ if (
             "stabilized time",
           )
         );
+      }
 
-      case "Hospital Care":
-        return validateHospitalCareDatesOnly();
+        case "Hospital Care":
+          return validateHospitalCareDatesOnly();
 
-      case "Address":
-      case "Remarks":
-      default:
-        return true;
+        case "Remarks":
+          if (
+            !isEditing &&
+            isSaResponderFlow &&
+            !selectedPhoto
+          ) {
+            return failValidation(
+              "Casualty photo required",
+              "Attach or capture a casualty photo before submitting.",
+            );
+          }
+
+          return true;
+
+        case "Address":
+        default:
+          return true;
+      }
     }
-  }
 
   function validateHospitalCareDatesOnly(): boolean {
     const dateFields: Array<[string, string, string]> = [
@@ -8651,7 +8783,18 @@ if (
         if (!form.fillPatientCareReport.trim()) {
           Alert.alert(
             "PCR selection required",
-            "Select whether to fill in the Patient Care Report.",
+            "Select whether you want to add a photo of the currently used PCR.",
+          );
+          return false;
+        }
+
+        if (
+          form.fillPatientCareReport === "Yes" &&
+          !selectedPcrPhoto
+        ) {
+          Alert.alert(
+            "PCR photo required",
+            "Attach or capture a photo of the currently used Patient Care Report before continuing.",
           );
           return false;
         }
@@ -9377,23 +9520,45 @@ if (
     }
   }
 
-  async function setPhotoFromPickerResult(
-    result: ImagePicker.ImagePickerResult,
-  ) {
-    if (result.canceled || result.assets.length === 0) {
-      return;
-    }
-
-    const asset = result.assets[0];
-    const fallbackName = `casualty-photo-${Date.now()}.jpg`;
-
-    setSelectedPhoto({
-      uri: asset.uri,
-      fileName: asset.fileName ?? fallbackName,
-      mimeType: asset.mimeType ?? "image/jpeg",
-      fileSize: asset.fileSize,
-    });
+  function saveSelectedPhoto(photo: SelectedPhoto) {
+  if (photoTarget === "pcr") {
+    setSelectedPcrPhoto(photo);
+    return;
   }
+
+  setSelectedPhoto(photo);
+}
+
+  async function setPhotoFromPickerResult(
+  result: ImagePicker.ImagePickerResult,
+) {
+  if (result.canceled || result.assets.length === 0) {
+    return;
+  }
+
+  const asset = result.assets[0];
+
+  const prefix =
+    photoTarget === "pcr"
+      ? "pcr"
+      : "casualty";
+
+  const fallbackName =
+    `${prefix}-photo-${Date.now()}.jpg`;
+
+  const fileName = asset.fileName
+    ? `${prefix}-${asset.fileName}`
+    : fallbackName;
+
+  saveSelectedPhoto({
+    uri: asset.uri,
+    fileName,
+    mimeType: asset.mimeType ?? "image/jpeg",
+    fileSize: asset.fileSize,
+  });
+}
+
+  
 
   async function pickPhotoFromLibrary() {
     const permission =
@@ -9520,9 +9685,15 @@ if (
 
           const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
           const base64Data = dataUrl.split(",")[1] ?? "";
-          const fallbackName = `casualty-photo-${Date.now()}.jpg`;
+          const prefix =
+            photoTarget === "pcr"
+              ? "pcr"
+              : "casualty";
 
-          setSelectedPhoto({
+          const fallbackName =
+            `${prefix}-photo-${Date.now()}.jpg`;
+
+          saveSelectedPhoto({
             uri: dataUrl,
             fileName: fallbackName,
             mimeType: "image/jpeg",
@@ -9582,7 +9753,10 @@ if (
     await setPhotoFromPickerResult(result);
   }
 
-  function handlePickPhoto() {
+  function handlePickPhoto(
+    target: PhotoTarget = "casualty",
+  ) {
+    setPhotoTarget(target);
     setIsPhotoSourceSheetVisible(true);
   }
 
@@ -9633,70 +9807,161 @@ if (
       setIsCapturingLocation(false);
     }
   }
+  
+  async function getPhotoBase64(
+  photo: SelectedPhoto,
+): Promise<string> {
+  if (photo.base64Data) {
+    return photo.base64Data;
+  }
 
-  async function uploadSelectedPhoto(
-    casualtyIncidentId: string,
-  ): Promise<string | null> {
-    if (!selectedPhoto) {
-      return null;
+  // Web camera already produces a data URL.
+  if (photo.uri.startsWith("data:")) {
+    return photo.uri.split(",")[1] ?? "";
+  }
+
+  // PWA / browser photo
+  if (Platform.OS === "web") {
+    const response = await fetch(photo.uri);
+
+    if (!response.ok) {
+      throw new Error("Unable to read the selected victim photo.");
     }
 
+    const blob = await response.blob();
+
+    const dataUrl = await new Promise<string>(
+      (resolve, reject) => {
+        const reader = new FileReader();
+
+        reader.onload = () => {
+          if (typeof reader.result === "string") {
+            resolve(reader.result);
+            return;
+          }
+
+          reject(
+            new Error(
+              "Unable to convert the selected victim photo.",
+            ),
+          );
+        };
+
+        reader.onerror = () => {
+          reject(
+            new Error(
+              "Unable to read the selected victim photo.",
+            ),
+          );
+        };
+
+        reader.readAsDataURL(blob);
+      },
+    );
+
+    return dataUrl.split(",")[1] ?? "";
+  }
+
+  // Android / iOS
+  return FileSystem.readAsStringAsync(
+    photo.uri,
+    {
+      encoding: FileSystem.EncodingType.Base64,
+    },
+  );
+}
+  
+  async function uploadSelectedPhotos(
+  casualtyIncidentId: string,
+): Promise<string | null> {
+  const photos: Array<{
+    label: string;
+    photo: SelectedPhoto;
+  }> = [];
+
+  if (selectedPhoto) {
+    photos.push({
+      label: "vicitm photo",
+      photo: selectedPhoto,
+    });
+  }
+
+  if (selectedPcrPhoto) {
+    photos.push({
+      label: "PCR photo",
+      photo: selectedPcrPhoto,
+    });
+  }
+
+  if (photos.length === 0) {
+    return null;
+  }
+
+  const errors: string[] = [];
+
+  for (const { label, photo } of photos) {
     try {
       const base64Data =
-        selectedPhoto.base64Data ??
-        (await FileSystem.readAsStringAsync(
-          selectedPhoto.uri,
-          {
-            encoding: FileSystem.EncodingType.Base64,
-          },
-        ));
+        await getPhotoBase64(photo);
 
       await uploadAttachment({
         casualtyIncidentId,
-        fileName: selectedPhoto.fileName,
+        fileName: photo.fileName,
         fileType: "photo",
-        mimeType: selectedPhoto.mimeType,
+        mimeType: photo.mimeType,
         base64Data,
-        fileSizeBytes: selectedPhoto.fileSize,
+        fileSizeBytes: photo.fileSize,
       });
-
-      return null;
     } catch (error) {
-      console.error("Failed to upload casualty photo:", error);
+      console.error(
+        `Failed to upload ${label}:`,
+        error,
+      );
 
-      return error instanceof Error
-        ? error.message
-        : "The photo could not be uploaded.";
+      errors.push(
+        `${label}: ${
+          error instanceof Error
+            ? error.message
+            : "upload failed"
+        }`,
+      );
     }
   }
+
+  return errors.length > 0
+    ? errors.join("; ")
+    : null;
+}
 
   async function getQueuedPhotoAttachments(): Promise<
-    QueuedCasualtyAttachment[]
-  > {
-    if (!selectedPhoto) {
-      return [];
-    }
+  QueuedCasualtyAttachment[]
+> {
+  const attachments: QueuedCasualtyAttachment[] = [];
 
+  const photos = [
+    selectedPhoto,
+    selectedPcrPhoto,
+  ].filter(
+    (photo): photo is SelectedPhoto =>
+      photo !== null,
+  );
+
+  for (const photo of photos) {
     const base64Data =
-      selectedPhoto.base64Data ??
-      (await FileSystem.readAsStringAsync(
-        selectedPhoto.uri,
-        {
-          encoding: FileSystem.EncodingType.Base64,
-        },
-      ));
+      await getPhotoBase64(photo);
 
-    return [
-      {
-        id: generateUuid(),
-        fileName: selectedPhoto.fileName,
-        fileType: "photo",
-        mimeType: selectedPhoto.mimeType,
-        base64Data,
-        fileSizeBytes: selectedPhoto.fileSize,
-      },
-    ];
+    attachments.push({
+      id: generateUuid(),
+      fileName: photo.fileName,
+      fileType: "photo",
+      mimeType: photo.mimeType,
+      base64Data,
+      fileSizeBytes: photo.fileSize,
+    });
   }
+
+  return attachments;
+}
 
   function getChoiceSheetTitle(): string {
     switch (activeChoiceSheet) {
@@ -9879,7 +10144,13 @@ if (
         return YES_NO_OPTIONS_TEXT.map((option) => ({
           label: option,
           selected: form.fillPatientCareReport === option,
-          onSelect: () => updateField("fillPatientCareReport", option),
+          onSelect: () => {
+            updateField("fillPatientCareReport", option);
+
+            if (option === "No") {
+              setSelectedPcrPhoto(null);
+            }
+          },
         }));
 
       case "fieldResponderVictimCode":
@@ -10606,7 +10877,7 @@ if (
 }
 
         const photoUploadError =
-          await uploadSelectedPhoto(createdRecordId);
+          await uploadSelectedPhotos(createdRecordId);
         await clearLoadedDraftAfterSave();
 
         if (shouldResetPendingDepartureForm) {
@@ -10614,10 +10885,10 @@ if (
         }
 
         setSubmissionFeedback({
-          title: "Casualty submitted",
+          title: "Victim submitted",
           message: photoUploadError
-            ? `The casualty record was saved, but the photo upload failed: ${photoUploadError}`
-            : "The casualty record has been saved successfully.",
+            ? `The victim record was saved, but the photo upload failed: ${photoUploadError}`
+            : "The victim record has been saved successfully.",
           resetOnClose: shouldResetPendingDepartureForm ? false : undefined,
         });
       } catch (error) {
@@ -10678,11 +10949,11 @@ if (
       setIsSubmitting(true);
 
       const response = await updateCasualty(casualtyId, updatePayload);
-      const photoUploadError = await uploadSelectedPhoto(casualtyId);
+      const photoUploadError = await uploadSelectedPhotos(casualtyId);
       await clearLoadedDraftAfterSave();
       const responseMessage =
         response.message ||
-        "The casualty record has been saved successfully.";
+        "The victim record has been saved successfully.";
       const returnedForReview = responseMessage
         .toLowerCase()
         .includes("returned for admin review");
@@ -10725,18 +10996,270 @@ if (
     }
   }
 
-  function goNext() {
-    if (!isResponderEditLockedStep && !validateCurrentStep()) {
-      return;
-    }
+  function getMissingRequiredFieldWarning(): string | null {
+  switch (stepName) {
+    case "Safety":
+      if (
+        (isFieldResponderFlow || isSaResponderFlow) &&
+        !form.incidentId &&
+        currentUserId &&
+        !canSaveWithOfflineIncidentPlaceholder
+      ) {
+        return "Incident Name is required.";
+      }
 
-    if (currentStep < activeSteps.length - 1) {
-      setCurrentStep((step) => step + 1);
-      return;
-    }
+      if (
+        !hasSavedResponderSafetyResponse &&
+        !form.responderSafetyStatus.trim()
+      ) {
+        return '"Are you safe?" is required.';
+      }
 
-    void handleSubmit();
+      if (
+        !hasSavedResponderSafetyResponse &&
+        !form.ppeUseTime.trim()
+      ) {
+        return "Time of PPE Use is required.";
+      }
+
+      return null;
+
+    case "Intro":
+    case "General Information":
+      if (
+        !form.incidentId &&
+        currentUserId &&
+        !canSaveWithOfflineIncidentPlaceholder
+      ) {
+        return "Incident Name is required.";
+      }
+
+      return null;
+
+    case "Info":
+      if (
+        isSaResponderFlow &&
+        !form.victimCode.trim()
+      ) {
+        return "Victim Code is required.";
+      }
+
+      return null;
+
+    case "Triage":
+      if (
+        getAppendixQuestionsForSystem(form.triageSystem).length > 0 &&
+        !hasTriageAssessmentAnswer()
+      ) {
+        return "Triage Assessment is required. Answer at least one assessment item.";
+      }
+
+      return null;
+
+    case "Treatment":
+      if (!form.treatmentStrategy.trim()) {
+        return "Treatment Type is required.";
+      }
+
+      if (!form.fillPatientCareReport.trim()) {
+        return "PCR photo selection is required. Select Yes or No.";
+      }
+
+      if (
+        form.fillPatientCareReport === "Yes" &&
+        !selectedPcrPhoto
+      ) {
+        return "PCR Photo is required because you selected Yes.";
+      }
+
+      return null;
+
+    case "Transport":
+      if (
+        isSaResponderFlow &&
+        form.conditionBeforeTransfer === "Dead" &&
+        !form.transferMedicalContact.trim()
+      ) {
+        return "Medical Contact before transfer is required.";
+      }
+
+      if (
+        isSaResponderFlow &&
+        form.conditionBeforeRelease === "Dead" &&
+        !form.releaseMedicalContact.trim()
+      ) {
+        return "Medical Contact before release is required.";
+      }
+
+      if (
+        isSaResponderFlow &&
+        form.usedEmsVehicle === "Yes" &&
+        !form.emsVehicleType.trim()
+      ) {
+        return "EMS Vehicle Type is required.";
+      }
+
+      return null;
+
+    case "Management":
+      if (
+        form.admittedToUnit === "Other Unit" &&
+        !form.otherAdmittedUnit.trim()
+      ) {
+        return "Other Admitted Unit is required.";
+      }
+
+      if (
+        (
+          form.admittedToUnit === "Ward" ||
+          form.admittedToUnit === "Other Unit"
+        ) &&
+        !form.unitAdmissionTime.trim()
+      ) {
+        return "Unit Admission Time is required.";
+      }
+
+      return null;
+
+    case "Disposition": {
+      const isIcu =
+        form.admittedToUnit === "ICU";
+
+      const isWardLike =
+        form.admittedToUnit === "Ward" ||
+        form.admittedToUnit === "Other Unit";
+
+      const isNotAdmitted =
+        form.admittedToUnit === "Not Admitted";
+
+      const isUnknown =
+        form.admittedToUnit === "Unknown";
+
+      if (
+        isIcu &&
+        !form.transferredToWard.trim()
+      ) {
+        return "Transferred to Ward selection is required.";
+      }
+
+      if (
+        isIcu &&
+        form.transferredToWard === "Yes" &&
+        !form.icuTransferOutTime.trim()
+      ) {
+        return "Ward Transfer Time is required.";
+      }
+
+      if (
+        isIcu &&
+        form.transferredToWard === "Yes" &&
+        !form.inActiveCare.trim()
+      ) {
+        return "Active Care Status is required.";
+      }
+
+      if (
+        isWardLike &&
+        !form.inActiveCare.trim()
+      ) {
+        return "Active Care Status is required.";
+      }
+
+      const dischargeRequired =
+        isNotAdmitted ||
+        isUnknown ||
+        (
+          (
+            isWardLike ||
+            (
+              isIcu &&
+              form.transferredToWard === "Yes"
+            )
+          ) &&
+          form.inActiveCare === "No"
+        );
+
+      if (
+        dischargeRequired &&
+        !form.dischargedAfterEd.trim()
+      ) {
+        return "Hospital Discharge Status is required.";
+      }
+
+      if (
+        dischargeRequired &&
+        form.dischargedAfterEd === "Yes" &&
+        !form.hospitalDischargeTime.trim()
+      ) {
+        return "Hospital Discharge Time is required.";
+      }
+
+      return null;
+    }
+    case "Status":
+      if (
+        !isEditing &&
+        isFieldResponderFlow &&
+        form.victimCodeMarked !== "Yes"
+      ) {
+        return 'The "Did you mark your victims?" confirmation is required.';
+      }
+
+      if (
+        !isEditing &&
+        isFieldResponderFlow &&
+        !selectedPhoto
+      ) {
+        return "Casualty Photo is required.";
+      }
+
+      return null;
+
+    case "Remarks":
+      if (
+        !isEditing &&
+        isSaResponderFlow &&
+        !selectedPhoto
+      ) {
+        return "Casualty Photo is required.";
+      }
+
+      return null;
+
+    default:
+      return null;
   }
+}
+
+  function goNext() {
+  if (!isResponderEditLockedStep) {
+    setValidationWarning(null);
+
+    const isValid = validateCurrentStep();
+
+    if (!isValid) {
+      const missingField =
+        getMissingRequiredFieldWarning();
+
+      setValidationWarning(
+        missingField ??
+          "Please review the information on this step. One or more values are invalid.",
+      );
+
+      return;
+    }
+  }
+
+  setValidationWarning(null);
+
+  if (currentStep < activeSteps.length - 1) {
+    setCurrentStep((step) => step + 1);
+    return;
+  }
+
+  void handleSubmit();
+}
+
 
   function goPreviousStep() {
   if (currentStep > 0) {
@@ -11546,7 +12069,7 @@ function confirmExitAddCasualty() {
     />
     <Text style={styles.inlineWarningText}>
       Victim code {form.victimCode.trim()} already exists
-      for this incident under Stabilization Area Responder.
+      for this incident under {AMP_RESPONDER_FULL_LABEL}.
       Please use a different victim code.
     </Text>
   </View>
@@ -12434,7 +12957,7 @@ function confirmExitAddCasualty() {
     />
     <Text style={styles.inlineWarningText}>
       Victim code {form.victimCode.trim()} already exists
-      for this incident under Stabilization Area Responder.
+      for this incident under Advanced Medical Responder.
       Please use a different victim code.
     </Text>
   </View>
@@ -13257,89 +13780,63 @@ function confirmExitAddCasualty() {
   }
 
   function renderSaTreatmentStep() {
-    const showPcr = form.fillPatientCareReport === "Yes";
+  const showPcr = form.fillPatientCareReport === "Yes";
 
-    return (
-      <>
-        <SelectField
-          label="TREATMENT"
-          value={form.treatmentStrategy}
-          placeholder="Select treatment type"
-          onPress={() => openChoiceSheet("treatmentStrategy")}
-        />
+  return (
+    <>
+      <SelectField
+        label="TREATMENT"
+        value={form.treatmentStrategy}
+        placeholder="Select treatment type"
+        onPress={() => openChoiceSheet("treatmentStrategy")}
+      />
 
-        <CurrentTimeField
-          label="STABILIZED TIME"
-          value={form.stabilizedTime}
-          placeholder="mm/dd/yyyy hh:mm"
-          icon="checkmark-circle-outline"
-          buttonLabel="Use current stabilized time"
-          onChangeText={(value) =>
-            updateField("stabilizedTime", value)
-          }
-          onUseCurrent={() =>
-            updateField(
-              "stabilizedTime",
-              formatDateTimeForInput(new Date()),
-            )
-          }
-        />
+      <CurrentTimeField
+        label="STABILIZED TIME"
+        value={form.stabilizedTime}
+        placeholder="mm/dd/yyyy hh:mm"
+        icon="checkmark-circle-outline"
+        buttonLabel="Use current stabilized time"
+        onChangeText={(value) =>
+          updateField("stabilizedTime", value)
+        }
+        onUseCurrent={() =>
+          updateField(
+            "stabilizedTime",
+            formatDateTimeForInput(new Date()),
+          )
+        }
+      />
 
-        <SelectField
-          label="ADD PHOTO OF YOUR CURRENTLY USED PCR?"
-          value={form.fillPatientCareReport}
-          placeholder="Yes or No"
-          onPress={() => openChoiceSheet("fillPatientCareReport")}
-        />
+      <SelectField
+        label="ADD PHOTO OF YOUR CURRENTLY USED PCR?"
+        value={form.fillPatientCareReport}
+        placeholder="Yes or No"
+        onPress={() =>
+          openChoiceSheet("fillPatientCareReport")
+        }
+      />
 
-        {showPcr ? (
-          <>
-            <SectionLabel title="PCR Patient Assessment" />
+      {showPcr ? (
+        <>
+          <SectionLabel title="PCR Attachment" />
 
-            <FormField
-              label="VISIBLE INJURY"
-              value={form.visibleInjury}
-              placeholder="Describe visible injuries"
-              multiline
-              onChangeText={(value) =>
-                updateField("visibleInjury", value)
-              }
-            />
+          {renderPcrPhotoAttachmentCard()}
+        </>
+      ) : null}
 
-            <FormField
-              label="MEDICAL CONDITION"
-              value={form.medicalCondition}
-              placeholder="Patient assessment findings"
-              multiline
-              onChangeText={(value) =>
-                updateField("medicalCondition", value)
-              }
-            />
-
-            <FormField
-              label="ASSISTANCE PROVIDED"
-              value={form.assistanceProvided}
-              placeholder="Care rendered"
-              multiline
-              onChangeText={(value) =>
-                updateField("assistanceProvided", value)
-              }
-            />
-          </>
-        ) : null}
-
-        <FormField
-          label="TREATMENT NOTES"
-          value={form.treatmentNotes}
-          placeholder="Treatment observations"
-          multiline
-          onChangeText={(value) =>
-            updateField("treatmentNotes", value)
-          }
-        />
-      </>
-    );
-  }
+      <FormField
+        label="TREATMENT NOTES"
+        value={form.treatmentNotes}
+        placeholder="Treatment observations"
+        multiline
+        onChangeText={(value) =>
+          updateField("treatmentNotes", value)
+        }
+      />
+    </>
+  );
+}
 
   function renderHospitalCareStep() {
     const showDeathDetails = normalizeYesNoUnknown(form.died) === true;
@@ -13694,6 +14191,50 @@ function confirmExitAddCasualty() {
     );
   }
 
+  function renderPcrPhotoAttachmentCard() {
+  return (
+    <Pressable
+      onPress={() => {
+        handlePickPhoto("pcr");
+      }}
+      style={({ pressed }) => [
+        styles.uploadCard,
+        pressed && styles.pressed,
+      ]}
+    >
+      <View style={styles.uploadIcon}>
+        <Ionicons
+          name="document-attach-outline"
+          size={25}
+          color={COLORS.maroon}
+        />
+      </View>
+
+      <View style={styles.uploadTextWrapper}>
+        <Text style={styles.uploadTitle}>
+          {selectedPcrPhoto
+            ? "PCR photo selected"
+            : "Attach PCR photo"}
+        </Text>
+
+        <Text style={styles.uploadDescription}>
+          {selectedPcrPhoto
+            ? `${selectedPcrPhoto.fileName} - uploads when saved.`
+            : "Capture or import a photo of the currently used Patient Care Report."}
+        </Text>
+      </View>
+
+      <Ionicons
+        name="chevron-forward-outline"
+        size={20}
+        color={COLORS.secondaryText}
+      />
+    </Pressable>
+  );
+}
+
+
+
   function renderCurrentStep() {
     switch (stepName) {
       case "Safety":
@@ -13963,6 +14504,19 @@ function confirmExitAddCasualty() {
           edges={["bottom"]}
           style={styles.footerSafeArea}
         >
+          {validationWarning ? (
+            <View style={styles.inlineWarning}>
+              <Ionicons
+                name="alert-circle-outline"
+                size={18}
+                color={COLORS.maroon}
+              />
+
+              <Text style={styles.inlineWarningText}>
+                {validationWarning}
+              </Text>
+            </View>
+          ) : null}
           <View style={styles.footer}>
             {currentStep > 0 ? (
               <Pressable
@@ -14116,7 +14670,11 @@ function confirmExitAddCasualty() {
 
       <ChoiceSheet
         visible={isPhotoSourceSheetVisible}
-        title="Add casualty photo"
+        title={
+          photoTarget === "pcr"
+            ? "Add PCR photo"
+            : "Add casualty photo"
+        }
         options={[
           {
             label: "Capture photo",
@@ -15314,6 +15872,11 @@ victimUserCodeValue: {
     paddingTop: 11,
     paddingBottom: 7,
     gap: 10,
+  },
+  footerWarningWrapper: {
+  paddingHorizontal: 16,
+  paddingTop: 8,
+  paddingBottom: 4,
   },
   primaryButton: {
     flex: 1,

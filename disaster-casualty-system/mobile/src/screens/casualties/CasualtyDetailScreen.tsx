@@ -1239,9 +1239,14 @@ export default function CasualtyDetailScreen() {
                 value={formatValue(
                   extractRecordSectionValue(
                     remarks,
-                    "SA Responder Details",
+                    "Advanced Medical Responder Details",
                     "Victim code",
-                  ),
+                  ) ||
+                    extractRecordSectionValue(
+                      remarks,
+                      "SA Responder Details",
+                      "Victim code",
+                    ),
                 )}
               />
 
@@ -1250,9 +1255,14 @@ export default function CasualtyDetailScreen() {
                 value={formatValue(
                   extractRecordSectionValue(
                     remarks,
-                    "SA Responder Details",
+                    "Advanced Medical Responder Details",
                     "Witness present",
-                  ),
+                  ) ||
+                    extractRecordSectionValue(
+                      remarks,
+                      "SA Responder Details",
+                      "Witness present",
+                    ),
                 )}
               />
 
@@ -1261,9 +1271,14 @@ export default function CasualtyDetailScreen() {
                 value={formatValue(
                   extractRecordSectionValue(
                     remarks,
-                    "SA Responder Details",
+                    "Advanced Medical Responder Details",
                     "Witness response",
-                  ),
+                  ) ||
+                    extractRecordSectionValue(
+                      remarks,
+                      "SA Responder Details",
+                      "Witness response",
+                    ),
                 )}
               />
 
@@ -1272,9 +1287,14 @@ export default function CasualtyDetailScreen() {
                 value={formatValue(
                   extractRecordSectionValue(
                     remarks,
-                    "SA Responder Details",
+                    "Advanced Medical Responder Details",
                     "CPR type",
-                  ),
+                  ) ||
+                    extractRecordSectionValue(
+                      remarks,
+                      "SA Responder Details",
+                      "CPR type",
+                    ),
                 )}
               />
             </SectionCard>
@@ -1285,9 +1305,14 @@ export default function CasualtyDetailScreen() {
                 value={formatValue(
                   extractRecordSectionValue(
                     remarks,
-                    "SA Responder Details",
+                    "Advanced Medical Responder Details",
                     "Patient identified",
-                  ),
+                  ) ||
+                    extractRecordSectionValue(
+                      remarks,
+                      "SA Responder Details",
+                      "Patient identified",
+                    ),
                 )}
               />
 
@@ -1307,15 +1332,19 @@ export default function CasualtyDetailScreen() {
                 label="Date of Birth"
                 value={casualty.dateOfBirth}
               />
-
               <DetailRow
                 label="Newborn"
                 value={formatValue(
                   extractRecordSectionValue(
                     remarks,
-                    "SA Responder Details",
+                    "Advanced Medical Responder Details",
                     "Newborn",
-                  ),
+                  ) ||
+                    extractRecordSectionValue(
+                      remarks,
+                      "SA Responder Details",
+                      "Newborn",
+                    ),
                 )}
               />
 
@@ -1324,9 +1353,14 @@ export default function CasualtyDetailScreen() {
                 value={formatValue(
                   extractRecordSectionValue(
                     remarks,
-                    "SA Responder Details",
+                    "Advanced Medical Responder Details",
                     "Pregnant",
-                  ),
+                  ) ||
+                    extractRecordSectionValue(
+                      remarks,
+                      "SA Responder Details",
+                      "Pregnant",
+                    ),
                 )}
               />
 
@@ -1335,9 +1369,14 @@ export default function CasualtyDetailScreen() {
                 value={formatValue(
                   extractRecordSectionValue(
                     remarks,
-                    "SA Responder Details",
+                    "Advanced Medical Responder Details",
                     "Religion",
-                  ),
+                  ) ||
+                    extractRecordSectionValue(
+                      remarks,
+                      "SA Responder Details",
+                      "Religion",
+                    ),
                 )}
               />
             </SectionCard>

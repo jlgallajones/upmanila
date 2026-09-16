@@ -990,7 +990,7 @@ export async function registerUnitUser(
       response.status(400).json({
         success: false,
         message:
-          "Admins can only create FR, SAR, or healthcare facility documenter accounts.",
+          "Admins can only assign FR, Advanced Medical Responder, or healthcare facility documenter roles.",
       });
       return;
     }
@@ -1198,7 +1198,7 @@ export async function bulkRegisterUnitUsers(
           results.push(
             rowError(
               rowNumber,
-              "Admins can only create FR, SAR, or healthcare facility documenter accounts.",
+              "Admins can only assign FR, Advanced Medical Responder, or healthcare facility documenter roles.",
             ),
           );
           continue;
@@ -2051,7 +2051,7 @@ export async function updateUnitUser(
       response.status(400).json({
         success: false,
         message:
-          "Admins can only assign FR, SAR, or healthcare facility documenter roles.",
+          "Admins can only create FR, Advanced Medical Responder, or healthcare facility documenter accounts.",
       });
       return;
     }
@@ -2176,7 +2176,7 @@ export async function deleteUnitUser(
       response.status(404).json({
         success: false,
         message:
-          "Only FR, SAR, healthcare facility documenter, and legacy responder accounts can be deleted here.",
+          "Only FR, Advanced Medical Responder, healthcare facility documenter, and legacy responder accounts can be deleted here.",
       });
       return;
     }

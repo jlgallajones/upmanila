@@ -2653,7 +2653,7 @@ function toggleHealthcareLocationFilter(
                   {useHealthcareDocumenterFilters
                     ? "Healthcare Facility Documenter"
                     : useSaResponderFilters
-                      ? "Stabilization Area Responder"
+                      ? "Advanced Medical Responder"
                       : "Field Responder"}
                 </Text>
               </View>

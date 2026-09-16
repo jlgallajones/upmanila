@@ -102,7 +102,7 @@ function formatResponderRole(
   }
 
   if (assignment === "sa_responder" || userRole === "sa_responder") {
-    return "Stabilization Area Responder";
+    return "Advanced Medical Responder";
   }
 
   return "Responder";
@@ -114,7 +114,7 @@ function formatRecordResponderRole(record: CasualtyRecord): string {
   }
 
   if (record.encoder.role === "sa_responder") {
-    return "Stabilization Area Responder";
+    return "Advanced Medical Responder";
   }
 
   return formatResponderRole(record.encoder.role, null);

@@ -2,8 +2,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import {
-  Alert,
   FlatList,
+  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -45,6 +45,11 @@ function draftTypeLabel(formType: string): string {
 export default function DraftsScreen() {
   const [drafts, setDrafts] = useState<LocalFormDraft[]>([]);
 
+  const [draftToDelete, setDraftToDelete] =
+    useState<LocalFormDraft | null>(null);
+
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const loadDrafts = useCallback(async () => {
     setDrafts(await getLocalFormDrafts());
   }, []);
@@ -55,23 +60,28 @@ export default function DraftsScreen() {
     }, [loadDrafts]),
   );
 
-  async function handleDeleteDraft(draft: LocalFormDraft) {
-    Alert.alert(
-      "Delete draft?",
-      "This removes the saved draft from this device.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            await deleteLocalFormDraft(draft.id);
-            await loadDrafts();
-          },
-        },
-      ],
-    );
+  function handleDeleteDraft(draft: LocalFormDraft) {
+  setDraftToDelete(draft);
+}
+
+async function confirmDeleteDraft() {
+  if (!draftToDelete || isDeleting) {
+    return;
   }
+
+  try {
+    setIsDeleting(true);
+
+    await deleteLocalFormDraft(draftToDelete.id);
+    await loadDrafts();
+
+    setDraftToDelete(null);
+  } catch (error) {
+    console.error("Unable to delete draft:", error);
+  } finally {
+    setIsDeleting(false);
+  }
+}
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -137,9 +147,7 @@ export default function DraftsScreen() {
               </Pressable>
 
               <Pressable
-                onPress={() => {
-                  void handleDeleteDraft(item);
-                }}
+                onPress={() => handleDeleteDraft(item)}
                 style={({ pressed }) => [
                   styles.deleteButton,
                   pressed && styles.pressed,
@@ -150,10 +158,82 @@ export default function DraftsScreen() {
             </View>
           </View>
         )}
-      />
+            />
+
+      <Modal
+        visible={draftToDelete !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!isDeleting) {
+            setDraftToDelete(null);
+          }
+        }}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalIcon}>
+              <Ionicons
+                name="trash-outline"
+                size={26}
+                color={COLORS.red}
+              />
+            </View>
+
+            <Text style={styles.modalTitle}>
+              Delete draft?
+            </Text>
+
+            <Text style={styles.modalMessage}>
+              {draftToDelete
+                ? `Are you sure you want to delete "${draftToDelete.title}"? This draft will be permanently removed from this device.`
+                : ""}
+            </Text>
+
+            <View style={styles.modalActions}>
+              <Pressable
+                disabled={isDeleting}
+                onPress={() => setDraftToDelete(null)}
+                style={({ pressed }) => [
+                  styles.modalCancelButton,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.modalCancelText}>
+                  Cancel
+                </Text>
+              </Pressable>
+
+              <Pressable
+                disabled={isDeleting}
+                onPress={() => {
+                  void confirmDeleteDraft();
+                }}
+                style={({ pressed }) => [
+                  styles.modalDeleteButton,
+                  pressed && styles.pressed,
+                  isDeleting && styles.disabledButton,
+                ]}
+              >
+                <Ionicons
+                  name="trash-outline"
+                  size={17}
+                  color={COLORS.white}
+                />
+
+                <Text style={styles.modalDeleteText}>
+                  {isDeleting ? "Deleting..." : "Delete"}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
+
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -277,5 +357,89 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.72,
   },
+  modalBackdrop: {
+  flex: 1,
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 22,
+  backgroundColor: "rgba(15, 23, 42, 0.48)",
+},
+
+modalCard: {
+  width: "100%",
+  maxWidth: 420,
+  padding: 22,
+  borderWidth: 1,
+  borderColor: COLORS.border,
+  borderRadius: 18,
+  backgroundColor: COLORS.white,
+},
+
+modalIcon: {
+  width: 52,
+  height: 52,
+  alignItems: "center",
+  justifyContent: "center",
+  marginBottom: 16,
+  borderRadius: 16,
+  backgroundColor: "#FFF1F1",
+},
+
+modalTitle: {
+  color: COLORS.text,
+  fontSize: 20,
+  fontWeight: "900",
+},
+
+modalMessage: {
+  marginTop: 8,
+  color: COLORS.muted,
+  fontSize: 14,
+  lineHeight: 21,
+},
+
+modalActions: {
+  flexDirection: "row",
+  gap: 10,
+  marginTop: 22,
+},
+
+modalCancelButton: {
+  flex: 1,
+  minHeight: 46,
+  alignItems: "center",
+  justifyContent: "center",
+  borderWidth: 1,
+  borderColor: COLORS.border,
+  borderRadius: 12,
+  backgroundColor: COLORS.white,
+},
+
+modalCancelText: {
+  color: COLORS.text,
+  fontSize: 14,
+  fontWeight: "800",
+},
+
+modalDeleteButton: {
+  flex: 1,
+  minHeight: 46,
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 7,
+  borderRadius: 12,
+  backgroundColor: COLORS.red,
+},
+
+modalDeleteText: {
+  color: COLORS.white,
+  fontSize: 14,
+  fontWeight: "900",
+},
+
+disabledButton: {
+  opacity: 0.55,
+},
 });
 

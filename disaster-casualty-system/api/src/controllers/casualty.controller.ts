@@ -234,7 +234,7 @@ function buildCasualtyNotificationLabel(
     .filter(Boolean)
     .join(" ");
 
-  return fullName || "this casualty record";
+  return fullName || "this victim record";
 }
 
 async function createCasualtyRejectionNotification({
@@ -252,7 +252,7 @@ async function createCasualtyRejectionNotification({
 }): Promise<void> {
   const reason = reviewNotes?.trim();
   const messageParts = [
-    `Your casualty record ${casualtyLabel} was rejected and returned for correction.`,
+    `Your victim record ${casualtyLabel} was rejected and returned for correction.`,
     incidentName ? `Incident: ${incidentName}.` : null,
     reason ? `Reason: ${reason}` : null,
   ].filter(Boolean);
@@ -261,10 +261,10 @@ async function createCasualtyRejectionNotification({
     .from("notifications")
     .insert({
       user_id: recipientUserId,
-      title: "Casualty record rejected",
+      title: "Victim record rejected",
       message: messageParts.join(" "),
       notification_type: "verification",
-      related_entity_type: "casualty",
+      related_entity_type: "victim",
       related_entity_id: casualtyIncidentId,
     });
 
@@ -287,7 +287,7 @@ async function createCasualtySubmissionNotification({
   incidentName: string | null;
 }): Promise<void> {
   const messageParts = [
-    `You submitted casualty record ${casualtyLabel} successfully.`,
+    `You submitted victim record ${casualtyLabel} successfully.`,
     incidentName ? `Incident: ${incidentName}.` : null,
   ].filter(Boolean);
 
@@ -295,16 +295,16 @@ async function createCasualtySubmissionNotification({
     .from("notifications")
     .insert({
       user_id: recipientUserId,
-      title: "Casualty submitted",
+      title: "Victim submitted",
       message: messageParts.join(" "),
       notification_type: "verification",
-      related_entity_type: "casualty",
+      related_entity_type: "victim",
       related_entity_id: casualtyIncidentId,
     });
 
   if (error) {
     console.error(
-      `Unable to create casualty submission notification: ${error.message}`,
+      `Unable to create victim submission notification: ${error.message}`,
     );
   }
 }
@@ -1584,7 +1584,7 @@ async function upsertCasualtyOutcome(
 
   if (error) {
     throw new Error(
-      `Unable to record casualty outcome: ${error.message}`,
+      `Unable to record victim outcome: ${error.message}`,
     );
   }
 }
@@ -1676,7 +1676,7 @@ export async function createCasualty(
     ) {
       response.status(400).json({
         success: false,
-        message: "Invalid casualty status.",
+        message: "Invalid victim status.",
       });
       return;
     }
@@ -1686,7 +1686,7 @@ export async function createCasualty(
     if (!casualtySeverities.includes(severity)) {
       response.status(400).json({
         success: false,
-        message: "Invalid casualty severity.",
+        message: "Invalid victim severity.",
       });
       return;
     }
@@ -1772,7 +1772,7 @@ export async function createCasualty(
       response.status(409).json({
         success: false,
         message:
-          "A casualty with this ID number already exists. Please generate a new record.",
+          "A victim with this ID number already exists. Please generate a new record.",
       });
       return;
     }
@@ -1878,7 +1878,7 @@ export async function createCasualty(
 
     if (transactionError || !transactionResult) {
       throw new Error(
-        `Unable to create casualty record: ${
+        `Unable to create victim record: ${
           transactionError?.message ?? "Unknown database error"
         }`,
       );
@@ -2004,7 +2004,7 @@ const casualtyNotificationLabel =
         value.trim().length > 0,
     )
     .join(" ") ||
-  "the casualty record";
+  "the victim record";
 
 await createCasualtySubmissionNotification({
   casualtyIncidentId:
@@ -2037,7 +2037,7 @@ await recordAuditLog({
 
 response.status(201).json({
   success: true,
-  message: "Casualty record submitted successfully.",
+  message: "Victim record submitted successfully.",
   data: transactionResult,
 });
   } catch (error) {
@@ -2162,7 +2162,7 @@ async function getAccessibleCasualtyIncidentIds(user: {
 
   if (error) {
     throw new Error(
-      `Unable to retrieve accessible casualty records: ${error.message}`,
+      `Unable to retrieve accessible victim records: ${error.message}`,
     );
   }
 
@@ -2199,7 +2199,7 @@ async function getCaseLinksForUser(user: {
 
   if (error) {
     throw new Error(
-      `Unable to retrieve casualty case links: ${error.message}`,
+      `Unable to retrieve victim case links: ${error.message}`,
     );
   }
 
@@ -2232,7 +2232,7 @@ async function getMatchRecordsById(
 
   if (error) {
     throw new Error(
-      `Unable to retrieve casualty records for matching: ${error.message}`,
+      `Unable to retrieve victim records for matching: ${error.message}`,
     );
   }
 
@@ -2289,7 +2289,7 @@ export async function matchCasualtyCaseRecords(
       response.status(400).json({
         success: false,
         message:
-          "Select one Field Responder, one SAR, and one HCFD record to match.",
+          "Select one Field Responder, one Advanced Medical Responder, and one HCFD record to match.",
       });
       return;
     }
@@ -2300,7 +2300,7 @@ export async function matchCasualtyCaseRecords(
     if (records.length !== recordIds.length) {
       response.status(404).json({
         success: false,
-        message: "One or more selected casualty records were not found.",
+        message: "One or more selected victim records were not found.",
       });
       return;
     }
@@ -2312,7 +2312,7 @@ export async function matchCasualtyCaseRecords(
       response.status(403).json({
         success: false,
         message:
-          "One or more selected casualty records are outside your admin scope.",
+          "One or more selected victim records are outside your admin scope.",
       });
       return;
     }
@@ -2429,7 +2429,7 @@ export async function matchCasualtyCaseRecords(
       entityType: "casualty_case",
       entityId: caseId,
       entityLabel:
-        records[0]?.incident?.incident_name ?? "Matched casualty case",
+        records[0]?.incident?.incident_name ?? "Matched victim case",
       metadata: {
         casualtyIncidentIds: recordIds,
         roles: roleBuckets,
@@ -2451,7 +2451,7 @@ function roleLabelForError(role: CaseMatchRoleBucket): string {
     case "field_responder":
       return "Field Responder";
     case "sa_responder":
-      return "SAR";
+      return "Advance Medical Responder";
     case "documenter":
       return "HCFD";
     case "responder":
@@ -2517,7 +2517,7 @@ export async function getNextCasualtyIdSequence(
 
     if (error) {
       throw new Error(
-        `Unable to retrieve casualty ID sequence: ${error.message}`,
+        `Unable to retrieve victim ID sequence: ${error.message}`,
       );
     }
 
@@ -2569,13 +2569,13 @@ export async function getCasualtyById(
     const { data, error } = await query.maybeSingle();
 
     if (error) {
-      throw new Error(`Unable to retrieve casualty: ${error.message}`);
+      throw new Error(`Unable to retrieve victim: ${error.message}`);
     }
 
     if (!data) {
     response.status(404).json({
       success: false,
-      message: "Casualty record not found.",
+      message: "Victim record not found.",
     });
     return;
     }
@@ -2610,7 +2610,7 @@ export async function getCasualtyStatusHistory(
     if (!hasAccess) {
       response.status(404).json({
         success: false,
-        message: "Casualty record not found.",
+        message: "Victim record not found.",
       });
       return;
     }
@@ -2703,7 +2703,7 @@ export async function getCasualtyVerificationHistory(
     if (!hasAccess) {
       response.status(404).json({
         success: false,
-        message: "Casualty record not found.",
+        message: "Victim record not found.",
       });
       return;
     }
@@ -2855,7 +2855,7 @@ export async function getCasualtyVerificationActionLogs(
 
         if (scopedCasualtyRecordsError) {
           throw new Error(
-            `Unable to retrieve admin-created account casualty records: ${scopedCasualtyRecordsError.message}`,
+            `Unable to retrieve admin-created account victim records: ${scopedCasualtyRecordsError.message}`,
           );
         }
 
@@ -2959,7 +2959,7 @@ export async function getCasualtyVerificationActionLogs(
 
       if (casualtyRecordsError) {
         throw new Error(
-          `Unable to retrieve action log casualty records: ${casualtyRecordsError.message}`,
+          `Unable to retrieve action log victim records: ${casualtyRecordsError.message}`,
         );
       }
 
@@ -3054,14 +3054,14 @@ export async function updateCasualtyVerification(
 
     if (existingError) {
       throw new Error(
-        `Unable to retrieve casualty record: ${existingError.message}`,
+        `Unable to retrieve victim record: ${existingError.message}`,
       );
     }
 
     if (!existingRecord) {
       response.status(404).json({
         success: false,
-        message: "Casualty record not found.",
+        message: "Victim record not found.",
       });
       return;
     }
@@ -3075,7 +3075,7 @@ export async function updateCasualtyVerification(
     if (!hasAccess) {
       response.status(404).json({
         success: false,
-        message: "Casualty record not found.",
+        message: "Victim record not found.",
       });
       return;
     }
@@ -3163,7 +3163,7 @@ export async function updateCasualtyVerification(
 
     if (updatedError || !updatedRecord) {
       throw new Error(
-        `Unable to retrieve updated casualty: ${
+        `Unable to retrieve updated victim: ${
           updatedError?.message ?? "Unknown database error"
         }`,
       );
@@ -3197,7 +3197,7 @@ export async function deleteCasualtyRecord(
     if (!hasAccess) {
       response.status(404).json({
         success: false,
-        message: "Casualty record not found.",
+        message: "Victim record not found.",
       });
       return;
     }
@@ -3212,14 +3212,14 @@ export async function deleteCasualtyRecord(
 
     if (existingError) {
       throw new Error(
-        `Unable to retrieve casualty record: ${existingError.message}`,
+        `Unable to retrieve victim record: ${existingError.message}`,
       );
     }
 
     if (!existingRecord) {
       response.status(404).json({
         success: false,
-        message: "Casualty record not found.",
+        message: "Victim record not found.",
       });
       return;
     }
@@ -3236,7 +3236,7 @@ export async function deleteCasualtyRecord(
 
     if (deleteError) {
       throw new Error(
-        `Unable to delete casualty record: ${deleteError.message}`,
+        `Unable to delete victim record: ${deleteError.message}`,
       );
     }
 
@@ -3248,7 +3248,7 @@ export async function deleteCasualtyRecord(
         new_status: "rejected",
         reviewed_by: user.id,
         review_notes:
-          "Casualty record deleted from the web dashboard.",
+          "Victim record deleted from the web dashboard.",
       });
 
     await recordAuditLog({
@@ -3265,7 +3265,7 @@ export async function deleteCasualtyRecord(
 
     response.status(200).json({
       success: true,
-      message: "Casualty record deleted successfully.",
+      message: "Victim record deleted successfully.",
       data: {
         id,
         deletedAt,
@@ -3294,7 +3294,7 @@ export async function getCasualtyTriageHistory(
     if (!hasAccess) {
       response.status(404).json({
         success: false,
-        message: "Casualty record not found.",
+        message: "Victim record not found.",
       });
       return;
     }
@@ -3412,14 +3412,14 @@ export async function createCasualtyTriageAssessment(
 
     if (existingError) {
       throw new Error(
-        `Unable to retrieve casualty record: ${existingError.message}`,
+        `Unable to retrieve victim record: ${existingError.message}`,
       );
     }
 
     if (!existingRecord) {
       response.status(404).json({
         success: false,
-        message: "Casualty record not found.",
+        message: "Victim record not found.",
       });
       return;
     }
@@ -3431,7 +3431,7 @@ export async function createCasualtyTriageAssessment(
       ) {
         response.status(404).json({
           success: false,
-          message: "Casualty record not found.",
+          message: "Vcitim record not found.",
         });
         return;
       }
@@ -3478,7 +3478,7 @@ export async function getCasualtyTreatmentHistory(
     if (!hasAccess) {
       response.status(404).json({
         success: false,
-        message: "Casualty record not found.",
+        message: "Vcitim record not found.",
       });
       return;
     }
@@ -3572,7 +3572,7 @@ export async function getCasualtyTransportHistory(
     if (!hasAccess) {
       response.status(404).json({
         success: false,
-        message: "Casualty record not found.",
+        message: "Vcitim record not found.",
       });
       return;
     }

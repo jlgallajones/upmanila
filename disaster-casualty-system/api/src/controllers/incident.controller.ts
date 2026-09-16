@@ -626,12 +626,12 @@ function formatResponderFunctionFilter(
     case "field_responder":
       return "Field Responder only";
     case "sa_responder":
-      return "Stabilization Area Responder only";
+      return "Advanced Medical Responder only";
     case "documenter":
       return "Healthcare Facility Documenter only";
     case "both":
     default:
-      return "Full incident - Field Responder, SAR, and HCFD";
+      return "Full incident - Field Responder, Advanced Medical Responder, and HCFD";
   }
 }
 
@@ -1150,7 +1150,7 @@ function buildSitrepCharts(payload: IncidentSitrepPayload): PdfChart[] {
       counts: {
         "Field Responder":
           payload.responderFunctionSummary?.fieldResponderRecords ?? 0,
-        "Stabilization Area Responder":
+        "Advanced Medical Responder":
           payload.responderFunctionSummary
             ?.stabilizationAreaResponderRecords ?? 0,
         "Healthcare Facility Documenter":
@@ -1681,7 +1681,7 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
   addTable("Role Coverage", [
     ["Field Responder records", payload.responderFunctionSummary?.fieldResponderRecords ?? 0],
     [
-      "Stabilization Area Responder records",
+      "Advanced Medical Responder records",
       payload.responderFunctionSummary?.stabilizationAreaResponderRecords ?? 0,
     ],
     [
@@ -1858,7 +1858,7 @@ function buildSitrepLines(sitrep: SitrepResponseRecord): string[] {
     `Field Responder Records: ${
       payload.responderFunctionSummary?.fieldResponderRecords ?? 0
     }`,
-    `Stabilization Area Responder Records: ${
+    `Advanced Medical Responder Records: ${
       payload.responderFunctionSummary?.stabilizationAreaResponderRecords ?? 0
     }`,
     `Healthcare Facility Documenter Records: ${
