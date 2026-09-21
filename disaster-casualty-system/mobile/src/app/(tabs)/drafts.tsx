@@ -36,7 +36,7 @@ function formatDraftDate(value: string): string {
 function draftTypeLabel(formType: string): string {
   switch (formType) {
     case "casualty":
-      return "Casualty";
+      return "Victim";
     default:
       return formType.replace(/_/g, " ");
   }
@@ -89,7 +89,7 @@ async function confirmDeleteDraft() {
         <Text style={styles.eyebrow}>Local Drafts</Text>
         <Text style={styles.title}>Drafts</Text>
         <Text style={styles.subtitle}>
-          Saved forms stay on this device until submitted or deleted.
+          Drafts are saved on this device and are only visible to the account that created them.
         </Text>
       </View>
 
@@ -106,7 +106,7 @@ async function confirmDeleteDraft() {
             />
             <Text style={styles.emptyTitle}>No drafts yet</Text>
             <Text style={styles.emptyText}>
-              Use Save Draft while adding a casualty to store unfinished work.
+              Use Save Draft while adding a victim to store unfinished work.
             </Text>
           </View>
         }
