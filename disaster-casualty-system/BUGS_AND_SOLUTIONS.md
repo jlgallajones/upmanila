@@ -759,3 +759,19 @@ Create a short checklist for the exact demo flow:
 **Solution:** Added mobile triage-specific display formatting so stored `minimal` category values continue to work internally while user-facing triage labels show **Minor**. The Add Casualty assessment summary now uses the same display wording.
 
 **Status:** Implemented.
+
+## 90. Field Responder Primary Triage Systems Were Hidden And Some Assisted Results Were Wrong
+
+**Problem:** Field Responder Add Casualty only exposed STIEVE and START even though the primary triage flow includes additional systems. Some assisted-calculation results also did not match the provided primary triage references, such as mSTART walking patients being marked Minor instead of Delayed.
+
+**Solution:** Unhid the supported primary triage systems for Field Responder accounts: STIEVE, START, mSTART, JumpSTART, SIEVE, Care Flight, SALT, PTT, MITT, Homebush, and MPTT. Updated mobile and API assisted-calculation rules for primary triage flows, including mSTART walking patients, SIEVE airway handling, Care Flight command/radial-pulse branching, SALT individual assessment, PTT pediatric thresholds, MITT/MPTT age and heart-rate handling, and Homebush-specific classification.
+
+**Status:** Implemented.
+
+## 91. Secondary Triage Needed More Systems And Manual Fallbacks
+
+**Problem:** SAR secondary triage only exposed SORT, while the secondary triage reference also included SAVE and META. Some listed systems, such as SwiFT, SMART, and Other, did not have configured assessment forms, causing the app to block assessment instead of letting responders encode a final triage manually.
+
+**Solution:** Unhid the secondary triage systems for SAR accounts. SAVE, SORT, and META remain assisted systems, with SORT upgraded to collect Eye, Verbal, and Motor GCS components and calculate the SORT score from GCS, respiratory rate, and systolic blood pressure. SwiFT, SMART, and Other now open a manual final-triage assessment with explanatory messaging instead of pretending to calculate a result. Mobile and API triage calculation logic were aligned, and API tests were added for SORT component scoring and manual final-triage mapping.
+
+**Status:** Implemented.

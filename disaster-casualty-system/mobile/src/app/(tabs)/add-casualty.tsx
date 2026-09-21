@@ -298,6 +298,15 @@ const PRIMARY_TRIAGE_SYSTEM_OPTIONS = [
 const FIELD_RESPONDER_TRIAGE_SYSTEM_OPTIONS = [
   "STIEVE",
   "START",
+  "mSTART",
+  "JumpSTART",
+  "SIEVE",
+  "Care Flight",
+  "SALT",
+  "PTT",
+  "MITT",
+  "Homebush",
+  "MPTT",
 ] as const;
 
 const SECONDARY_TRIAGE_SYSTEM_OPTIONS = [
@@ -309,7 +318,9 @@ const SECONDARY_TRIAGE_SYSTEM_OPTIONS = [
   "Other",
 ] as const;
 
-const SA_RESPONDER_TRIAGE_SYSTEM_OPTIONS = ["SORT"] as const;
+const SA_RESPONDER_TRIAGE_SYSTEM_OPTIONS = [
+  ...SECONDARY_TRIAGE_SYSTEM_OPTIONS,
+] as const;
 
 const TERTIARY_TRIAGE_SYSTEM_OPTIONS = [
   "ESI",
@@ -381,6 +392,14 @@ const METTS_TRIAGE_OPTIONS: AppendixAnswerOption[] = [
   { label: "Yellow", value: "yellow" },
   { label: "Green", value: "green" },
   { label: "Blue", value: "blue" },
+];
+
+const MANUAL_FINAL_TRIAGE_OPTIONS: AppendixQuestion[] = [
+  {
+    key: "finalTriage",
+    label: "Final triage",
+    options: FINAL_TRIAGE_COLOR_OPTIONS,
+  },
 ];
 
 const START_RESPIRATION_OPTIONS: AppendixAnswerOption[] = [
@@ -565,7 +584,14 @@ const APPENDIX_TRIAGE_FIELDS: Record<string, AppendixQuestion[]> = {
       options: [
         { label: "Alert", value: "alert" },
         { label: "Responds to verbal stimuli", value: "verbal" },
-        { label: "Responds to painful stimuli", value: "painful" },
+        {
+          label: "Appropriate response to painful stimuli",
+          value: "painful_appropriate",
+        },
+        {
+          label: "Inappropriate response / posturing",
+          value: "painful",
+        },
         { label: "Unresponsive to noxious stimuli", value: "unresponsive" },
       ],
     },
@@ -648,14 +674,36 @@ const APPENDIX_TRIAGE_FIELDS: Record<string, AppendixQuestion[]> = {
   ],
   sort: [
     {
-      key: "gcs",
-      label: "Glasgow Coma Scale",
+      key: "gcsEye",
+      label: "GCS Eye Opening",
       options: [
-        { label: "13-15", value: "13_to_15" },
-        { label: "9-12", value: "9_to_12" },
-        { label: "6-8", value: "6_to_8" },
-        { label: "4-5", value: "4_to_5" },
-        { label: "3", value: "3" },
+        { label: "Spontaneous", value: "4" },
+        { label: "To speech", value: "3" },
+        { label: "To pain", value: "2" },
+        { label: "None", value: "1" },
+      ],
+    },
+    {
+      key: "gcsVerbal",
+      label: "GCS Verbal Response",
+      options: [
+        { label: "Oriented", value: "5" },
+        { label: "Confused", value: "4" },
+        { label: "Inappropriate words", value: "3" },
+        { label: "Incomprehensible sounds", value: "2" },
+        { label: "No response", value: "1" },
+      ],
+    },
+    {
+      key: "gcsMotor",
+      label: "GCS Motor Response",
+      options: [
+        { label: "Obeys commands", value: "6" },
+        { label: "Moves to localized pain", value: "5" },
+        { label: "Flexion withdrawal from pain", value: "4" },
+        { label: "Abnormal flexion", value: "3" },
+        { label: "Abnormal extension", value: "2" },
+        { label: "No response", value: "1" },
       ],
     },
     {
@@ -748,6 +796,9 @@ const APPENDIX_TRIAGE_FIELDS: Record<string, AppendixQuestion[]> = {
       ],
     },
   ],
+  swift: MANUAL_FINAL_TRIAGE_OPTIONS,
+  smart: MANUAL_FINAL_TRIAGE_OPTIONS,
+  other: MANUAL_FINAL_TRIAGE_OPTIONS,
   rts: [
     {
       key: "gcs",
@@ -2059,6 +2110,17 @@ function triageFinalAnswerToCategory(
   return triageColorToCategory(value);
 }
 
+function isManualOnlyTriageSystem(system: string): boolean {
+  switch (normalizeTriageSystem(system)) {
+    case "swift":
+    case "smart":
+    case "other":
+      return true;
+    default:
+      return false;
+  }
+}
+
 function readAssessmentString(
   answers: Record<string, unknown>,
   key: string,
@@ -2093,6 +2155,15 @@ function readAssessmentNumber(
   }
 
   return null;
+}
+
+function readGcsComponent(
+  answers: Record<string, unknown>,
+  key: string,
+): number | null {
+  const value = readAssessmentNumber(answers, key);
+
+  return value !== null && value > 0 ? value : null;
 }
 
 function scoreSortValue(
@@ -2223,7 +2294,7 @@ function calculateMstartTriage(
   answers: Record<string, unknown>,
 ): TriageCategory {
   if (readAssessmentBoolean(answers, "canWalk") === true) {
-    return "minimal";
+    return "delayed";
   }
 
   if (
@@ -2318,12 +2389,16 @@ function calculateSieveTriage(
   const respirations = readAssessmentString(answers, "respirations");
 
   if (respirations === "absent") {
-    return readAssessmentBoolean(
+    const breathingAfterAirway = readAssessmentBoolean(
       answers,
       "breathingAfterAirwayManagement",
-    ) === true
-      ? "immediate"
-      : "expectant";
+    );
+
+    if (breathingAfterAirway === false) {
+      return "expectant";
+    }
+
+    return "unknown";
   }
 
   if (
@@ -2349,13 +2424,32 @@ function calculateSieveTriage(
 function calculateSortTriage(
   answers: Record<string, unknown>,
 ): TriageCategory {
-  const gcsScore = scoreSortValue(readAssessmentString(answers, "gcs"), {
+  const gcsEye = readGcsComponent(answers, "gcsEye");
+  const gcsVerbal = readGcsComponent(answers, "gcsVerbal");
+  const gcsMotor = readGcsComponent(answers, "gcsMotor");
+  const calculatedGcs =
+    gcsEye !== null && gcsVerbal !== null && gcsMotor !== null
+      ? gcsEye + gcsVerbal + gcsMotor
+      : null;
+  const legacyGcsScore = scoreSortValue(readAssessmentString(answers, "gcs"), {
     "13_to_15": 4,
     "9_to_12": 3,
     "6_to_8": 2,
     "4_to_5": 1,
     "3": 0,
   });
+  const gcsScore =
+    calculatedGcs !== null
+      ? calculatedGcs >= 13
+        ? 4
+        : calculatedGcs >= 9
+          ? 3
+          : calculatedGcs >= 6
+            ? 2
+            : calculatedGcs >= 4
+              ? 1
+              : 0
+      : legacyGcsScore;
   const respiratoryRateScore = scoreSortValue(
     readAssessmentString(answers, "respiratoryRate"),
     {
@@ -2462,34 +2556,38 @@ function calculateCareFlightTriage(
     return "minimal";
   }
 
+  const canObeyCommands = readAssessmentBoolean(
+    answers,
+    "canObeyCommands",
+  );
+
+  if (canObeyCommands === true) {
+    return readAssessmentString(answers, "palpableRadialPulse") ===
+      "present"
+      ? "delayed"
+      : readAssessmentString(answers, "palpableRadialPulse") ===
+          "absent"
+        ? "immediate"
+        : "unknown";
+  }
+
   if (
+    canObeyCommands === false &&
     readAssessmentBoolean(answers, "breathingWithOpenAirway") === false
   ) {
     return "expectant";
   }
 
-  if (
-    readAssessmentBoolean(answers, "canObeyCommands") === false ||
-    readAssessmentString(answers, "palpableRadialPulse") === "absent"
-  ) {
+  if (canObeyCommands === false) {
     return "immediate";
   }
 
-  return readAssessmentBoolean(answers, "canObeyCommands") === true
-    ? "delayed"
-    : "unknown";
+  return "unknown";
 }
 
 function calculateSaltTriage(
   answers: Record<string, unknown>,
 ): TriageCategory {
-  if (
-    readAssessmentBoolean(answers, "canWalk") === true ||
-    readAssessmentBoolean(answers, "canWave") === true
-  ) {
-    return "minimal";
-  }
-
   if (
     readAssessmentBoolean(answers, "breathing") === false ||
     readAssessmentString(answers, "respirations") === "absent"
@@ -2579,6 +2677,12 @@ function calculatePttTriage(
   answers: Record<string, unknown>,
 ): TriageCategory {
   if (
+    readAssessmentBoolean(answers, "alertAndMovingAllLimbs") === true
+  ) {
+    return "delayed";
+  }
+
+  if (
     readAssessmentBoolean(answers, "spontaneousBreathing") === false &&
     readAssessmentBoolean(answers, "breathingAfterAirwayManagement") !==
       true
@@ -2591,12 +2695,6 @@ function calculatePttTriage(
       answers,
       "breathingAfterAirwayManagement",
     ) === true
-  ) {
-    return "immediate";
-  }
-
-  if (
-    readAssessmentBoolean(answers, "alertAndMovingAllLimbs") === false
   ) {
     return "immediate";
   }
@@ -2616,18 +2714,26 @@ function calculatePttTriage(
 
   if (
     respiratoryRate < ranges.minRespiratoryRate ||
-    respiratoryRate > ranges.maxRespiratoryRate ||
-    pulseRate < ranges.minPulseRate ||
-    pulseRate > ranges.maxPulseRate ||
-    readAssessmentString(answers, "capillaryRefill") ===
-      "more_than_2_seconds"
+    respiratoryRate > ranges.maxRespiratoryRate
   ) {
     return "immediate";
   }
 
-  return readAssessmentBoolean(answers, "alertAndMovingAllLimbs") === true
-    ? "minimal"
-    : "delayed";
+  if (
+    readAssessmentString(answers, "capillaryRefill") ===
+    "less_than_or_equal_to_2_seconds"
+  ) {
+    return "delayed";
+  }
+
+  if (
+    pulseRate < ranges.minPulseRate ||
+    pulseRate > ranges.maxPulseRate
+  ) {
+    return "immediate";
+  }
+
+  return "delayed";
 }
 
 function calculateMittTriage(
@@ -2650,12 +2756,44 @@ function calculateMittTriage(
     return "expectant";
   }
 
+  if (readAssessmentBoolean(answers, "agedOverTwoYears") === false) {
+    return "immediate";
+  }
+
   if (
     readAssessmentBoolean(answers, "respondsToVoice") === false ||
     readAssessmentString(answers, "respirations") === "less_than_12" ||
     readAssessmentString(answers, "respirations") === "more_than_23" ||
     readAssessmentString(answers, "heartRate") === "absent" ||
-    readAssessmentString(answers, "heartRate") === "more_than_100"
+    readAssessmentString(answers, "heartRate") === "more_than_100" ||
+    readAssessmentString(answers, "heartRate") === "100"
+  ) {
+    return "immediate";
+  }
+
+  return readAssessmentString(answers, "respirations")
+    ? "delayed"
+    : "unknown";
+}
+
+function calculateHomebushTriage(
+  answers: Record<string, unknown>,
+): TriageCategory {
+  if (readAssessmentBoolean(answers, "canWalk") === true) {
+    return "minimal";
+  }
+
+  if (
+    readAssessmentBoolean(answers, "spontaneousBreathing") === false ||
+    readAssessmentString(answers, "respirations") === "absent"
+  ) {
+    return "expectant";
+  }
+
+  if (
+    readAssessmentString(answers, "respirations") === "more_than_30" ||
+    readAssessmentString(answers, "radialPulse") === "absent" ||
+    readAssessmentBoolean(answers, "followsSimpleCommands") === false
   ) {
     return "immediate";
   }
@@ -3020,7 +3158,7 @@ function calculateMobileTriageCategory(
     case "mptt":
       return calculateMittTriage(algorithmAnswers);
     case "homebush":
-      return calculateStartLikeTriage(algorithmAnswers);
+      return calculateHomebushTriage(algorithmAnswers);
     case "sort":
     case "rts":
       return calculateSortTriage(algorithmAnswers);
@@ -3033,13 +3171,22 @@ function calculateMobileTriageCategory(
     case "urgent_non_urgent":
       return calculateUrgentNonUrgentTriage(algorithmAnswers);
     case "smart":
-      return calculateSmartTriage(algorithmAnswers);
+      return triageColorToCategory(
+        typeof assessmentAnswers.finalTriage === "string"
+          ? assessmentAnswers.finalTriage
+          : undefined,
+      );
     case "esi":
     case "ed_triage":
     case "stm":
+      return "unknown";
     case "swift":
     case "other":
-      return "unknown";
+      return triageColorToCategory(
+        typeof assessmentAnswers.finalTriage === "string"
+          ? assessmentAnswers.finalTriage
+          : undefined,
+      );
     case "metts":
       return triageColorToCategory(
         calculateMettsFinalTriage(algorithmAnswers),
@@ -3650,6 +3797,9 @@ function coerceAppendixAnswer(
   value: string,
 ): string | number | boolean {
   if (
+    key === "gcsEye" ||
+    key === "gcsVerbal" ||
+    key === "gcsMotor" ||
     key === "pttRespiratoryRate" ||
     key === "pttPulseRate" ||
     key === "painScore" ||
@@ -6702,6 +6852,9 @@ const victimCodeAlreadyExists = useMemo(() => {
       }
 
       if (key === "triageSystem") {
+  const nextSystem = String(value);
+  const manualOnly = isManualOnlyTriageSystem(nextSystem);
+
   return {
     ...current,
     [key]: value,
@@ -6712,7 +6865,7 @@ const victimCodeAlreadyExists = useMemo(() => {
         : "",
 
     triageAssessmentAnswers: {},
-    triageAssistanceMode: "assisted",
+    triageAssistanceMode: manualOnly ? "unassisted" : "assisted",
     triageAssistanceLocked: false,
   };
 }
@@ -7014,6 +7167,17 @@ const victimCodeAlreadyExists = useMemo(() => {
   function changeTriageAssistanceMode(
   nextMode: TriageAssistanceMode,
 ) {
+if (
+  nextMode === "assisted" &&
+  isManualOnlyTriageSystem(form.triageSystem)
+) {
+  Alert.alert(
+    "Manual triage only",
+    "No assisted assessment is available for this triage system. Select the final triage manually.",
+  );
+  return;
+}
+
 if (
   nextMode === "unassisted" &&
   form.triageAssistanceLocked
@@ -7526,6 +7690,10 @@ function handleTriageAssessmentDone() {
   }
 
   function hasTriageAssessmentAnswer(): boolean {
+    if (isManualOnlyTriageSystem(form.triageSystem)) {
+      return Boolean(form.triageAssessmentAnswers.finalTriage);
+    }
+
     return getAppendixQuestionsForSystem(form.triageSystem).some(
       (question) =>
         question.key !== "finalTriage" &&
@@ -7542,8 +7710,12 @@ function handleTriageAssessmentDone() {
 
     if (!hasTriageAssessmentAnswer()) {
   Alert.alert(
-    "Assessment answer required",
-    "Answer at least one triage assessment item before continuing.",
+    isManualOnlyTriageSystem(form.triageSystem)
+      ? "Final triage required"
+      : "Assessment answer required",
+    isManualOnlyTriageSystem(form.triageSystem)
+      ? "Select a Final Triage before continuing."
+      : "Answer at least one triage assessment item before continuing.",
   );
 
   return false;
@@ -13036,6 +13208,20 @@ function getCurrentFinalTriageAnswer(): string {
       return "";
     }
 
+    if (isManualOnlyTriageSystem(form.triageSystem)) {
+      const selectedFinalTriage =
+        form.triageAssessmentAnswers.finalTriage;
+
+      return selectedFinalTriage
+        ? formatTriageCategoryLabel(
+            triageFinalAnswerToCategory(
+              form.triageSystem,
+              selectedFinalTriage,
+            ),
+          )
+        : "Select final triage";
+    }
+
     const manualQuestions = questions.filter(
       (question) => question.key !== "finalTriage",
     );
@@ -13085,6 +13271,8 @@ if (
 
   function renderTriageAssessmentSheet() {
     const questions = getAppendixQuestionsForSystem(form.triageSystem);
+    const manualOnly =
+      isManualOnlyTriageSystem(form.triageSystem);
 
     return (
       <Modal
@@ -13134,6 +13322,7 @@ if (
 
   <View style={styles.triageModeToggle}>
     <Pressable
+      disabled={manualOnly}
       onPress={() =>
         changeTriageAssistanceMode("assisted")
       }
@@ -13141,7 +13330,8 @@ if (
         styles.triageModeOption,
         form.triageAssistanceMode === "assisted" &&
           styles.triageModeOptionSelected,
-        pressed && styles.pressed,
+        manualOnly && styles.triageModeOptionDisabled,
+        pressed && !manualOnly && styles.pressed,
       ]}
     >
       <Text
@@ -13189,6 +13379,10 @@ if (
 form.triageAssistanceMode === "assisted" ? (
   <Text style={styles.triageModeLockedHint}>
     Assisted mode is locked for this assessment.
+  </Text>
+) : manualOnly ? (
+  <Text style={styles.triageModeLockedHint}>
+    No assisted assessment is available for this triage system. Select the final triage manually.
   </Text>
 ) : null}
 </View>

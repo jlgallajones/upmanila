@@ -114,12 +114,12 @@ const cases = [
     expected: "immediate",
   },
   {
-    name: "mSTART walking patient is minimal",
+    name: "mSTART walking patient is delayed",
     system: "mstart",
     answers: {
       canWalk: true,
     },
-    expected: "minimal",
+    expected: "delayed",
   },
   {
     name: "JumpSTART absent breathing and no pulse is expectant",
@@ -133,7 +133,7 @@ const cases = [
     expected: "expectant",
   },
   {
-    name: "PTT abnormal pulse rate is immediate",
+    name: "PTT alert and moving all limbs is delayed",
     system: "ptt",
     answers: {
       height: "80_to_100_cm",
@@ -141,6 +141,19 @@ const cases = [
       spontaneousBreathing: true,
       pttRespiratoryRate: 24,
       capillaryRefill: "less_than_or_equal_to_2_seconds",
+      pttPulseRate: 180,
+    },
+    expected: "delayed",
+  },
+  {
+    name: "PTT abnormal pulse rate after failed alert check is immediate",
+    system: "ptt",
+    answers: {
+      height: "80_to_100_cm",
+      alertAndMovingAllLimbs: false,
+      spontaneousBreathing: true,
+      pttRespiratoryRate: 24,
+      capillaryRefill: "more_than_2_seconds",
       pttPulseRate: 180,
     },
     expected: "immediate",
@@ -166,6 +179,38 @@ const cases = [
       heartRate: "less_than_100",
     },
     expected: "immediate",
+  },
+  {
+    name: "SORT component total score 12 maps to minimal",
+    system: "sort",
+    answers: {
+      gcsEye: "4",
+      gcsVerbal: "5",
+      gcsMotor: "6",
+      respiratoryRate: "10_to_29",
+      systolicBp: "more_than_or_equal_to_90",
+    },
+    expected: "minimal",
+  },
+  {
+    name: "SORT component GCS score 11 maps to delayed",
+    system: "sort",
+    answers: {
+      gcsEye: "4",
+      gcsVerbal: "3",
+      gcsMotor: "3",
+      respiratoryRate: "10_to_29",
+      systolicBp: "more_than_or_equal_to_90",
+    },
+    expected: "delayed",
+  },
+  {
+    name: "SwiFT manual final triage maps to delayed",
+    system: "swift",
+    answers: {
+      finalTriage: "yellow",
+    },
+    expected: "delayed",
   },
   {
     name: "Homebush follows START-compatible delayed path",
@@ -253,13 +298,13 @@ const cases = [
     expected: "unknown",
   },
   {
-    name: "METTS remains unknown because it does not map cleanly to T1-T4",
+    name: "METTS red/orange criteria map to immediate",
     system: "metts",
     answers: {
       airway: "obstructed",
       finalTriage: "orange",
     },
-    expected: "unknown",
+    expected: "immediate",
   },
 ] as const;
 
