@@ -671,3 +671,11 @@ Create a short checklist for the exact demo flow:
 **Solution:** Add Casualty now refreshes the current user profile from the API when the screen loads and saves the fresh profile back into local session storage. If the refreshed role is `field_responder` or `sa_responder`, the screen automatically uses the matching responder function and skips the legacy function-selection requirement.
 
 **Status:** Implemented.
+
+## 79. Profile Page Still Showed Responder Function Selection
+
+**Problem:** The mobile Profile page still showed the old responder function selection UI even though responder accounts are now separated into `field_responder` and `sa_responder` roles.
+
+**Solution:** Removed the responder function selection UI and its unused styles from the mobile Profile page. The page now only displays the assigned account role, while Add Casualty uses the separated role from the current profile.
+
+**Status:** Implemented.
