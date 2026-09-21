@@ -332,6 +332,7 @@ type TreatmentRecordRow = {
   treatment_area_name: string | null;
   stabilization_started_at: string | null;
   stabilized_at: string | null;
+  treatment_details?: Record<string, unknown> | null;
   created_at: string | null;
 };
 
@@ -5025,7 +5026,7 @@ export async function getIncidentAnalyticsSummary(
         ? await supabase
             .from("casualty_treatments")
             .select(
-              "casualty_incident_id, treatment_strategy, treatment_area_name, stabilization_started_at, stabilized_at, created_at",
+              "casualty_incident_id, treatment_strategy, treatment_area_name, stabilization_started_at, stabilized_at, treatment_details, created_at",
             )
             .in("casualty_incident_id", casualtyIncidentIds)
             .order("created_at", { ascending: true })
@@ -5098,6 +5099,14 @@ export async function getIncidentAnalyticsSummary(
 
       return dates[dates.length - 1]?.toISOString() ?? null;
     };
+    const firstFacilityDisasterPlanActivationAt = firstDate(
+      treatmentRows.map((row) => {
+        const value =
+          row.treatment_details?.disasterPlanActivationTime;
+
+        return typeof value === "string" ? value : null;
+      }),
+    );
     const isPrimaryTriage = (row: TriageAssessmentRow) =>
       row.triage_stage === "on_site" ||
       primaryTriageSystems.has(row.triage_system ?? "");
@@ -5394,6 +5403,12 @@ const unsafeResponders = responderSafetyResponses.filter(
         key: "firstFacilityTriage",
         label: "First victim triaged at a healthcare facility",
         at: firstDate(facilityTriageRows.map((row) => row.triaged_at)),
+      },
+      {
+        key: "firstFacilityDisasterResponseActivation",
+        label:
+          "First healthcare facility to activate its disaster response",
+        at: firstFacilityDisasterPlanActivationAt,
       },
       {
         key: "lastFacilityTriage",

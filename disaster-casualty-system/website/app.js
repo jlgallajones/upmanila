@@ -10388,7 +10388,7 @@ function renderDmmpStaffView(staffRecords, summary) {
                   <td>${escapeHtml(displayRole || "No role")}</td>
                   <td>${record?.was_contacted ? "Yes" : "No"}</td>
                   <td>${record?.has_arrived || record?.arrived_at ? "Yes" : "No"}</td>
-                  <td>${escapeHtml(roleLabel(record?.status || "unknown"))}</td>
+                  <td>${escapeHtml(formatDmmpStaffStatus(record?.status))}</td>
                   <td>${formatDate(record?.arrived_at)}</td>
                 </tr>
               `;
@@ -10399,6 +10399,13 @@ function renderDmmpStaffView(staffRecords, summary) {
       </table>
     </div>
   `;
+}
+
+function formatDmmpStaffStatus(status) {
+  if (status === "safe") return "Safe";
+  if (status === "unsafe") return "Unsafe";
+  if (status === "deceased") return "Deceased";
+  return "Not recorded";
 }
 
 function formatBoolean(value) {
@@ -10507,7 +10514,14 @@ function renderDmmpStaffManagement(staffRecords, summary, forModal = false) {
                           ${renderDmmpStaffStatusOptions(record?.status)}
                         </select>
                       </td>
-                      <td><input type="datetime-local" data-dmmp-field="arrivedAt" value="${toLocalDateTimeInput(record?.arrived_at)}" /></td>
+                      <td>
+                        <div class="dmmp-arrival-time-control">
+                          <input type="datetime-local" data-dmmp-field="arrivedAt" value="${toLocalDateTimeInput(record?.arrived_at)}" />
+                          <button class="ghost-button mini" type="button" data-use-current-arrival-time>
+                            Use current arrival time
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   `;
                 })
@@ -10524,11 +10538,9 @@ function renderDmmpStaffManagement(staffRecords, summary, forModal = false) {
 function renderDmmpStaffStatusOptions(selected) {
   const options = [
     ["", "Not recorded"],
-    ["ill", "Ill"],
-    ["injured", "Injured"],
-    ["deceased", "Deceased"],
     ["safe", "Safe"],
     ["unsafe", "Unsafe"],
+    ["deceased", "Deceased"],
   ];
 
   return options
@@ -10807,26 +10819,151 @@ function renderSummaryFacts(data) {
   `;
 }
 
+const summaryFactLabels = {
+  totalSurvivors: "Total survivors",
+  onSiteTriagedTotal: "On-site triaged total",
+  facilityTriagedTotal: "Facility triaged total",
+  triageSystemUsed: "Triage system used",
+  firstTriageSystemCounts: "First triage system counts",
+  treatmentRecordedTotal: "Treatment records total",
+  stabilizedT1Total: "Stabilized T1 total",
+  stabilizedT2Total: "Stabilized T2 total",
+  firstEmsVehicleOnSceneAt: "First EMS vehicle on scene",
+  firstTransportFromSceneAt: "First transport from scene",
+  lastTransportFromSceneAt: "Last transport from scene",
+  emsTransportedTotal: "EMS transported total",
+  totalFacilityArrivals: "Total facility arrivals",
+  totalEdCareSeekers: "Total ED care seekers",
+  disasterOnsetAt: "Disaster onset",
+  responseInitiatedAt: "Response initiated",
+  responseInitiationSource: "Response initiation source",
+  intervalMinutes: "Time intervals",
+  treatmentStrategyCounts: "Treatment strategy counts",
+  "treatmentStrategyCounts.unknown": "Treatment strategy: Unknown",
+  "categories.immediate": "Immediate category intervals",
+  "categories.delayed": "Delayed category intervals",
+  "transported.immediate": "Immediate transported intervals",
+  "transported.delayed": "Delayed transported intervals",
+  "ambulances.bls": "BLS ambulance intervals",
+  "ambulances.als": "ALS ambulance intervals",
+  "facilityLevels.primary.nonEms.level":
+    "Primary non-EMS facility level",
+  "facilityLevels.primary.nonEms.transportUse":
+    "Primary non-EMS transport use",
+  "facilityLevels.primary.nonEms.numerator":
+    "Primary non-EMS numerator",
+  "facilityLevels.primary.nonEms.denominator":
+    "Primary non-EMS denominator",
+  "facilityLevels.primary.nonEms.percentage":
+    "Primary non-EMS percentage",
+  "facilityLevels.primary.ems.level":
+    "Primary EMS facility level",
+  "facilityLevels.primary.ems.transportUse":
+    "Primary EMS transport use",
+  "facilityLevels.primary.ems.numerator":
+    "Primary EMS numerator",
+  "facilityLevels.primary.ems.denominator":
+    "Primary EMS denominator",
+  "facilityLevels.primary.ems.percentage":
+    "Primary EMS percentage",
+  "categories.immediate.soughtCare.label":
+    "Immediate sought care label",
+  "categories.immediate.soughtCare.numerator":
+    "Immediate sought care numerator",
+  "categories.immediate.soughtCare.denominator":
+    "Immediate sought care denominator",
+  "categories.immediate.soughtCare.percentage":
+    "Immediate sought care percentage",
+  "categories.immediate.admitted.label":
+    "Immediate admitted label",
+  "categories.immediate.admitted.numerator":
+    "Immediate admitted numerator",
+  "categories.immediate.admitted.denominator":
+    "Immediate admitted denominator",
+  "categories.immediate.admitted.percentage":
+    "Immediate admitted percentage",
+};
+
+const summarySourceLabels = {
+  dmmp_activated_at: "DMMP activation time",
+  triage_ordered_at: "Triage ordered time",
+  incident_started_at: "Incident start time",
+};
+
+function formatSummaryKeySegment(segment) {
+  return roleLabel(
+    String(segment || "unknown")
+      .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+      .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+      .replace(/[_-]+/g, " ")
+      .trim()
+      .toLowerCase()
+      .replace(/\bems\b/g, "EMS")
+      .replace(/\bed\b/g, "ED")
+      .replace(/\bdmmp\b/g, "DMMP")
+      .replace(/\bt1\b/g, "T1")
+      .replace(/\bt2\b/g, "T2"),
+  );
+}
+
+function formatSummaryFactLabel(path) {
+  if (summaryFactLabels[path]) {
+    return summaryFactLabels[path];
+  }
+
+  const parts = String(path || "")
+    .split(".")
+    .filter(Boolean);
+
+  return parts.length
+    ? parts.map(formatSummaryKeySegment).join(" - ")
+    : "Summary value";
+}
+
+function formatSummaryFactValue(path, value) {
+  if (value === null || value === undefined) {
+    return "Not recorded";
+  }
+
+  if (path === "responseInitiationSource") {
+    return summarySourceLabels[value] || roleLabel(value);
+  }
+
+  if (
+    typeof value === "string" &&
+    /(?:At|Date|Time)$/.test(path)
+  ) {
+    return formatDate(value);
+  }
+
+  if (typeof value === "boolean") {
+    return formatBoolean(value);
+  }
+
+  return String(value);
+}
+
 function flattenSummaryFacts(data, prefix = "") {
   if (!data || typeof data !== "object") return [];
 
   return Object.entries(data).flatMap(([key, value]) => {
     if (key.toLowerCase().includes("formula") || key === "incidentId") return [];
-    const label = prefix ? `${prefix} ${roleLabel(key)}` : roleLabel(key);
+    const path = prefix ? `${prefix}.${key}` : key;
+    const label = formatSummaryFactLabel(path);
 
     if (value === null || value === undefined) {
       return [[label, "Not recorded"]];
     }
 
     if (typeof value === "object" && !Array.isArray(value)) {
-      return flattenSummaryFacts(value, label);
+      return flattenSummaryFacts(value, path);
     }
 
     if (Array.isArray(value)) {
       return [[label, `${value.length} entries`]];
     }
 
-    return [[label, String(value)]];
+    return [[label, formatSummaryFactValue(path, value)]];
   });
 }
 
@@ -10972,6 +11109,22 @@ function bindIncidentManagementActions() {
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       await handleIncidentSectionSubmit(form);
+    });
+  });
+
+  document.querySelectorAll("[data-use-current-arrival-time]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const row = button.closest("[data-dmmp-staff-row]");
+      const arrivedAtInput = row?.querySelector('[data-dmmp-field="arrivedAt"]');
+      const hasArrivedInput = row?.querySelector('[data-dmmp-field="hasArrived"]');
+
+      if (!arrivedAtInput) return;
+
+      arrivedAtInput.value = toLocalDateTimeInput(new Date().toISOString());
+
+      if (hasArrivedInput) {
+        hasArrivedInput.checked = true;
+      }
     });
   });
 

@@ -200,7 +200,7 @@ const RELEASE_OF_LIABILITY_TEXT =
   "The patient or authorized representative was informed of the risks, benefits, and possible consequences of refusing referral, transfer, or further medical care. The patient or representative accepts responsibility for the decision to release from care.";
 
 const HOSPITAL_ARRIVAL_DISPOSITION_OPTIONS = [
-  "Active Care",
+  "Admitted to ED",
   "Admitted to Hospital",
   "Discharged",
   "Transferred",
@@ -583,18 +583,19 @@ const APPENDIX_TRIAGE_FIELDS: Record<string, AppendixQuestion[]> = {
       options: YES_NO_OPTIONS,
     },
     {
-      key: "lowSurvivalComplexTreatment",
-      label: "Complex treatment with low survival chance?",
-      options: YES_NO_OPTIONS,
-    },
-    {
       key: "lifeSavingSurgeryHighSurvival",
-      label: "Life-saving surgery, high survival chance?",
+      label: "Life-threatening injuries with good survival chance?",
       options: YES_NO_OPTIONS,
     },
     {
       key: "delayedSurgeryPermitted",
-      label: "Surgery can be delayed safely?",
+      label: "Can treatment wait a few hours without undue danger?",
+      options: YES_NO_OPTIONS,
+    },
+    {
+      key: "lowSurvivalComplexTreatment",
+      label:
+        "Serious multiple injuries needing significant resources with signs of impending death?",
       options: YES_NO_OPTIONS,
     },
     {
@@ -1024,9 +1025,15 @@ const APPENDIX_TRIAGE_FIELDS: Record<string, AppendixQuestion[]> = {
     },
   ],
   mass: [
+    { key: "canWalk", label: "Able to walk?", options: YES_NO_OPTIONS },
+    {
+      key: "canWave",
+      label: "Able to wave or make purposeful movement?",
+      options: YES_NO_OPTIONS,
+    },
     {
       key: "lifeSavingInterventionPerformed",
-      label: "Life-saving intervention already performed?",
+      label: "Life-saving intervention needed and performed?",
       options: YES_NO_OPTIONS,
     },
     {
@@ -1078,12 +1085,12 @@ const APPENDIX_TRIAGE_FIELDS: Record<string, AppendixQuestion[]> = {
   esi: [
     {
       key: "requiresImmediateLifeSavingIntervention",
-      label: "Requires immediate life-saving intervention?",
+      label: "Patient dying / immediate life-saving intervention required?",
       options: YES_NO_OPTIONS,
     },
     {
       key: "highRiskSituation",
-      label: "High-risk situation?",
+      label: "Shouldn't wait?",
       options: YES_NO_OPTIONS,
     },
     {
@@ -1099,6 +1106,11 @@ const APPENDIX_TRIAGE_FIELDS: Record<string, AppendixQuestion[]> = {
         { label: "One", value: "one" },
         { label: "Multiple", value: "multiple" },
       ],
+    },
+    {
+      key: "dangerZoneVitals",
+      label: "Danger-zone vital signs?",
+      options: YES_NO_OPTIONS,
     },
     {
       key: "finalTriage",
@@ -1193,6 +1205,12 @@ const APPENDIX_TRIAGE_FIELDS: Record<string, AppendixQuestion[]> = {
         { label: "35-38.5 C", value: "35_to_38_5" },
         { label: "Less than 35 C", value: "less_than_35" },
       ],
+    },
+    {
+      key: "restrictedEmergencyCareNeed",
+      label:
+        "Restricted emergency care need suitable for another care level?",
+      options: YES_NO_OPTIONS,
     },
     {
       key: "finalTriage",
@@ -1726,6 +1744,18 @@ function titleCase(value: string | null | undefined): string {
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function formatTriageCategoryLabel(
+  category: string | null | undefined,
+): string {
+  switch (category?.trim().toLowerCase()) {
+    case "minimal":
+    case "minor":
+      return "Minor";
+    default:
+      return titleCase(category);
+  }
 }
 
 function parseMultiSelectValue(value: string): string[] {
@@ -2638,21 +2668,62 @@ function calculateMittTriage(
 function calculateMassTriage(
   answers: Record<string, unknown>,
 ): TriageCategory {
-  if (
-    readAssessmentBoolean(
-      answers,
-      "lifeSavingInterventionPerformed",
-    ) === true
-  ) {
-    return "immediate";
+  const canWalk = readAssessmentBoolean(answers, "canWalk");
+  const canWave = readAssessmentBoolean(answers, "canWave");
+
+  if (canWalk === true) {
+    return "minimal";
   }
 
-  if (readAssessmentBoolean(answers, "breathing") === false) {
-    return "expectant";
+  if (canWalk !== false) {
+    return "unknown";
+  }
+
+  if (canWave === true) {
+    return "delayed";
+  }
+
+  if (canWave !== false) {
+    return "unknown";
+  }
+
+  const lifeSavingInterventionPerformed = readAssessmentBoolean(
+    answers,
+    "lifeSavingInterventionPerformed",
+  );
+  const breathing = readAssessmentBoolean(answers, "breathing");
+  const likelyToSurvive = readAssessmentBoolean(
+    answers,
+    "likelyToSurviveGivenResources",
+  );
+
+  if (
+    lifeSavingInterventionPerformed === true ||
+    breathing === false
+  ) {
+    if (breathing === false) {
+      return "expectant";
+    }
+
+    if (breathing === true) {
+      if (likelyToSurvive === true) {
+        return "immediate";
+      }
+
+      if (likelyToSurvive === false) {
+        return "expectant";
+      }
+    }
+
+    return "unknown";
+  }
+
+  if (lifeSavingInterventionPerformed !== false) {
+    return "unknown";
   }
 
   const stable =
-    readAssessmentBoolean(answers, "breathing") === true &&
+    breathing === true &&
     readAssessmentBoolean(answers, "obeysCommands") === true &&
     readAssessmentBoolean(answers, "breathingNormally") === true &&
     readAssessmentBoolean(answers, "purposefulMovements") === true &&
@@ -2660,17 +2731,15 @@ function calculateMassTriage(
     readAssessmentString(answers, "radialPulse") === "present";
 
   if (!stable) {
-    return readAssessmentBoolean(
-      answers,
-      "likelyToSurviveGivenResources",
-    ) === false
-      ? "expectant"
-      : readAssessmentBoolean(
-            answers,
-            "likelyToSurviveGivenResources",
-          ) === true
-        ? "immediate"
-        : "unknown";
+    if (likelyToSurvive === true) {
+      return "immediate";
+    }
+
+    if (likelyToSurvive === false) {
+      return "expectant";
+    }
+
+    return "unknown";
   }
 
   if (readAssessmentBoolean(answers, "minorInjuriesOnly") === true) {
@@ -2797,14 +2866,20 @@ function calculateEsiFinalTriage(
   }
 
   if (resourcesNeeded === "multiple") {
-    /*
-     * For now this becomes ESI 3.
-     *
-     * Your current form does not yet collect the danger-zone
-     * vital signs shown in the ESI flowchart, so automatic
-     * reconsideration for ESI 2 cannot be done here yet.
-     */
-    return "esi_3";
+    const dangerZoneVitals = readAssessmentBoolean(
+      answers,
+      "dangerZoneVitals",
+    );
+
+    if (dangerZoneVitals === true) {
+      return "esi_2";
+    }
+
+    if (dangerZoneVitals === false) {
+      return "esi_3";
+    }
+
+    return "";
   }
 
   return "";
@@ -2842,6 +2917,10 @@ function calculateMettsFinalTriage(
     "glasgowComaScale",
   );
   const temperature = readAssessmentString(answers, "temperature");
+  const restrictedEmergencyCareNeed = readAssessmentBoolean(
+    answers,
+    "restrictedEmergencyCareNeed",
+  );
 
   if (
     airway === "obstructed" ||
@@ -2884,10 +2963,15 @@ function calculateMettsFinalTriage(
     return "yellow";
   }
 
+  if (restrictedEmergencyCareNeed === true) {
+    return "blue";
+  }
+
   if (
     airway === "unobstructed" &&
     stridor === "absent" &&
     oxygenSaturation === "more_than_95" &&
+    oxygenSupport === "absent" &&
     respirations === "8_to_25" &&
     pulseRate === "50_to_110" &&
     systolicBloodPressure === "more_than_90" &&
@@ -4370,10 +4454,6 @@ function buildHealthcareDocumenterRemarks(form: FormState): string {
 function buildHealthcareDocumenterTriageNotes(form: FormState): string {
   return appendSectionNote(form.triageNotes, "Healthcare Facility Triage", [
     ["Other triage system", form.triageSystemOther],
-    ["Admitted to hospital", form.admittedAfterEd],
-    ["Admission time", form.hospitalAdmissionTime],
-    ["Discharged from hospital", form.dischargedAfterEd],
-    ["Discharge time", form.hospitalDischargeTime],
   ]);
 }
 
@@ -4441,7 +4521,7 @@ function buildHealthcareDocumenterTreatmentNotes(form: FormState): string {
     ],
     ["Currently admitted in ICU", form.currentlyAdmittedInIcu],
     ["Transferred to ward", form.transferredToWard],
-    ["In active care", form.inActiveCare],
+    ["Admitted to ED", form.inActiveCare],
   ]);
 }
 
@@ -5215,6 +5295,14 @@ const [
     activeSteps[currentStep] ?? activeSteps[0];
   const isResponderEditLockedStep =
     isResponderEditFlow && stepName !== "Transport";
+  const isHealthcareDocumenterEditLockedStep =
+    isEditing &&
+    isHealthcareDocumenterFlow &&
+    (
+      stepName === "General Information" ||
+      stepName === "Patient Information" ||
+      stepName === "Triage"
+    );
   const isResponderTransportFocusedEdit =
     isResponderEditFlow &&
     requestedFocusStep?.toLowerCase() === "transport";
@@ -5248,6 +5336,16 @@ const [
     (stepName === "Triage" || stepName === "Status")
   );
   const stickyVictimNumber = form.victimCode.trim() || "No victim code entered";
+  const healthcareDocumenterPatientName =
+    [form.firstName, form.middleName, form.lastName]
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .join(" ") ||
+    (form.patientIdentified === "No"
+      ? "Unidentified patient"
+      : "No patient name entered");
+  const showHealthcareDocumenterStickyHeader =
+    isHealthcareDocumenterFlow;
   const generatedUserCode = generateUserCodeFromName(currentUserFullName);
   const hasSavedResponderSafetyResponse =
     responderSafetyResponse !== null &&
@@ -5727,7 +5825,8 @@ const victimCodeAlreadyExists = useMemo(() => {
               : admittedToHospital === true
                 ? "hospital_admission"
                 : inActiveCare === true ||
-                    form.dispositionUponHospitalArrival === "Active Care"
+                    form.dispositionUponHospitalArrival === "Active Care" ||
+                    form.dispositionUponHospitalArrival === "Admitted to ED"
                   ? "active_care"
                   : "unknown",
     };
@@ -6659,7 +6758,7 @@ const victimCodeAlreadyExists = useMemo(() => {
           firstName: "",
           middleName: "",
           lastName: "",
-          sex: "",
+          sex: isHealthcareDocumenterFlow ? current.sex : "",
           dateOfBirth: "",
           newborn: "",
           pregnant: "",
@@ -7662,16 +7761,6 @@ if (
             form.triageTime,
             "Invalid triage time",
             "triage time",
-          ) &&
-          validateOptionalDateTime(
-            form.hospitalAdmissionTime,
-            "Invalid admission time",
-            "admission time",
-          ) &&
-          validateOptionalDateTime(
-            form.hospitalDischargeTime,
-            "Invalid discharge time",
-            "discharge time",
           )
         );
 
@@ -7763,93 +7852,7 @@ if (
       }
 
       case "Disposition": {
-      const isIcu =
-        form.admittedToUnit === "ICU";
-
-      const isWardLike =
-        form.admittedToUnit === "Ward" ||
-        form.admittedToUnit === "Other Unit";
-
-      const isNotAdmitted =
-        form.admittedToUnit === "Not Admitted";
-
-      const isUnknown =
-        form.admittedToUnit === "Unknown";
-
-      if (isIcu) {
-        if (!form.transferredToWard.trim()) {
-          Alert.alert(
-            "Ward transfer status required",
-            "Select whether the patient was transferred to ward.",
-          );
-          return false;
-        }
-
-        if (
-          form.transferredToWard === "Yes" &&
-          !form.icuTransferOutTime.trim()
-        ) {
-          Alert.alert(
-            "Ward transfer time required",
-            "Enter the time of transfer to ward.",
-          );
-          return false;
-        }
-
-        if (
-          form.icuTransferOutTime.trim() &&
-          !getValidDateTimeInput(
-            form.icuTransferOutTime,
-          )
-        ) {
-          Alert.alert(
-            "Invalid ward transfer time",
-            "Enter transfer time using mm/dd/yyyy hh:mm.",
-          );
-          return false;
-        }
-
-        if (
-          form.transferredToWard === "Yes" &&
-          !form.inActiveCare.trim()
-        ) {
-          Alert.alert(
-            "Active care status required",
-            "Select whether the patient is still in active care.",
-          );
-          return false;
-        }
-      }
-
-
       if (
-        isWardLike &&
-        !form.inActiveCare.trim()
-      ) {
-        Alert.alert(
-          "Active care status required",
-          "Select whether the patient is still in active care.",
-        );
-        return false;
-      }
-
-
-      const dischargeRequired =
-        isNotAdmitted ||
-        isUnknown ||
-        (
-          (
-            isWardLike ||
-            (
-              isIcu &&
-              form.transferredToWard === "Yes"
-            )
-          ) &&
-          form.inActiveCare === "No"
-        );
-
-      if (
-        dischargeRequired &&
         !form.dischargedAfterEd.trim()
       ) {
         Alert.alert(
@@ -7860,7 +7863,6 @@ if (
       }
 
       if (
-        dischargeRequired &&
         form.dischargedAfterEd === "Yes" &&
         !form.hospitalDischargeTime.trim()
       ) {
@@ -8533,72 +8535,6 @@ if (
           return false;
         }
 
-        if (isHealthcareDocumenterFlow) {
-          if (!form.admittedAfterEd.trim()) {
-            Alert.alert(
-              "Admission status required",
-              "Select whether the patient was admitted to hospital.",
-            );
-            return false;
-          }
-
-          if (
-            form.admittedAfterEd === "Yes" &&
-            !form.hospitalAdmissionTime.trim()
-          ) {
-            Alert.alert(
-              "Admission time required",
-              "Enter the hospital admission time.",
-            );
-            return false;
-          }
-
-          if (
-            form.hospitalAdmissionTime.trim() &&
-            !getValidDateTimeInput(form.hospitalAdmissionTime)
-          ) {
-            Alert.alert(
-              "Invalid admission time",
-              "Enter admission time using mm/dd/yyyy hh:mm.",
-            );
-            return false;
-          }
-
-          if (
-            form.admittedAfterEd === "No" &&
-            !form.dischargedAfterEd.trim()
-          ) {
-            Alert.alert(
-              "Discharge status required",
-              "Select whether the patient was discharged from hospital.",
-            );
-            return false;
-          }
-
-          if (
-            form.admittedAfterEd === "No" &&
-            form.dischargedAfterEd === "Yes" &&
-            !form.hospitalDischargeTime.trim()
-          ) {
-            Alert.alert(
-              "Discharge time required",
-              "Enter the hospital discharge time.",
-            );
-            return false;
-          }
-
-          if (
-            form.hospitalDischargeTime.trim() &&
-            !getValidDateTimeInput(form.hospitalDischargeTime)
-          ) {
-            Alert.alert(
-              "Invalid discharge time",
-              "Enter discharge time using mm/dd/yyyy hh:mm.",
-            );
-            return false;
-          }
-        }
-
         if (!validateMinimumTriageAssessmentAnswer()) {
           return false;
         }
@@ -8791,46 +8727,6 @@ if (
       }
 
       case "Disposition":
-        if (form.admittedToUnit === "ICU") {
-          if (!form.transferredToWard.trim()) {
-            Alert.alert(
-              "Ward transfer status required",
-              "Select whether the patient was transferred to ward.",
-            );
-            return false;
-          }
-
-          if (
-            form.transferredToWard === "Yes" &&
-            !form.icuTransferOutTime.trim()
-          ) {
-            Alert.alert(
-              "Ward transfer time required",
-              "Enter the time of transfer to ward.",
-            );
-            return false;
-          }
-
-          if (
-            form.icuTransferOutTime.trim() &&
-            !getValidDateTimeInput(form.icuTransferOutTime)
-          ) {
-            Alert.alert(
-              "Invalid ward transfer time",
-              "Enter transfer time using mm/dd/yyyy hh:mm.",
-            );
-            return false;
-          }
-        } else {
-          if (!form.inActiveCare.trim()) {
-            Alert.alert(
-              "Active care status required",
-              "Select whether the patient is in active care.",
-            );
-            return false;
-          }
-        }
-
         if (!form.dischargedAfterEd.trim()) {
           Alert.alert(
             "Discharge status required",
@@ -10351,7 +10247,7 @@ if (
       case "transferredToWard":
         return "Transferred to Ward";
       case "inActiveCare":
-        return "In Active Care";
+        return "Admitted to ED?";
       case "incident":
         return "Select Incident Name";
       case "evacuationCenter":
@@ -10379,9 +10275,9 @@ if (
       case "soughtEdCare":
         return "ED / Similar Facility Care";
       case "admittedAfterEd":
-        return "ED Admission";
+        return "Admitted to Hospital?";
       case "dischargedAfterEd":
-        return "ED Discharge";
+        return "Discharged from Hospital?";
       case "xrayRequired":
         return "Plain X-ray Required";
       case "ultrasoundRequired":
@@ -10571,7 +10467,10 @@ if (
       case "dispositionUponHospitalArrival":
         return HOSPITAL_ARRIVAL_DISPOSITION_OPTIONS.map((option) => ({
           label: option,
-          selected: form.dispositionUponHospitalArrival === option,
+          selected:
+            form.dispositionUponHospitalArrival === option ||
+            (option === "Admitted to ED" &&
+              form.dispositionUponHospitalArrival === "Active Care"),
           onSelect: () =>
             updateField("dispositionUponHospitalArrival", option),
         }));
@@ -11492,72 +11391,13 @@ async function ensureResponderSafetyResponseSaved() {
       return null;
 
     case "Disposition": {
-      const isIcu =
-        form.admittedToUnit === "ICU";
-
-      const isWardLike =
-        form.admittedToUnit === "Ward" ||
-        form.admittedToUnit === "Other Unit";
-
-      const isNotAdmitted =
-        form.admittedToUnit === "Not Admitted";
-
-      const isUnknown =
-        form.admittedToUnit === "Unknown";
-
       if (
-        isIcu &&
-        !form.transferredToWard.trim()
-      ) {
-        return "Transferred to Ward selection is required.";
-      }
-
-      if (
-        isIcu &&
-        form.transferredToWard === "Yes" &&
-        !form.icuTransferOutTime.trim()
-      ) {
-        return "Ward Transfer Time is required.";
-      }
-
-      if (
-        isIcu &&
-        form.transferredToWard === "Yes" &&
-        !form.inActiveCare.trim()
-      ) {
-        return "Active Care Status is required.";
-      }
-
-      if (
-        isWardLike &&
-        !form.inActiveCare.trim()
-      ) {
-        return "Active Care Status is required.";
-      }
-
-      const dischargeRequired =
-        isNotAdmitted ||
-        isUnknown ||
-        (
-          (
-            isWardLike ||
-            (
-              isIcu &&
-              form.transferredToWard === "Yes"
-            )
-          ) &&
-          form.inActiveCare === "No"
-        );
-
-      if (
-        dischargeRequired &&
         !form.dischargedAfterEd.trim()
       ) {
         return "Hospital Discharge Status is required.";
       }
 
       if (
-        dischargeRequired &&
         form.dischargedAfterEd === "Yes" &&
         !form.hospitalDischargeTime.trim()
       ) {
@@ -11849,7 +11689,7 @@ function confirmExitAddCasualty() {
         />
 
         <CurrentTimeField
-          label="ARRIVAL TIME"
+          label="TIME OF ARRIVAL OF VICTIM"
           value={form.arrivedFacilityTime}
           placeholder="mm/dd/yyyy hh:mm"
           buttonLabel="Use current arrival time"
@@ -11866,7 +11706,11 @@ function confirmExitAddCasualty() {
 
         <SelectField
           label="DISPOSITION UPON HOSPITAL ARRIVAL"
-          value={form.dispositionUponHospitalArrival}
+          value={
+            form.dispositionUponHospitalArrival === "Active Care"
+              ? "Admitted to ED"
+              : form.dispositionUponHospitalArrival
+          }
           placeholder="Select disposition"
           onPress={() =>
             openChoiceSheet("dispositionUponHospitalArrival")
@@ -11877,55 +11721,80 @@ function confirmExitAddCasualty() {
   }
 
   function renderHealthcareDocumenterPatientStep() {
+    const showPatientIdentityFields =
+      form.patientIdentified === "Yes";
+    const showSexOnly =
+      form.patientIdentified === "No";
+
     return (
       <>
-        <FormField
-          label="FIRST NAME"
-          value={form.firstName}
-          placeholder="First name"
-          onChangeText={(value) =>
-            updateField("firstName", value)
-          }
+        <SelectField
+          label="PATIENT IDENTIFIED?"
+          value={form.patientIdentified}
+          placeholder="Yes or No"
+          onPress={() => openChoiceSheet("patientIdentified")}
         />
 
-        <FormField
-          label="MIDDLE NAME"
-          value={form.middleName}
-          placeholder="Middle name"
-          onChangeText={(value) =>
-            updateField("middleName", value)
-          }
-        />
-
-        <FormField
-          label="LAST NAME"
-          value={form.lastName}
-          placeholder="Last name"
-          onChangeText={(value) =>
-            updateField("lastName", value)
-          }
-        />
-
-        <View style={styles.twoColumnRow}>
-          <View style={styles.halfColumn}>
-            <SelectField
-              label="SEX"
-              value={form.sex}
-              placeholder="Select sex"
-              onPress={() => openChoiceSheet("sex")}
+        {showPatientIdentityFields ? (
+          <>
+            <FormField
+              label="FIRST NAME"
+              value={form.firstName}
+              placeholder="First name"
+              onChangeText={(value) =>
+                updateField("firstName", value)
+              }
             />
-          </View>
 
-          <View style={styles.halfColumn}>
-            <SelectField
-              label="DATE OF BIRTH"
-              value={form.dateOfBirth}
-              placeholder="mm/dd/yyyy"
-              icon="calendar-outline"
-              onPress={() => setIsDatePickerVisible(true)}
+            <FormField
+              label="MIDDLE NAME"
+              value={form.middleName}
+              placeholder="Middle name"
+              onChangeText={(value) =>
+                updateField("middleName", value)
+              }
             />
-          </View>
-        </View>
+
+            <FormField
+              label="LAST NAME"
+              value={form.lastName}
+              placeholder="Last name"
+              onChangeText={(value) =>
+                updateField("lastName", value)
+              }
+            />
+
+            <View style={styles.twoColumnRow}>
+              <View style={styles.halfColumn}>
+                <SelectField
+                  label="SEX"
+                  value={form.sex}
+                  placeholder="Select sex"
+                  onPress={() => openChoiceSheet("sex")}
+                />
+              </View>
+
+              <View style={styles.halfColumn}>
+                <SelectField
+                  label="DATE OF BIRTH"
+                  value={form.dateOfBirth}
+                  placeholder="mm/dd/yyyy"
+                  icon="calendar-outline"
+                  onPress={() => setIsDatePickerVisible(true)}
+                />
+              </View>
+            </View>
+          </>
+        ) : null}
+
+        {showSexOnly ? (
+          <SelectField
+            label="SEX"
+            value={form.sex}
+            placeholder="Select sex"
+            onPress={() => openChoiceSheet("sex")}
+          />
+        ) : null}
       </>
     );
   }
@@ -12248,107 +12117,19 @@ function confirmExitAddCasualty() {
   }
 
   function renderHealthcareDocumenterDispositionStep() {
-  const isIcu =
-    form.admittedToUnit === "ICU";
-
-  const isWardLike =
-    form.admittedToUnit === "Ward" ||
-    form.admittedToUnit === "Other Unit";
-
-  const isNotAdmitted =
-    form.admittedToUnit === "Not Admitted";
-
-  const isUnknown =
-    form.admittedToUnit === "Unknown";
-
-  const transferredToWard =
-    isIcu && form.transferredToWard === "Yes";
-
-  const showWardTransferTime =
-    transferredToWard;
-
-  const showActiveCare =
-    isWardLike ||
-    transferredToWard ||
-    isUnknown;
-
-  const showDischarge =
-    isNotAdmitted ||
-    isUnknown ||
-    (
-      showActiveCare &&
-      !isUnknown &&
-      form.inActiveCare === "No"
-    );
-
   const showDischargeTime =
-    showDischarge &&
     form.dischargedAfterEd === "Yes";
 
   return (
     <>
-      {isIcu ? (
-        <>
-          <SelectField
-            label="TRANSFERRED TO WARD"
-            value={form.transferredToWard}
-            placeholder="Yes or No"
-            onPress={() =>
-              openChoiceSheet("transferredToWard")
-            }
-          />
-
-          {showWardTransferTime ? (
-            <View style={styles.conditionalChildGroup}>
-              <CurrentTimeField
-                label="TIME OF TRANSFER"
-                value={form.icuTransferOutTime}
-                placeholder="mm/dd/yyyy hh:mm"
-                buttonLabel="Use current transfer time"
-                onChangeText={(value) =>
-                  updateField(
-                    "icuTransferOutTime",
-                    value,
-                  )
-                }
-                onUseCurrent={() =>
-                  updateField(
-                    "icuTransferOutTime",
-                    formatDateTimeForInput(
-                      new Date(),
-                    ),
-                  )
-                }
-              />
-            </View>
-          ) : null}
-        </>
-      ) : null}
-
-
-      {showActiveCare ? (
-        <SelectField
-          label="IN ACTIVE CARE"
-          value={form.inActiveCare}
-          placeholder="Yes or No"
-          onPress={() =>
-            openChoiceSheet("inActiveCare")
-          }
-        />
-      ) : null}
-
-
-      {showDischarge ? (
-        <SelectField
-          label="DISCHARGED FROM HOSPITAL"
-          value={form.dischargedAfterEd}
-          placeholder="Yes or No"
-          onPress={() =>
-            openChoiceSheet("dischargedAfterEd")
-          }
-        />
-      ) : null}
-
+      <SelectField
+        label="DISCHARGED FROM HOSPITAL?"
+        value={form.dischargedAfterEd}
+        placeholder="Yes or No"
+        onPress={() =>
+          openChoiceSheet("dischargedAfterEd")
+        }
+      />
 
       {showDischargeTime ? (
         <View style={styles.conditionalChildGroup}>
@@ -13270,7 +13051,7 @@ function getCurrentFinalTriageAnswer(): string {
       ? isEsiTriage
         ? ` - ${calculatedFinalTriage
             .replace("esi_", "ESI ")}`
-        : ` - ${titleCase(
+        : ` - ${formatTriageCategoryLabel(
             triageFinalAnswerToCategory(
               form.triageSystem,
               calculatedFinalTriage,
@@ -13572,72 +13353,6 @@ form.triageAssistanceMode === "assisted" ? (
               }
             />
 
-            {isHealthcareDocumenterFlow ? (
-              <>
-                <SelectField
-                  label="ADMITTED TO HOSPITAL?"
-                  value={form.admittedAfterEd}
-                  placeholder="Yes or No"
-                  onPress={() => openChoiceSheet("admittedAfterEd")}
-                />
-
-                {form.admittedAfterEd === "Yes" ? (
-                  <View style={styles.conditionalChildGroup}>
-                    <CurrentTimeField
-                      label="ADMISSION TIME"
-                      value={form.hospitalAdmissionTime}
-                      placeholder="mm/dd/yyyy hh:mm"
-                      buttonLabel="Use current admission time"
-                      onChangeText={(value) =>
-                        updateField("hospitalAdmissionTime", value)
-                      }
-                      onUseCurrent={() =>
-                        updateField(
-                          "hospitalAdmissionTime",
-                          formatDateTimeForInput(new Date()),
-                        )
-                      }
-                    />
-                  </View>
-                ) : null}
-
-                {form.admittedAfterEd === "No" ? (
-                  <View style={styles.conditionalChildGroup}>
-                    <SelectField
-                      label="DISCHARGED FROM HOSPITAL?"
-                      value={form.dischargedAfterEd}
-                      placeholder="Yes or No"
-                      onPress={() =>
-                        openChoiceSheet("dischargedAfterEd")
-                      }
-                    />
-
-                    {form.dischargedAfterEd === "Yes" ? (
-                      <View style={styles.conditionalGrandchildGroup}>
-                        <CurrentTimeField
-                          label="DISCHARGE TIME"
-                          value={form.hospitalDischargeTime}
-                          placeholder="mm/dd/yyyy hh:mm"
-                          buttonLabel="Use current discharge time"
-                          onChangeText={(value) =>
-                            updateField(
-                              "hospitalDischargeTime",
-                              value,
-                            )
-                          }
-                          onUseCurrent={() =>
-                            updateField(
-                              "hospitalDischargeTime",
-                              formatDateTimeForInput(new Date()),
-                            )
-                          }
-                        />
-                      </View>
-                    ) : null}
-                  </View>
-                ) : null}
-              </>
-            ) : null}
           </>
         ) : null}
       </>
@@ -14933,6 +14648,30 @@ form.triageAssistanceMode === "assisted" ? (
   </View>
 ) : null}
 
+        {showHealthcareDocumenterStickyHeader ? (
+          <View style={styles.victimNumberStickyHeader}>
+            <View style={styles.victimStickyGroup}>
+              <Text style={styles.victimNumberStickyLabel}>
+                PATIENT NAME
+              </Text>
+
+              <Text style={styles.victimNumberStickyValue}>
+                {healthcareDocumenterPatientName}
+              </Text>
+            </View>
+
+            <View style={styles.victimUserCodeGroup}>
+              <Text style={styles.victimNumberStickyLabel}>
+                IDENTIFIED
+              </Text>
+
+              <Text style={styles.victimUserCodeValue}>
+                {form.patientIdentified || "Not set"}
+              </Text>
+            </View>
+          </View>
+        ) : null}
+
         <ScrollView
           contentContainerStyle={styles.formContent}
           keyboardShouldPersistTaps="handled"
@@ -14951,13 +14690,32 @@ form.triageAssistanceMode === "assisted" ? (
             </View>
           ) : null}
 
+          {isHealthcareDocumenterEditLockedStep ? (
+            <View style={styles.inlineWarning}>
+              <Ionicons
+                name="lock-closed-outline"
+                size={18}
+                color={COLORS.maroon}
+              />
+              <Text style={styles.inlineWarningText}>
+                This section is locked after submission. Use Management and Disposition for editable HCFD updates.
+              </Text>
+            </View>
+          ) : null}
+
           <View
             style={
-              isResponderEditLockedStep
+              isResponderEditLockedStep ||
+              isHealthcareDocumenterEditLockedStep
                 ? styles.lockedStepContent
                 : undefined
             }
-            pointerEvents={isResponderEditLockedStep ? "none" : "auto"}
+            pointerEvents={
+              isResponderEditLockedStep ||
+              isHealthcareDocumenterEditLockedStep
+                ? "none"
+                : "auto"
+            }
           >
             {renderCurrentStep()}
           </View>

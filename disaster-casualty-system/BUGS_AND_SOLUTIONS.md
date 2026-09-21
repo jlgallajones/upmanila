@@ -679,3 +679,83 @@ Create a short checklist for the exact demo flow:
 **Solution:** Removed the responder function selection UI and its unused styles from the mobile Profile page. The page now only displays the assigned account role, while Add Casualty uses the separated role from the current profile.
 
 **Status:** Implemented.
+
+## 80. HCFD Dashboard Active Incidents Card Did Not Look Clickable
+
+**Problem:** On the mobile home dashboard, responder accounts saw the **Active Incidents** summary card with clickable styling and an **Open** affordance, but HCFD/documenter accounts saw the same card as a display-only metric.
+
+**Solution:** Updated the dashboard role logic so `documenter` and legacy `medical_personnel` accounts are also allowed to open the Active Incidents card. HCFD accounts now get the same clickable visual treatment as responder accounts.
+
+**Status:** Implemented.
+
+## 81. HCFD Add Casualty Flow Needed Simpler Patient And Disposition Handling
+
+**Problem:** The HCFD Add Casualty flow repeated hospital admission/discharge fields in Triage, used confusing labels such as **Arrival Time**, **Active Care**, **ED Admission**, and **ED Discharge**, showed too many fields in Disposition, and allowed too many tabs to remain editable when editing an already submitted HCFD record.
+
+**Solution:** Added an HCFD sticky patient-name header, renamed **Arrival Time** to **Time of Arrival of Victim**, changed **Active Care** wording to **Admitted to ED**, changed ED admission/discharge picker titles to **Admitted to Hospital?** and **Discharged from Hospital?**, added **Patient Identified?** at the top of the HCFD Patient tab, hid name and DOB fields when the patient is unidentified while keeping Sex available, removed the repeated hospital admission/discharge controls from Triage, simplified Disposition to **Discharged from Hospital?** plus discharge time when applicable and the victim photo attachment, and locked General, Patient Information, and Triage during HCFD edit mode so only Management and Disposition remain editable.
+
+**Status:** Implemented.
+
+## 82. Assisted Tertiary Triage Results Did Not Match Reference Flow
+
+**Problem:** Some assisted tertiary triage results did not align with the entered assessment data, especially for NATO, MASS, ESI, and METTS.
+
+**Solution:** Updated the tertiary assisted triage questions and calculation logic to better follow the provided reference flow. NATO now follows the green/red/yellow/black decision order from the reference. MASS now includes the initial walk/wave movement sorting before assessment and sorting. ESI now includes the danger-zone vital signs branch for multiple-resource cases. METTS now includes the restricted-care Blue category and requires no oxygen support for the all-normal Green result.
+
+**Status:** Implemented.
+
+## 83. HCFD Record Detail Did Not Allow Management And Disposition Editing
+
+**Problem:** In the mobile Records detail view, submitted HCFD records still showed Management and Disposition as read-only even though only those two sections should remain editable after submission. The record header also showed two separate **Verified** badges.
+
+**Solution:** Added focused **Edit** buttons to the HCFD Management and Disposition detail cards. These buttons reuse the Add Casualty edit flow and open the correct tab directly while the existing HCFD edit lock keeps General, Patient Information, and Triage read-only. Removed the duplicate boolean verified badge so the detail header only shows the review-status badge once.
+
+**Status:** Implemented.
+
+## 84. HCFD Records ESI Filters Did Not Match Saved Triage Values
+
+**Problem:** In the mobile Records page, Healthcare Facility Documenter ESI filters such as **ESI 1** through **ESI 5** did not filter correctly even though other filters worked. The filter only checked one saved field and expected one exact value format.
+
+**Solution:** Updated the HCFD Records ESI filter matching to normalize saved triage values and check `finalTriage`, possible ESI answer keys, `triage_category`, `calculated_category`, and `responder_category`. The filter now accepts saved formats such as `esi_1`, `ESI 1`, `esi1`, and ESI level numbers when the triage system is ESI/ED triage.
+
+**Status:** Implemented.
+
+## 85. Mobile Record Detail Verification Badge Needed Admin Decision Wording
+
+**Problem:** After removing the duplicate **Verified** badge, the remaining badge represented the review status but still used a generic status formatter. Depending on the backend value, it could display inconsistent wording instead of clearly showing the admin decision.
+
+**Solution:** Added a dedicated verification-status formatter for the mobile casualty detail badge. Admin-approved values such as `verified`, `accepted`, and `approved` now display as **Verified**, rejected records display as **Rejected**, and pending states display as **Submitted** or **Under Review**.
+
+**Status:** Implemented.
+
+## 86. Web Incident Timeline Needed First Facility Disaster Response Activation
+
+**Problem:** The web Incident Analytics timeline did not show when the first healthcare facility activated its disaster response, even though HCFD entries can record a facility disaster plan activation time.
+
+**Solution:** Updated the incident analytics backend to include `treatment_details` from HCFD treatment records, extract valid `disasterPlanActivationTime` values, and add the earliest one to `timelineVisuals` as **First healthcare facility to activate its disaster response**. The existing web timeline renderer will display the new event automatically.
+
+**Status:** Implemented.
+
+## 87. Web Incident Management Summary Card Labels Had No Spacing
+
+**Problem:** Incident Management summary modals such as **Onsite Care**, **Scene Clearance**, **Survivor Distribution**, and **ED Resources** displayed raw object keys as card titles. Labels like `totalSurvivors` and `responseInitiatedAt` appeared as cramped uppercase text such as **TOTALSURVIVORS**.
+
+**Solution:** Added a dedicated summary fact label formatter in the web dashboard. Known incident summary fields now use readable labels, nested metric paths are formatted with separators, camelCase keys are split into words, common acronyms such as EMS/ED/DMMP are preserved, and date-like values are displayed with the existing dashboard date formatter.
+
+**Status:** Implemented.
+
+## 88. DMMP Staff Call-down Needed Responder Safety Status Integration
+
+**Problem:** The DMMP Staff Call-down status dropdown still included old Ill/Injured options, while responder Safe/Unsafe answers from the mobile responder safety flow were stored separately and were not shown as editable call-down status values. Arrival time also required manual date/time entry.
+
+**Solution:** Limited DMMP Staff Call-down status values to Safe, Unsafe, and Deceased, while keeping a blank Not recorded placeholder for empty records. Linked system-account call-down rows now merge Safe/Unsafe values from `responder_safety_responses`; safety-only mobile responses appear in the call-down roster even before a DMMP row exists. Saving Safe/Unsafe from DMMP Call-down syncs back to responder safety so Incident Analytics remains aligned. Added a **Use current arrival time** button per row that fills the current date/time and marks the staff member as arrived.
+
+**Status:** Implemented.
+
+## 89. Field Responder Triage Badge Showed Minimal Instead of Minor
+
+**Problem:** Field Responder casualty records displayed the green/minor triage category as **Minimal** in the rounded triage badge and related triage detail labels.
+
+**Solution:** Added mobile triage-specific display formatting so stored `minimal` category values continue to work internally while user-facing triage labels show **Minor**. The Add Casualty assessment summary now uses the same display wording.
+
+**Status:** Implemented.

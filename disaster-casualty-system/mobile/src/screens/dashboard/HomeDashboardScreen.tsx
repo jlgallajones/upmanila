@@ -90,6 +90,11 @@ const RESPONDER_ROLES = new Set([
   "sa_responder",
 ]);
 
+const DOCUMENTATION_ROLES = new Set([
+  "documenter",
+  "medical_personnel",
+]);
+
 const DISRUPTION_OPTIONS: Array<{
   value: DisruptionLevel;
   label: string;
@@ -791,9 +796,13 @@ export default function HomeDashboardScreen() {
   const isResponderAccount = currentUserRole
     ? RESPONDER_ROLES.has(currentUserRole)
     : false;
+  const isDocumenterAccount = currentUserRole
+    ? DOCUMENTATION_ROLES.has(currentUserRole)
+    : false;
   const canOpenActiveIncidents =
-    canOpenIncidentManagement || isResponderAccount;
-  const isDocumenterAccount = currentUserRole === "documenter";
+    canOpenIncidentManagement ||
+    isResponderAccount ||
+    isDocumenterAccount;
   const isAdminAccount =
     currentUserRole === "admin" ||
     currentUserRole === "administrator";

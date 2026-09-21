@@ -450,6 +450,80 @@ function isHealthcareDocumenterView(
   );
 }
 
+function normalizeRecordFilterValue(value: unknown): string {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function getEsiFilterFromValue(
+  value: unknown,
+  isEsiSystem: boolean,
+): HealthcareDocumenterTriageFilter | null {
+  const normalized = normalizeRecordFilterValue(value);
+
+  switch (normalized) {
+    case "esi_1":
+    case "esi1":
+      return "ESI 1";
+
+    case "esi_2":
+    case "esi2":
+      return "ESI 2";
+
+    case "esi_3":
+    case "esi3":
+      return "ESI 3";
+
+    case "esi_4":
+    case "esi4":
+      return "ESI 4";
+
+    case "esi_5":
+    case "esi5":
+      return "ESI 5";
+
+    default:
+      break;
+  }
+
+  if (!isEsiSystem) {
+    return null;
+  }
+
+  switch (normalized) {
+    case "1":
+    case "level_1":
+    case "level1":
+      return "ESI 1";
+
+    case "2":
+    case "level_2":
+    case "level2":
+      return "ESI 2";
+
+    case "3":
+    case "level_3":
+    case "level3":
+      return "ESI 3";
+
+    case "4":
+    case "level_4":
+    case "level4":
+      return "ESI 4";
+
+    case "5":
+    case "level_5":
+    case "level5":
+      return "ESI 5";
+
+    default:
+      return null;
+  }
+}
+
 function getRecordEsiTriageFilter(
   record: CasualtyRecord,
 ): HealthcareDocumenterTriageFilter | null {
@@ -460,40 +534,41 @@ function getRecordEsiTriageFilter(
     return null;
   }
 
-  if (
-    String(assessment.triage_system || "")
-      .trim()
-      .toLowerCase() !== "esi"
-  ) {
-    return null;
+  const normalizedSystem = normalizeRecordFilterValue(
+    assessment.triage_system,
+  );
+  const isEsiSystem =
+    normalizedSystem === "esi" ||
+    normalizedSystem === "ed_triage" ||
+    normalizedSystem === "emergency_severity_index";
+  const answers =
+    assessment.assessment_answers &&
+    typeof assessment.assessment_answers === "object"
+      ? assessment.assessment_answers
+      : {};
+
+  const candidateValues = [
+    answers.finalTriage,
+    answers.esiLevel,
+    answers.esiTriage,
+    answers.esilevel,
+    assessment.triage_category,
+    assessment.calculated_category,
+    assessment.responder_category,
+  ];
+
+  for (const value of candidateValues) {
+    const filter = getEsiFilterFromValue(
+      value,
+      isEsiSystem,
+    );
+
+    if (filter) {
+      return filter;
+    }
   }
 
-  const finalTriage =
-    assessment.assessment_answers?.finalTriage;
-
-  if (typeof finalTriage !== "string") {
-    return null;
-  }
-
-  switch (finalTriage.trim().toLowerCase()) {
-    case "esi_1":
-      return "ESI 1";
-
-    case "esi_2":
-      return "ESI 2";
-
-    case "esi_3":
-      return "ESI 3";
-
-    case "esi_4":
-      return "ESI 4";
-
-    case "esi_5":
-      return "ESI 5";
-
-    default:
-      return null;
-  }
+  return null;
 }
 
 function getRecordHealthcareLocation(

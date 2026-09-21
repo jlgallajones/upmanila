@@ -51,3 +51,8 @@ cd api npm run dev
 root folder
 
 npx.cmd serve website -l 5173
+
+
+to push
+git push origin main
+git push organization main

@@ -357,6 +357,18 @@ function formatStatus(status: string | null | undefined): string {
     .join(" ");
 }
 
+function formatTriageCategory(
+  category: string | null | undefined,
+): string {
+  switch (category?.trim().toLowerCase()) {
+    case "minimal":
+    case "minor":
+      return "Minor";
+    default:
+      return formatStatus(category);
+  }
+}
+
 function formatCasualtyDisplayId(
   idNumber: string | null | undefined,
   clientRecordId: string | null | undefined,
@@ -386,8 +398,10 @@ function formatCasualtyDisplayId(
 }
 
 function getVerificationPalette(status: string | null | undefined) {
-  switch (status) {
+  switch (status?.trim().toLowerCase()) {
     case "verified":
+    case "accepted":
+    case "approved":
       return {
         color: COLORS.green,
         backgroundColor: COLORS.greenBackground,
@@ -407,6 +421,33 @@ function getVerificationPalette(status: string | null | undefined) {
         color: COLORS.orange,
         backgroundColor: COLORS.orangeBackground,
       };
+  }
+}
+
+function formatVerificationStatus(
+  status: string | null | undefined,
+): string {
+  switch (status?.trim().toLowerCase()) {
+    case "verified":
+    case "accepted":
+    case "approved":
+      return "Verified";
+
+    case "rejected":
+      return "Rejected";
+
+    case "under_review":
+    case "under review":
+      return "Under Review";
+
+    case "submitted":
+      return "Submitted";
+
+    case "draft":
+      return "Draft";
+
+    default:
+      return "Submitted";
   }
 }
 
@@ -837,7 +878,9 @@ export default function CasualtyDetailScreen() {
       dateTime: formatDateTime(record.reported_at),
       status: formatStatus(record.current_status),
       severity: formatStatus(record.severity),
-      verificationStatus: formatStatus(record.verification_status),
+      verificationStatus: formatVerificationStatus(
+        record.verification_status,
+      ),
       verificationStatusRaw: record.verification_status,
       verifiedAt: formatDateTime(record.verified_at),
       notes:
@@ -845,7 +888,6 @@ export default function CasualtyDetailScreen() {
           ? notes.join("\n")
           : "No medical notes recorded.",
       lastUpdated: formatDateTime(record.updated_at),
-      verified: record.verification_status === "verified",
       encoderName: record.encoder.full_name,
       latestTriage: triageHistory[0],
       latestTransport: transportHistory[0],
@@ -880,6 +922,22 @@ export default function CasualtyDetailScreen() {
     } as never);
   }
 
+  function handleEditHealthcareStep(
+    focusStep: "Management" | "Disposition",
+  ) {
+    if (!casualty) {
+      return;
+    }
+
+    router.push({
+      pathname: "/add-casualty",
+      params: {
+        editId: casualty.recordId,
+        focusStep,
+      },
+    } as never);
+  }
+
   const canEditCurrentRecord = canEditRecord(
     currentUserRole,
     casualty?.verificationStatusRaw,
@@ -895,8 +953,12 @@ export default function CasualtyDetailScreen() {
   const showHealthcareDocumenterDetails =
     Boolean(isOwnRecord) &&
     isHealthcareDocumenterView(currentUserRole);
+  const canEditHealthcareDocumenterSections =
+    showHealthcareDocumenterDetails;
   const canShowHeaderEdit =
-    canEditCurrentRecord && !isResponderCurrentUser;
+    canEditCurrentRecord &&
+    !isResponderCurrentUser &&
+    !showHealthcareDocumenterDetails;
   const canEditTransportCard =
     canEditCurrentRecord ||
     (isResponderCurrentUser && isOwnRecord);
@@ -962,7 +1024,7 @@ export default function CasualtyDetailScreen() {
     casualty.latestTriage?.triage_category ??
     record?.latest_triage_assessment?.triage_category ??
     casualty.status;
-  const triageCategoryLabel = formatStatus(triageCategory);
+  const triageCategoryLabel = formatTriageCategory(triageCategory);
   const triagePalette = getTriagePalette(triageCategory);
   const statusPalette = getStatusPalette(casualty.status);
   const verificationPalette = getVerificationPalette(
@@ -1061,20 +1123,6 @@ export default function CasualtyDetailScreen() {
                   ID: {casualty.id}
                 </Text>
               </View>
-
-              {casualty.verified ? (
-                <View style={styles.verifiedBadge}>
-                  <Ionicons
-                    name="checkmark"
-                    size={13}
-                    color={COLORS.green}
-                  />
-
-                  <Text style={styles.verifiedText}>
-                    Verified
-                  </Text>
-                </View>
-              ) : null}
 
               <View
                 style={[
@@ -1201,7 +1249,7 @@ export default function CasualtyDetailScreen() {
 
                   <DetailRow
                     label="Final Triage"
-                    value={formatStatus(
+                    value={formatTriageCategory(
                       casualty.latestTriage.triage_category,
                     )}
                     valueColor={COLORS.maroon}
@@ -1513,7 +1561,7 @@ export default function CasualtyDetailScreen() {
               />
 
               <DetailRow
-                label="Arrival Time"
+                label="Time of Arrival of Victim"
                 value={formatDateTime(facilityEncounter?.arrived_at)}
               />
 
@@ -1561,7 +1609,7 @@ export default function CasualtyDetailScreen() {
 
                   <DetailRow
                     label="Triage Assessment"
-                    value={formatStatus(
+                    value={formatTriageCategory(
                       casualty.latestTriage.triage_category,
                     )}
                     valueColor={COLORS.maroon}
@@ -1609,7 +1657,33 @@ export default function CasualtyDetailScreen() {
               )}
             </SectionCard>
 
-            <SectionCard title="MANAGEMENT">
+            <SectionCard
+              title="MANAGEMENT"
+              action={
+                canEditHealthcareDocumenterSections ? (
+                  <Pressable
+                    onPress={() =>
+                      handleEditHealthcareStep("Management")
+                    }
+                    style={({ pressed }) => [
+                      styles.sectionEditButton,
+                      pressed && styles.pressed,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Edit management"
+                  >
+                    <Ionicons
+                      name="create-outline"
+                      size={15}
+                      color={COLORS.maroon}
+                    />
+                    <Text style={styles.sectionEditButtonText}>
+                      Edit
+                    </Text>
+                  </Pressable>
+                ) : null
+              }
+            >
               <DetailRow
                 label="Resuscitation Room Used"
                 value={formatValue(
@@ -1694,42 +1768,42 @@ export default function CasualtyDetailScreen() {
               />
             </SectionCard>
 
-            <SectionCard title="DISPOSITION">
+            <SectionCard
+              title="DISPOSITION"
+              action={
+                canEditHealthcareDocumenterSections ? (
+                  <Pressable
+                    onPress={() =>
+                      handleEditHealthcareStep("Disposition")
+                    }
+                    style={({ pressed }) => [
+                      styles.sectionEditButton,
+                      pressed && styles.pressed,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Edit disposition"
+                  >
+                    <Ionicons
+                      name="create-outline"
+                      size={15}
+                      color={COLORS.maroon}
+                    />
+                    <Text style={styles.sectionEditButtonText}>
+                      Edit
+                    </Text>
+                  </Pressable>
+                ) : null
+              }
+            >
               <DetailRow
-                label="Currently Admitted in ICU"
+                label="Discharged from Hospital"
                 value={formatDetailUnknown(
-                  extractRecordSectionValue(
-                    treatmentNotes,
-                    "Management",
-                    "Currently admitted in ICU",
-                  ) ?? treatmentDetails.currentlyAdmittedInIcu,
+                  formatBooleanValue(facilityEncounter?.discharged_home),
                 )}
               />
 
               <DetailRow
-                label="Transferred to Ward"
-                value={formatDetailUnknown(
-                  extractRecordSectionValue(
-                    treatmentNotes,
-                    "Management",
-                    "Transferred to ward",
-                  ) ?? treatmentDetails.transferredToWard,
-                )}
-              />
-
-              <DetailRow
-                label="In Active Care"
-                value={formatDetailUnknown(
-                  extractRecordSectionValue(
-                    treatmentNotes,
-                    "Management",
-                    "In active care",
-                  ) ?? treatmentDetails.inActiveCare,
-                )}
-              />
-
-              <DetailRow
-                label="Hospital Discharge Time"
+                label="Time of Discharge"
                 value={formatDateTime(
                   facilityEncounter?.hospital_discharged_at,
                 )}
@@ -1878,7 +1952,7 @@ export default function CasualtyDetailScreen() {
 
               <DetailRow
                 label="Category"
-                value={formatStatus(
+                value={formatTriageCategory(
                   casualty.latestTriage.triage_category,
                 )}
                 valueColor={COLORS.maroon}
@@ -1914,7 +1988,7 @@ export default function CasualtyDetailScreen() {
               {triageHistory.map((triage, index) => (
                 <TimelineItem
                   key={triage.id}
-                  title={`${formatStatus(triage.triage_category)} - ${formatTriageSystem(triage.triage_system)}`}
+                  title={`${formatTriageCategory(triage.triage_category)} - ${formatTriageSystem(triage.triage_system)}`}
                   time={formatDateTime(triage.triaged_at)}
                   user={
                     triage.triaged_by_user?.full_name ?? "System"
@@ -2261,22 +2335,6 @@ const styles = StyleSheet.create({
   idBadgeText: {
     color: COLORS.secondary,
     fontSize: 9,
-  },
-
-  verifiedBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 7,
-    backgroundColor: COLORS.greenBackground,
-  },
-
-  verifiedText: {
-    color: COLORS.green,
-    fontSize: 9,
-    fontWeight: "800",
-    marginLeft: 3,
   },
 
   verificationBadge: {

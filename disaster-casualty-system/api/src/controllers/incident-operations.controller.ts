@@ -152,18 +152,137 @@ function parseDmmpStaffStatus(
   }
 
   if (
-    value !== "ill" &&
-    value !== "injured" &&
     value !== "deceased" &&
     value !== "safe" &&
     value !== "unsafe"
   ) {
     throw new Error(
-      `${fieldName} must be ill, injured, deceased, safe, unsafe, or null.`,
+      `${fieldName} must be safe, unsafe, deceased, or null.`,
     );
   }
 
   return value;
+}
+
+function responderSafetyStatusToDmmpStatus(
+  value: unknown,
+): string | null {
+  if (value === "yes") {
+    return "safe";
+  }
+
+  if (value === "no") {
+    return "unsafe";
+  }
+
+  return null;
+}
+
+function dmmpStatusToResponderSafetyStatus(
+  value: string | null | undefined,
+): "yes" | "no" | null {
+  if (value === "safe") {
+    return "yes";
+  }
+
+  if (value === "unsafe") {
+    return "no";
+  }
+
+  return null;
+}
+
+function mergeDmmpRecordWithResponderSafety(
+  record: Record<string, unknown>,
+  responderSafetyByUserId: Map<string, Record<string, unknown>>,
+): Record<string, unknown> {
+  const linkedUserId =
+    typeof record.linked_user_id === "string"
+      ? record.linked_user_id
+      : null;
+  const responderSafety = linkedUserId
+    ? responderSafetyByUserId.get(linkedUserId)
+    : null;
+  const safetyStatus = responderSafetyStatusToDmmpStatus(
+    responderSafety?.safety_status,
+  );
+  const currentStatus =
+    typeof record.status === "string" ? record.status : null;
+
+  return {
+    ...record,
+    responder_safety_response_id:
+      responderSafety?.id ?? null,
+    responder_safety_status:
+      responderSafety?.safety_status ?? null,
+    status:
+      currentStatus === "deceased"
+        ? currentStatus
+        : safetyStatus ?? currentStatus,
+  };
+}
+
+async function loadResponderSafetyByUserId(
+  incidentId: string,
+): Promise<Map<string, Record<string, unknown>>> {
+  const { data, error } = await supabase
+    .from("responder_safety_responses")
+    .select("id, responder_id, safety_status")
+    .eq("incident_id", incidentId);
+
+  if (error) {
+    throw new Error(
+      `Unable to retrieve responder safety responses: ${error.message}`,
+    );
+  }
+
+  return new Map(
+    (data ?? [])
+      .filter((record) => typeof record.responder_id === "string")
+      .map((record) => [record.responder_id as string, record]),
+  );
+}
+
+async function syncResponderSafetyFromDmmpStatus(
+  incidentId: string,
+  linkedUserId: string | null | undefined,
+  status: string | null | undefined,
+  fallbackArrivalAt: string | null | undefined,
+): Promise<void> {
+  if (!linkedUserId) {
+    return;
+  }
+
+  const safetyStatus = dmmpStatusToResponderSafetyStatus(status);
+
+  if (!safetyStatus) {
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const responderArrivedAt = fallbackArrivalAt ?? now;
+
+  const { error } = await supabase
+    .from("responder_safety_responses")
+    .upsert(
+      {
+        incident_id: incidentId,
+        responder_id: linkedUserId,
+        safety_status: safetyStatus,
+        responder_arrived_at: responderArrivedAt,
+        ppe_used_at: now,
+        updated_at: now,
+      },
+      {
+        onConflict: "incident_id,responder_id",
+      },
+    );
+
+  if (error) {
+    throw new Error(
+      `Unable to sync responder safety status: ${error.message}`,
+    );
+  }
 }
 
 function parseDisruptionLevel(
@@ -647,9 +766,55 @@ export async function getDmmpStaff(
       );
     }
 
+    const responderSafetyByUserId =
+      await loadResponderSafetyByUserId(incidentId);
+
+    const records = data ?? [];
+    const linkedUserIdsWithCallDown = new Set(
+      records
+        .map((record) => record.linked_user_id)
+        .filter(
+          (value): value is string =>
+            typeof value === "string" && value.length > 0,
+        ),
+    );
+    const safetyOnlyRecords = Array.from(
+      responderSafetyByUserId.entries(),
+    )
+      .filter(([responderId]) => !linkedUserIdsWithCallDown.has(responderId))
+      .map(([responderId, responderSafety]) => ({
+        id: null,
+        incident_id: incidentId,
+        call_down_staff_id: null,
+        linked_user_id: responderId,
+        staff_name: null,
+        role_name: null,
+        was_contacted: false,
+        has_arrived: false,
+        status: responderSafetyStatusToDmmpStatus(
+          responderSafety.safety_status,
+        ),
+        contacted_at: null,
+        required_arrival_at: null,
+        arrived_at: null,
+        arrived_within_standard: null,
+        responder_safety_response_id:
+          responderSafety.id ?? null,
+        responder_safety_status:
+          responderSafety.safety_status ?? null,
+      }));
+
     response.status(200).json({
       success: true,
-      data: data ?? [],
+      data: [
+        ...records.map((record) =>
+          mergeDmmpRecordWithResponderSafety(
+            record,
+            responderSafetyByUserId,
+          ),
+        ),
+        ...safetyOnlyRecords,
+      ],
     });
   } catch (error) {
     next(error);
@@ -824,12 +989,24 @@ export async function createDmmpStaff(
       incidentId,
       authenticatedUser.id,
     );
+    await syncResponderSafetyFromDmmpStatus(
+      incidentId,
+      linkedUserId ?? null,
+      status ?? null,
+      arrivedAt ?? null,
+    );
+
+    const responderSafetyByUserId =
+      await loadResponderSafetyByUserId(incidentId);
 
     response.status(201).json({
       success: true,
       message:
         "DMMP staff record created successfully.",
-      data,
+      data: mergeDmmpRecordWithResponderSafety(
+        data,
+        responderSafetyByUserId,
+      ),
     });
   } catch (error) {
     next(error);
@@ -1042,12 +1219,26 @@ export async function updateDmmpStaff(
       existingRecord.incident_id,
       authenticatedUser.id,
     );
+    await syncResponderSafetyFromDmmpStatus(
+      existingRecord.incident_id,
+      (updates.linked_user_id as string | null | undefined) ??
+        existingRecord.linked_user_id,
+      (updates.status as string | null | undefined) ??
+        existingRecord.status,
+      finalArrivedAt,
+    );
+
+    const responderSafetyByUserId =
+      await loadResponderSafetyByUserId(existingRecord.incident_id);
 
     response.status(200).json({
       success: true,
       message:
         "DMMP staff record updated successfully.",
-      data,
+      data: mergeDmmpRecordWithResponderSafety(
+        data,
+        responderSafetyByUserId,
+      ),
     });
   } catch (error) {
     next(error);

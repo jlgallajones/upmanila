@@ -1947,6 +1947,19 @@ tbody tr:hover td {
   padding-inline: 10px;
 }
 
+.dmmp-arrival-time-control {
+  display: grid;
+  gap: 6px;
+  min-width: 190px;
+}
+
+.dmmp-arrival-time-control .ghost-button {
+  width: max-content;
+  max-width: 100%;
+  justify-self: start;
+  white-space: normal;
+}
+
 .form-section-title {
   display: flex;
   align-items: center;
