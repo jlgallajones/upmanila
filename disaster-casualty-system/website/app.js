@@ -331,7 +331,11 @@ const adminNavGroups = [
 const matchCasingRequiredRoleSlots = [
   "field_responder",
   "sa_responder",
-  "documenter",
+];
+const matchCasingOptionalRoleSlots = ["documenter"];
+const matchCasingRoleSlots = [
+  ...matchCasingRequiredRoleSlots,
+  ...matchCasingOptionalRoleSlots,
 ];
 
 function getViewsForRole(role) {
@@ -4057,8 +4061,8 @@ function renderAdminScopeCard() {
         <button class="scope-item" data-view-link="users"><strong>Accounts</strong><span>Register and manage FR, AMP, and HCFD accounts in this unit.</span></button>
         <button class="scope-item" data-view-link="incident-analytics"><strong>Reported incident history</strong><span>Review incident analytics for records created within this unit.</span></button>
         <button class="scope-item" data-view-link="records"><strong>Victim records</strong><span>See a summary of all victim entries.</span></button>
-        <button class="scope-item" data-view-link="match-casing"><strong>Match Casing</strong><span>Build complete FR, AMP, and HCFD matched cases.</span></button>
-        <button class="scope-item" data-view-link="matched-cases"><strong>Matched Cases</strong><span>Review completed matched victim case records.</span></button>
+        <button class="scope-item" data-view-link="match-casing"><strong>Match Casing</strong><span>Build FR and AMP matched cases, with HCFD optional.</span></button>
+        <button class="scope-item" data-view-link="matched-cases"><strong>Matched Cases</strong><span>Review matched victim case records.</span></button>
         <button class="scope-item" data-view-link="logs"><strong>Action logs</strong><span>Audit actions by users this admin created.</span></button>
         <button class="scope-item" data-view-link="verification"><strong>Verification review</strong><span>Review victim entries from assigned responders.</span></button>
       </div>
@@ -6094,13 +6098,13 @@ function toggleMatchCasingRecordSelection(recordId) {
   const role = matchCasingRoleBucket(record);
   if (!isMatchCasingRoleEligible(role)) {
     showMatchCasingWarning(
-      "Only Field Responder, Advanced Medical Responder, and HCFD records can be matched.",
+      "Only Field Responder, Advanced Medical Responder, and optional HCFD records can be matched.",
     );
     return;
   }
 
   const selectedRecords = getSelectedMatchCasingRecords();
-  if (selectedRecords.length >= 3) {
+  if (selectedRecords.length >= matchCasingRoleSlots.length) {
     showMatchCasingWarning(
       "You can only select up to 3 records for one matched case.",
     );
@@ -6329,6 +6333,7 @@ function renderMatchCasingSlot(role) {
   const selectedRecord = selectedByRole[role];
   const candidateCount = getMatchCasingCandidateRecords(role).length;
   const slotLabel = matchCasingRoleLabel(role);
+  const required = matchCasingRequiredRoleSlots.includes(role);
 
   return `
     <article class="match-casing-slot ${selectedRecord ? "filled" : ""}">
@@ -6337,7 +6342,7 @@ function renderMatchCasingSlot(role) {
           <h3>${escapeHtml(slotLabel)}</h3>
           <p>${candidateCount} available record${candidateCount === 1 ? "" : "s"}</p>
         </div>
-        ${selectedRecord ? `<span class="pill green">Selected</span>` : `<span class="pill blue">Required</span>`}
+        ${selectedRecord ? `<span class="pill green">Selected</span>` : `<span class="pill ${required ? "blue" : "orange"}">${required ? "Required" : "Optional"}</span>`}
       </div>
 
       ${
@@ -6476,6 +6481,8 @@ function renderMatchCasing() {
   const records = getMatchCasingFilteredRecords();
   const linkByRecordId = getCaseLinksByRecordId();
   const selectedRecordIds = new Set(state.selectedMatchCasingRecordIds);
+  const selectedRecords = getSelectedMatchCasingRecords();
+  const selectedRoles = selectedRecords.map(matchCasingRoleBucket);
   const availableRecords = records.filter((record) => {
     const role = matchCasingRoleBucket(record);
     return (
@@ -6484,15 +6491,21 @@ function renderMatchCasing() {
       !selectedRecordIds.has(record.id)
     );
   });
-  const selectedCount = state.selectedMatchCasingRecordIds.length;
-  const canMatch = selectedCount === matchCasingRequiredRoleSlots.length;
+  const requiredFilledCount = matchCasingRequiredRoleSlots.filter((role) =>
+    selectedRoles.includes(role),
+  ).length;
+  const optionalFilledCount = matchCasingOptionalRoleSlots.filter((role) =>
+    selectedRoles.includes(role),
+  ).length;
+  const canMatch =
+    requiredFilledCount === matchCasingRequiredRoleSlots.length;
 
   return `
     <div class="topbar">
       <div>
         <span class="eyebrow">Admin Review</span>
         <h1>Match Casing</h1>
-        <p>Complete the Field Responder, Advanced Medical Responder, and HCFD slots before matching one victim case.</p>
+        <p>Complete the Field Responder and Advanced Medical Responder slots before matching one victim case. HCFD can be added when available.</p>
       </div>
     </div>
 
@@ -6500,7 +6513,7 @@ function renderMatchCasing() {
       <div class="panel-header">
         <div>
           <h2>Candidate filters</h2>
-          <p class="panel-subtitle">Only unmatched FR, AMP, and HCFD records are available for new case matching.</p>
+          <p class="panel-subtitle">Only unmatched FR, AMP, and optional HCFD records are available for new case matching.</p>
         </div>
         <span class="pill blue">${availableRecords.length} available</span>
       </div>
@@ -6530,13 +6543,13 @@ function renderMatchCasing() {
       <div class="panel-header">
         <div>
           <h2>Build matched case</h2>
-          <p class="panel-subtitle">Fill all 3 role boxes. A case cannot be matched until Field Responder, Advanced Medical Responder, and HCFD are complete.</p>
+          <p class="panel-subtitle">Fill the required FR and AMP boxes. Add HCFD if the healthcare facility record is already available.</p>
         </div>
-        <span class="pill ${canMatch ? "green" : "orange"}">${selectedCount} / 3 filled</span>
+        <span class="pill ${canMatch ? "green" : "orange"}">${requiredFilledCount} / ${matchCasingRequiredRoleSlots.length} required${optionalFilledCount ? ` + ${optionalFilledCount} optional` : ""}</span>
       </div>
 
       <div class="match-casing-slots">
-        ${matchCasingRequiredRoleSlots.map(renderMatchCasingSlot).join("")}
+        ${matchCasingRoleSlots.map(renderMatchCasingSlot).join("")}
       </div>
 
       <div class="match-casing-submit-row">
@@ -6565,7 +6578,7 @@ function renderMatchedCaseRecords() {
       <div>
         <span class="eyebrow">Admin Review</span>
         <h1>Matched Case Records</h1>
-        <p>Review completed FR, AMP, and HCFD case matches. Submitted matches are locked.</p>
+        <p>Review matched FR and AMP case records. HCFD links appear when included.</p>
       </div>
     </div>
 
@@ -6767,16 +6780,23 @@ function bindMatchCasingActions() {
     const selectedRecords = getSelectedMatchCasingRecords();
     const selectedRoles = selectedRecords.map(matchCasingRoleBucket);
 
-    if (selectedRecords.length !== matchCasingRequiredRoleSlots.length) {
+    if (selectedRecords.length < matchCasingRequiredRoleSlots.length) {
       showMatchCasingWarning(
-        "Complete Field Responder, Advanced Medical Responder, and HCFD before matching.",
+        "Complete Field Responder and Advanced Medical Responder before matching.",
+      );
+      return;
+    }
+
+    if (selectedRecords.length > matchCasingRoleSlots.length) {
+      showMatchCasingWarning(
+        "You can only select up to 3 records for one matched case.",
       );
       return;
     }
 
     if (selectedRoles.some((role) => !isMatchCasingRoleEligible(role))) {
       showMatchCasingWarning(
-        "Only Field Responder, Advanced Medical Responder, and HCFD records can be matched.",
+        "Only Field Responder, Advanced Medical Responder, and optional HCFD records can be matched.",
       );
       return;
     }
@@ -6826,7 +6846,7 @@ function bindMatchCasingActions() {
       renderCurrentView();
       bindView();
       showDashboardToast(
-        "Complete matched case was created and locked.",
+        "Matched case was created and locked.",
         "success",
       );
     } catch (error) {
@@ -9900,6 +9920,11 @@ function renderIncidentManagementItem(incident) {
 }
 
 function getIncidentSectionLauncherSubtitle(sectionId, canEdit, details) {
+  const incident = details?.incident;
+  if (canEdit && isIncidentManagementLocked(incident)) {
+    return "Locked after closure";
+  }
+
   if (sectionId === "dmmp-staff") {
     const accountNames = state.unitUsers
       .filter((user) => user.is_active !== false)
@@ -9928,15 +9953,23 @@ function getIncidentSectionLauncherSubtitle(sectionId, canEdit, details) {
 }
 
 function renderIncidentManagementSections(incident, details) {
+  const sectionDetails = {
+    ...details,
+    incident,
+  };
+
   return `
     <div class="incident-management-body">
+      ${isIncidentManagementLocked(incident)
+        ? `<div class="status-message warning incident-management-lock-notice">This incident is ${escapeHtml(roleLabel(incident.status))}. Incident management sections are view-only.</div>`
+        : ""}
       <div class="section-launcher-grid">
         ${incidentManagementSections
           .map(
             ([id, title, canEdit, tone]) => `
               <button class="section-launcher ${tone === "accent" ? "section-launcher-accent" : ""}" type="button" data-open-incident-section="${id}" data-incident-id="${escapeHtml(incident.id)}">
                 <span>${escapeHtml(title)}</span>
-                <small>${escapeHtml(getIncidentSectionLauncherSubtitle(id, canEdit, details))}</small>
+                <small>${escapeHtml(getIncidentSectionLauncherSubtitle(id, canEdit, sectionDetails))}</small>
               </button>
             `,
           )
@@ -9959,6 +9992,12 @@ function getIncidentById(incidentId) {
   );
 }
 
+function isIncidentManagementLocked(incident) {
+  return ["closed", "archived"].includes(
+    String(incident?.status || "").toLowerCase(),
+  );
+}
+
 function renderIncidentSectionModal() {
   const modal = state.activeIncidentSectionModal;
   if (!modal) return "";
@@ -9969,7 +10008,8 @@ function renderIncidentSectionModal() {
   if (!incident || !meta) return "";
 
   const details = state.incidentManagementDetails[incident.id] || {};
-  const isEditMode = Boolean(modal.editMode);
+  const isLocked = isIncidentManagementLocked(incident);
+  const isEditMode = Boolean(modal.editMode) && !isLocked;
   const modalBody = isEditMode
     ? renderIncidentSectionEditContent(incident, details, meta.id)
     : renderIncidentSectionViewContent(incident, details, meta.id);
@@ -9986,6 +10026,9 @@ function renderIncidentSectionModal() {
           <button class="icon-button" type="button" data-close-incident-section-modal aria-label="Close section">&times;</button>
         </div>
         <div class="modal-body">
+          ${isLocked && meta.canEdit
+            ? `<div class="status-message warning modal-lock-notice">This incident is ${escapeHtml(roleLabel(incident.status))}. This section is view-only and cannot be edited unless the incident is reopened.</div>`
+            : ""}
           ${modalBody}
         </div>
         <div class="modal-footer">
@@ -9993,7 +10036,7 @@ function renderIncidentSectionModal() {
           <div class="modal-footer-spacer"></div>
           <button class="ghost-button" type="button" data-close-incident-section-modal>Close</button>
           ${
-            meta.canEdit
+            meta.canEdit && !isLocked
               ? isEditMode
                 ? `<button class="primary-button" type="submit" form="incidentSectionEditForm">Save</button>`
                 : `<button class="primary-button" type="button" data-edit-incident-section>Edit</button>`
@@ -11096,6 +11139,16 @@ function bindIncidentManagementActions() {
     editSectionButton.addEventListener("click", () => {
       if (!state.activeIncidentSectionModal) return;
 
+      const incident = getIncidentById(state.activeIncidentSectionModal.incidentId);
+      if (isIncidentManagementLocked(incident)) {
+        setMessage(
+          "incidentSectionModalMessage",
+          "This incident is closed. Reopen it before editing incident management sections.",
+          "warning",
+        );
+        return;
+      }
+
       state.activeIncidentSectionModal = {
         ...state.activeIncidentSectionModal,
         editMode: true,
@@ -11290,6 +11343,23 @@ async function handleIncidentSectionSubmit(form) {
 
   const handler = sectionHandlers[section];
   if (!handler) return;
+
+  const incident = getIncidentById(incidentId);
+  if (isIncidentManagementLocked(incident)) {
+    const message = "This incident is closed. Reopen it before editing incident management sections.";
+    const messageId = {
+      "edit-incident": "editIncidentMessage",
+      timeline: "timelineMessage",
+      "dmmp-staff": "dmmpStaffMessage",
+      coordination: "coordinationMessage",
+      deactivation: "deactivationMessage",
+      "hospital-resources": "hospitalResourcesMessage",
+    }[section] || "incidentSectionModalMessage";
+
+    setMessage(messageId, message, "warning");
+    setMessage("incidentSectionModalMessage", message, "warning");
+    return;
+  }
 
   try {
     await handler(incidentId, form);

@@ -7,7 +7,7 @@ Progress submission version for the current Disaster Casualty Management System 
 The Disaster Casualty Management System, or DCMS, is a role-based casualty and incident management platform for disaster response operations. It provides:
 
 - A web dashboard for super admins and admins.
-- A mobile/PWA app for Field Responders, SAR/Stabilization Area Responders, and Healthcare Facility Documenters.
+- A mobile/PWA app for Field Responders, Advanced Medical Responders (AMP; previously SAR/Stabilization Area Responders), and Healthcare Facility Documenters.
 - A Node/Express API that connects both clients to Supabase Auth, PostgreSQL, Storage, and Realtime.
 - Role-scoped records, incident analytics, audit logs, data export, attachment handling, offline mobile queuing, and manual case matching.
 
@@ -55,7 +55,7 @@ Current dashboard capabilities:
 - Admin dashboard summary.
 - Super admin system summary.
 - Admin account management.
-- Separated account roles for Field Responder, SAR, and HCFD.
+- Separated account roles for Field Responder, AMP, and HCFD.
 - Bulk upload preview for accounts and reference data.
 - Healthcare facility management.
 - Web Drafts folder for unfinished incident and healthcare facility forms.
@@ -64,7 +64,7 @@ Current dashboard capabilities:
 - Casualty records view.
 - Casualty attachment preview and expanded viewer.
 - Verification review with approve, reject, and delete workflows.
-- Match Casing for connecting FR, SAR, and HCFD records into one locked case.
+- Match Casing for connecting required FR and AMP records into one locked case, with HCFD optional.
 - Matched Cases review section.
 - Incident analytics.
 - Audit/action logs.
@@ -100,7 +100,7 @@ Current mobile capabilities:
 - Add Casualty wizard.
 - Role-specific casualty entry:
   - Field Responder.
-  - SAR/Stabilization Area Responder.
+  - AMP/Advanced Medical Responder.
   - Healthcare Facility Documenter.
 - Incident selection.
 - Cached incident support for offline use after incident data has been loaded.
@@ -198,12 +198,12 @@ Primary client: Web dashboard.
 
 Capabilities:
 
-- Create and manage Field Responder, SAR, and HCFD accounts.
+- Create and manage Field Responder, AMP, and HCFD accounts.
 - Create and manage official incidents.
 - Manage healthcare facility references.
 - Review casualty records.
 - Verify, reject, or delete casualty records.
-- Match FR, SAR, and HCFD records into locked matched cases.
+- Match required FR and AMP records into locked matched cases, with HCFD optional.
 - View incident analytics.
 - Export scoped operational data.
 - View audit logs for the admin unit and created users.
@@ -222,13 +222,13 @@ Capabilities:
 - Retry failed submissions.
 - View own role-scoped records.
 
-### SAR / Stabilization Area Responder
+### AMP / Advanced Medical Responder
 
 Primary client: Mobile/PWA app.
 
 Capabilities:
 
-- Create SAR/Stabilization casualty records.
+- Create AMP/Stabilization casualty records.
 - Record stabilization, transport, and scene-side details.
 - Attach casualty photos.
 - Queue casualty submissions while offline.
@@ -337,7 +337,7 @@ Admins create operational accounts from the web dashboard.
 Supported new account roles:
 
 - Field Responder.
-- SAR Responder.
+- AMP Responder.
 - Healthcare Facility Documenter.
 
 The web dashboard also supports bulk import with preview and row validation. Existing legacy responder accounts remain editable.
@@ -379,19 +379,19 @@ Match Casing links separate role records for the same real-world casualty.
 
 Current rule:
 
-- A new matched case must include exactly:
+- A new matched case must include:
   - One Field Responder record.
-  - One SAR record.
-  - One HCFD record.
+  - One Advanced Medical Responder (AMP) record.
+  - Optional: one HCFD record.
 
 Dashboard behavior:
 
-- The Match Casing page shows available record counts and three required role boxes.
+- The Match Casing page shows available record counts, required FR and AMP boxes, and an optional HCFD box.
 - Each role box has an add button.
 - Clicking add opens a role-specific picker.
 - Already selected and already matched records are hidden from picker options.
 - A selected record can be replaced before submission.
-- The match button is enabled only when all three role boxes are filled.
+- The match button is enabled once the required FR and AMP boxes are filled.
 - Submitted matched cases are locked and cannot be undone.
 - Completed matches appear under the separate Matched Cases section.
 
@@ -620,7 +620,7 @@ npm.cmd run build
 - Offline queue and retry behavior.
 - Audit logs for traceability.
 - Export and backup support.
-- Complete-case Match Casing for FR/SAR/HCFD records.
+- Complete-case Match Casing for required FR/AMP records, with optional HCFD linkage.
 - Incident analytics and operational dashboard views.
 
 ## 15. Current Limitations And Recommended Next Work

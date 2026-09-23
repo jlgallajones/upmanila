@@ -7,7 +7,7 @@ For one-file PDF export, open `SYSTEM_ARCHITECTURE_AND_DATABASE_SCHEMA_PRINT.htm
 The diagrams are based on the current project structure:
 
 - `website/` - Web dashboard for admins and super admins.
-- `mobile/` - Expo React Native / PWA app for Field Responders, SAR, and HCFD users.
+- `mobile/` - Expo React Native / PWA app for Field Responders, AMP, and HCFD users.
 - `api/` - Node/Express API.
 - Supabase - Auth, PostgreSQL, Storage, and Realtime.
 
@@ -17,7 +17,7 @@ The diagrams are based on the current project structure:
 flowchart TD
   subgraph Clients["Client Layer"]
     Web["Web Dashboard\nHTML/CSS/JS\nAdmin + Super Admin"]
-    Mobile["Mobile/PWA App\nExpo React Native\nFR + SAR + HCFD"]
+    Mobile["Mobile/PWA App\nExpo React Native\nFR + AMP + HCFD"]
   end
 
   subgraph ApiLayer["Application Layer"]
@@ -619,17 +619,17 @@ flowchart TD
   RoleCheck -->|super_admin| SuperAdminAccess["System-wide admin account, backup, logs, reopen approval"]
   RoleCheck -->|admin / administrator| AdminScope["Admin-scoped incidents, accounts, records, facilities, analytics"]
   RoleCheck -->|field_responder| FRScope["Own FR casualty submissions and records"]
-  RoleCheck -->|sa_responder| SARScope["Own SAR casualty submissions and records"]
+  RoleCheck -->|sa_responder| AMPScope["Own AMP casualty submissions and records"]
   RoleCheck -->|documenter| HCFDScope["Own HCFD casualty submissions and records"]
   RoleCheck -->|legacy responder| AssignmentCheck["Check stored responder assignment"]
 
   AssignmentCheck -->|field_responder| FRScope
-  AssignmentCheck -->|sa_responder| SARScope
+  AssignmentCheck -->|sa_responder| AMPScope
 
   SuperAdminAccess --> Controller["Controller Operation"]
   AdminScope --> Controller
   FRScope --> Controller
-  SARScope --> Controller
+  AMPScope --> Controller
   HCFDScope --> Controller
   Controller --> DB[("Supabase PostgreSQL")]
 ```
@@ -658,8 +658,8 @@ flowchart TD
 
 - `casualties` stores person-level identity data.
 - `casualty_incidents` stores incident-specific casualty records, including status, severity, encoder, location, and verification state.
-- FR, SAR, and HCFD records remain separate records after role separation.
-- `casualty_case_links` connects separate FR, SAR, and HCFD records into one matched case without merging or deleting the original records.
+- FR, AMP, and HCFD records remain separate records after role separation.
+- `casualty_case_links` connects required FR and AMP records, plus an optional HCFD record, into one matched case without merging or deleting the original records.
 - `attachments` stores metadata, while Supabase Storage stores the actual files.
 - `audit_logs` stores cross-device actions for traceability.
 - `form_drafts` stores saved draft payloads.

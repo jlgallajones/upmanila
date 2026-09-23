@@ -17,6 +17,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
+  getNextCasualtyIdSequence,
   getCasualties,
   type CasualtyRecord,
 } from "../../api/casualties";
@@ -41,6 +42,7 @@ import {
   getQueuedCasualtySubmissions,
   retryQueuedCasualtySubmission,
   syncQueuedCasualtySubmissions,
+  updateQueuedCasualtyVictimCode,
   type QueuedCasualtySubmission,
 } from "../../offline/casualtyQueue";
 
@@ -210,6 +212,90 @@ function getInitials(name: string): string {
     .join("");
 
   return initials || "UC";
+}
+
+type QueuedVictimCodeCorrection = {
+  queueId: string;
+  oldVictimCode: string;
+  newVictimCode: string;
+  userCode: string;
+};
+
+function formatCasualtyIdDate(date = new Date()): string {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const year = String(date.getFullYear()).slice(-2);
+
+  return `${month}${day}${year}`;
+}
+
+function extractQueuedVictimCode(
+  item: QueuedCasualtySubmission,
+): string {
+  const notes = item.payload.triageAssessment?.notes ?? "";
+  const noteMatch = /Victim code:\s*([^\r\n]+)/i.exec(notes);
+  const noteCode = noteMatch?.[1]?.trim();
+
+  return noteCode || item.payload.person.idNumber?.trim() || "";
+}
+
+function parseVictimCodeParts(
+  victimCode: string,
+): { userCode: string; sequence: number } | null {
+  const match = /^([A-Z]+)(\d+)$/i.exec(victimCode.trim());
+
+  if (!match) {
+    return null;
+  }
+
+  const sequence = Number(match[2]);
+
+  if (!Number.isFinite(sequence) || sequence < 1) {
+    return null;
+  }
+
+  return {
+    userCode: match[1].toUpperCase(),
+    sequence,
+  };
+}
+
+function confirmQueuedVictimCodeCorrections(
+  corrections: QueuedVictimCodeCorrection[],
+): Promise<boolean> {
+  if (corrections.length === 0) {
+    return Promise.resolve(true);
+  }
+
+  const preview = corrections
+    .slice(0, 5)
+    .map(
+      (correction) =>
+        `${correction.oldVictimCode} will be changed to ${correction.newVictimCode}`,
+    )
+    .join("\n");
+  const extra =
+    corrections.length > 5
+      ? `\n...and ${corrections.length - 5} more.`
+      : "";
+
+  return new Promise((resolve) => {
+    Alert.alert(
+      "Update offline victim code?",
+      `${preview}${extra}\n\nThe saved offline record already uses a victim code that exists online for this incident. The app will update both the victim code and internal ID number before syncing.`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+          onPress: () => resolve(false),
+        },
+        {
+          text: "Update and sync",
+          onPress: () => resolve(true),
+        },
+      ],
+    );
+  });
 }
 
 function getLocation(record: CasualtyRecord): string {
@@ -976,7 +1062,7 @@ function QueuedCasualtyCard({
               ? "Failed"
               : item.status === "syncing" || isRetrying
                 ? "Syncing"
-                : "Queued"}
+                : "Submitted offline"}
           </Text>
 
           <Text style={styles.timeText}>
@@ -1041,7 +1127,7 @@ function QueuedCasualtyCard({
           ]}
         >
           <Text style={styles.queuedRetryButtonText}>
-            {isRetrying ? "Retrying..." : "Retry sync"}
+            {isRetrying ? "Syncing..." : "Sync now"}
           </Text>
         </Pressable>
       ) : null}
@@ -1499,6 +1585,70 @@ export default function RecordsScreen() {
     }
   }, [loadQueuedSubmissions]);
 
+  const prepareQueuedVictimCodeCorrections = useCallback(
+    async (
+      items: QueuedCasualtySubmission[],
+    ): Promise<QueuedVictimCodeCorrection[]> => {
+      const nextSequenceByIncidentAndUser = new Map<string, number>();
+      const corrections: QueuedVictimCodeCorrection[] = [];
+      const dateCode = formatCasualtyIdDate();
+
+      for (const item of items) {
+        const incidentId = item.payload.incidentId;
+        const victimCode = extractQueuedVictimCode(item);
+        const parsedCode = parseVictimCodeParts(victimCode);
+
+        if (!incidentId || !parsedCode) {
+          continue;
+        }
+
+        const key = `${incidentId}:${parsedCode.userCode}`;
+        let nextSequence = nextSequenceByIncidentAndUser.get(key);
+
+        if (!nextSequence) {
+          nextSequence = await getNextCasualtyIdSequence(
+            parsedCode.userCode,
+            dateCode,
+            {
+              incidentId,
+            },
+          );
+        }
+
+        if (parsedCode.sequence < nextSequence) {
+          const correctedCode = `${parsedCode.userCode}${nextSequence}`;
+          corrections.push({
+            queueId: item.id,
+            oldVictimCode: victimCode,
+            newVictimCode: correctedCode,
+            userCode: parsedCode.userCode,
+          });
+          nextSequence += 1;
+        } else {
+          nextSequence = parsedCode.sequence + 1;
+        }
+
+        nextSequenceByIncidentAndUser.set(key, nextSequence);
+      }
+
+      return corrections;
+    },
+    [],
+  );
+
+  const applyQueuedVictimCodeCorrections = useCallback(
+    async (corrections: QueuedVictimCodeCorrection[]) => {
+      for (const correction of corrections) {
+        await updateQueuedCasualtyVictimCode(
+          correction.queueId,
+          correction.newVictimCode,
+          correction.userCode,
+        );
+      }
+    },
+    [],
+  );
+
   useFocusEffect(
     useCallback(() => {
     let isMounted = true;
@@ -1611,6 +1761,22 @@ export default function RecordsScreen() {
         setSyncingQueueId(queueId);
         setQueueMessage(null);
 
+        const queuedItem = queuedSubmissions.find(
+          (item) => item.id === queueId,
+        );
+        const corrections = queuedItem
+          ? await prepareQueuedVictimCodeCorrections([queuedItem])
+          : [];
+        const confirmed =
+          await confirmQueuedVictimCodeCorrections(corrections);
+
+        if (!confirmed) {
+          setQueueMessage("Sync cancelled. Offline record was not changed.");
+          return;
+        }
+
+        await applyQueuedVictimCodeCorrections(corrections);
+
         const result =
           await retryQueuedCasualtySubmission(queueId);
 
@@ -1640,13 +1806,31 @@ export default function RecordsScreen() {
         setSyncingQueueId(null);
       }
     },
-    [loadQueuedSubmissions, loadRecords],
+    [
+      applyQueuedVictimCodeCorrections,
+      loadQueuedSubmissions,
+      loadRecords,
+      prepareQueuedVictimCodeCorrections,
+      queuedSubmissions,
+    ],
   );
 
   const handleRetryAllQueuedSubmissions = useCallback(async () => {
     try {
       setIsRetryingAllQueued(true);
       setQueueMessage(null);
+
+      const corrections =
+        await prepareQueuedVictimCodeCorrections(queuedSubmissions);
+      const confirmed =
+        await confirmQueuedVictimCodeCorrections(corrections);
+
+      if (!confirmed) {
+        setQueueMessage("Sync cancelled. Offline records were not changed.");
+        return;
+      }
+
+      await applyQueuedVictimCodeCorrections(corrections);
 
       const result = await syncQueuedCasualtySubmissions();
 
@@ -1682,7 +1866,13 @@ export default function RecordsScreen() {
     } finally {
       setIsRetryingAllQueued(false);
     }
-  }, [loadQueuedSubmissions, loadRecords]);
+  }, [
+    applyQueuedVictimCodeCorrections,
+    loadQueuedSubmissions,
+    loadRecords,
+    prepareQueuedVictimCodeCorrections,
+    queuedSubmissions,
+  ]);
 
   const handleAssignQueuedIncident = useCallback(
     async (incident: Incident) => {
@@ -1697,7 +1887,7 @@ export default function RecordsScreen() {
         });
         setAssigningIncidentQueueId(null);
         setQueueMessage(
-          "Incident assigned. Retry sync when the connection is stable.",
+          "Incident assigned. Sync this queued record when the connection is stable.",
         );
         await loadQueuedSubmissions();
       } catch (error) {
@@ -2926,7 +3116,7 @@ function toggleHealthcareLocationFilter(
           <View style={styles.offlineQueueHeader}>
             <View style={styles.offlineQueueTitleGroup}>
               <Text style={styles.offlineQueueTitle}>
-                Offline Sync Queue
+                Submitted Offline Queue
               </Text>
               <Text style={styles.offlineQueueSubtitle}>
                 {pendingQueuedCount} pending {"\u00B7"}{" "}
@@ -2947,14 +3137,15 @@ function toggleHealthcareLocationFilter(
               ]}
             >
               <Text style={styles.offlineQueueRetryAllText}>
-                {isRetryingAllQueued ? "Syncing..." : "Retry all"}
+                {isRetryingAllQueued ? "Syncing..." : "Sync all queued"}
               </Text>
             </Pressable>
           </View>
 
           <Text style={styles.offlineQueueMessage}>
-            These victim records are saved on this device and will appear
-            in the dashboard after they sync.
+            These are submitted offline records waiting to sync to the
+            server. They are not editable drafts and will appear in the
+            dashboard after successful sync.
           </Text>
 
           {queueMessage ? (

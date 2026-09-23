@@ -9,7 +9,7 @@ The Disaster Casualty Management System, or DCMS, helps responders and administr
 The system has two main user interfaces:
 
 - **Web Dashboard** for super admins and admins.
-- **Mobile/PWA App** for Field Responders, SAR/Stabilization Area Responders, and Healthcare Facility Documenters.
+- **Mobile/PWA App** for Field Responders, Advanced Medical Responders (AMP; previously SAR/Stabilization Area Responders), and Healthcare Facility Documenters.
 
 ## 2. User Roles
 
@@ -27,12 +27,12 @@ Uses the web dashboard to:
 
 Uses the web dashboard to:
 
-- Create and manage Field Responder, SAR, and HCFD accounts.
+- Create and manage Field Responder, AMP, and HCFD accounts.
 - Create official incidents.
 - Manage healthcare facilities.
 - Review casualty records.
 - Verify, reject, or delete casualty submissions.
-- Match FR, SAR, and HCFD casualty records into one matched case.
+- Match required FR and AMP casualty records into one matched case, with HCFD optional.
 - View incident analytics.
 - Export scoped records.
 - View action logs.
@@ -47,11 +47,11 @@ Uses the mobile/PWA app to:
 - Submit records online or queue records offline.
 - View synced and queued records.
 
-### SAR / Stabilization Area Responder
+### AMP / Advanced Medical Responder
 
 Uses the mobile/PWA app to:
 
-- Add SAR/Stabilization casualty records.
+- Add AMP/Stabilization casualty records.
 - Record stabilization, transport, and related field data.
 - Attach casualty photos.
 - Submit records online or queue records offline.
@@ -119,7 +119,7 @@ Steps:
 2. Enter the account user's full name and email.
 3. Select the account role:
    - Field Responder.
-   - SAR Responder.
+   - AMP Responder.
    - Healthcare Facility Documenter.
 4. Enter a temporary password.
 5. Use the show/hide password control if needed.
@@ -129,7 +129,7 @@ Steps:
 
 Notes:
 
-- New responder accounts should use Field Responder or SAR, not the legacy responder role.
+- New responder accounts should use Field Responder or AMP, not the legacy responder role.
 - Existing legacy accounts remain visible for compatibility.
 - Admins may edit existing accounts when needed.
 - Temporary passwords are not stored in saved drafts. Type the password when creating the account.
@@ -205,7 +205,7 @@ Steps:
 3. Select a casualty record.
 4. Review role sections:
    - Field Responder.
-   - SAR.
+   - AMP.
    - Healthcare Facility Documenter.
 5. Open attachments if present.
 6. If the record is part of a matched case, review the **Matched Case** section.
@@ -262,15 +262,16 @@ Match Casing
 
 Purpose:
 
-Match Casing connects three separate records for the same casualty:
+Match Casing connects separate role records for the same casualty:
 
 - One Field Responder record.
-- One SAR record.
-- One HCFD record.
+- One Advanced Medical Responder (AMP) record.
+- Optional: one HCFD record when the healthcare facility submission is already available.
 
 Rules:
 
-- All three roles must be filled before matching.
+- FR and AMP must be filled before matching.
+- HCFD can be added, but it is not required to complete the match.
 - The selected records must belong to the same incident.
 - Already matched records cannot be selected again.
 - A selected record can be replaced before matching.
@@ -283,9 +284,9 @@ Steps:
 3. Review the available record count.
 4. In the Field Responder box, click the large add button.
 5. Select one Field Responder record from the popup.
-6. Repeat for SAR.
-7. Repeat for HCFD.
-8. Confirm all three boxes are filled.
+6. Repeat for AMP.
+7. Add HCFD only if that record is already available.
+8. Confirm the required FR and AMP boxes are filled.
 9. Click **Match selected records** at the bottom.
 10. The completed match appears in **Matched Cases**.
 
@@ -489,7 +490,7 @@ Steps:
 Role behavior:
 
 - Field Responder sees Field Responder casualty fields.
-- SAR sees SAR/Stabilization casualty fields.
+- AMP sees AMP/Stabilization casualty fields.
 - HCFD sees Healthcare Facility Documenter fields.
 
 ### 5.4 Mobile Drafts
@@ -581,7 +582,7 @@ Use Profile to:
 - Confirm assigned role.
 - Confirm account/session status.
 
-For new Field Responder and SAR accounts, the operational role is assigned by the admin and cannot be switched from the device.
+For new Field Responder and AMP accounts, the operational role is assigned by the admin and cannot be switched from the device.
 
 ## 6. Common Troubleshooting
 
@@ -595,7 +596,7 @@ If requests point to Render but local testing is needed:
 - Restart the local API.
 - Refresh the dashboard.
 
-### New FR/SAR account creation fails
+### New FR/AMP account creation fails
 
 Possible cause:
 
@@ -614,7 +615,7 @@ Check:
 
 - The selected incident filter.
 - Whether records already belong to a matched case.
-- Whether all three roles have submitted records.
+- Whether the required FR and AMP roles have submitted records.
 - Whether the records are visible within the current admin scope.
 
 ### Cannot match case
@@ -622,9 +623,9 @@ Check:
 The system requires:
 
 - One Field Responder record.
-- One SAR record.
-- One HCFD record.
-- Same incident for all three.
+- One Advanced Medical Responder (AMP) record.
+- Optional: one HCFD record.
+- Same incident for all selected records.
 - No selected record already matched.
 
 ### Mobile offline cannot select incident
@@ -653,11 +654,11 @@ Check:
 
 1. Login as admin on the web dashboard.
 2. Create or show an incident.
-3. Show account management with FR, SAR, and HCFD roles.
+3. Show account management with FR, AMP, and HCFD roles.
 4. Login on mobile as Field Responder and submit a casualty with photo.
-5. Submit related SAR and HCFD records.
+5. Submit a related AMP record, and optionally an HCFD record.
 6. Show the records in the web dashboard.
-7. Open Match Casing and fill the three role boxes.
+7. Open Match Casing and fill the required FR and AMP boxes.
 8. Submit the matched case.
 9. Open Matched Cases.
 10. Open the casualty record and show combined role sections.

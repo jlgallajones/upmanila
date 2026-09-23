@@ -167,6 +167,39 @@ function generateQueuedSyncIdNumber(): string {
   return `CAS-SYNC-${Date.now()}-${randomPart}`;
 }
 
+function replaceOrAppendFieldResponderCodeNotes(
+  notes: string | undefined,
+  victimCode: string,
+  userCode: string,
+): string {
+  const baseNotes = notes ?? "";
+  let nextNotes = baseNotes;
+
+  if (/Victim code:\s*[^\r\n]*/i.test(nextNotes)) {
+    nextNotes = nextNotes.replace(
+      /Victim code:\s*[^\r\n]*/i,
+      `Victim code: ${victimCode}`,
+    );
+  } else {
+    nextNotes = [nextNotes.trim(), `[Field Responder Codes]\nVictim code: ${victimCode}`]
+      .filter(Boolean)
+      .join("\n\n");
+  }
+
+  if (/User code:\s*[^\r\n]*/i.test(nextNotes)) {
+    nextNotes = nextNotes.replace(
+      /User code:\s*[^\r\n]*/i,
+      `User code: ${userCode}`,
+    );
+  } else {
+    nextNotes = [nextNotes.trim(), `User code: ${userCode}`]
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  return nextNotes;
+}
+
 export async function queueCasualtySubmission(
   payload: QueuedCasualtyPayload,
   options: { attachments?: QueuedCasualtyAttachment[] } = {},
@@ -215,6 +248,45 @@ export async function assignQueuedCasualtyIncident(
               ...item.payload,
               incidentId: incident.id,
               offlineIncidentName: incident.name,
+            },
+            status: "pending",
+            updatedAt: now,
+            lastError: undefined,
+          }
+        : item,
+    ),
+  );
+}
+
+export async function updateQueuedCasualtyVictimCode(
+  queueId: string,
+  victimCode: string,
+  userCode: string,
+): Promise<void> {
+  const queue = await readQueue();
+  const now = new Date().toISOString();
+
+  await writeQueue(
+    queue.map((item) =>
+      item.id === queueId
+        ? {
+            ...item,
+            payload: {
+              ...item.payload,
+              person: {
+                ...item.payload.person,
+                idNumber: victimCode,
+              },
+              triageAssessment: item.payload.triageAssessment
+                ? {
+                    ...item.payload.triageAssessment,
+                    notes: replaceOrAppendFieldResponderCodeNotes(
+                      item.payload.triageAssessment.notes,
+                      victimCode,
+                      userCode,
+                    ),
+                  }
+                : item.payload.triageAssessment,
             },
             status: "pending",
             updatedAt: now,

@@ -775,3 +775,27 @@ Create a short checklist for the exact demo flow:
 **Solution:** Unhid the secondary triage systems for SAR accounts. SAVE, SORT, and META remain assisted systems, with SORT upgraded to collect Eye, Verbal, and Motor GCS components and calculate the SORT score from GCS, respiratory rate, and systolic blood pressure. SwiFT, SMART, and Other now open a manual final-triage assessment with explanatory messaging instead of pretending to calculate a result. Mobile and API triage calculation logic were aligned, and API tests were added for SORT component scoring and manual final-triage mapping.
 
 **Status:** Implemented.
+
+## 92. Closed Incidents Still Allowed Incident Management Edits
+
+**Problem:** After closing an incident from the web dashboard, editable Incident Management sections such as Response Timeline could still be opened in edit mode and saved.
+
+**Solution:** Closed and archived incidents now render Incident Management sections as view-only. Editable section launchers show a locked-after-closure subtitle, section modals display a view-only warning, Edit/Save buttons are hidden, and submit/edit handlers block stale attempts to modify locked incidents.
+
+**Status:** Implemented.
+
+## 93. Match Casing Required HCFD Even When Only FR And AMP Should Be Mandatory
+
+**Problem:** Web Match Casing and the API both required exactly three role records: Field Responder, Advanced Medical Responder, and HCFD. This blocked completing a matched victim case when the required FR and AMP records existed but no HCFD record was available yet.
+
+**Solution:** Updated Match Casing so Field Responder and Advanced Medical Responder are the only required slots. HCFD now appears as an optional slot in the web dashboard, and the API accepts either a two-record FR+AMP match or a three-record FR+AMP+HCFD match while still rejecting duplicate roles and unsupported record roles.
+
+**Status:** Implemented.
+
+## 94. FR Victim Codes Did Not Advance Per Incident And Offline Sync Needed Safe Correction
+
+**Problem:** Field Responder victim codes were generated from a global/date-based sequence and could stay on the same value after submission. Offline queued records could later collide with synced records for the same incident.
+
+**Solution:** FR victim codes now use the logged-in responder initials plus the synced victim count for that same responder code within the selected incident, so each responder has an independent sequence per incident. The API sequence endpoint supports incident-and-user-code based counts, and duplicate ID checks are scoped to the incident. Offline queue sync now detects when a queued code is behind that same responder-code sequence, asks for confirmation, then updates both the visible victim code and internal ID number before syncing.
+
+**Status:** Implemented.

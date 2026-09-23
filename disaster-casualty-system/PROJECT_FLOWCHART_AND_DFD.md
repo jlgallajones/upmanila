@@ -28,11 +28,11 @@ flowchart TD
   WebRole -->|Admin| Admin[Incidents, Accounts, Facilities, Records, Verification, Analytics, Match Casing]
 
   MobileRole -->|Field Responder| FR[Add Field Responder Casualty Record]
-  MobileRole -->|SAR| SAR[Add SAR/Stabilization Record]
+  MobileRole -->|AMP| AMP[Add AMP/Stabilization Record]
   MobileRole -->|HCFD| HCFD[Add Healthcare Facility Record]
 
   FR --> SubmitCasualty[Submit Casualty Data]
-  SAR --> SubmitCasualty
+  AMP --> SubmitCasualty
   HCFD --> SubmitCasualty
 
   SubmitCasualty --> OnlineCheck{Online?}
@@ -79,7 +79,7 @@ flowchart TD
   AdminDashboard --> OfficialIncidents[Official Incidents / Incident History]
   AdminDashboard --> CallDownList[Call Down List]
   AdminDashboard --> Facilities[Healthcare Facilities]
-  AdminDashboard --> Accounts[FR/SAR/HCFD Accounts]
+  AdminDashboard --> Accounts[FR/AMP/HCFD Accounts]
   AdminDashboard --> Records[Casualty Records]
   AdminDashboard --> Verification[Verification Review / Records Review]
   AdminDashboard --> MatchCasing[Match Casing]
@@ -128,11 +128,11 @@ flowchart TD
 
   AddCasualty --> RoleCheck{Mobile Role}
   RoleCheck -->|Field Responder| FRForm[FR Safety, Incident, Primary/Secondary Triage, Victim Code, Photo]
-  RoleCheck -->|SAR| SARForm[SAR Info, Stabilization, Transport, PCR Photo]
+  RoleCheck -->|AMP| AMPForm[AMP Info, Stabilization, Transport, PCR Photo]
   RoleCheck -->|HCFD| HCFDForm[Facility Patient Info, Tertiary Triage, Management, Disposition]
 
   FRForm --> Submit[Submit Record]
-  SARForm --> Submit
+  AMPForm --> Submit
   HCFDForm --> Submit
 
   Submit --> NetworkCheck{API Reachable?}
@@ -154,7 +154,7 @@ flowchart LR
   SuperAdmin[Super Admin]
   Admin[Admin]
   FR[Field Responder]
-  SAR[SAR Responder]
+  AMP[AMP Responder]
   HCFD[Healthcare Facility Documenter]
 
   System((DCMS Platform))
@@ -167,7 +167,7 @@ flowchart LR
   SuperAdmin -->|Admin account actions, backup requests, reopen approvals| System
   Admin -->|Incidents, accounts, facilities, review, analytics, match casing| System
   FR -->|Field casualty records, photos, safety responses| System
-  SAR -->|SAR casualty records, stabilization, transport, photos| System
+  AMP -->|AMP casualty records, stabilization, transport, photos| System
   HCFD -->|Facility casualty records, treatment/outcome data, photos| System
 
   System -->|Authentication| SupabaseAuth
@@ -178,7 +178,7 @@ flowchart LR
   System -->|Dashboards, records, feedback, reports| SuperAdmin
   System -->|Dashboards, records, analytics, action logs| Admin
   System -->|Submission status, records, notifications| FR
-  System -->|Submission status, records, notifications| SAR
+  System -->|Submission status, records, notifications| AMP
   System -->|Submission status, records, notifications| HCFD
 ```
 
@@ -256,7 +256,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  MobileUser[FR / SAR / HCFD User]
+  MobileUser[FR / AMP / HCFD User]
 
   P1((1. Login And Load Profile))
   P2((2. Load Incidents And Dashboard))
@@ -415,12 +415,12 @@ sequenceDiagram
 flowchart TD
   Admin[Admin Opens Match Casing] --> SelectIncident[Select Incident Filter]
   SelectIncident --> FRBox[Choose One Field Responder Record]
-  SelectIncident --> SARBox[Choose One SAR Record]
-  SelectIncident --> HCFDBox[Choose One HCFD Record]
+  SelectIncident --> AMPBox[Choose One AMP Record]
+  SelectIncident --> HCFDBox[Optional HCFD Record]
 
-  FRBox --> CompleteCheck{All 3 Roles Selected?}
-  SARBox --> CompleteCheck
-  HCFDBox --> CompleteCheck
+  FRBox --> CompleteCheck{Required FR And AMP Selected?}
+  AMPBox --> CompleteCheck
+  HCFDBox -. Optional .-> SubmitMatch
 
   CompleteCheck -->|No| Wait[Match Button Disabled]
   CompleteCheck -->|Yes| SubmitMatch[Click Match Selected Records]
@@ -429,7 +429,7 @@ flowchart TD
   API --> Validate[Validate Same Incident And Unmatched Records]
   Validate --> CaseLinkDB[(casualty_case_links)]
   CaseLinkDB --> Locked[Matched Case Locked]
-  Locked --> RecordsView[Casualty Record Shows Linked FR/SAR/HCFD Sections]
+  Locked --> RecordsView[Casualty Record Shows Linked FR/AMP Sections And Optional HCFD Section]
   Locked --> MatchedCases[Matched Cases Section]
 ```
 
@@ -464,13 +464,13 @@ flowchart TD
 | `casualties` | Person-level casualty identity/demographic information. |
 | `casualty_incidents` | Incident-specific casualty record, status, severity, encoder, location, verification status. |
 | `casualty_triage_assessments` | Primary, secondary, and tertiary triage assessment data. |
-| `casualty_transport_records` | SAR/transport movement and receiving facility details. |
+| `casualty_transport_records` | AMP/transport movement and receiving facility details. |
 | `casualty_treatments` | Stabilization/treatment/PCR-related data. |
 | `facility_encounters` | HCFD arrival, ED care, admission, management, ICU, and disposition data. |
 | `casualty_outcomes` | Final outcome/death/disposition details. |
 | `attachments` | Attachment metadata linked to casualty records. |
 | Supabase Storage | Actual uploaded attachment files/photos. |
-| `casualty_case_links` | Manual match casing links between FR, SAR, and HCFD records. |
+| `casualty_case_links` | Manual match casing links between required FR and AMP records, with optional HCFD records. |
 | `healthcare_facilities` | Facility reference list. |
 | `call_down_staff` | Reusable staff contact list, including staff without login accounts. |
 | `dmmp_staff_call_downs` | Incident-specific call-down response, contacted, arrived, status, and arrival time. |

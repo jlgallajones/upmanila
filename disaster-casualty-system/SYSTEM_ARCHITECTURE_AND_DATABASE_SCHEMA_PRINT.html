@@ -146,7 +146,7 @@
 flowchart TD
   subgraph Clients["Client Layer"]
     Web["Web Dashboard&lt;br/&gt;HTML/CSS/JS&lt;br/&gt;Admin + Super Admin"]
-    Mobile["Mobile/PWA App&lt;br/&gt;Expo React Native&lt;br/&gt;FR + SAR + HCFD"]
+    Mobile["Mobile/PWA App&lt;br/&gt;Expo React Native&lt;br/&gt;FR + AMP + HCFD"]
   end
 
   subgraph ApiLayer["Application Layer"]
@@ -722,15 +722,15 @@ flowchart TD
   RoleCheck -->|super_admin| SuperAdminAccess["System-wide admin account, backup, logs, reopen approval"]
   RoleCheck -->|admin / administrator| AdminScope["Admin-scoped incidents, accounts, records, facilities, analytics"]
   RoleCheck -->|field_responder| FRScope["Own FR casualty submissions and records"]
-  RoleCheck -->|sa_responder| SARScope["Own SAR casualty submissions and records"]
+  RoleCheck -->|sa_responder| AMPScope["Own AMP casualty submissions and records"]
   RoleCheck -->|documenter| HCFDScope["Own HCFD casualty submissions and records"]
   RoleCheck -->|legacy responder| AssignmentCheck["Check stored responder assignment"]
   AssignmentCheck -->|field_responder| FRScope
-  AssignmentCheck -->|sa_responder| SARScope
+  AssignmentCheck -->|sa_responder| AMPScope
   SuperAdminAccess --> Controller["Controller Operation"]
   AdminScope --> Controller
   FRScope --> Controller
-  SARScope --> Controller
+  AMPScope --> Controller
   HCFDScope --> Controller
   Controller --> DB[("Supabase PostgreSQL")]
       </pre>
@@ -760,8 +760,8 @@ flowchart TD
       <ul>
         <li><strong>casualties</strong> stores person-level identity data.</li>
         <li><strong>casualty_incidents</strong> stores incident-specific casualty records, including status, severity, encoder, location, and verification state.</li>
-        <li>FR, SAR, and HCFD records remain separate after role separation.</li>
-        <li><strong>casualty_case_links</strong> connects separate FR, SAR, and HCFD records into one matched case without merging or deleting the original records.</li>
+        <li>FR, AMP, and HCFD records remain separate after role separation.</li>
+        <li><strong>casualty_case_links</strong> connects required FR and AMP records, plus an optional HCFD record, into one matched case without merging or deleting the original records.</li>
         <li><strong>attachments</strong> stores metadata, while Supabase Storage stores the actual files.</li>
         <li><strong>audit_logs</strong> stores cross-device actions for traceability.</li>
         <li><strong>form_drafts</strong> stores saved draft payloads.</li>

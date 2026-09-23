@@ -495,6 +495,7 @@ export async function getCasualties(
 export async function getNextCasualtyIdSequence(
   userCode: string,
   dateCode: string,
+  options: { incidentId?: string } = {},
 ): Promise<number> {
   const response = await api.get<NextCasualtyIdSequenceResponse>(
     "/casualties/next-id-sequence",
@@ -502,6 +503,7 @@ export async function getNextCasualtyIdSequence(
       params: {
         userCode,
         dateCode,
+        incidentId: options.incidentId,
       },
     },
   );

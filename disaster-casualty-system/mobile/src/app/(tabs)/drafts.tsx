@@ -89,7 +89,7 @@ async function confirmDeleteDraft() {
         <Text style={styles.eyebrow}>Local Drafts</Text>
         <Text style={styles.title}>Drafts</Text>
         <Text style={styles.subtitle}>
-          Drafts are saved on this device and are only visible to the account that created them.
+          Drafts are unfinished forms saved on this device. They are not submitted or queued for sync, and only the creator account can see them.
         </Text>
       </View>
 
@@ -106,7 +106,7 @@ async function confirmDeleteDraft() {
             />
             <Text style={styles.emptyTitle}>No drafts yet</Text>
             <Text style={styles.emptyText}>
-              Use Save Draft while adding a victim to store unfinished work.
+              Use Save Draft while adding a victim to pause and continue later before submitting.
             </Text>
           </View>
         }
@@ -442,4 +442,3 @@ disabledButton: {
   opacity: 0.55,
 },
 });
-

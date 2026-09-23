@@ -74,7 +74,6 @@ import {
 } from "../../auth/session";
 import {
   isNetworkSubmissionError,
-  getQueuedCasualtySubmissions,
   queueCasualtySubmission,
   type QueuedCasualtyAttachment,
   type QueuedCasualtyPayload,
@@ -4146,32 +4145,6 @@ function generateVictimCode(
   )}`;
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function getCasualtyIdSequence(
-  idNumber: string | null | undefined,
-  dateCode = formatCasualtyIdDate(),
-  userCode = "",
-): number {
-  const normalizedUserCode = normalizeCasualtyUserCode(userCode);
-  const match = new RegExp(
-    `^CAS:${escapeRegExp(dateCode)}:${escapeRegExp(
-      normalizedUserCode,
-    )}(\\d{3,})$`,
-    "i",
-  ).exec(idNumber ?? "");
-
-  if (!match) {
-    return 0;
-  }
-
-  const sequence = Number(match[1]);
-
-  return Number.isFinite(sequence) ? sequence : 0;
-}
-
 function isGeneratedCasualtyIdNumber(
   idNumber: string | null | undefined,
 ): boolean {
@@ -6226,35 +6199,25 @@ const victimCodeAlreadyExists = useMemo(() => {
     async function loadNextCasualtySequence() {
       const dateCode = formatCasualtyIdDate();
       const userCode = normalizeCasualtyUserCode(generatedUserCode);
-      const queuedRecords = await getQueuedCasualtySubmissions();
-      let highestSequence = queuedRecords.reduce((highest, item) => {
-        return Math.max(
-          highest,
-          getCasualtyIdSequence(
-            item.payload.person.idNumber,
-            dateCode,
-            userCode,
-          ),
-        );
-      }, 0);
+      let nextSequence = 1;
 
       if (currentUserId) {
         try {
           const serverNextSequence = await getNextCasualtyIdSequence(
             userCode,
             dateCode,
+            {
+              incidentId: form.incidentId || undefined,
+            },
           );
-          highestSequence = Math.max(
-            highestSequence,
-            serverNextSequence - 1,
-          );
+          nextSequence = serverNextSequence;
         } catch (error) {
           console.warn("Unable to count synced victim IDs:", error);
         }
       }
 
       if (isMounted) {
-        setNextCasualtySequence(highestSequence + 1);
+        setNextCasualtySequence(nextSequence);
       }
     }
 
@@ -6263,7 +6226,13 @@ const victimCodeAlreadyExists = useMemo(() => {
     return () => {
       isMounted = false;
     };
-  }, [currentUserId, generatedUserCode, isEditing, isSaResponderFlow]);
+  }, [
+    currentUserId,
+    form.incidentId,
+    generatedUserCode,
+    isEditing,
+    isSaResponderFlow,
+  ]);
 
   useEffect(() => {
     if (isEditing) {
@@ -6279,19 +6248,21 @@ const victimCodeAlreadyExists = useMemo(() => {
           ? generateVictimCode(generatedUserCode, nextCasualtySequence)
           : current.victimCode,
       idNumber:
-        current.idNumber &&
-        !isGeneratedCasualtyIdNumber(current.idNumber) &&
-        !(isSaResponderFlow && current.idNumber.startsWith("CAS-UNIT-"))
-          ? current.idNumber
-          : isSaResponderFlow
-            ? generateCasualtyUnitIdNumber(
-                currentAssignedMunicipality,
-                currentAssignedBarangay,
-              )
-            : generateCasualtyIdNumber(
-                generatedUserCode,
-                nextCasualtySequence,
-              ),
+        isFieldResponderFlow
+          ? generateVictimCode(generatedUserCode, nextCasualtySequence)
+          : current.idNumber &&
+              !isGeneratedCasualtyIdNumber(current.idNumber) &&
+              !(isSaResponderFlow && current.idNumber.startsWith("CAS-UNIT-"))
+            ? current.idNumber
+            : isSaResponderFlow
+              ? generateCasualtyUnitIdNumber(
+                  currentAssignedMunicipality,
+                  currentAssignedBarangay,
+                )
+              : generateCasualtyIdNumber(
+                  generatedUserCode,
+                  nextCasualtySequence,
+                ),
     }));
   }, [
     currentAssignedBarangay,
@@ -7399,7 +7370,9 @@ function handleTriageAssessmentDone() {
           new Date(responderSafetyResponse.ppe_used_at),
         )
       : "",
-      idNumber: isSaResponderFlow
+      idNumber: isFieldResponderFlow
+        ? generateVictimCode(generatedUserCode, sequence)
+        : isSaResponderFlow
         ? generateCasualtyUnitIdNumber(
             currentAssignedMunicipality,
             currentAssignedBarangay,
@@ -11210,9 +11183,9 @@ async function ensureResponderSafetyResponseSaved() {
           }
 
           setSubmissionFeedback({
-            title: "Saved on this device",
+            title: "Submitted offline",
             message:
-              "The victim record was saved locally. Log in from Profile later to sync records to DCMS.",
+              "The victim record was submitted offline and queued on this device. Log in from Profile later to sync queued records to DCMS.",
             resetOnClose: shouldResetPendingDepartureForm ? false : undefined,
           });
         } catch (error) {
@@ -11244,7 +11217,7 @@ async function ensureResponderSafetyResponseSaved() {
             setSubmissionFeedback({
               title: "Saved offline",
               message:
-                "No incident list is available on this device yet, so the victim was saved locally. When internet returns, open Records, assign the queued victim to an active incident, then retry sync.",
+                "This submitted offline record is queued on this device. When internet returns, open Records, assign the queued victim to an active incident, then sync it.",
               resetOnClose: shouldResetPendingDepartureForm
                 ? false
                 : undefined,
@@ -11346,7 +11319,7 @@ async function ensureResponderSafetyResponseSaved() {
           setSubmissionFeedback({
             title: "Saved offline",
             message:
-              "The victim record was saved on this device and will sync when the connection is available.",
+              "The victim record was submitted offline and queued on this device. It will sync when the connection is available.",
             resetOnClose: shouldResetPendingDepartureForm ? false : undefined,
           });
           return;
@@ -11362,7 +11335,7 @@ async function ensureResponderSafetyResponseSaved() {
 
           Alert.alert(
             "Session expired",
-            "The victim record was saved on this device. Please log in again from Profile, then sync queued records.",
+            "The victim record was submitted offline and queued on this device. Please log in again from Profile, then sync queued records.",
             [
               {
                 text: "OK",

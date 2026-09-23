@@ -755,26 +755,51 @@ function trimmedOrNull(
 
 async function ensureUniqueIdNumber(
   idNumber: string | undefined,
+  incidentId: string | undefined,
   excludeCasualtyId?: string,
 ): Promise<string | null> {
   const normalizedIdNumber = idNumber?.trim();
 
-  if (!normalizedIdNumber) {
+  if (!normalizedIdNumber || !incidentId) {
     return null;
   }
 
-  let query = supabase
+  let incidentQuery = supabase
+    .from("casualty_incidents")
+    .select("casualty_id")
+    .eq("incident_id", incidentId)
+    .is("deleted_at", null);
+
+  if (excludeCasualtyId) {
+    incidentQuery = incidentQuery.neq("casualty_id", excludeCasualtyId);
+  }
+
+  const { data: incidentRows, error: incidentError } = await incidentQuery;
+
+  if (incidentError) {
+    throw new Error(
+      `Unable to check duplicate ID number: ${incidentError.message}`,
+    );
+  }
+
+  const casualtyIds = (incidentRows ?? [])
+    .map((row) => row.casualty_id)
+    .filter(
+      (value): value is string =>
+        typeof value === "string" && value.trim().length > 0,
+    );
+
+  if (casualtyIds.length === 0) {
+    return null;
+  }
+
+  const { data, error } = await supabase
     .from("casualties")
     .select("id")
+    .in("id", casualtyIds)
     .eq("id_number", normalizedIdNumber)
     .is("deleted_at", null)
     .limit(1);
-
-  if (excludeCasualtyId) {
-    query = query.neq("id", excludeCasualtyId);
-  }
-
-  const { data, error } = await query;
 
   if (error) {
     throw new Error(
@@ -796,6 +821,24 @@ function getCasualtyIdSequenceFromNumber(
 ): number {
   const match = new RegExp(
     `^CAS:${dateCode}:${userCode}(\\d{3,})$`,
+    "i",
+  ).exec(idNumber ?? "");
+
+  if (!match) {
+    return 0;
+  }
+
+  const sequence = Number(match[1]);
+
+  return Number.isFinite(sequence) ? sequence : 0;
+}
+
+function getIncidentVictimCodeSequence(
+  idNumber: string | null | undefined,
+  userCode: string,
+): number {
+  const match = new RegExp(
+    `^${userCode}(\\d+)$`,
     "i",
   ).exec(idNumber ?? "");
 
@@ -1764,19 +1807,6 @@ export async function createCasualty(
       return;
     }
 
-    const existingIdNumber = await ensureUniqueIdNumber(
-      person.idNumber,
-    );
-
-    if (existingIdNumber) {
-      response.status(409).json({
-        success: false,
-        message:
-          "A victim with this ID number already exists. Please generate a new record.",
-      });
-      return;
-    }
-
     /*
      * Confirm that the selected disaster exists and is active.
      */
@@ -1800,6 +1830,20 @@ export async function createCasualty(
         success: false,
         message:
           "Casualties can only be submitted to an active incident.",
+      });
+      return;
+    }
+
+    const existingIdNumber = await ensureUniqueIdNumber(
+      person.idNumber,
+      incidentId,
+    );
+
+    if (existingIdNumber) {
+      response.status(409).json({
+        success: false,
+        message:
+          "A victim with this ID number already exists in this incident. Please generate a new record.",
       });
       return;
     }
@@ -2285,11 +2329,23 @@ export async function matchCasualtyCaseRecords(
         ? body.notes.trim()
         : null;
 
-    if (recordIds.length !== 3) {
+    const requiredRoles: CaseMatchRoleBucket[] = [
+      "field_responder",
+      "sa_responder",
+    ];
+    const allowedRoles: CaseMatchRoleBucket[] = [
+      ...requiredRoles,
+      "documenter",
+    ];
+
+    if (
+      recordIds.length < requiredRoles.length ||
+      recordIds.length > allowedRoles.length
+    ) {
       response.status(400).json({
         success: false,
         message:
-          "Select one Field Responder, one Advanced Medical Responder, and one HCFD record to match.",
+          "Select one Field Responder and one Advanced Medical Responder record to match. HCFD is optional.",
       });
       return;
     }
@@ -2330,11 +2386,15 @@ export async function matchCasualtyCaseRecords(
     const roleBuckets = records.map((record) =>
       getCaseMatchRoleBucket(record.encoder?.role),
     );
-    const requiredRoles: CaseMatchRoleBucket[] = [
-      "field_responder",
-      "sa_responder",
-      "documenter",
-    ];
+
+    if (roleBuckets.some((role) => !allowedRoles.includes(role))) {
+      response.status(400).json({
+        success: false,
+        message:
+          "Only Field Responder, Advanced Medical Responder, and optional HCFD records can be matched.",
+      });
+      return;
+    }
 
     if (new Set(roleBuckets).size !== roleBuckets.length) {
       response.status(400).json({
@@ -2490,6 +2550,10 @@ export async function getNextCasualtyIdSequence(
       typeof request.query.dateCode === "string"
         ? request.query.dateCode
         : "";
+    const incidentId =
+      typeof request.query.incidentId === "string"
+        ? request.query.incidentId.trim()
+        : "";
     const userCode = normalizeCasualtyIdUserCode(rawUserCode);
     const dateCode = rawDateCode.trim();
 
@@ -2497,6 +2561,53 @@ export async function getNextCasualtyIdSequence(
       response.status(400).json({
         success: false,
         message: "User code is required.",
+      });
+      return;
+    }
+
+    if (incidentId) {
+      const { data, error } = await supabase
+        .from("casualty_incidents")
+        .select(
+          `
+            casualty:casualties (
+              id_number
+            )
+          `,
+        )
+        .eq("incident_id", incidentId)
+        .is("deleted_at", null);
+
+      if (error) {
+        throw new Error(
+          `Unable to retrieve incident victim sequence: ${error.message}`,
+        );
+      }
+
+      const highestSequence = (data ?? []).reduce((highest, record) => {
+        const casualty = Array.isArray(record.casualty)
+          ? record.casualty[0]
+          : record.casualty;
+
+        return Math.max(
+          highest,
+          getIncidentVictimCodeSequence(
+            casualty?.id_number,
+            userCode,
+          ),
+        );
+      }, 0);
+      const nextSequence = highestSequence + 1;
+
+      response.status(200).json({
+        success: true,
+        data: {
+          dateCode,
+          incidentId,
+          userCode,
+          nextSequence,
+          formattedSequence: String(nextSequence),
+        },
       });
       return;
     }
@@ -3872,7 +3983,7 @@ export async function updateCasualty(
     const { data: existingRecord, error: existingError } =
       await supabase
         .from("casualty_incidents")
-        .select("id, casualty_id, current_status, encoded_by, verification_status")
+        .select("id, casualty_id, incident_id, current_status, encoded_by, verification_status")
         .eq("id", id)
         .is("deleted_at", null)
         .maybeSingle();
@@ -4057,6 +4168,7 @@ export async function updateCasualty(
     if (person) {
       const existingIdNumber = await ensureUniqueIdNumber(
         person.idNumber,
+        incidentId ?? existingRecord.incident_id,
         existingRecord.casualty_id,
       );
 
@@ -4064,7 +4176,7 @@ export async function updateCasualty(
         response.status(409).json({
           success: false,
           message:
-            "A casualty with this ID number already exists. Please generate a new record.",
+            "A casualty with this ID number already exists in this incident. Please generate a new record.",
         });
         return;
       }
