@@ -6190,49 +6190,105 @@ const victimCodeAlreadyExists = useMemo(() => {
   }, [isEditing, isHealthcareDocumenterFlow]);
 
   useEffect(() => {
-    if (isEditing || isSaResponderFlow) {
+  if (isEditing || isSaResponderFlow) {
+    return;
+  }
+
+  // Field Responder Victim Code:
+  // sequence is per account + per incident.
+  if (isFieldResponderFlow) {
+    if (
+      !currentUserId ||
+      !form.incidentId ||
+      isLoadingOwnResponderRecords
+    ) {
       return;
     }
 
-    let isMounted = true;
+    const userCode =
+      normalizeCasualtyUserCode(generatedUserCode);
 
-    async function loadNextCasualtySequence() {
-      const dateCode = formatCasualtyIdDate();
-      const userCode = normalizeCasualtyUserCode(generatedUserCode);
-      let nextSequence = 1;
+    const highestSequence = ownResponderRecords.reduce(
+      (highest, record) => {
+        const existingVictimCode =
+          extractFieldResponderVictimCode(record)
+            .trim()
+            .toUpperCase();
 
-      if (currentUserId) {
-        try {
-          const serverNextSequence = await getNextCasualtyIdSequence(
+        if (!existingVictimCode.startsWith(userCode)) {
+          return highest;
+        }
+
+        const sequenceText =
+          existingVictimCode.slice(userCode.length);
+
+        if (!/^\d+$/.test(sequenceText)) {
+          return highest;
+        }
+
+        const sequence = Number(sequenceText);
+
+        return Number.isFinite(sequence)
+          ? Math.max(highest, sequence)
+          : highest;
+      },
+      0,
+    );
+
+    setNextCasualtySequence(highestSequence + 1);
+    return;
+  }
+
+  let isMounted = true;
+
+  async function loadNextCasualtySequence() {
+    const dateCode = formatCasualtyIdDate();
+    const userCode =
+      normalizeCasualtyUserCode(generatedUserCode);
+
+    let nextSequence = 1;
+
+    if (currentUserId) {
+      try {
+        const serverNextSequence =
+          await getNextCasualtyIdSequence(
             userCode,
             dateCode,
             {
-              incidentId: form.incidentId || undefined,
+              incidentId:
+                form.incidentId || undefined,
             },
           );
-          nextSequence = serverNextSequence;
-        } catch (error) {
-          console.warn("Unable to count synced victim IDs:", error);
-        }
-      }
 
-      if (isMounted) {
-        setNextCasualtySequence(nextSequence);
+        nextSequence = serverNextSequence;
+      } catch (error) {
+        console.warn(
+          "Unable to count synced victim IDs:",
+          error,
+        );
       }
     }
 
-    void loadNextCasualtySequence();
+    if (isMounted) {
+      setNextCasualtySequence(nextSequence);
+    }
+  }
 
-    return () => {
-      isMounted = false;
-    };
-  }, [
-    currentUserId,
-    form.incidentId,
-    generatedUserCode,
-    isEditing,
-    isSaResponderFlow,
-  ]);
+  void loadNextCasualtySequence();
+
+  return () => {
+    isMounted = false;
+  };
+}, [
+  currentUserId,
+  form.incidentId,
+  generatedUserCode,
+  isEditing,
+  isFieldResponderFlow,
+  isSaResponderFlow,
+  isLoadingOwnResponderRecords,
+  ownResponderRecords,
+]);
 
   useEffect(() => {
     if (isEditing) {
