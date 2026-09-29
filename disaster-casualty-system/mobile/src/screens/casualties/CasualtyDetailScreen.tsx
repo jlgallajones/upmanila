@@ -804,6 +804,7 @@ export default function CasualtyDetailScreen() {
         setErrorMessage(
           "Your session has expired. Please sign in again before opening casualty records.",
         );
+        router.replace("/login");
         return;
       }
 
@@ -831,10 +832,14 @@ export default function CasualtyDetailScreen() {
     } catch (error) {
       console.error("Failed to load casualty detail:", error);
 
+      if (isAuthenticationTokenError(error)) {
+        setErrorMessage(null);
+        router.replace("/login");
+        return;
+      }
+
       setErrorMessage(
-        isAuthenticationTokenError(error)
-          ? "Your session has expired. Please sign in again before opening casualty records."
-          : error instanceof Error
+        error instanceof Error
           ? error.message
           : "Unable to load casualty details.",
       );

@@ -1,9 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Tabs } from "expo-router";
-import { useEffect, useState } from "react";
+import { router, Tabs, useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
 import { Platform } from "react-native";
 
-import { getCurrentUser } from "../../auth/session";
+import {
+  getAccessToken,
+  getCurrentUser,
+} from "../../auth/session";
 
 const COLORS = {
   maroon: "#7B1113",
@@ -15,20 +18,47 @@ const COLORS = {
 export default function TabLayout() {
   const [isSuperAdmin, setIsSuperAdmin] =
     useState(false);
+  const [isCheckingSession, setIsCheckingSession] =
+    useState(true);
+  const [isAuthenticated, setIsAuthenticated] =
+    useState(false);
 
-  useEffect(() => {
-    let isMounted = true;
+  useFocusEffect(
+    useCallback(() => {
+      let isMounted = true;
 
-    void getCurrentUser().then((user) => {
-      if (isMounted) {
+      async function requireSession() {
+        const [user, token] = await Promise.all([
+          getCurrentUser(),
+          getAccessToken(),
+        ]);
+
+        if (!isMounted) {
+          return;
+        }
+
+        const hasSession = Boolean(user && token);
+
+        setIsAuthenticated(hasSession);
         setIsSuperAdmin(user?.role === "super_admin");
-      }
-    });
+        setIsCheckingSession(false);
 
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+        if (!hasSession) {
+          router.replace("/login");
+        }
+      }
+
+      void requireSession();
+
+      return () => {
+        isMounted = false;
+      };
+    }, []),
+  );
+
+  if (isCheckingSession || !isAuthenticated) {
+    return null;
+  }
 
   return (
     <Tabs

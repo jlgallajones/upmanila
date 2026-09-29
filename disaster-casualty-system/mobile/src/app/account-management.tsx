@@ -23,6 +23,7 @@ import {
   type RegisterAdminAccountPayload,
   type RegisterUnitUserPayload,
 } from "../api/accounts";
+import { isAuthenticationTokenError } from "../api/client";
 import { getCurrentUser } from "../auth/session";
 
 const COLORS = {
@@ -111,6 +112,13 @@ export default function AccountManagementScreen() {
 
       setCurrentRole(user?.role ?? null);
 
+      if (!user) {
+        setAccounts([]);
+        setErrorMessage(null);
+        router.replace("/login");
+        return;
+      }
+
       if (
         user?.role !== "super_admin" &&
         user?.role !== "admin" &&
@@ -145,6 +153,14 @@ export default function AccountManagementScreen() {
         ),
       );
     } catch (error) {
+      if (isAuthenticationTokenError(error)) {
+        setAccounts([]);
+        setCurrentRole(null);
+        setErrorMessage(null);
+        router.replace("/login");
+        return;
+      }
+
       setErrorMessage(
         error instanceof Error
           ? error.message

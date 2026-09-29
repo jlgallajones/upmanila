@@ -648,15 +648,14 @@ export default function HomeDashboardScreen() {
       setIsSuperAdmin(hasSuperAdminRole);
 
       if (!token) {
-        const queuedCount = await getQueuedCasualtyCount();
-        setQueuedCasualtyCount(queuedCount);
         setSummary(initialSummary);
         setActivities([]);
         setUnreadNotificationCount(0);
-        setIsGuestMode(true);
+        setIsGuestMode(false);
         setCurrentUserRole(null);
         setCanOpenIncidentManagement(false);
         setIsSuperAdmin(false);
+        router.replace("/login");
         return null;
       }
 
@@ -690,16 +689,15 @@ export default function HomeDashboardScreen() {
       return syncResult;
     } catch (error) {
       if (isAuthenticationTokenError(error)) {
-        const queuedCount = await getQueuedCasualtyCount();
-        setQueuedCasualtyCount(queuedCount);
         setSummary(initialSummary);
         setActivities([]);
         setUnreadNotificationCount(0);
-        setIsGuestMode(true);
+        setIsGuestMode(false);
         setCurrentUserRole(null);
         setCanOpenIncidentManagement(false);
         setIsSuperAdmin(false);
         setErrorMessage(null);
+        router.replace("/login");
         return null;
       }
 
@@ -1332,7 +1330,7 @@ export default function HomeDashboardScreen() {
 
                 <Text style={styles.activeText}>
                   {isGuestMode
-                    ? "Guest capture mode"
+                    ? "Offline capture mode"
                     : "Connected to DCMS"}
                 </Text>
               </View>
@@ -1465,7 +1463,7 @@ export default function HomeDashboardScreen() {
               color={COLORS.orange}
             />
             <Text style={styles.offlineBannerText}>
-              Guest capture mode. Add casualty records offline, then log in from Profile to sync and view cloud data.
+              Offline capture mode. Log in to sync and view cloud data.
             </Text>
           </View>
         ) : null}

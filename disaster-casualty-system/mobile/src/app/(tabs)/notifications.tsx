@@ -259,13 +259,13 @@ function buildLocalNotifications({
   }
 
   if (isGuestMode) {
-    const id = "local-guest-mode";
+    const id = "local-offline-mode";
 
     items.push({
       id,
-      title: "Guest capture mode is active",
+      title: "Login required",
       message:
-        "You can add casualty records offline, but cloud records, incident lists, and account notifications require login from Profile.",
+        "Cloud records, incident lists, and account notifications require login.",
       time: "Current session",
       kind: "system",
       section: localReadIds.has(id) ? "Earlier" : "New",
@@ -439,7 +439,8 @@ export default function NotificationsScreen() {
 
       if (!token) {
         setServerNotifications([]);
-        setIsGuestMode(true);
+        setIsGuestMode(false);
+        router.replace("/login");
         return;
       }
 
@@ -455,8 +456,9 @@ export default function NotificationsScreen() {
 
       if (isAuthenticationTokenError(error)) {
         setServerNotifications([]);
-        setIsGuestMode(true);
+        setIsGuestMode(false);
         setErrorMessage(null);
+        router.replace("/login");
         return;
       }
 

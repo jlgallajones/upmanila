@@ -6095,6 +6095,10 @@ const victimCodeAlreadyExists = useMemo(() => {
       }
 
       if (isMounted) {
+        if (!user) {
+          router.replace("/login");
+        }
+
         setCurrentUserId(user?.id ?? null);
         setCurrentUserFullName(user?.full_name ?? null);
         setCurrentUserRole(user?.role ?? null);
@@ -11402,11 +11406,11 @@ async function ensureResponderSafetyResponseSaved() {
 
           Alert.alert(
             "Session expired",
-            "The victim record was submitted offline and queued on this device. Please log in again from Profile, then sync queued records.",
+            "The victim record was submitted offline and queued on this device. Please log in again, then sync queued records.",
             [
               {
                 text: "OK",
-                onPress: () => router.replace("/profile"),
+                onPress: () => router.replace("/login"),
               },
             ],
           );
@@ -11455,11 +11459,11 @@ async function ensureResponderSafetyResponseSaved() {
       if (isAuthenticationTokenError(error)) {
         Alert.alert(
           "Session expired",
-          "Please log in again from Profile, then try saving the victim update again.",
+          "Please log in again, then try saving the victim update again.",
           [
             {
               text: "OK",
-              onPress: () => router.replace("/profile"),
+              onPress: () => router.replace("/login"),
             },
           ],
         );

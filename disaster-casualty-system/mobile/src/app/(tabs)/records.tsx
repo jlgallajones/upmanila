@@ -1537,9 +1537,10 @@ export default function RecordsScreen() {
       if (!token) {
         setRecords([]);
         setIncidents([]);
-        setIsGuestMode(true);
+        setIsGuestMode(false);
         setCurrentUserRole(null);
         setCurrentResponderAssignment(null);
+        router.replace("/login");
         return;
       }
 
@@ -1576,10 +1577,11 @@ export default function RecordsScreen() {
       if (isAuthenticationTokenError(error)) {
         setRecords([]);
         setIncidents([]);
-        setIsGuestMode(true);
+        setIsGuestMode(false);
         setCurrentUserRole(null);
         setCurrentResponderAssignment(null);
         setErrorMessage(null);
+        router.replace("/login");
         return;
       }
 

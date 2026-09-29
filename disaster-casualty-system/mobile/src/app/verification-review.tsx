@@ -259,12 +259,18 @@ export default function VerificationReviewScreen() {
     } catch (error) {
       console.error("Failed to load verification review records:", error);
 
+      if (isAuthenticationTokenError(error)) {
+        setRecords([]);
+        setCurrentUserRole(null);
+        setErrorMessage(null);
+        router.replace("/login");
+        return;
+      }
+
       setErrorMessage(
-        isAuthenticationTokenError(error)
-          ? "Log in to view records for verification review."
-          : error instanceof Error
-            ? error.message
-            : "Unable to load verification review records.",
+        error instanceof Error
+          ? error.message
+          : "Unable to load verification review records.",
       );
     } finally {
       setIsLoading(false);

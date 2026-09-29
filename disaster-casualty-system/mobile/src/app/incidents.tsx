@@ -72,6 +72,7 @@ import {
   updateIncidentTimeline,
   type UpdateIncidentTimelinePayload,
 } from "../api/incidents";
+import { isAuthenticationTokenError } from "../api/client";
 import { getCurrentUser } from "../auth/session";
 
 const COLORS = {
@@ -1522,6 +1523,15 @@ export default function IncidentsPage() {
       setIncidents(data);
     } catch (error) {
       console.error("Unable to load incidents:", error);
+
+      if (isAuthenticationTokenError(error)) {
+        setIncidents([]);
+        setCurrentUserId(null);
+        setCurrentUserRole(null);
+        setErrorMessage(null);
+        router.replace("/login");
+        return;
+      }
 
       setErrorMessage(
         error instanceof Error

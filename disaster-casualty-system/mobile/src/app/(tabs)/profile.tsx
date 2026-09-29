@@ -258,6 +258,7 @@ export default function ProfileScreen() {
       setErrorMessage(null);
       setLastLoadedAt(null);
       setIsLoading(false);
+      router.replace("/login");
       return;
     }
 
@@ -278,6 +279,7 @@ export default function ProfileScreen() {
         setProfile(null);
         setErrorMessage(null);
         setLastLoadedAt(null);
+        router.replace("/login");
         return;
       }
 
@@ -358,11 +360,11 @@ export default function ProfileScreen() {
   };
 
   const fullName =
-    user?.full_name ?? "Guest Responder";
+    user?.full_name ?? "DCMS User";
 
   const role = user
     ? formatRole(user.role)
-    : "Offline Capture";
+    : "Login Required";
 
   const initials = getInitials(fullName);
 
@@ -535,7 +537,7 @@ export default function ProfileScreen() {
                   >
                     {user?.is_active
                       ? "Active"
-                      : "Guest"}
+                      : "Unavailable"}
                   </Text>
                 </View>
               </View>
@@ -625,11 +627,11 @@ export default function ProfileScreen() {
 
             <View style={styles.guestContent}>
               <Text style={styles.guestTitle}>
-                Guest capture mode
+                Login required
               </Text>
 
               <Text style={styles.guestMessage}>
-                You can add casualty records offline. Log in to sync, view cloud records, and manage incidents.
+                Please log in to sync, view cloud records, and manage incidents.
               </Text>
             </View>
           </View>
@@ -709,7 +711,7 @@ export default function ProfileScreen() {
                 ? user.is_active
                   ? "Active"
                   : "Inactive"
-                : "Guest mode"
+                : "Login required"
             }
           />
         </View>
