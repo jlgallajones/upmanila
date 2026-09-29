@@ -510,6 +510,19 @@ function formatTriageSystem(value: string | null | undefined): string {
   }
 }
 
+function formatTriageStage(value: string | null | undefined): string {
+  switch (value?.trim().toLowerCase()) {
+    case "on_site":
+      return "Primary Triage";
+    case "reassessment":
+      return "Secondary Triage";
+    case "facility_arrival":
+      return "Tertiary Triage";
+    default:
+      return formatStatus(value);
+  }
+}
+
 function formatTransportRequired(
   value: string | null | undefined,
 ): string {
@@ -1451,7 +1464,7 @@ export default function CasualtyDetailScreen() {
 
                   <DetailRow
                     label="Stage"
-                    value={formatStatus(
+                    value={formatTriageStage(
                       casualty.latestTriage.triage_stage,
                     )}
                   />
@@ -2011,7 +2024,7 @@ export default function CasualtyDetailScreen() {
 
               <DetailRow
                 label="Stage"
-                value={formatStatus(
+                value={formatTriageStage(
                   casualty.latestTriage.triage_stage,
                 )}
               />
