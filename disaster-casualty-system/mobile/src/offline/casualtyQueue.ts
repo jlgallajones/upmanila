@@ -8,6 +8,7 @@ import { uploadAttachment } from "../api/attachments";
 import { getAccessToken } from "../auth/session";
 
 const queueKey = "dcms.offlineCasualtyQueue";
+let syncAllQueuePromise: Promise<QueueSyncResult> | null = null;
 
 export type QueuedCasualtyPayload = Omit<
   CreateCasualtyPayload,
@@ -487,13 +488,7 @@ export async function retryQueuedCasualtySubmission(
   };
 }
 
-export async function syncQueuedCasualtySubmissions(): Promise<{
-  synced: number;
-  remaining: number;
-  skipped: number;
-  failed: number;
-  issues: QueueSyncIssue[];
-}> {
+async function runQueuedCasualtySync(): Promise<QueueSyncResult> {
   const queue = await readQueue();
   const token = await getAccessToken();
 
@@ -581,4 +576,14 @@ export async function syncQueuedCasualtySubmissions(): Promise<{
     failed,
     issues,
   };
+}
+
+export async function syncQueuedCasualtySubmissions(): Promise<QueueSyncResult> {
+  if (!syncAllQueuePromise) {
+    syncAllQueuePromise = runQueuedCasualtySync().finally(() => {
+      syncAllQueuePromise = null;
+    });
+  }
+
+  return syncAllQueuePromise;
 }

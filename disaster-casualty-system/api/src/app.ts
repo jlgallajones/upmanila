@@ -1,4 +1,5 @@
 import cors from "cors";
+import { randomUUID } from "crypto";
 import express, {
   type NextFunction,
   type Request,
@@ -78,6 +79,7 @@ app.use(
     allowedHeaders: [
       "Content-Type",
       "Authorization",
+      "x-request-id",
       "ngrok-skip-browser-warning",
     ],
   }),
@@ -85,6 +87,37 @@ app.use(
 
 app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ extended: true }));
+
+app.use((request: Request, response: Response, next: NextFunction) => {
+  const requestIdHeader = request.headers["x-request-id"];
+  const requestId =
+    typeof requestIdHeader === "string" && requestIdHeader.trim()
+      ? requestIdHeader.trim()
+      : randomUUID();
+  const startedAt = Date.now();
+
+  response.setHeader("x-request-id", requestId);
+
+  response.on("finish", () => {
+    const durationMs = Date.now() - startedAt;
+    const logPayload = {
+      requestId,
+      method: request.method,
+      path: request.originalUrl,
+      status: response.statusCode,
+      durationMs,
+    };
+
+    if (response.statusCode >= 500 || durationMs >= 10000) {
+      console.warn("[DCMS API request]", logPayload);
+      return;
+    }
+
+    console.info("[DCMS API request]", logPayload);
+  });
+
+  next();
+});
 
 app.get("/", (_request: Request, response: Response) => {
   response.json({
@@ -127,11 +160,16 @@ app.use((_request: Request, response: Response) => {
 app.use(
   (
     error: unknown,
-    _request: Request,
+    request: Request,
     response: Response,
     _next: NextFunction,
   ) => {
-    console.error(error);
+    console.error("[DCMS API error]", {
+      requestId: response.getHeader("x-request-id"),
+      method: request.method,
+      path: request.originalUrl,
+      error,
+    });
 
     const message =
       error instanceof Error

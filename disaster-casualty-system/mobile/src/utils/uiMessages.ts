@@ -14,6 +14,8 @@ export const uiMessages = {
     generic: "Something went wrong. Please try again.",
     network:
       "Unable to reach the server. Please check your connection and try again.",
+    timeout:
+      "The server took too long to respond. Please try again.",
     sessionExpired: "Your session has expired. Please sign in again.",
     duplicateIdNumber:
       "This casualty ID number is already in use. Please generate or enter a different ID number.",
@@ -36,10 +38,16 @@ export function getUserFriendlyMessage(
 
   if (
     normalizedMessage.includes("network") ||
-    normalizedMessage.includes("timeout") ||
     normalizedMessage.includes("failed to fetch")
   ) {
     return uiMessages.error.network;
+  }
+
+  if (
+    normalizedMessage.includes("timeout") ||
+    normalizedMessage.includes("took too long")
+  ) {
+    return uiMessages.error.timeout;
   }
 
   if (

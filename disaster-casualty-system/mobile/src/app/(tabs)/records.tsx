@@ -1536,7 +1536,10 @@ export default function RecordsScreen() {
 
       if (!token) {
         setRecords([]);
+        setIncidents([]);
         setIsGuestMode(true);
+        setCurrentUserRole(null);
+        setCurrentResponderAssignment(null);
         return;
       }
 
@@ -1572,7 +1575,10 @@ export default function RecordsScreen() {
 
       if (isAuthenticationTokenError(error)) {
         setRecords([]);
+        setIncidents([]);
         setIsGuestMode(true);
+        setCurrentUserRole(null);
+        setCurrentResponderAssignment(null);
         setErrorMessage(null);
         return;
       }
@@ -1651,89 +1657,13 @@ export default function RecordsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-    let isMounted = true;
+      setIsLoading(true);
+      void loadRecords().finally(() => {
+        setIsLoading(false);
+      });
 
-    async function initialize() {
-      try {
-        setIsLoading(true);
-        await loadQueuedSubmissions();
-
-        const [token, user, responderAssignment] = await Promise.all([
-          getAccessToken(),
-          getCurrentUser(),
-          getResponderAssignment(),
-        ]);
-
-        if (!token) {
-          if (isMounted) {
-            setRecords([]);
-            setIncidents([]);
-            setErrorMessage(null);
-            setIsGuestMode(true);
-            setCurrentUserRole(null);
-            setCurrentResponderAssignment(null);
-          }
-          return;
-        }
-
-        if (isMounted) {
-          setIsGuestMode(false);
-          setCurrentUserRole(user?.role ?? null);
-          setCurrentResponderAssignment(responderAssignment);
-        }
-
-        const isAdminView = isAdminRecordsRole(user?.role ?? null);
-        const [incidentData, casualtyData] = isAdminView
-          ? await Promise.all([
-              getIncidents({
-                scope: "all",
-              }),
-              getCasualties(),
-            ])
-          : await Promise.all([getIncidents(), getCasualties()]);
-
-        if (isMounted) {
-          setIncidents(incidentData);
-          setRecords(
-            filterOwnRecordsForDataEntryRole(
-              casualtyData,
-              user?.id,
-              user?.role,
-            ),
-          );
-          setErrorMessage(null);
-        }
-      } catch (error) {
-        console.error("Failed to initialize victim records:", error);
-
-        if (isMounted) {
-          if (isAuthenticationTokenError(error)) {
-            setRecords([]);
-            setIncidents([]);
-            setErrorMessage(null);
-            setIsGuestMode(true);
-            return;
-          }
-
-          setErrorMessage(
-            error instanceof Error
-              ? error.message
-              : "Unable to load victim records.",
-          );
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    void initialize();
-
-    return () => {
-      isMounted = false;
-    };
-    }, [loadQueuedSubmissions]),
+      return undefined;
+    }, [loadRecords]),
   );
 
   useEffect(() => {

@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios, { type AxiosRequestConfig } from "axios";
 
 import {
   clearSession,
@@ -39,10 +39,25 @@ if (!apiUrl) {
 }
 
 export const API_BASE_URL = apiUrl;
+const apiTimeoutMs = 30000;
+
+type RequestMetadata = {
+  requestId: string;
+  startedAt: number;
+};
+
+type RetriableRequestConfig = AxiosRequestConfig & {
+  _retry?: boolean;
+  metadata?: RequestMetadata;
+};
+
+function createRequestId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 export const api = axios.create({
   baseURL: apiUrl,
-  timeout: 15000,
+  timeout: apiTimeoutMs,
   headers: {
     "Content-Type": "application/json",
   },
@@ -72,6 +87,15 @@ export function isAuthenticationTokenError(error: unknown): boolean {
 
 api.interceptors.request.use(async (config) => {
   const token = await getAccessToken();
+  const requestConfig = config as RetriableRequestConfig;
+  const requestId = createRequestId();
+
+  requestConfig.metadata = {
+    requestId,
+    startedAt: Date.now(),
+  };
+
+  config.headers["x-request-id"] = requestId;
 
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
@@ -98,7 +122,7 @@ async function refreshAccessToken(): Promise<string | null> {
           headers: {
             "Content-Type": "application/json",
           },
-          timeout: 15000,
+          timeout: apiTimeoutMs,
         },
       )
       .then(async (response) => {
@@ -125,9 +149,24 @@ async function refreshAccessToken(): Promise<string | null> {
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const originalRequest = error.config;
+    const originalRequest = error.config as
+      | RetriableRequestConfig
+      | undefined;
     const status = error?.response?.status;
     const message = error?.response?.data?.message;
+    const requestId =
+      originalRequest?.metadata?.requestId ??
+      error?.response?.headers?.["x-request-id"] ??
+      "unknown";
+    const durationMs = originalRequest?.metadata?.startedAt
+      ? Date.now() - originalRequest.metadata.startedAt
+      : undefined;
+    const errorMessage =
+      error instanceof Error ? error.message : String(error);
+    const isTimeout =
+      error?.code === "ECONNABORTED" ||
+      errorMessage.toLowerCase().includes("timeout");
+    const isNetworkFailure = !error?.response;
     const normalizedMessage =
       typeof message === "string" ? message.toLowerCase() : "";
     const shouldRefresh =
@@ -160,11 +199,18 @@ api.interceptors.response.use(
     }
 
     logUiError("API request failed", {
+      requestId,
       url: originalRequest?.url,
       method: originalRequest?.method,
       status,
+      durationMs,
+      failureType: isTimeout
+        ? "timeout"
+        : isNetworkFailure
+          ? "network"
+          : "server-response",
       response: error?.response?.data,
-      message: error instanceof Error ? error.message : String(error),
+      message: errorMessage,
     });
 
     if (typeof message === "string" && message.trim().length > 0) {
@@ -175,7 +221,10 @@ api.interceptors.response.use(
 
     return Promise.reject(
       new Error(
-        getUserFriendlyMessage(error, uiMessages.error.network),
+        getUserFriendlyMessage(
+          isTimeout ? uiMessages.error.timeout : error,
+          uiMessages.error.network,
+        ),
       ),
     );
   },
