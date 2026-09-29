@@ -533,6 +533,11 @@ button {
   border-color: #c6ddf5;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .dashboard-dialog-backdrop {
   position: fixed;
   inset: 0;
@@ -2047,6 +2052,32 @@ tbody tr:hover td {
   padding: 16px;
   border-top: 1px solid var(--line);
   background: #f8fafc;
+}
+
+.incident-final-sitrep-ready {
+  display: grid;
+  gap: 4px;
+  padding: 16px;
+  border: 1px solid #a7dfbd;
+  border-radius: 14px;
+  color: #14532d;
+  background: #ecfdf3;
+  box-shadow: 0 12px 28px rgba(20, 83, 45, 0.08);
+}
+
+.incident-final-sitrep-ready strong {
+  color: #14532d;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+}
+
+.incident-final-sitrep-ready span {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.incident-final-sitrep-ready-inline {
+  margin: 14px 0;
 }
 
 .section-launcher-grid {

@@ -9957,9 +9957,16 @@ function renderIncidentManagementSections(incident, details) {
     ...details,
     incident,
   };
+  const isClosed = String(incident?.status || "").toLowerCase() === "closed";
 
   return `
     <div class="incident-management-body">
+      ${isClosed
+        ? `<div class="incident-final-sitrep-ready" role="status">
+            <strong>INCIDENT CLOSED</strong>
+            <span>Final SitRep is now available for export.</span>
+          </div>`
+        : ""}
       ${isIncidentManagementLocked(incident)
         ? `<div class="status-message warning incident-management-lock-notice">This incident is ${escapeHtml(roleLabel(incident.status))}. Incident management sections are view-only.</div>`
         : ""}
@@ -11011,6 +11018,11 @@ function flattenSummaryFacts(data, prefix = "") {
 }
 
 function renderSitrepAndCloseSection(incident) {
+  const isClosed = String(incident?.status || "").toLowerCase() === "closed";
+  const finalSitrepExportDisabled = isClosed
+    ? ""
+    : `disabled aria-disabled="true" title="Close incident before exporting the Final SitRep."`;
+
   return `
     <section class="incident-section-card">
       <div class="section-card-header">
@@ -11024,10 +11036,16 @@ function renderSitrepAndCloseSection(incident) {
         <strong>${escapeHtml(incident.incident_name || "Unnamed incident")}</strong>
         <small>${escapeHtml(incident.incident_code || incident.id)} · ${escapeHtml(roleLabel(incident.status || "unknown"))}</small>
       </div>
+      ${isClosed
+        ? `<div class="incident-final-sitrep-ready incident-final-sitrep-ready-inline" role="status">
+            <strong>INCIDENT CLOSED</strong>
+            <span>Final SitRep is now available for export.</span>
+          </div>`
+        : `<div class="status-message warning">Close this incident before exporting the Final SitRep.</div>`}
       <div class="button-row">
-        <button class="secondary-button" type="button" data-generate-sitrep="${escapeHtml(incident.id)}">Generate Selected Incident SitRep</button>
-        <button class="ghost-button" type="button" data-download-sitrep="pdf" data-incident-id="${escapeHtml(incident.id)}">Download Latest PDF</button>
-        <button class="ghost-button" type="button" data-download-sitrep="csv" data-incident-id="${escapeHtml(incident.id)}">Download Latest CSV</button>
+        <button class="secondary-button" type="button" data-generate-sitrep="${escapeHtml(incident.id)}" data-incident-status="${escapeHtml(incident.status || "")}">Generate Selected Incident SitRep</button>
+        <button class="ghost-button" type="button" data-download-sitrep="pdf" data-incident-id="${escapeHtml(incident.id)}" ${finalSitrepExportDisabled}>Download Latest PDF</button>
+        <button class="ghost-button" type="button" data-download-sitrep="csv" data-incident-id="${escapeHtml(incident.id)}" ${finalSitrepExportDisabled}>Download Latest CSV</button>
         <button class="ghost-button" type="button" data-export-download="/incidents/${escapeHtml(incident.id)}/export/casualties.csv" data-export-file="${escapeHtml(incident.incident_code || incident.id)}-casualties.csv">Download Victim CSV</button>
         <button class="ghost-button" type="button" data-export-download="/exports/incidents/${escapeHtml(incident.id)}/package.json" data-export-file="${escapeHtml(incident.incident_code || incident.id)}-incident-package.json">Download Incident Package</button>
         ${
@@ -11218,6 +11236,7 @@ function bindIncidentManagementActions() {
   document.querySelectorAll("[data-generate-sitrep]").forEach((button) => {
     button.addEventListener("click", async () => {
       const incidentId = button.dataset.generateSitrep;
+      const incidentStatus = String(button.dataset.incidentStatus || "").toLowerCase();
 
       if (!incidentId) {
         setMessage("incidentActionMessage", "Select an incident before generating a SitRep.", "error");
@@ -11231,6 +11250,15 @@ function bindIncidentManagementActions() {
           body: JSON.stringify({}),
         });
         const reportNumber = response.data?.report_number || "latest-sitrep";
+        if (incidentStatus !== "closed") {
+          setMessage(
+            "incidentActionMessage",
+            `SitRep generated: ${reportNumber}. Close the incident before exporting the Final SitRep.`,
+            "success",
+          );
+          return;
+        }
+
         await downloadApiFile(
           `/incidents/${encodeURIComponent(incidentId)}/export/sitrep.pdf`,
           `${reportNumber}-incident.pdf`,

@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 
 import { supabase } from "../config/supabase.js";
+import type { AuthenticatedUser } from "../middleware/auth.js";
 import { getAuthenticatedUser } from "../middleware/auth.js";
 import { recordAuditLog } from "../services/audit-log.service.js";
 import {
@@ -6304,13 +6305,68 @@ async function getLatestSitrep(
   );
 }
 
+async function verifyIncidentClosedForFinalSitrepExport(
+  incidentId: string,
+  user: AuthenticatedUser,
+  response: Response,
+): Promise<boolean> {
+  const { data: incident, error } = await supabase
+    .from("incidents")
+    .select("id, status, created_by")
+    .eq("id", incidentId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Unable to verify incident status: ${error.message}`);
+  }
+
+  if (!incident) {
+    response.status(404).json({
+      success: false,
+      message: "Incident not found.",
+    });
+    return false;
+  }
+
+  if (user.role !== "super_admin" && incident.created_by !== user.id) {
+    response.status(403).json({
+      success: false,
+      message: "You can only export incidents created by your account.",
+    });
+    return false;
+  }
+
+  if (incident.status !== "closed") {
+    response.status(409).json({
+      success: false,
+      message:
+        "Final SitRep export is available only after the incident is closed.",
+    });
+    return false;
+  }
+
+  return true;
+}
+
 export async function exportLatestSitrepCsv(
   request: Request<{ id: string }>,
   response: Response,
   next: NextFunction,
 ): Promise<void> {
   try {
-    const sitrep = await getLatestSitrep(request.params.id);
+    const user = getAuthenticatedUser(request);
+    const incidentId = request.params.id;
+    const canExport = await verifyIncidentClosedForFinalSitrepExport(
+      incidentId,
+      user,
+      response,
+    );
+
+    if (!canExport) {
+      return;
+    }
+
+    const sitrep = await getLatestSitrep(incidentId);
 
     if (!sitrep) {
       response.status(404).json({
@@ -6440,7 +6496,19 @@ export async function exportLatestSitrepPdf(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const sitrep = await getLatestSitrep(request.params.id);
+    const user = getAuthenticatedUser(request);
+    const incidentId = request.params.id;
+    const canExport = await verifyIncidentClosedForFinalSitrepExport(
+      incidentId,
+      user,
+      response,
+    );
+
+    if (!canExport) {
+      return;
+    }
+
+    const sitrep = await getLatestSitrep(incidentId);
 
     if (!sitrep) {
       response.status(404).json({
