@@ -676,33 +676,33 @@ const APPENDIX_TRIAGE_FIELDS: Record<string, AppendixQuestion[]> = {
       key: "gcsEye",
       label: "GCS Eye Opening",
       options: [
-        { label: "Spontaneous", value: "4" },
-        { label: "To speech", value: "3" },
-        { label: "To pain", value: "2" },
-        { label: "None", value: "1" },
+        { label: "4 - Opens spontaneously", value: "4" },
+        { label: "3 - Opens to voice", value: "3" },
+        { label: "2 - Opens to pain", value: "2" },
+        { label: "1 - No response", value: "1" },
       ],
     },
     {
       key: "gcsVerbal",
       label: "GCS Verbal Response",
       options: [
-        { label: "Oriented", value: "5" },
-        { label: "Confused", value: "4" },
-        { label: "Inappropriate words", value: "3" },
-        { label: "Incomprehensible sounds", value: "2" },
-        { label: "No response", value: "1" },
+        { label: "5 - Oriented", value: "5" },
+        { label: "4 - Confused", value: "4" },
+        { label: "3 - Inappropriate words", value: "3" },
+        { label: "2 - Incomprehensible sounds", value: "2" },
+        { label: "1 - No response", value: "1" },
       ],
     },
     {
       key: "gcsMotor",
       label: "GCS Motor Response",
       options: [
-        { label: "Obeys commands", value: "6" },
-        { label: "Moves to localized pain", value: "5" },
-        { label: "Flexion withdrawal from pain", value: "4" },
-        { label: "Abnormal flexion", value: "3" },
-        { label: "Abnormal extension", value: "2" },
-        { label: "No response", value: "1" },
+        { label: "6 - Obeys commands", value: "6" },
+        { label: "5 - Localizes pain", value: "5" },
+        { label: "4 - Withdraws from pain", value: "4" },
+        { label: "3 - Abnormal flexion", value: "3" },
+        { label: "2 - Abnormal extension", value: "2" },
+        { label: "1 - No response", value: "1" },
       ],
     },
     {
@@ -13069,6 +13069,8 @@ function confirmExitAddCasualty() {
 function renderAppendixQuestion(question: AppendixQuestion) {
   const isFinalTriageQuestion =
     question.key === "finalTriage";
+  const isGcsMotorQuestion =
+    question.key === "gcsMotor";
 
   const isAssistedMode =
     form.triageAssistanceMode === "assisted";
@@ -13085,6 +13087,9 @@ function renderAppendixQuestion(question: AppendixQuestion) {
     isFinalTriageQuestion &&
     isAssistedMode &&
     selectedValue.length > 0;
+  const gcsTotal = isGcsMotorQuestion
+    ? getSelectedGcsTotal()
+    : null;
 
   if (question.inputType === "numeric") {
     return (
@@ -13213,7 +13218,33 @@ function renderAppendixQuestion(question: AppendixQuestion) {
           );
         })}
       </View>
+
+      {gcsTotal !== null ? (
+        <View style={styles.gcsTotalCard}>
+          <Text style={styles.gcsTotalText}>
+            GCS Total: {gcsTotal} / 15
+          </Text>
+        </View>
+      ) : null}
     </View>
+  );
+}
+
+function getSelectedGcsTotal(): number | null {
+  const keys = ["gcsEye", "gcsVerbal", "gcsMotor"] as const;
+  const values = keys.map((key) => {
+    const value = Number(form.triageAssessmentAnswers[key]);
+
+    return Number.isFinite(value) && value > 0 ? value : null;
+  });
+
+  if (values.some((value) => value === null)) {
+    return null;
+  }
+
+  return values.reduce<number>(
+    (total, value) => total + Number(value),
+    0,
   );
 }
 
@@ -16098,6 +16129,20 @@ triageModeOptionTextSelected: {
   },
   appendixOptionTextSelected: {
     color: COLORS.maroon,
+  },
+  gcsTotalCard: {
+    marginTop: 8,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.maroon,
+    backgroundColor: "#FFF8F8",
+  },
+  gcsTotalText: {
+    color: COLORS.maroon,
+    fontSize: 12,
+    fontWeight: "900",
   },
   finalTriageLightText: {
     color: COLORS.white,

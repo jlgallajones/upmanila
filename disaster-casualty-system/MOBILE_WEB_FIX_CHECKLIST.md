@@ -63,23 +63,23 @@ This checklist is based on the pasted UPDRRM DCMS requirements. Work should be d
 
 ### Investigation
 
-- [ ] Locate current GCS options in the AMP/STAB workflow.
-- [ ] Confirm whether automatic GCS total is already calculated.
-- [ ] Confirm stored assessment field names stay unchanged.
+- [x] Locate current GCS options in the AMP/STAB workflow.
+- [x] Confirm whether automatic GCS total is already calculated.
+- [x] Confirm stored assessment field names stay unchanged.
 
 ### Likely Files
 
-- [ ] `mobile/src/app/(tabs)/add-casualty.tsx`
-- [ ] `api/src/services/triage/calculate-triage.ts`
-- [ ] `api/src/services/triage/calculate-triage.test.ts`
+- [x] `mobile/src/app/(tabs)/add-casualty.tsx`
+- [x] `api/src/services/triage/calculate-triage.ts`
+- [x] `api/src/services/triage/calculate-triage.test.ts`
 
 ### Implementation
 
-- [ ] Show score numbers beside GCS Eye Opening options.
-- [ ] Show score numbers beside GCS Verbal Response options.
-- [ ] Show score numbers beside GCS Motor Response options.
-- [ ] Keep existing option values and API payload fields.
-- [ ] Display `GCS Total: X / 15` after all three components are selected, if appropriate.
+- [x] Show score numbers beside GCS Eye Opening options.
+- [x] Show score numbers beside GCS Verbal Response options.
+- [x] Show score numbers beside GCS Motor Response options.
+- [x] Keep existing option values and API payload fields.
+- [x] Display `GCS Total: X / 15` after all three components are selected, if appropriate.
 
 ### Testing
 
