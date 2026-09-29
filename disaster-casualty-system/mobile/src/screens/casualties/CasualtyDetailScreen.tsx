@@ -1429,6 +1429,55 @@ export default function CasualtyDetailScreen() {
               />
             </SectionCard>
 
+            <SectionCard title="TRIAGE">
+              {casualty.latestTriage ? (
+                <>
+                  <DetailRow
+                    label="System"
+                    value={formatTriageSystem(
+                      casualty.latestTriage.triage_system,
+                    )}
+                  />
+
+                  <DetailRow
+                    label="Final Triage"
+                    value={formatTriageCategory(
+                      casualty.latestTriage.triage_category,
+                    )}
+                    valueColor={COLORS.maroon}
+                  />
+
+                  <DetailRow
+                    label="Stage"
+                    value={formatStatus(
+                      casualty.latestTriage.triage_stage,
+                    )}
+                  />
+
+                  <DetailRow
+                    label="Triage Time"
+                    value={formatDateTime(
+                      casualty.latestTriage.triaged_at,
+                    )}
+                  />
+
+                  <DetailRow
+                    label="Location"
+                    value={formatValue(casualty.latestTriage.location)}
+                  />
+
+                  <DetailRow
+                    label="Triage Notes"
+                    value={extractRecordBaseText(triageNotes)}
+                  />
+                </>
+              ) : (
+                <Text style={styles.emptyAttachmentText}>
+                  No AMP triage assessment recorded.
+                </Text>
+              )}
+            </SectionCard>
+
             <SectionCard title="CARE / TREATMENT">
               <DetailRow
                 label="Treatment Strategy"
