@@ -33,7 +33,7 @@ http://localhost:5000/api
 When deployed, it uses the Render API:
 
 ```text
-https://dcms-api-ljco.onrender.com/api
+
 ```
 
 ## Runtime Configuration And Security
