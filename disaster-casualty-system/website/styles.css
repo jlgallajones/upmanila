@@ -1947,9 +1947,24 @@ tbody tr:hover td {
   min-width: 0;
 }
 
-.timeline-fields input[type="datetime-local"] {
+.timeline-fields input {
   font-size: 13px;
   padding-inline: 10px;
+}
+
+.timeline-timepoint-field {
+  align-self: stretch;
+}
+
+.timeline-timepoint-control {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.timeline-timepoint-control .ghost-button {
+  white-space: normal;
 }
 
 .dmmp-arrival-time-control {
@@ -3302,6 +3317,10 @@ tbody tr:hover td {
 
   .mini-table-row,
   .mini-table-row.readonly {
+    grid-template-columns: 1fr;
+  }
+
+  .timeline-timepoint-control {
     grid-template-columns: 1fr;
   }
 

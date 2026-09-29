@@ -906,6 +906,78 @@ function toLocalDateTimeInput(value) {
   return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
 }
 
+function formatManualDateTimeInput(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const year = date.getFullYear();
+  const hour24 = date.getHours();
+  const period = hour24 >= 12 ? "PM" : "AM";
+  const hour12 = hour24 % 12 || 12;
+  const hour = String(hour12).padStart(2, "0");
+  const minute = String(date.getMinutes()).padStart(2, "0");
+
+  return `${month}/${day}/${year} ${hour}:${minute} ${period}`;
+}
+
+function toNullableIsoFromManualDateTime(value) {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return null;
+
+  const match = trimmed.match(
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})\s*(AM|PM)$/i,
+  );
+
+  if (!match) return undefined;
+
+  const [, monthText, dayText, yearText, hourText, minuteText, periodText] = match;
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const year = Number(yearText);
+  const hour12 = Number(hourText);
+  const minute = Number(minuteText);
+
+  if (
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > 31 ||
+    hour12 < 1 ||
+    hour12 > 12 ||
+    minute < 0 ||
+    minute > 59
+  ) {
+    return undefined;
+  }
+
+  const period = periodText.toUpperCase();
+  const hour24 =
+    period === "AM"
+      ? hour12 === 12
+        ? 0
+        : hour12
+      : hour12 === 12
+        ? 12
+        : hour12 + 12;
+  const date = new Date(year, month - 1, day, hour24, minute, 0, 0);
+
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day ||
+    date.getHours() !== hour24 ||
+    date.getMinutes() !== minute
+  ) {
+    return undefined;
+  }
+
+  return date.toISOString();
+}
+
 function nullableFormText(form, name) {
   const value = formValue(form, name);
   return value || null;
@@ -9772,13 +9844,17 @@ function bindCallDownStaffActions() {
 }
 
 const incidentTimelineFields = [
-  ["disasterOccurredAt", "Disaster occurred", "disaster_occurred_at"],
-  ["eventNotificationAt", "Event notification", "event_notification_at"],
-  ["dmmpActivatedAt", "DMMP activated", "dmmp_activated_at"],
-  ["medicalCoordinatorNotifiedAt", "Medical coordinator notified", "medical_coordinator_notified_at"],
-  ["firstEmsOnSceneAt", "First EMS on scene", "first_ems_on_scene_at"],
-  ["triageOrderedAt", "Triage ordered", "triage_ordered_at"],
-  ["sceneDemobilizedAt", "Scene demobilized", "scene_demobilized_at"],
+  ["disasterOccurredAt", "Incident Onset", "disaster_occurred_at"],
+  ["eventNotificationAt", "Event Notification", "event_notification_at"],
+  ["dmmpActivatedAt", "Activation of DMMP", "dmmp_activated_at"],
+  [
+    "medicalCoordinatorNotifiedAt",
+    "Notification of First Appropriate Staff Person to Assume Medical Management Coordination Role",
+    "medical_coordinator_notified_at",
+  ],
+  ["firstEmsOnSceneAt", "First EMS Vehicle Arrived", "first_ems_on_scene_at"],
+  ["triageOrderedAt", "Triage Ordered", "triage_ordered_at"],
+  ["sceneDemobilizedAt", "Scene Demobilized", "scene_demobilized_at"],
 ];
 
 const coordinationFields = [
@@ -10085,21 +10161,7 @@ function renderIncidentSectionEditContent(incident, details, sectionId) {
 function renderIncidentSectionViewContent(incident, details, sectionId) {
   switch (sectionId) {
     case "timeline":
-      return renderKeyValueSection(
-        incidentTimelineFields.map(([name, label, key]) => [
-          label,
-          name === "disasterOccurredAt"
-            ? formatDate(incident.started_at)
-            : formatDate(details.timeline?.data?.[key]),
-        ]).concat([
-          ["First site triage", formatDate(details.onsiteTriage?.data?.firstSiteTriageAt)],
-          ["Last site triage", formatDate(details.onsiteTriage?.data?.lastSiteTriageAt)],
-          ["First transport from scene", formatDate(details.sceneClearance?.data?.firstTransportFromSceneAt)],
-          ["Last transport from scene", formatDate(details.sceneClearance?.data?.lastTransportFromSceneAt)],
-          ["DMMP activated?", formatBoolean(details.timeline?.data?.dmmp_activated)],
-          ["DMMP activation trigger", details.timeline?.data?.dmmp_activation_trigger || "Not recorded"],
-        ]),
-      );
+      return renderIncidentTimelineView(incident, details);
     case "dmmp-staff":
       return renderDmmpStaffView(
         details.dmmpStaff?.data || [],
@@ -10246,6 +10308,81 @@ function renderKeyValueSection(rows) {
         )
         .join("")}
     </div>
+  `;
+}
+
+function timelineSortValue(value) {
+  const timestamp = new Date(value || "").getTime();
+  return Number.isNaN(timestamp) ? Number.POSITIVE_INFINITY : timestamp;
+}
+
+function getIncidentTimelineValue(incident, timeline, name, key) {
+  return name === "disasterOccurredAt" ? incident?.started_at : timeline?.[key];
+}
+
+function buildIncidentTimelineEntries(incident, details) {
+  const timeline = details?.timeline?.data ?? null;
+  const manualEntries = incidentTimelineFields.map(([name, label, key], index) => ({
+    label,
+    value: getIncidentTimelineValue(incident, timeline, name, key),
+    source: "Manual",
+    order: index,
+  }));
+  const mobileEntries = [
+    [
+      "First site triage",
+      details?.onsiteTriage?.data?.firstSiteTriageAt,
+    ],
+    [
+      "Last site triage",
+      details?.onsiteTriage?.data?.lastSiteTriageAt,
+    ],
+    [
+      "First transport from scene",
+      details?.sceneClearance?.data?.firstTransportFromSceneAt,
+    ],
+    [
+      "Last transport from scene",
+      details?.sceneClearance?.data?.lastTransportFromSceneAt,
+    ],
+  ].map(([label, value], index) => ({
+    label,
+    value,
+    source: "Mobile-derived",
+    order: incidentTimelineFields.length + index,
+  }));
+
+  return [...manualEntries, ...mobileEntries].sort(
+    (first, second) =>
+      timelineSortValue(first.value) -
+        timelineSortValue(second.value) ||
+      first.order - second.order,
+  );
+}
+
+function renderIncidentTimelineView(incident, details) {
+  const timeline = details?.timeline?.data ?? null;
+  const entries = buildIncidentTimelineEntries(incident, details);
+
+  return `
+    ${renderKeyValueSection(
+      entries.map((entry) => [
+        `${entry.label} (${entry.source})`,
+        formatDate(entry.value),
+      ]),
+    )}
+    <section class="incident-section-card summary-preview full-width">
+      <div class="section-card-header">
+        <div>
+          <h3>DMMP activation details</h3>
+          <p class="panel-subtitle">Manual status fields stored with the incident response timeline.</p>
+        </div>
+      </div>
+      ${renderKeyValueSection([
+        ["DMMP activated?", formatBoolean(timeline?.dmmp_activated)],
+        ["DMMP activation trigger", timeline?.dmmp_activation_trigger || "Not recorded"],
+      ])}
+    </section>
   `;
 }
 
@@ -10487,15 +10624,26 @@ function renderTimelineManagementForm(incident, details, forModal = false) {
         </label>
         <label class="field"><span>DMMP activation trigger</span><input name="dmmpActivationTrigger" value="${escapeHtml(timeline?.dmmp_activation_trigger || "")}" /></label>
       </div>
+      <div class="form-section-title">Manual timeline time points</div>
       <div class="timeline-fields">
         ${incidentTimelineFields
           .map(([name, label, key]) => {
-            const value =
-              name === "disasterOccurredAt"
-                ? incident.started_at
-                : timeline?.[key];
+            const value = getIncidentTimelineValue(incident, timeline, name, key);
 
-            return `<label class="field"><span>${label}</span><input name="${name}" type="datetime-local" value="${toLocalDateTimeInput(value)}" /></label>`;
+            return `
+              <label class="field timeline-timepoint-field">
+                <span>${label}</span>
+                <div class="timeline-timepoint-control">
+                  <input
+                    name="${name}"
+                    inputmode="text"
+                    placeholder="MM/DD/YYYY HH:MM AM/PM"
+                    value="${escapeHtml(formatManualDateTimeInput(value))}"
+                  />
+                  <button class="ghost-button mini" type="button" data-use-current-timeline-time="${name}">Use current time</button>
+                </div>
+              </label>
+            `;
           })
           .join("")}
       </div>
@@ -11199,6 +11347,18 @@ function bindIncidentManagementActions() {
     });
   });
 
+  document.querySelectorAll("[data-use-current-timeline-time]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const inputName = button.dataset.useCurrentTimelineTime;
+      const form = button.closest("form");
+      const input = inputName ? form?.elements?.[inputName] : null;
+
+      if (!input) return;
+
+      input.value = formatManualDateTimeInput(new Date().toISOString());
+    });
+  });
+
   document.querySelectorAll("[data-delete-dmmp-staff]").forEach((button) => {
     button.addEventListener("click", async () => {
       const staffId = button.dataset.deleteDmmpStaff;
@@ -11457,8 +11617,14 @@ async function saveIncidentTimelineSection(incidentId, form) {
     dmmpActivationTrigger: nullableFormText(form, "dmmpActivationTrigger"),
   };
 
-  incidentTimelineFields.forEach(([name]) => {
-    payload[name] = toNullableIsoFromLocal(formValue(form, name));
+  incidentTimelineFields.forEach(([name, label]) => {
+    const parsedValue = toNullableIsoFromManualDateTime(formValue(form, name));
+
+    if (parsedValue === undefined) {
+      throw new Error(`${label} must use MM/DD/YYYY HH:MM AM/PM.`);
+    }
+
+    payload[name] = parsedValue;
   });
 
   await apiRequest(`/incidents/${encodeURIComponent(incidentId)}/timeline`, {
