@@ -452,7 +452,7 @@ function formatVerificationStatus(
 }
 
 function formatTriageSystem(value: string | null | undefined): string {
-  switch (value) {
+  switch (value?.trim().toLowerCase()) {
     case "urgent_non_urgent":
       return "Urgent/Non-urgent";
     case "stieve":
@@ -471,6 +471,8 @@ function formatTriageSystem(value: string | null | undefined): string {
       return "SIEVE";
     case "save":
       return "SAVE";
+    case "sort":
+      return "SORT";
     case "meta":
       return "META";
     case "swift":

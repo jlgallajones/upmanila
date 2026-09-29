@@ -8093,6 +8093,17 @@ if (
       case "Transport": {
         if (
           isSaResponderFlow &&
+          !form.patientFor.trim()
+        ) {
+          Alert.alert(
+            "Patient disposition required",
+            "Select Pending Departure, Release, or Referral/Transfer to Health Facility.",
+          );
+          return false;
+        }
+
+        if (
+          isSaResponderFlow &&
           form.conditionBeforeTransfer === "Dead" &&
           !form.transferMedicalContact.trim()
         ) {
@@ -11545,6 +11556,13 @@ async function ensureResponderSafetyResponseSaved() {
       return null;
 
     case "Transport":
+      if (
+        isSaResponderFlow &&
+        !form.patientFor.trim()
+      ) {
+        return "Patient For is required.";
+      }
+
       if (
         isSaResponderFlow &&
         form.conditionBeforeTransfer === "Dead" &&
