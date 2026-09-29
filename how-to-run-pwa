@@ -29,7 +29,7 @@ then recommit and upload new dist in render and netlify
 
 
 env.local EXPO_PUBLIC_API_URL=http://localhost:5000/api
-env.prod EXPO_PUBLIC_API_URL=https://dcms-api-ljco.onrender.com/api
+env.prod EXPO_PUBLIC_API_URL=
 
 Do not wrap EXPO_PUBLIC_API_URL in quotes. If the deployed app calls
 .../api%22/auth/login, the production environment variable has an extra quote.
@@ -56,3 +56,6 @@ npx.cmd serve website -l 5173
 to push
 git push origin main
 git push organization main
+
+
+asdasd
