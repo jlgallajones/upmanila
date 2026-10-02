@@ -3001,7 +3001,7 @@ function renderSuperAdminView() {
     case "registration":
       return renderRegistrationShell();
     case "users":
-      return renderAdminUnitRegistration();
+      return renderSuperAdminAccountRecords();
     case "records":
       return renderAdminCasualtyRecords();
     case "approvals":
@@ -5643,6 +5643,74 @@ function renderAdminAccountList() {
   `;
 }
 
+function renderSuperAdminAccountRecords() {
+  const accounts = state.adminAccounts
+    .slice()
+    .sort((first, second) =>
+      compareText(first.full_name || first.email, second.full_name || second.email),
+    );
+
+  return `
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>All accounts</h2>
+          <p class="panel-subtitle">System account records across all admin groups. Create new command accounts from Account Registration.</p>
+        </div>
+        <button
+          class="ghost-button mini"
+          type="button"
+          data-export-download="/exports/responders-documenters.csv"
+          data-export-file="dcms-responders-documenters.csv"
+        >
+          Export FR/AMP/HCFD CSV
+        </button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Role</th>
+              <th>Admin group</th>
+              <th>Account status</th>
+              <th>Online</th>
+              <th>Date created</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${
+              accounts
+                .map((user) => {
+                  const online = isRecentlyOnline(user);
+                  const canEditHere = editableUnitAccountRoles.includes(user.role);
+                  const adminGroup = canEditHere
+                    ? adminScopeLabel(user.created_by)
+                    : "Command account";
+
+                  return `
+                    <tr>
+                      <td><strong>${escapeHtml(user.full_name || "Unnamed account")}</strong><br><span class="panel-subtitle">${escapeHtml(user.email || "No email")}</span></td>
+                      <td>${escapeHtml(roleLabel(user.role))}</td>
+                      <td>${escapeHtml(adminGroup)}</td>
+                      <td><span class="pill ${user.is_active ? "green" : "red"}">${user.is_active ? "Active" : "Inactive"}</span></td>
+                      <td><span class="pill ${online ? "green" : ""}">${online ? "Online" : "Offline"}</span><br><span class="panel-subtitle">${user.last_seen_at ? `Last seen ${formatDate(user.last_seen_at)}` : "No login recorded"}</span></td>
+                      <td>${formatDate(user.created_at)}</td>
+                      <td>${canEditHere ? `<button class="ghost-button mini" type="button" data-edit-account="${escapeHtml(user.id)}">Edit account</button>` : `<span class="panel-subtitle">Managed in registration</span>`}</td>
+                    </tr>
+                  `;
+                })
+                .join("") || `<tr><td colspan="7"><div class="empty-state">No accounts found.</div></td></tr>`
+            }
+          </tbody>
+        </table>
+      </div>
+      <div id="accountMessage" class="status-message" hidden></div>
+    </section>
+  `;
+}
+
 function bindRegisterUnitUserForm() {
   const form = qs("#unitUserForm");
   if (!form) return;
@@ -7235,20 +7303,17 @@ function renderSuperAdminApprovals() {
         new Date(second.reopen_requested_at || 0).getTime() -
         new Date(first.reopen_requested_at || 0).getTime(),
     );
-  const pendingVictimRecords = state.casualties.filter((item) =>
-    ["submitted", "under_review"].includes(item.verification_status),
-  ).length;
 
   return `
     <div class="grid two">
       ${renderMetric("Incident reopen requests", pendingReopenIncidents.length, pendingReopenIncidents.length ? "emphasis" : "")}
-      ${renderMetric("Victim records pending", pendingVictimRecords)}
+      ${renderMetric("Superadmin approvals", pendingReopenIncidents.length)}
     </div>
     <section class="panel" style="margin-top:18px">
       <div class="panel-header">
         <div>
-          <h2>Incident reopening approvals</h2>
-          <p class="panel-subtitle">Closed incidents requested by admins for reopening.</p>
+          <h2>Superadmin approvals</h2>
+          <p class="panel-subtitle">Requests that require Superadmin approval, including closed incident reopening.</p>
         </div>
       </div>
       <div class="table-wrap">
@@ -7291,7 +7356,6 @@ function renderSuperAdminApprovals() {
       </div>
       <div id="incidentActionMessage" class="status-message" hidden></div>
     </section>
-    <div style="margin-top:18px">${renderAdminVerificationReview()}</div>
   `;
 }
 
