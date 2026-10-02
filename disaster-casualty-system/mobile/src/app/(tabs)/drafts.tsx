@@ -18,7 +18,7 @@ import {
 } from "../../offline/formDrafts";
 
 const COLORS = {
-  maroon: "#7B1113",
+  maroon: "#242424",
   text: "#17213A",
   muted: "#69758C",
   border: "#DCE3EE",

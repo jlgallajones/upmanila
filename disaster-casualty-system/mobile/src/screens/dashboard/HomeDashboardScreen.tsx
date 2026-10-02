@@ -48,7 +48,7 @@ import {
 } from "../../offline/casualtyQueue";
 
 const COLORS = {
-  maroon: "#7B1113",
+  maroon: "#242424",
   white: "#FFFFFF",
   background: "#F3F5F9",
   text: "#15213A",
@@ -1331,7 +1331,7 @@ export default function HomeDashboardScreen() {
                 <Text style={styles.activeText}>
                   {isGuestMode
                     ? "Offline capture mode"
-                    : "Connected to DCMS"}
+                    : "Connected to MedSORT"}
                 </Text>
               </View>
             </View>

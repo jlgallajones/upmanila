@@ -76,7 +76,7 @@ import { isAuthenticationTokenError } from "../api/client";
 import { getCurrentUser } from "../auth/session";
 
 const COLORS = {
-  maroon: "#7B1113",
+  maroon: "#242424",
   white: "#FFFFFF",
   background: "#F3F5F9",
   card: "#FFFFFF",

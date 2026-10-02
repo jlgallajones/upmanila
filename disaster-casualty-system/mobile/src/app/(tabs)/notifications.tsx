@@ -25,7 +25,7 @@ import { getAccessToken } from "../../auth/session";
 import { getQueuedCasualtyCount } from "../../offline/casualtyQueue";
 
 const COLORS = {
-  maroon: "#7B1113",
+  maroon: "#242424",
   white: "#FFFFFF",
   background: "#F3F5F9",
   text: "#17213A",
@@ -639,7 +639,7 @@ export default function NotificationsScreen() {
                 ? `ACTIVE NOTICE - ${activeBanner}`
                 : isGuestMode
                   ? "GUEST MODE - login to receive cloud alerts"
-                  : "DCMS notifications are up to date"}
+                  : "MedSORT notifications are up to date"}
             </Text>
           </View>
         </View>

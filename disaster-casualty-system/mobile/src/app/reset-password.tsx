@@ -20,7 +20,7 @@ import {
 } from "../utils/uiMessages";
 
 const COLORS = {
-  maroon: "#7B1113",
+  maroon: "#242424",
   white: "#FFFFFF",
   background: "#F7F8FB",
   card: "#FFFFFF",
@@ -145,7 +145,7 @@ export default function ResetPasswordScreen() {
         <Text style={styles.eyebrow}>Account Recovery</Text>
         <Text style={styles.title}>Create a new password</Text>
         <Text style={styles.subtitle}>
-          Enter a new password for your DCMS account.
+          Enter a new password for your MedSORT account.
         </Text>
 
         {successMessage ? (

@@ -25,7 +25,7 @@ import { isAuthenticationTokenError } from "../../api/client";
 import { clearSession, getCurrentUserId } from "../../auth/session";
 
 const COLORS = {
-  maroon: "#7B1113",
+  maroon: "#242424",
   white: "#FFFFFF",
   background: "#F3F5F9",
   card: "#FFFFFF",
@@ -334,7 +334,7 @@ export default function ProfileScreen() {
 
     Alert.alert(
       "Log out",
-      "Are you sure you want to log out from DCMS?",
+      "Are you sure you want to log out from MedSORT?",
       [
         {
           text: "Cancel",
@@ -360,7 +360,7 @@ export default function ProfileScreen() {
   };
 
   const fullName =
-    user?.full_name ?? "DCMS User";
+    user?.full_name ?? "MedSORT User";
 
   const role = user
     ? formatRole(user.role)
@@ -419,7 +419,7 @@ export default function ProfileScreen() {
             </Text>
 
             <Text style={styles.confirmMessage}>
-              Are you sure you want to log out from DCMS?
+              Are you sure you want to log out from MedSORT?
             </Text>
 
             <View style={styles.confirmActions}>
@@ -724,7 +724,7 @@ export default function ProfileScreen() {
           <InformationRow
             icon="phone-portrait-outline"
             label="App Version"
-            value={`DCMS v${appVersion}`}
+            value={`MedSORT v${appVersion}`}
           />
 
           <InformationRow
@@ -780,13 +780,13 @@ export default function ProfileScreen() {
             {user
               ? isLoggingOut
                 ? "Logging out..."
-                : "Logout from DCMS"
-              : "Login to DCMS"}
+                : "Logout from MedSORT"
+              : "Login to MedSORT"}
           </Text>
         </Pressable>
 
         <Text style={styles.footerText}>
-          Disaster Casualty Management System
+          MedSORT
         </Text>
 
         <Text style={styles.footerVersion}>

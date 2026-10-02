@@ -25,16 +25,16 @@ import {
 } from "../../utils/uiMessages";
 
 const COLORS = {
-  maroon: "#7B1113",
-  darkMaroon: "#630C0E",
-  lightMaroon: "#9B2427",
+  maroon: "#242424",
+  darkMaroon: "#000000",
+  lightMaroon: "#3A3A3A",
   white: "#FFFFFF",
-  background: "#FFFFFF",
-  fieldBackground: "#F6F8FB",
-  fieldBorder: "#D7DFEB",
-  primaryText: "#15213A",
-  secondaryText: "#536078",
-  mutedText: "#8A97AE",
+  background: "#FAFAFA",
+  fieldBackground: "#FFFFFF",
+  fieldBorder: "#E6E6E6",
+  primaryText: "#000000",
+  secondaryText: "#3A3A3A",
+  mutedText: "#6B6B6B",
   warningBackground: "#FFF5F5",
   warningBorder: "#FFB7B7",
   warningText: "#D32626",
@@ -206,7 +206,7 @@ export default function LoginScreen() {
 
             <View style={styles.headerTextWrapper}>
               <Text style={styles.portalText}>
-                NDRRMC · DCMS PORTAL
+                MEDSORT RESPONDER PORTAL
               </Text>
 
               <Text style={styles.headerTitle}>
@@ -228,7 +228,7 @@ export default function LoginScreen() {
         >
           <Text style={styles.description}>
             Sign in with your official responder credentials to
-            access the casualty management system.
+            access MedSORT casualty and incident tools.
           </Text>
 
           <View style={styles.formGroup}>
@@ -397,7 +397,7 @@ export default function LoginScreen() {
             ]}
           >
             <Text style={styles.loginButtonText}>
-              {isSubmitting ? "Signing in..." : "Sign in to DCMS"}
+              {isSubmitting ? "Signing in..." : "Sign in to MedSORT"}
             </Text>
           </Pressable>
 

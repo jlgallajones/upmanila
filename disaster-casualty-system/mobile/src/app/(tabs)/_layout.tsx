@@ -9,7 +9,7 @@ import {
 } from "../../auth/session";
 
 const COLORS = {
-  maroon: "#7B1113",
+  maroon: "#242424",
   inactive: "#8792A8",
   white: "#FFFFFF",
   border: "#E5E9F0",

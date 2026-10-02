@@ -85,8 +85,8 @@ import {
 } from "../../offline/formDrafts";
 
 const COLORS = {
-  maroon: "#7B1113",
-  darkMaroon: "#5E0B0D",
+  maroon: "#242424",
+  darkMaroon: "#000000",
   white: "#FFFFFF",
   background: "#FFFFFF",
   fieldBackground: "#F7F9FC",
@@ -10101,8 +10101,8 @@ if (
           return button;
         };
 
-        const cancelButton = makeButton("Cancel", "#ffffff", "#7B1113");
-        const captureButton = makeButton("Capture photo", "#7B1113");
+        const cancelButton = makeButton("Cancel", "#ffffff", "#242424");
+        const captureButton = makeButton("Capture photo", "#242424");
 
         function cleanup() {
           stream?.getTracks().forEach((track) => track.stop());
@@ -11256,7 +11256,7 @@ async function ensureResponderSafetyResponseSaved() {
           setSubmissionFeedback({
             title: "Submitted offline",
             message:
-              "The victim record was submitted offline and queued on this device. Log in from Profile later to sync queued records to DCMS.",
+              "The victim record was submitted offline and queued on this device. Log in from Profile later to sync queued records to MedSORT.",
             resetOnClose: shouldResetPendingDepartureForm ? false : undefined,
           });
         } catch (error) {

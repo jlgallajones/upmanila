@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "DCMS",
+    "name": "MedSORT",
     "slug": "mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -24,10 +24,10 @@
     "web": {
       "output": "static",
       "favicon": "./assets/images/dcms-app-icon.png",
-      "name": "Disaster Casualty Management System",
-      "shortName": "DCMS",
-      "themeColor": "#7B1113",
-      "backgroundColor": "#7B1113"
+      "name": "MedSORT",
+      "shortName": "MedSORT",
+      "themeColor": "#242424",
+      "backgroundColor": "#FAFAFA"
     },
     "plugins": [
       "expo-router",

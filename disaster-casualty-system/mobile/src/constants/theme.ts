@@ -10,17 +10,17 @@ import { Platform } from 'react-native';
 export const Colors = {
   light: {
     text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
+    background: '#FAFAFA',
+    backgroundElement: '#F2F2F2',
+    backgroundSelected: '#E6E6E6',
+    textSecondary: '#6B6B6B',
   },
   dark: {
     text: '#ffffff',
     background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
+    backgroundElement: '#242424',
+    backgroundSelected: '#3A3A3A',
+    textSecondary: '#E6E6E6',
   },
 } as const;
 
@@ -44,9 +44,9 @@ export const Fonts = Platform.select({
     mono: 'monospace',
   },
   web: {
-    sans: 'var(--font-display)',
+    sans: 'var(--font-body)',
     serif: 'var(--font-serif)',
-    rounded: 'var(--font-rounded)',
+    rounded: 'var(--font-display)',
     mono: 'var(--font-mono)',
   },
 });

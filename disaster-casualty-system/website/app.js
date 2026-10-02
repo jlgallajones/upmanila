@@ -1986,11 +1986,11 @@ function renderLogin() {
                 <div class="shield-cross">+</div>
               </div>
             </div>
-            <div class="acronym-badge">DCMS</div>
+            <div class="acronym-badge">MedSORT</div>
           </div>
 
           <div class="landing-title">
-            <h1>Disaster Casualty<br />Management System</h1>
+            <h1>MedSORT</h1>
             <p>Emergency Response Information Platform</p>
           </div>
         </div>
@@ -1999,7 +1999,7 @@ function renderLogin() {
       <section class="login-pane">
         <form id="loginForm" class="login-card">
           <span class="eyebrow">Administrator Portal</span>
-          <h2>Sign in to DCMS</h2>
+          <h2>Sign in to MedSORT</h2>
           <p>Use an active super admin or admin account to manage official incidents, facilities, SitReps, and system oversight.</p>
 
           <div class="form-grid">
@@ -2053,9 +2053,9 @@ function renderDashboardShell() {
     <div class="app-shell ${state.sidebarCollapsed ? "sidebar-collapsed" : ""}">
       <aside class="sidebar">
         <div class="sidebar-title">
-          <div class="sidebar-mark">DC</div>
+          <div class="sidebar-mark">MS</div>
           <div class="sidebar-brand-text">
-            <strong>DCMS Admin</strong>
+            <strong>MedSORT</strong>
             <span>${isSuperAdmin() ? "Super Admin Portal" : "Admin Portal"}</span>
           </div>
           <button
@@ -3404,7 +3404,7 @@ function analyticsBarClass(label, colorKey) {
 function analyticsColorValue(label, colorKey, index = 0) {
   const key = String(colorKey || label || "").toLowerCase();
   const strategyColors = {
-    "scoop and run": "#7b1113",
+    "scoop and run": "#d32f2f",
     scooter: "#267abd",
     "stay and play": "#2e7d4f",
     "1+3": "#f0b429",
@@ -3412,7 +3412,7 @@ function analyticsColorValue(label, colorKey, index = 0) {
     unknown: "#69758c",
   };
   const fallbackColors = [
-    "#7b1113",
+    "#d32f2f",
     "#267abd",
     "#2e7d4f",
     "#f0b429",
@@ -5449,7 +5449,7 @@ function renderRegistrationShell() {
   return `
     <section class="panel">
       <h2>Account registration</h2>
-      <p class="panel-subtitle">Create command accounts with Supabase Auth login and a matching DCMS user profile.</p>
+      <p class="panel-subtitle">Create command accounts with Supabase Auth login and a matching MedSORT user profile.</p>
       <form id="registerAdminForm" class="form-grid" style="margin-top:14px">
         <div class="form-grid two">
           <label class="field"><span>Full name</span><input name="fullName" required placeholder="Account holder full name" /></label>

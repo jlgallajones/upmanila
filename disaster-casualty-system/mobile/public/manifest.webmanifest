@@ -1,13 +1,13 @@
 {
-  "name": "Disaster Casualty Management System",
-  "short_name": "DCMS",
+  "name": "MedSORT",
+  "short_name": "MedSORT",
   "description": "Emergency response casualty records and incident management.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#7B1113",
-  "theme_color": "#7B1113",
+  "background_color": "#FAFAFA",
+  "theme_color": "#242424",
   "icons": [
     {
       "src": "/icons/dcms-icon-192.png",
