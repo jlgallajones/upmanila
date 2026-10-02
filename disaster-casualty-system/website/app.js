@@ -3732,6 +3732,16 @@ function renderAnalyticsGraphGrid(analytics, incidentId) {
         ${renderAnalyticsLineChart("Victims Arriving at a Healthcare Facility", lineGraphs.facilityArrivalByActivation, { note: cumulativeNote })}
       </div>`,
     )}
+    ${renderAnalyticsSection(
+      "HCFD Time-Interval Graphs",
+      "Cumulative HCFD-derived ED resources, hospital resources, morbidity, and mortality events.",
+      `<div class="analytics-graph-grid">
+        ${renderAnalyticsLineChart("ED Resources Utilization", lineGraphs.edResourcesUtilization, { note: cumulativeNote })}
+        ${renderAnalyticsLineChart("Hospital Resources Utilization", lineGraphs.hospitalResourcesUtilization, { note: cumulativeNote })}
+        ${renderAnalyticsLineChart("Morbidity Events", lineGraphs.morbidityByActivation, { note: cumulativeNote })}
+        ${renderAnalyticsLineChart("Mortality Events", lineGraphs.mortalityByActivation, { note: cumulativeNote })}
+      </div>`,
+    )}
   `;
 }
 

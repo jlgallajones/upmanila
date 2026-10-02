@@ -5405,17 +5405,27 @@ export async function getIncidentAnalyticsSummary(
         ? await supabase
             .from("facility_encounters")
             .select(
-              "casualty_incident_id, facility_id, arrived_at, sought_ed_care, admitted_to_hospital, ed_admitted_at, ed_departed_at, hospital_admitted_at, hospital_discharged_at, created_at",
+              "casualty_incident_id, facility_id, arrived_at, sought_ed_care, admitted_to_hospital, ed_admitted_at, ed_departed_at, hospital_admitted_at, hospital_discharged_at, ed_resuscitation_started_at, surgical_intervention_started_at, surgical_intervention_ended_at, operating_room_started_at, xray_required, xray_performed_at, ultrasound_required, ultrasound_performed_at, ct_required, ct_performed_at, icu_admitted_at, icu_discharged_at, mechanical_ventilation_required, ventilation_started_at, ventilation_ended_at, created_at",
             )
             .in("casualty_incident_id", casualtyIncidentIds)
             .order("created_at", { ascending: true })
+        : { data: [], error: null };
+    const outcomeResult =
+      casualtyIncidentIds.length > 0
+        ? await supabase
+            .from("casualty_outcomes")
+            .select(
+              "casualty_incident_id, reached_hospital, medical_contact_before_death, died, death_stage, death_at, final_disposition",
+            )
+            .in("casualty_incident_id", casualtyIncidentIds)
         : { data: [], error: null };
 
     const detailsError =
       triageResult.error ??
       transportResult.error ??
       treatmentResult.error ??
-      encounterResult.error;
+      encounterResult.error ??
+      outcomeResult.error;
 
     if (detailsError) {
       throw new Error(
@@ -5435,6 +5445,8 @@ export async function getIncidentAnalyticsSummary(
       (treatmentResult.data ?? []) as TreatmentRecordRow[];
     const encounterRows =
       (encounterResult.data ?? []) as FacilityEncounterRow[];
+    const outcomeRows =
+      (outcomeResult.data ?? []) as CasualtyOutcomeRow[];
     const responderSafety =
       (responderSafetyResult.data as ResponderSafetyReportRow | null) ??
       null;
@@ -5578,6 +5590,34 @@ export async function getIncidentAnalyticsSummary(
         intervalMinutes,
         denominator,
       });
+    const buildHcfdIntervalRows = (
+      rows: Array<{
+        casualty_incident_id: string;
+        occurred_at: string | null;
+      }>,
+      denominator = totalVictims,
+    ) => buildIntervalRows(dedupeEarliestEventRows(rows), denominator);
+    const facilityEncounterEvents = (
+      getTime: (row: FacilityEncounterRow) => string | null | undefined,
+    ) =>
+      encounterRows.map((row) => ({
+        casualty_incident_id: row.casualty_incident_id,
+        occurred_at: getTime(row) ?? null,
+      }));
+    const deathEvents = (
+      filter: (row: CasualtyOutcomeRow) => boolean,
+    ) =>
+      outcomeRows
+        .filter(
+          (row) =>
+            row.death_at &&
+            (row.died === true || row.final_disposition === "deceased") &&
+            filter(row),
+        )
+        .map((row) => ({
+          casualty_incident_id: row.casualty_incident_id,
+          occurred_at: row.death_at,
+        }));
     const primaryEvents = dedupeEarliestEventRows(
       primaryTriageRows.map((row) => ({
         casualty_incident_id: row.casualty_incident_id,
@@ -5717,6 +5757,91 @@ const unsafeResponders = responderSafetyResponses.filter(
     const facilityArrivalByActivation = buildIntervalRows(
       arrivalEvents,
       totalVictims,
+    );
+    const edArrivalByActivation = buildHcfdIntervalRows(
+      facilityEncounterEvents((row) => row.arrived_at),
+    );
+    const edAdmissionByActivation = buildHcfdIntervalRows(
+      facilityEncounterEvents((row) => row.ed_admitted_at),
+    );
+    const edResuscitationByActivation = buildHcfdIntervalRows(
+      facilityEncounterEvents((row) => row.ed_resuscitation_started_at),
+    );
+    const edDepartureByActivation = buildHcfdIntervalRows(
+      facilityEncounterEvents((row) => row.ed_departed_at),
+    );
+    const hospitalAdmissionByActivation = buildHcfdIntervalRows(
+      facilityEncounterEvents((row) => row.hospital_admitted_at),
+    );
+    const hospitalDischargeByActivation = buildHcfdIntervalRows(
+      facilityEncounterEvents((row) => row.hospital_discharged_at),
+    );
+    const surgeryStartedByActivation = buildHcfdIntervalRows(
+      facilityEncounterEvents(
+        (row) => row.surgical_intervention_started_at,
+      ),
+    );
+    const operatingRoomStartedByActivation = buildHcfdIntervalRows(
+      facilityEncounterEvents((row) => row.operating_room_started_at),
+    );
+    const xrayPerformedByActivation = buildHcfdIntervalRows(
+      facilityEncounterEvents((row) => row.xray_performed_at),
+    );
+    const ultrasoundPerformedByActivation = buildHcfdIntervalRows(
+      facilityEncounterEvents((row) => row.ultrasound_performed_at),
+    );
+    const ctPerformedByActivation = buildHcfdIntervalRows(
+      facilityEncounterEvents((row) => row.ct_performed_at),
+    );
+    const icuAdmissionByActivation = buildHcfdIntervalRows(
+      facilityEncounterEvents((row) => row.icu_admitted_at),
+    );
+    const icuDischargeByActivation = buildHcfdIntervalRows(
+      facilityEncounterEvents((row) => row.icu_discharged_at),
+    );
+    const ventilationStartedByActivation = buildHcfdIntervalRows(
+      facilityEncounterEvents((row) => row.ventilation_started_at),
+    );
+    const ventilationEndedByActivation = buildHcfdIntervalRows(
+      facilityEncounterEvents((row) => row.ventilation_ended_at),
+    );
+    const mortalityByActivation = buildHcfdIntervalRows(
+      deathEvents(() => true),
+    );
+    const impactMortalityByActivation = buildHcfdIntervalRows(
+      deathEvents(
+        (row) =>
+          row.death_stage === "impact" ||
+          row.medical_contact_before_death === false,
+      ),
+    );
+    const prehospitalMortalityByActivation = buildHcfdIntervalRows(
+      deathEvents(
+        (row) =>
+          row.death_stage === "prehospital" ||
+          (
+            row.medical_contact_before_death === true &&
+            row.reached_hospital === false
+          ),
+      ),
+    );
+    const inHospitalMortalityByActivation = buildHcfdIntervalRows(
+      deathEvents(
+        (row) =>
+          row.death_stage === "in_hospital" ||
+          row.reached_hospital === true,
+      ),
+    );
+    const immediateMortalityByActivation = buildHcfdIntervalRows(
+      deathEvents(
+        (row) =>
+          facilityCategoryForCasualty(row.casualty_incident_id) ===
+          "immediate",
+      ),
+      casualtyIncidentIds.filter(
+        (casualtyIncidentId) =>
+          facilityCategoryForCasualty(casualtyIncidentId) === "immediate",
+      ).length,
     );
     const rawTimelineVisuals = [
       {
@@ -5878,6 +6003,26 @@ const unsafeResponders = responderSafetyResponses.filter(
           immediateDepartedAndArrivedByActivation,
           delayedDepartedAndArrivedByActivation,
           facilityArrivalByActivation,
+          edArrivalByActivation,
+          edAdmissionByActivation,
+          edResuscitationByActivation,
+          edDepartureByActivation,
+          hospitalAdmissionByActivation,
+          hospitalDischargeByActivation,
+          surgeryStartedByActivation,
+          operatingRoomStartedByActivation,
+          xrayPerformedByActivation,
+          ultrasoundPerformedByActivation,
+          ctPerformedByActivation,
+          icuAdmissionByActivation,
+          icuDischargeByActivation,
+          ventilationStartedByActivation,
+          ventilationEndedByActivation,
+          mortalityByActivation,
+          impactMortalityByActivation,
+          prehospitalMortalityByActivation,
+          inHospitalMortalityByActivation,
+          immediateMortalityByActivation,
           edCareByTriageCategory: edCareByCategory,
         },
         lineGraphs: {
@@ -5922,6 +6067,114 @@ const unsafeResponders = responderSafetyResponses.filter(
               key: "all",
               label: "All victims",
               data: facilityArrivalByActivation,
+            },
+          ],
+          edResourcesUtilization: [
+            {
+              key: "arrived",
+              label: "Arrived at ED / facility",
+              data: edArrivalByActivation,
+            },
+            {
+              key: "ed_admitted",
+              label: "Admitted to ED",
+              data: edAdmissionByActivation,
+            },
+            {
+              key: "resuscitation",
+              label: "Resuscitation started",
+              data: edResuscitationByActivation,
+            },
+            {
+              key: "ed_departed",
+              label: "Discharged from ED",
+              data: edDepartureByActivation,
+            },
+          ],
+          hospitalResourcesUtilization: [
+            {
+              key: "hospital_admitted",
+              label: "Admitted to hospital",
+              data: hospitalAdmissionByActivation,
+            },
+            {
+              key: "surgery_started",
+              label: "Surgery started",
+              data: surgeryStartedByActivation,
+            },
+            {
+              key: "operating_room_started",
+              label: "Operating room used",
+              data: operatingRoomStartedByActivation,
+            },
+            {
+              key: "xray_performed",
+              label: "X-ray performed",
+              data: xrayPerformedByActivation,
+            },
+            {
+              key: "ultrasound_performed",
+              label: "Ultrasound performed",
+              data: ultrasoundPerformedByActivation,
+            },
+            {
+              key: "ct_performed",
+              label: "CT scan performed",
+              data: ctPerformedByActivation,
+            },
+          ],
+          morbidityByActivation: [
+            {
+              key: "icu_admitted",
+              label: "Admitted to ICU",
+              data: icuAdmissionByActivation,
+            },
+            {
+              key: "ventilation_started",
+              label: "Mechanical ventilation started",
+              data: ventilationStartedByActivation,
+            },
+            {
+              key: "hospital_discharged",
+              label: "Discharged from hospital",
+              data: hospitalDischargeByActivation,
+            },
+            {
+              key: "icu_discharged",
+              label: "Discharged from ICU",
+              data: icuDischargeByActivation,
+            },
+            {
+              key: "ventilation_ended",
+              label: "Mechanical ventilation ended",
+              data: ventilationEndedByActivation,
+            },
+          ],
+          mortalityByActivation: [
+            {
+              key: "all_deaths",
+              label: "All deaths",
+              data: mortalityByActivation,
+            },
+            {
+              key: "impact_deaths",
+              label: "Impact deaths",
+              data: impactMortalityByActivation,
+            },
+            {
+              key: "prehospital_deaths",
+              label: "Prehospital deaths",
+              data: prehospitalMortalityByActivation,
+            },
+            {
+              key: "in_hospital_deaths",
+              label: "In-hospital deaths",
+              data: inHospitalMortalityByActivation,
+            },
+            {
+              key: "immediate_deaths",
+              label: "Immediate deaths",
+              data: immediateMortalityByActivation,
             },
           ],
         },
