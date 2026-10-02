@@ -96,6 +96,7 @@ const state = {
   casualtyRecordSortOrder: "desc",
   casualtyRecordDateFilter: "",
   verificationReviewIncidentFilter: "all",
+  analyticsAdminScopeFilter: "all",
   matchCasingIncidentFilter: "all",
   selectedMatchCasingRecordIds: [],
   matchCasingPickerRole: null,
@@ -113,6 +114,7 @@ const state = {
   healthcareFacilities: [],
   callDownStaff: [],
   unitUsers: [],
+  adminAccounts: [],
   auditLogs: [],
   auditLogDateFilter: "",
   formDrafts: [],
@@ -217,11 +219,19 @@ const editableUnitAccountRoles = [
 ];
 
 const superAdminViews = [
-  ["home", "Summary"],
-  ["registration", "Account Registration"],
-  ["drafts", "Drafts"],
+  ["home", "Homepage"],
+  ["call-down-list", "Call Down List"],
   ["incident-management", "Incident Management"],
   ["incident-analytics", "Incident Analytics"],
+  ["incidents", "Official Incidents"],
+  ["facilities", "Healthcare Facilities"],
+  ["users", "Accounts"],
+  ["records", "Victim Records"],
+  ["approvals", "Approvals"],
+  ["match-casing", "Match Casing"],
+  ["matched-cases", "Matched Cases"],
+  ["registration", "Account Registration"],
+  ["drafts", "Drafts"],
   ["history", "Incident History"],
   ["logs", "Action Logs"],
 ];
@@ -247,25 +257,45 @@ const superAdminNavGroups = [
     id: "overview",
     label: "Overview",
     icon: "O",
-    views: [["home", "Summary"]],
-  },
-  {
-    id: "administration",
-    label: "Administration",
-    icon: "AD",
-    views: [
-      ["registration", "Account Registration"],
-      ["drafts", "Drafts"],
-    ],
+    views: [["home", "Homepage"]],
   },
   {
     id: "incidents",
     label: "Incidents",
     icon: "IN",
     views: [
+      ["call-down-list", "Call Down List"],
       ["incident-management", "Incident Management"],
       ["incident-analytics", "Incident Analytics"],
+      ["incidents", "Official Incidents"],
       ["history", "Incident History"],
+    ],
+  },
+  {
+    id: "casualties",
+    label: "Victims",
+    icon: "CA",
+    views: [
+      ["records", "Victim Records"],
+      ["approvals", "Approvals"],
+      ["match-casing", "Match Casing"],
+      ["matched-cases", "Matched Cases"],
+    ],
+  },
+  {
+    id: "resources",
+    label: "Resources",
+    icon: "RS",
+    views: [["facilities", "Healthcare Facilities"]],
+  },
+  {
+    id: "administration",
+    label: "Administration",
+    icon: "AD",
+    views: [
+      ["users", "Accounts"],
+      ["registration", "Account Registration"],
+      ["drafts", "Drafts"],
     ],
   },
   {
@@ -692,6 +722,54 @@ function encoderUnitName(encoder) {
   ].filter(Boolean);
 
   return parts.length > 0 ? parts.join(", ") : "Unassigned unit";
+}
+
+function getAdminAccountUsers() {
+  return state.adminAccounts
+    .filter((user) =>
+      ["admin", "administrator"].includes(String(user.role || "")),
+    )
+    .slice()
+    .sort((first, second) =>
+      compareText(
+        first.full_name || first.email,
+        second.full_name || second.email,
+      ),
+    );
+}
+
+function adminScopeLabel(adminId) {
+  if (!adminId) {
+    return "Unassigned admin group";
+  }
+
+  const admin = getAdminAccountUsers().find((user) => user.id === adminId);
+
+  return admin
+    ? `${admin.full_name || admin.email} (${admin.email})`
+    : "Unknown admin group";
+}
+
+function getIncidentAdminScopeId(incident) {
+  return incident?.created_by || "";
+}
+
+function getCasualtyAdminScopeId(record) {
+  const encoderId = record?.encoder?.id;
+  const encoderCreatedBy = record?.encoder?.created_by;
+
+  if (encoderCreatedBy) {
+    return encoderCreatedBy;
+  }
+
+  if (
+    encoderId &&
+    getAdminAccountUsers().some((admin) => admin.id === encoderId)
+  ) {
+    return encoderId;
+  }
+
+  return record?.incident?.created_by || "";
 }
 
 function compareText(a, b) {
@@ -1484,6 +1562,7 @@ async function loadSharedData() {
     healthcareFacilities,
     callDownStaff,
     unitUsers,
+    adminAccounts,
     auditLogs,
     formDrafts,
     recent,
@@ -1497,6 +1576,9 @@ async function loadSharedData() {
       apiRequest("/healthcare-facilities"),
       apiRequest("/call-down-staff"),
       apiRequest("/auth/unit-users"),
+      isSuperAdmin()
+        ? apiRequest("/auth/accounts")
+        : Promise.resolve({ data: state.adminAccounts }),
       apiRequest("/audit-logs?limit=100"),
       apiRequest("/drafts"),
       apiRequest("/dashboard/recent-activity?limit=12"),
@@ -1513,6 +1595,7 @@ async function loadSharedData() {
   let loadedHealthcareFacilities = state.healthcareFacilities;
   let loadedCallDownStaff = state.callDownStaff;
   let loadedUnitUsers = state.unitUsers;
+  let loadedAdminAccounts = state.adminAccounts;
   let loadedAuditLogs = state.auditLogs;
   let loadedFormDrafts = state.formDrafts;
   let loadedRecentActivity = state.recentActivity;
@@ -1545,6 +1628,10 @@ async function loadSharedData() {
 
   if (unitUsers.status === "fulfilled") {
     loadedUnitUsers = unitUsers.value.data || [];
+  }
+
+  if (adminAccounts.status === "fulfilled") {
+    loadedAdminAccounts = adminAccounts.value.data || [];
   }
 
   if (auditLogs.status === "fulfilled") {
@@ -1587,6 +1674,7 @@ async function loadSharedData() {
   state.healthcareFacilities = loadedHealthcareFacilities;
   state.callDownStaff = loadedCallDownStaff;
   state.unitUsers = loadedUnitUsers;
+  state.adminAccounts = loadedAdminAccounts;
   state.auditLogs = loadedAuditLogs;
   state.formDrafts = loadedFormDrafts;
   state.recentActivity = loadedRecentActivity;
@@ -2332,8 +2420,17 @@ function renderCurrentView(errorMessage = "") {
 
   const title = isSuperAdmin()
     ? {
-        home: "Super Admin Summary",
+        home: "Super Admin Homepage",
+        "call-down-list": "Call Down List",
         registration: "Account Registration",
+        users: "Accounts",
+        records: "Victim Records",
+        approvals: "Approvals",
+        "match-casing": "Match Casing",
+        "matched-cases": "Matched Cases",
+        incidents: "Official Incidents",
+        facilities: "Healthcare Facilities",
+        drafts: "Drafts",
         "incident-management": "Incident Management",
         "incident-analytics": "Incident Analytics",
         history: "Reported Incident History",
@@ -2668,7 +2765,16 @@ function bindVerificationReviewFilters() {
 }
 
 function getAnalyticsIncidents() {
-  return state.allIncidents.length ? state.allIncidents : state.incidents;
+  const incidents = state.allIncidents.length ? state.allIncidents : state.incidents;
+
+  if (!isSuperAdmin() || state.analyticsAdminScopeFilter === "all") {
+    return incidents;
+  }
+
+  return incidents.filter(
+    (incident) =>
+      getIncidentAdminScopeId(incident) === state.analyticsAdminScopeFilter,
+  );
 }
 
 function getSelectedAnalyticsIncident() {
@@ -2684,6 +2790,45 @@ function getSelectedAnalyticsIncident() {
 
 function getSelectedAnalyticsIncidentId() {
   return getSelectedAnalyticsIncident()?.id ?? "";
+}
+
+function renderAnalyticsAdminScopeFilter(incidents) {
+  if (!isSuperAdmin()) {
+    return "";
+  }
+
+  const adminAccounts = getAdminAccountUsers();
+  const selectedScope = adminAccounts.some(
+    (admin) => admin.id === state.analyticsAdminScopeFilter,
+  )
+    ? state.analyticsAdminScopeFilter
+    : "all";
+
+  if (selectedScope !== state.analyticsAdminScopeFilter) {
+    state.analyticsAdminScopeFilter = selectedScope;
+  }
+
+  return `
+    <label class="field">
+      <span>Filter by admin group</span>
+      <select id="analyticsAdminScopeFilter">
+        <option value="all" ${selectedScope === "all" ? "selected" : ""}>All admin groups</option>
+        ${adminAccounts
+          .map((admin) => {
+            const count = incidents.filter(
+              (incident) => getIncidentAdminScopeId(incident) === admin.id,
+            ).length;
+
+            return `
+              <option value="${escapeHtml(admin.id)}" ${selectedScope === admin.id ? "selected" : ""}>
+                ${escapeHtml(admin.full_name || admin.email)} (${count})
+              </option>
+            `;
+          })
+          .join("")}
+      </select>
+    </label>
+  `;
 }
 
 function stopAnalyticsLiveRefresh() {
@@ -2749,6 +2894,7 @@ function bindIncidentAnalyticsActions() {
   const selectedIncident = getSelectedAnalyticsIncident();
   const selectedIncidentId = selectedIncident?.id ?? "";
   const select = qs("#analyticsIncidentSelect");
+  const adminScopeSelect = qs("#analyticsAdminScopeFilter");
 
   if (selectedIncidentId && state.analyticsIncidentId !== selectedIncidentId) {
     state.analyticsIncidentId = selectedIncidentId;
@@ -2764,6 +2910,21 @@ function bindIncidentAnalyticsActions() {
         renderCurrentView();
         bindView();
       }
+    });
+  }
+
+  if (adminScopeSelect) {
+    adminScopeSelect.addEventListener("change", async () => {
+      state.analyticsAdminScopeFilter = adminScopeSelect.value || "all";
+      const nextIncident = getSelectedAnalyticsIncident();
+      state.analyticsIncidentId = nextIncident?.id ?? null;
+
+      if (nextIncident?.id && !state.incidentManagementDetails[nextIncident.id]) {
+        await loadIncidentManagementDetails(nextIncident.id);
+      }
+
+      renderCurrentView();
+      bindView();
     });
   }
 
@@ -2835,8 +2996,26 @@ function renderDashboardShellIntoExisting() {
 
 function renderSuperAdminView() {
   switch (state.activeView) {
+    case "call-down-list":
+      return renderCallDownList();
     case "registration":
       return renderRegistrationShell();
+    case "users":
+      return renderAdminUnitRegistration();
+    case "records":
+      return renderAdminCasualtyRecords();
+    case "approvals":
+      return renderSuperAdminApprovals();
+    case "match-casing":
+      return renderMatchCasing();
+    case "matched-cases":
+      return renderMatchedCaseRecords();
+    case "incidents":
+      return renderIncidentCreator();
+    case "facilities":
+      return renderFacilityCreator();
+    case "drafts":
+      return renderDrafts();
     case "incident-management":
       return renderIncidentManagement();
     case "incident-analytics":
@@ -3919,6 +4098,8 @@ function bindResponderSafetyViewActions() {
 }
 
 function renderIncidentAnalytics() {
+  const analyticsSourceIncidents =
+    state.allIncidents.length ? state.allIncidents : state.incidents;
   const incidents = getAnalyticsIncidents();
   const selectedIncident = getSelectedAnalyticsIncident();
   const selectedIncidentId = selectedIncident?.id ?? "";
@@ -3985,12 +4166,15 @@ const incidentLocation = selectedIncident
           ${isLoading ? "Loading..." : "Refresh Analytics"}
         </button>
       </div>
-      <label class="field">
-        <span>Select incident</span>
-        <select id="analyticsIncidentSelect">
-          ${analyticsIncidentOptions(incidents, selectedIncidentId)}
-        </select>
-      </label>
+      <div class="form-grid two">
+        ${renderAnalyticsAdminScopeFilter(analyticsSourceIncidents)}
+        <label class="field">
+          <span>Select incident</span>
+          <select id="analyticsIncidentSelect">
+            ${analyticsIncidentOptions(incidents, selectedIncidentId)}
+          </select>
+        </label>
+      </div>
     </section>
     <section class="panel analytics-incident-summary">
 
@@ -6986,7 +7170,7 @@ function renderAdminVerificationReview() {
       <div class="panel-header">
         <div>
           <h2>Verification review</h2>
-          <p class="panel-subtitle">Victim entries awaiting review from responder accounts in this admin unit.</p>
+          <p class="panel-subtitle">${isSuperAdmin() ? "Victim entries awaiting review across all admin groups." : "Victim entries awaiting review from responder accounts in this admin unit."}</p>
         </div>
       </div>
       ${renderVerificationReviewFilters(
@@ -7003,7 +7187,10 @@ function renderAdminVerificationReview() {
                 .map(
                   (item) => `
                     <tr class="clickable-row" data-open-casualty="${escapeHtml(item.id)}">
-                      <td>${escapeHtml(encoderUnitName(item.encoder))}</td>
+                      <td>
+                        ${escapeHtml(isSuperAdmin() ? adminScopeLabel(getCasualtyAdminScopeId(item)) : encoderUnitName(item.encoder))}
+                        ${isSuperAdmin() ? `<br><span class="panel-subtitle">${escapeHtml(encoderUnitName(item.encoder))}</span>` : ""}
+                      </td>
                       <td>${escapeHtml(item.incident?.incident_name || "Unknown incident")}</td>
                       <td>
                         <button class="record-link" type="button" data-open-casualty="${escapeHtml(item.id)}">
@@ -7033,6 +7220,78 @@ function renderAdminVerificationReview() {
       </div>
       <div id="verificationMessage" class="status-message" hidden></div>
     </section>
+  `;
+}
+
+function renderSuperAdminApprovals() {
+  const pendingReopenIncidents = (state.allIncidents.length
+    ? state.allIncidents
+    : state.incidents
+  )
+    .filter((incident) => incident.reopen_request_status === "pending")
+    .slice()
+    .sort(
+      (first, second) =>
+        new Date(second.reopen_requested_at || 0).getTime() -
+        new Date(first.reopen_requested_at || 0).getTime(),
+    );
+  const pendingVictimRecords = state.casualties.filter((item) =>
+    ["submitted", "under_review"].includes(item.verification_status),
+  ).length;
+
+  return `
+    <div class="grid two">
+      ${renderMetric("Incident reopen requests", pendingReopenIncidents.length, pendingReopenIncidents.length ? "emphasis" : "")}
+      ${renderMetric("Victim records pending", pendingVictimRecords)}
+    </div>
+    <section class="panel" style="margin-top:18px">
+      <div class="panel-header">
+        <div>
+          <h2>Incident reopening approvals</h2>
+          <p class="panel-subtitle">Closed incidents requested by admins for reopening.</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Incident</th>
+              <th>Admin group</th>
+              <th>Reason</th>
+              <th>Requested</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${
+              pendingReopenIncidents
+                .map(
+                  (incident) => `
+                    <tr>
+                      <td>
+                        <strong>${escapeHtml(incident.incident_name || "Unnamed incident")}</strong>
+                        <br><span class="panel-subtitle">${escapeHtml(incident.incident_code || incident.id)}</span>
+                      </td>
+                      <td>${escapeHtml(adminScopeLabel(incident.created_by))}</td>
+                      <td>${escapeHtml(incident.reopen_request_reason || "No reason recorded")}</td>
+                      <td>${formatDate(incident.reopen_requested_at)}</td>
+                      <td>
+                        <div class="table-actions">
+                          <button class="ghost-button mini" type="button" data-focus-incident-management="${escapeHtml(incident.id)}">Open incident</button>
+                          <button class="primary-button mini" type="button" data-approve-reopen-incident="${escapeHtml(incident.id)}">Approve Reopen</button>
+                        </div>
+                      </td>
+                    </tr>
+                  `,
+                )
+                .join("") || `<tr><td colspan="5"><div class="empty-state">No incident reopen requests are pending.</div></td></tr>`
+            }
+          </tbody>
+        </table>
+      </div>
+      <div id="incidentActionMessage" class="status-message" hidden></div>
+    </section>
+    <div style="margin-top:18px">${renderAdminVerificationReview()}</div>
   `;
 }
 
@@ -11337,6 +11596,24 @@ function getIncidentCloseWarnings(incidentId) {
 }
 
 function bindIncidentManagementActions() {
+  document.querySelectorAll("[data-focus-incident-management]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const incidentId = button.dataset.focusIncidentManagement;
+
+      if (!incidentId) return;
+
+      state.expandedIncidentId = incidentId;
+      setActiveView("incident-management");
+
+      if (!state.incidentManagementDetails[incidentId]) {
+        await loadIncidentManagementDetails(incidentId);
+      }
+
+      renderCurrentView();
+      bindView();
+    });
+  });
+
   document.querySelectorAll("[data-incident-toggle]").forEach((button) => {
     button.addEventListener("click", async () => {
       const incidentId = button.dataset.incidentToggle;
