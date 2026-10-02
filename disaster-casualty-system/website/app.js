@@ -10654,6 +10654,13 @@ function getIncidentTimelineValue(incident, timeline, name, key) {
   return name === "disasterOccurredAt" ? incident?.started_at : timeline?.[key];
 }
 
+function getAnalyticsTimelineVisualAt(details, key) {
+  const items = details?.analytics?.data?.timelineVisuals || [];
+  const found = items.find((item) => item?.key === key);
+
+  return found?.at || null;
+}
+
 function normalizeCustomTimelineEvents(value) {
   return Array.isArray(value)
     ? value
@@ -10716,6 +10723,22 @@ function buildIncidentTimelineEntries(incident, details) {
       "Last transport from scene",
       details?.sceneClearance?.data?.lastTransportFromSceneAt,
     ],
+    [
+      "Time of arrival of medical staff on the scene",
+      getAnalyticsTimelineVisualAt(details, "firstMedicalStaffArrivalOnScene"),
+    ],
+    [
+      "Last responder to arrive on the scene",
+      getAnalyticsTimelineVisualAt(details, "lastResponderArrivalOnScene"),
+    ],
+    [
+      "Time of first victim stabilized at the advanced medical post",
+      getAnalyticsTimelineVisualAt(details, "firstVictimStabilizedAtAmp"),
+    ],
+    [
+      "Time of last victim stabilized at the advanced medical post",
+      getAnalyticsTimelineVisualAt(details, "lastVictimStabilizedAtAmp"),
+    ],
   ].map(([label, value], index) => ({
     label,
     value,
@@ -10770,7 +10793,7 @@ function renderExtractedTimelineFacts(details) {
       <div class="section-card-header">
         <div>
           <h3>Extracted from records</h3>
-          <p class="panel-subtitle">Calculated from the Onsite Triage and Scene Clearance summaries.</p>
+          <p class="panel-subtitle">Calculated from mobile responder, triage, transport, and AMP treatment records.</p>
         </div>
       </div>
       ${renderKeyValueSection([
@@ -10778,6 +10801,10 @@ function renderExtractedTimelineFacts(details) {
         ["Last site triage", formatDate(details?.onsiteTriage?.data?.lastSiteTriageAt)],
         ["First transport from scene", formatDate(details?.sceneClearance?.data?.firstTransportFromSceneAt)],
         ["Last transport from scene", formatDate(details?.sceneClearance?.data?.lastTransportFromSceneAt)],
+        ["Time of arrival of medical staff on the scene", formatDate(getAnalyticsTimelineVisualAt(details, "firstMedicalStaffArrivalOnScene"))],
+        ["Last responder to arrive on the scene", formatDate(getAnalyticsTimelineVisualAt(details, "lastResponderArrivalOnScene"))],
+        ["Time of first victim stabilized at the advanced medical post", formatDate(getAnalyticsTimelineVisualAt(details, "firstVictimStabilizedAtAmp"))],
+        ["Time of last victim stabilized at the advanced medical post", formatDate(getAnalyticsTimelineVisualAt(details, "lastVictimStabilizedAtAmp"))],
       ])}
     </section>
   `;
