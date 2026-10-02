@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS public.responder_safety_responses (
   responder_role text,
   responder_function text,
   safety_status varchar(20) NOT NULL,
+  responder_arrived_at timestamptz,
   ppe_used_at timestamptz NOT NULL,
   recorded_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
@@ -18,6 +19,7 @@ ALTER TABLE public.responder_safety_responses
   ADD COLUMN IF NOT EXISTS responder_role text,
   ADD COLUMN IF NOT EXISTS responder_function text,
   ADD COLUMN IF NOT EXISTS safety_status varchar(20),
+  ADD COLUMN IF NOT EXISTS responder_arrived_at timestamptz,
   ADD COLUMN IF NOT EXISTS ppe_used_at timestamptz,
   ADD COLUMN IF NOT EXISTS recorded_at timestamptz DEFAULT now(),
   ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();

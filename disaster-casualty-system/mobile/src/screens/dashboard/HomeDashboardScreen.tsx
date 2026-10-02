@@ -801,6 +801,11 @@ export default function HomeDashboardScreen() {
     currentUserRole === "administrator";
   const hideDataEntryQuickLinks =
     isResponderAccount || isDocumenterAccount;
+  const summaryDate = new Intl.DateTimeFormat("en-US", {
+    month: "2-digit",
+    day: "2-digit",
+    year: "numeric",
+  }).format(new Date());
 
   async function resolveActiveIncident(
     title: string,
@@ -1452,11 +1457,11 @@ export default function HomeDashboardScreen() {
           </View>
         ) : null}
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.summaryGrid}
-        >
+        <Text style={styles.sectionTitle}>
+          Summary for Today, {summaryDate}
+        </Text>
+
+        <View style={styles.summaryGrid}>
           <SummaryCard
             icon="warning-outline"
             value={String(summary.activeIncidents)}
@@ -1505,7 +1510,7 @@ export default function HomeDashboardScreen() {
             iconColor={COLORS.cyan}
             loading={isLoading}
           />
-        </ScrollView>
+        </View>
 
         <Text style={styles.sectionTitle}>
           QUICK ACTIONS
@@ -2229,8 +2234,9 @@ const styles = StyleSheet.create({
 
   summaryGrid: {
     flexDirection: "row",
-    gap: 8,
-    paddingRight: SCREEN_PADDING,
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    rowGap: 22,
     marginBottom: 26,
   },
 
@@ -2256,7 +2262,7 @@ const styles = StyleSheet.create({
   },
 
   summaryCard: {
-    width: 205,
+    width: "48.5%",
     minHeight: 140,
     borderRadius: 12,
     backgroundColor: COLORS.white,

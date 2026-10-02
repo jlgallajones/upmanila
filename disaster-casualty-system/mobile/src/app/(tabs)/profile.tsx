@@ -48,6 +48,8 @@ const COLORS = {
 };
 
 const SCREEN_PADDING = 16;
+const FLOATING_TAB_BAR_CLEARANCE =
+  Platform.OS === "android" ? 86 : 98;
 
 type InformationRowProps = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -1315,6 +1317,6 @@ const styles = StyleSheet.create({
   },
 
   bottomSpacing: {
-    height: 25,
+    height: FLOATING_TAB_BAR_CLEARANCE,
   },
 });

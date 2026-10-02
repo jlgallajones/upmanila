@@ -21,7 +21,7 @@ function TabIcon({
   focused,
   icon,
   activeIcon,
-  size = 24,
+  size = 26,
 }: {
   color: ColorValue;
   focused: boolean;
@@ -102,7 +102,7 @@ export default function TabLayout() {
           left: 14,
           right: 14,
           bottom: Platform.OS === "android" ? 14 : 22,
-          height: 38,
+          height: 50,
           paddingTop: 0,
           paddingBottom: 0,
           borderTopWidth: 1,
@@ -122,7 +122,12 @@ export default function TabLayout() {
           },
         },
         tabBarItemStyle: {
-          height: 38,
+          height: 50,
+          alignItems: "center",
+          justifyContent: "center",
+        },
+        tabBarIconStyle: {
+          alignItems: "center",
           justifyContent: "center",
         },
       }}
@@ -168,7 +173,7 @@ export default function TabLayout() {
               focused={focused}
               icon="add-circle-outline"
               activeIcon="add-circle"
-              size={25}
+              size={29}
             />
           ),
         }}
@@ -217,7 +222,7 @@ export default function TabLayout() {
 
 const styles = StyleSheet.create({
   tabIconShell: {
-    width: 62,
+    width: 52,
     height: 34,
     borderRadius: 999,
     alignItems: "center",

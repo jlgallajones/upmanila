@@ -4,7 +4,7 @@
     "slug": "mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/dcms-app-icon.png",
+    "icon": "./assets/images/medsort.png",
     "scheme": "mobile",
     "userInterfaceStyle": "automatic",
     "ios": {
@@ -23,7 +23,7 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/dcms-app-icon.png",
+      "favicon": "./assets/images/medsort.png",
       "name": "MedSORT",
       "shortName": "MedSORT",
       "themeColor": "#242424",

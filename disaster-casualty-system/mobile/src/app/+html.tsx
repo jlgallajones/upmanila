@@ -24,34 +24,34 @@ export default function Root({ children }: PropsWithChildren) {
         <link
           rel="apple-touch-icon"
           sizes="180x180"
-          href="/icons/dcms-icon-180.png"
+          href="/icons/medsort-icon-180.png"
         />
         <link
           rel="apple-touch-icon"
           sizes="167x167"
-          href="/icons/dcms-icon-167.png"
+          href="/icons/medsort-icon-167.png"
         />
         <link
           rel="apple-touch-icon"
           sizes="152x152"
-          href="/icons/dcms-icon-152.png"
+          href="/icons/medsort-icon-152.png"
         />
         <link
           rel="apple-touch-icon"
           sizes="120x120"
-          href="/icons/dcms-icon-120.png"
+          href="/icons/medsort-icon-120.png"
         />
         <link
           rel="icon"
           type="image/png"
           sizes="64x64"
-          href="/icons/dcms-icon-64.png"
+          href="/icons/medsort-icon-64.png"
         />
         <link
           rel="icon"
           type="image/png"
           sizes="32x32"
-          href="/icons/dcms-icon-32.png"
+          href="/icons/medsort-icon-32.png"
         />
         <script
           dangerouslySetInnerHTML={{

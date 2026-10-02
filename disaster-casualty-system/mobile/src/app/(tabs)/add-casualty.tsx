@@ -103,6 +103,9 @@ const AMP_RESPONDER_FULL_LABEL =
 const AMP_RESPONDER_SHORT_LABEL =
   "AMP Responder";
 
+const FLOATING_TAB_BAR_CLEARANCE =
+  Platform.OS === "android" ? 66 : 78;
+
 const DEFAULT_STEPS = [
   "Personal",
   "Address",
@@ -8256,17 +8259,6 @@ if (
           );
         }
 
-        if (
-          !isEditing &&
-          isFieldResponderFlow &&
-          !selectedPhoto
-        ) {
-          return failValidation(
-            "Victim photo required",
-            "Attach or capture a victim photo before submitting.",
-          );
-        }
-
         return (
           validateOptionalDateTime(
             form.stabilizationStartedTime,
@@ -8285,17 +8277,6 @@ if (
           return validateHospitalCareDatesOnly();
 
         case "Remarks":
-          if (
-            !isEditing &&
-            isSaResponderFlow &&
-            !selectedPhoto
-          ) {
-            return failValidation(
-              "Victim photo required",
-              "Attach or capture a victim photo before submitting.",
-            );
-          }
-
           return true;
 
         case "Address":
@@ -11638,25 +11619,9 @@ async function ensureResponderSafetyResponseSaved() {
         return 'The "Did you mark your victims?" confirmation is required.';
       }
 
-      if (
-        !isEditing &&
-        isFieldResponderFlow &&
-        !selectedPhoto
-      ) {
-        return "Victim Photo is required.";
-      }
-
       return null;
 
     case "Remarks":
-      if (
-        !isEditing &&
-        isSaResponderFlow &&
-        !selectedPhoto
-      ) {
-        return "Victim Photo is required.";
-      }
-
       return null;
 
     default:
@@ -14627,7 +14592,7 @@ form.triageAssistanceMode === "assisted" ? (
           <Text style={styles.uploadTitle}>
             {selectedPhoto
               ? "Victim photo selected"
-              : "Add victim photo"}
+              : "Add victim photo (optional)"}
           </Text>
           <Text style={styles.uploadDescription}>
             {selectedPhoto
@@ -15703,7 +15668,7 @@ exitButtonText: {
   formContent: {
     paddingHorizontal: 14,
     paddingTop: 23,
-    paddingBottom: 30,
+    paddingBottom: FLOATING_TAB_BAR_CLEARANCE + 34,
   },
   responderFunctionStickyHeader: {
     flexDirection: "row",
@@ -16429,6 +16394,7 @@ triageModeOptionTextSelected: {
     backgroundColor: COLORS.white,
     borderTopWidth: 1,
     borderTopColor: "#E8EBF0",
+    paddingBottom: FLOATING_TAB_BAR_CLEARANCE,
   },
   footer: {
     flexDirection: "row",

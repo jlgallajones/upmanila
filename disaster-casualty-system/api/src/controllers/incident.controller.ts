@@ -530,9 +530,37 @@ type ResponderSafetyReportRow = {
 };
 
 type ResponderSafetyResponseRow = {
+  responder_role?: string | null;
+  responder_function?: string | null;
   safety_status: string | null;
+  responder_arrived_at?: string | null;
   ppe_used_at: string | null;
 };
+
+function isFieldOrAmpResponderSafetyResponse(
+  row: ResponderSafetyResponseRow,
+): boolean {
+  const normalize = (value: string | null | undefined) =>
+    String(value ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+  const candidates = [
+    normalize(row.responder_function),
+    normalize(row.responder_role),
+  ];
+
+  return candidates.some((value) =>
+    [
+      "field_responder",
+      "sa_responder",
+      "advanced_medical_responder",
+      "amp_responder",
+      "responder",
+    ].includes(value),
+  );
+}
 
 type HospitalResourceSnapshotRow = {
   id: string;
@@ -5343,7 +5371,9 @@ export async function getIncidentAnalyticsSummary(
     .maybeSingle(),
       supabase
         .from("responder_safety_responses")
-        .select("safety_status, ppe_used_at")
+        .select(
+          "responder_role, responder_function, safety_status, responder_arrived_at, ppe_used_at",
+        )
         .eq("incident_id", id),
     ]);
 
@@ -5495,6 +5525,24 @@ export async function getIncidentAnalyticsSummary(
 
         return typeof value === "string" ? value : null;
       }),
+    );
+    const fieldOrAmpResponderSafetyResponses =
+      responderSafetyResponses.filter(isFieldOrAmpResponderSafetyResponse);
+    const firstFieldOrAmpResponderArrivalAt = firstDate(
+      fieldOrAmpResponderSafetyResponses.map(
+        (row) => row.responder_arrived_at,
+      ),
+    );
+    const lastFieldOrAmpResponderArrivalAt = lastDate(
+      fieldOrAmpResponderSafetyResponses.map(
+        (row) => row.responder_arrived_at,
+      ),
+    );
+    const firstVictimStabilizedAtAmpAt = firstDate(
+      treatmentRows.map((row) => row.stabilized_at),
+    );
+    const lastVictimStabilizedAtAmpAt = lastDate(
+      treatmentRows.map((row) => row.stabilized_at),
     );
     const isPrimaryTriage = (row: TriageAssessmentRow) =>
       row.triage_stage === "on_site" ||
@@ -5861,6 +5909,16 @@ const unsafeResponders = responderSafetyResponses.filter(
         at: timelineDateValue("medical_coordinator_notified_at"),
       },
       {
+        key: "firstMedicalStaffArrivalOnScene",
+        label: "Time of arrival of medical staff on the scene",
+        at: firstFieldOrAmpResponderArrivalAt,
+      },
+      {
+        key: "lastResponderArrivalOnScene",
+        label: "Last responder to arrive on the scene",
+        at: lastFieldOrAmpResponderArrivalAt,
+      },
+      {
         key: "triageInitiated",
         label: "Triage initiated",
         at: timelineDateValue("triage_ordered_at"),
@@ -5884,6 +5942,18 @@ const unsafeResponders = responderSafetyResponses.filter(
         key: "lastSecondaryTriage",
         label: "Last victim triaged using secondary triage",
         at: lastDate(secondaryTriageRows.map((row) => row.triaged_at)),
+      },
+      {
+        key: "firstVictimStabilizedAtAmp",
+        label:
+          "Time of first victim stabilized at the advanced medical post",
+        at: firstVictimStabilizedAtAmpAt,
+      },
+      {
+        key: "lastVictimStabilizedAtAmp",
+        label:
+          "Time of last victim stabilized at the advanced medical post",
+        at: lastVictimStabilizedAtAmpAt,
       },
       {
         key: "firstEmsVehicle",
