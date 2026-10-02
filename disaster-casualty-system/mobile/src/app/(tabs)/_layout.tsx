@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, Tabs, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
-import { Platform } from "react-native";
+import { Platform, StyleSheet, View, type ColorValue } from "react-native";
 
 import {
   getAccessToken,
@@ -9,11 +9,36 @@ import {
 } from "../../auth/session";
 
 const COLORS = {
-  maroon: "#242424",
-  inactive: "#8792A8",
+  teal: "#00838F",
+  inactive: "#FFFFFF",
+  activeIcon: "#242424",
   white: "#FFFFFF",
-  border: "#E5E9F0",
+  border: "#E6E6E6",
 };
+
+function TabIcon({
+  color,
+  focused,
+  icon,
+  activeIcon,
+  size = 24,
+}: {
+  color: ColorValue;
+  focused: boolean;
+  icon: keyof typeof Ionicons.glyphMap;
+  activeIcon: keyof typeof Ionicons.glyphMap;
+  size?: number;
+}) {
+  return (
+    <View style={[styles.tabIconShell, focused && styles.tabIconShellActive]}>
+      <Ionicons
+        name={focused ? activeIcon : icon}
+        size={size}
+        color={focused ? COLORS.activeIcon : color}
+      />
+    </View>
+  );
+}
 
 export default function TabLayout() {
   const [isSuperAdmin, setIsSuperAdmin] =
@@ -64,28 +89,41 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: COLORS.maroon,
+        tabBarActiveTintColor: COLORS.white,
         tabBarInactiveTintColor: COLORS.inactive,
+        tabBarShowLabel: false,
         tabBarLabelStyle: {
           fontSize: 10,
           fontWeight: "600",
           marginTop: 2,
         },
         tabBarStyle: {
-          height: Platform.OS === "android" ? 72 : 84,
-          paddingTop: 8,
-          paddingBottom: Platform.OS === "android" ? 9 : 22,
+          position: "absolute",
+          left: 14,
+          right: 14,
+          bottom: Platform.OS === "android" ? 14 : 22,
+          height: 38,
+          paddingTop: 0,
+          paddingBottom: 0,
           borderTopWidth: 1,
-          borderTopColor: COLORS.border,
-          backgroundColor: COLORS.white,
-          elevation: 14,
+          borderTopColor: "transparent",
+          borderColor: COLORS.border,
+          borderWidth: 1,
+          borderRadius: 999,
+          backgroundColor: COLORS.teal,
+          overflow: "hidden",
+          elevation: 10,
           shadowColor: "#000000",
-          shadowOpacity: 0.08,
-          shadowRadius: 10,
+          shadowOpacity: 0.12,
+          shadowRadius: 12,
           shadowOffset: {
             width: 0,
-            height: -4,
+            height: 5,
           },
+        },
+        tabBarItemStyle: {
+          height: 38,
+          justifyContent: "center",
         },
       }}
     >
@@ -93,11 +131,12 @@ export default function TabLayout() {
         name="home"
         options={{
           title: "Home",
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? "home" : "home-outline"}
-              size={size}
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
               color={color}
+              focused={focused}
+              icon="home-outline"
+              activeIcon="home"
             />
           ),
         }}
@@ -107,11 +146,12 @@ export default function TabLayout() {
         name="records"
         options={{
           title: "Records",
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? "people" : "people-outline"}
-              size={size}
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
               color={color}
+              focused={focused}
+              icon="folder-outline"
+              activeIcon="folder"
             />
           ),
         }}
@@ -123,10 +163,12 @@ export default function TabLayout() {
           href: isSuperAdmin ? null : undefined,
           title: "Add",
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={focused ? "add-circle" : "add-circle-outline"}
-              size={32}
+            <TabIcon
               color={color}
+              focused={focused}
+              icon="add-circle-outline"
+              activeIcon="add-circle"
+              size={25}
             />
           ),
         }}
@@ -137,11 +179,12 @@ export default function TabLayout() {
         options={{
           href: isSuperAdmin ? null : undefined,
           title: "Drafts",
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? "document-text" : "document-text-outline"}
-              size={size}
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
               color={color}
+              focused={focused}
+              icon="document-text-outline"
+              activeIcon="document-text"
             />
           ),
         }}
@@ -158,11 +201,12 @@ export default function TabLayout() {
         name="profile"
         options={{
           title: "Profile",
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? "person" : "person-outline"}
-              size={size}
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
               color={color}
+              focused={focused}
+              icon="person-outline"
+              activeIcon="person"
             />
           ),
         }}
@@ -170,3 +214,16 @@ export default function TabLayout() {
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  tabIconShell: {
+    width: 62,
+    height: 34,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tabIconShellActive: {
+    backgroundColor: COLORS.white,
+  },
+});
