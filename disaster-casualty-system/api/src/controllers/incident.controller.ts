@@ -47,9 +47,30 @@ type UpdateIncidentTimelineRequest = {
   firstTransportFromSceneAt?: string | null;
   lastTransportFromSceneAt?: string | null;
   sceneDemobilizedAt?: string | null;
+  customTimelineEvents?: Array<{
+    id?: string | null;
+    label?: string | null;
+    at?: string | null;
+  }>;
 };
 
 type CountMap = Record<string, number>;
+type CustomTimelineEvent = {
+  id: string;
+  label: string;
+  at: string;
+};
+type AnalyticsTriageAccuracySummary = ReturnType<
+  typeof buildTriageAccuracySummary
+> & {
+  assessedRecords: number;
+  overTriageTotal: number;
+  overTriagePercentage: number;
+  underTriageTotal: number;
+  underTriagePercentage: number;
+  explicitOverTriageRecords: number;
+  explicitUnderTriageRecords: number;
+};
 type ResponderFunctionFilter =
   | "field_responder"
   | "sa_responder"
@@ -124,7 +145,52 @@ type IncidentSitrepPayload = {
     };
     edCareByTriageCategory: Record<string, { count: number; total: number; percentage: number }>;
     stabilizationStrategies: CountMap;
+    triageAccuracy: AnalyticsTriageAccuracySummary;
     cumulativeIntervalsMinutes: number[];
+  };
+  incidentManagementSnapshot?: {
+    dmmpStaff: {
+      totalStaffRecords: number;
+      contacted: number;
+      arrived: number;
+      safe: number;
+      unsafe: number;
+      deceased: number;
+      lastArrivalAt: string | null;
+    };
+    coordinationAssessment: {
+      initialActions: number | null;
+      sceneCoordination: number | null;
+      systemCoordination: number | null;
+      communications: number | null;
+      resourceManagement: number | null;
+      assessedAt: string | null;
+      notes: string | null;
+    } | null;
+    responderSafety: {
+      safeResponders: number;
+      unsafeResponders: number;
+    };
+    onsiteTriage: {
+      firstSiteTriageAt: string | null;
+      lastSiteTriageAt: string | null;
+      totalAssessments: number;
+    };
+    sceneClearance: {
+      firstTransportFromSceneAt: string | null;
+      lastTransportFromSceneAt: string | null;
+      departedScene: number;
+      arrivedFacility: number;
+    };
+    treatment: {
+      treatmentRecordedTotal: number;
+      stabilizedTotal: number;
+      strategyCounts: CountMap;
+    };
+    facilities: {
+      evacuationCenters: CountMap;
+      receivingFacilities: CountMap;
+    };
   };
 };
 
@@ -195,6 +261,8 @@ type TriageAssessmentRow = {
   triaged_at: string | null;
   triaged_by?: string | null;
   assessment_answers?: Record<string, unknown> | null;
+  is_over_triage?: boolean | null;
+  is_under_triage?: boolean | null;
 };
 
 type AnalyticsTriageCategory =
@@ -313,6 +381,72 @@ function getAnalyticsTriageCategory(
   }
 
   return "unknown";
+}
+
+function getCalculatedTriageCategory(
+  row: TriageAssessmentRow,
+): AnalyticsTriageCategory {
+  const finalTriage =
+    row.assessment_answers &&
+    typeof row.assessment_answers === "object"
+      ? row.assessment_answers.finalTriage
+      : null;
+
+  for (const value of [
+    row.calculated_category,
+    row.triage_category,
+    finalTriage,
+  ]) {
+    const category = normalizeAnalyticsTriageCategory(value);
+
+    if (category !== "unknown") {
+      return category;
+    }
+  }
+
+  return "unknown";
+}
+
+function buildAnalyticsTriageAccuracy(
+  rows: TriageAssessmentRow[],
+): AnalyticsTriageAccuracySummary {
+  const accuracyRows = rows
+    .map((row) => ({
+      responder_category: normalizeAnalyticsTriageCategory(
+        row.responder_category ?? row.triage_category,
+      ),
+      triage_category: normalizeAnalyticsTriageCategory(
+        row.triage_category,
+      ),
+      calculated_category: getCalculatedTriageCategory(row),
+    }))
+    .filter((row) => row.calculated_category !== "unknown");
+  const summary = buildTriageAccuracySummary(accuracyRows);
+  const overTriageTotal =
+    summary.overtriagedT2.numerator + summary.overtriagedT3.numerator;
+  const underTriageTotal =
+    summary.undertriagedT1.numerator + summary.undertriagedT2.numerator;
+
+  return {
+    ...summary,
+    assessedRecords: accuracyRows.length,
+    overTriageTotal,
+    overTriagePercentage: calculatePercentage(
+      overTriageTotal,
+      accuracyRows.length,
+    ),
+    underTriageTotal,
+    underTriagePercentage: calculatePercentage(
+      underTriageTotal,
+      accuracyRows.length,
+    ),
+    explicitOverTriageRecords: rows.filter(
+      (row) => row.is_over_triage === true,
+    ).length,
+    explicitUnderTriageRecords: rows.filter(
+      (row) => row.is_under_triage === true,
+    ).length,
+  };
 }
 
 type TransportRecordRow = {
@@ -511,6 +645,7 @@ const incidentTimelineSelect = `
   first_transport_from_scene_at,
   last_transport_from_scene_at,
   scene_demobilized_at,
+  custom_events,
   updated_by,
   created_at,
   updated_at
@@ -558,6 +693,89 @@ function parseNullableTimestamp(
   }
 
   return parsed.toISOString();
+}
+
+function normalizeStoredCustomTimelineEvents(
+  value: unknown,
+): CustomTimelineEvent[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item, index) => {
+      if (!isRecord(item)) {
+        return null;
+      }
+
+      const label = String(item.label ?? "").trim();
+      const at = String(item.at ?? "").trim();
+
+      if (!label || !at) {
+        return null;
+      }
+
+      const parsedAt = new Date(at);
+
+      if (Number.isNaN(parsedAt.getTime())) {
+        return null;
+      }
+
+      return {
+        id:
+          typeof item.id === "string" && item.id.trim()
+            ? item.id.trim()
+            : `custom-${index + 1}`,
+        label,
+        at: parsedAt.toISOString(),
+      };
+    })
+    .filter((item): item is CustomTimelineEvent => item !== null);
+}
+
+function parseCustomTimelineEvents(
+  value: UpdateIncidentTimelineRequest["customTimelineEvents"] | undefined,
+): CustomTimelineEvent[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value)) {
+    throw new Error("Custom timeline events must be a list.");
+  }
+
+  return value
+    .map((item, index) => {
+      const label = String(item?.label ?? "").trim();
+      const rawAt = String(item?.at ?? "").trim();
+
+      if (!label && !rawAt) {
+        return null;
+      }
+
+      if (!label) {
+        throw new Error("Custom timeline event name is required.");
+      }
+
+      const parsedAt = parseNullableTimestamp(
+        rawAt,
+        `Custom timeline event "${label}" time`,
+      );
+
+      if (!parsedAt) {
+        throw new Error(`Custom timeline event "${label}" needs a time.`);
+      }
+
+      return {
+        id:
+          item?.id && String(item.id).trim()
+            ? String(item.id).trim()
+            : `custom-${index + 1}`,
+        label,
+        at: parsedAt,
+      };
+    })
+    .filter((item): item is CustomTimelineEvent => item !== null);
 }
 
 function assertChronologicalPair(
@@ -1141,6 +1359,13 @@ function buildSitrepCharts(payload: IncidentSitrepPayload): PdfChart[] {
             title: "Stabilization Strategies",
             counts: analytics.stabilizationStrategies,
           },
+          {
+            title: "Over- and Under-triage",
+            counts: {
+              "Over-triage": analytics.triageAccuracy.overTriageTotal,
+              "Under-triage": analytics.triageAccuracy.underTriageTotal,
+            },
+          },
         ]
       : []),
   ];
@@ -1246,6 +1471,120 @@ function countRows(counts: CountMap): PdfTableRow[] {
   return entries.length > 0
     ? entries.map(([label, value]) => [formatSitrepLabel(label), value])
     : [["No data recorded", 0]];
+}
+
+function buildSitrepTimelineRows(payload: IncidentSitrepPayload): PdfTableRow[] {
+  const incident = payload.incident;
+  const timeline = isRecord(payload.timeline) ? payload.timeline : null;
+  const baseRows: Array<{ label: string; at: string | null; order: number }> = [
+    {
+      label: "Incident onset",
+      at: stringValue(incident, "started_at", "") || null,
+      order: 0,
+    },
+    {
+      label: "Event notification",
+      at: stringValue(timeline, "event_notification_at", "") || null,
+      order: 1,
+    },
+    {
+      label: "Activation of DMMP",
+      at: stringValue(timeline, "dmmp_activated_at", "") || null,
+      order: 2,
+    },
+    {
+      label:
+        "Notification of first appropriate staff person to assume medical management coordination role",
+      at:
+        stringValue(timeline, "medical_coordinator_notified_at", "") ||
+        null,
+      order: 3,
+    },
+    {
+      label: "First EMS vehicle arrived",
+      at: stringValue(timeline, "first_ems_on_scene_at", "") || null,
+      order: 4,
+    },
+    {
+      label: "Triage ordered",
+      at: stringValue(timeline, "triage_ordered_at", "") || null,
+      order: 5,
+    },
+    {
+      label: "Scene demobilized",
+      at: stringValue(timeline, "scene_demobilized_at", "") || null,
+      order: 6,
+    },
+    ...normalizeStoredCustomTimelineEvents(timeline?.custom_events).map(
+      (event, index) => ({
+        label: event.label,
+        at: event.at,
+        order: 7 + index,
+      }),
+    ),
+  ];
+
+  return baseRows
+    .sort((first, second) => {
+      const firstTime = first.at ? new Date(first.at).getTime() : null;
+      const secondTime = second.at ? new Date(second.at).getTime() : null;
+
+      if (firstTime !== null && secondTime !== null) {
+        return firstTime - secondTime || first.order - second.order;
+      }
+
+      if (firstTime !== null) return -1;
+      if (secondTime !== null) return 1;
+      return first.order - second.order;
+    })
+    .map((row) => [row.label, formatSitrepDate(row.at)]);
+}
+
+function buildIncidentManagementRows(
+  snapshot: IncidentSitrepPayload["incidentManagementSnapshot"],
+): PdfTableRow[] {
+  if (!snapshot) {
+    return [["Incident management data", "No data recorded"]];
+  }
+
+  const coordination = snapshot.coordinationAssessment;
+
+  return [
+    ["DMMP staff records", snapshot.dmmpStaff.totalStaffRecords],
+    ["DMMP staff contacted", snapshot.dmmpStaff.contacted],
+    ["DMMP staff arrived", snapshot.dmmpStaff.arrived],
+    ["DMMP staff safe", snapshot.dmmpStaff.safe],
+    ["DMMP staff unsafe", snapshot.dmmpStaff.unsafe],
+    ["DMMP staff deceased", snapshot.dmmpStaff.deceased],
+    [
+      "Last DMMP staff arrival",
+      formatSitrepDate(snapshot.dmmpStaff.lastArrivalAt),
+    ],
+    ["Coordination initial actions", coordination?.initialActions ?? "Not recorded"],
+    ["Coordination scene", coordination?.sceneCoordination ?? "Not recorded"],
+    ["Coordination system", coordination?.systemCoordination ?? "Not recorded"],
+    ["Coordination communications", coordination?.communications ?? "Not recorded"],
+    [
+      "Coordination resource management",
+      coordination?.resourceManagement ?? "Not recorded",
+    ],
+    ["Responder safety safe", snapshot.responderSafety.safeResponders],
+    ["Responder safety unsafe", snapshot.responderSafety.unsafeResponders],
+    [
+      "Onsite triage first/last",
+      `${formatSitrepDate(snapshot.onsiteTriage.firstSiteTriageAt)} / ${formatSitrepDate(snapshot.onsiteTriage.lastSiteTriageAt)}`,
+    ],
+    [
+      "Scene clearance first/last transport",
+      `${formatSitrepDate(snapshot.sceneClearance.firstTransportFromSceneAt)} / ${formatSitrepDate(snapshot.sceneClearance.lastTransportFromSceneAt)}`,
+    ],
+    ["Treatment records", snapshot.treatment.treatmentRecordedTotal],
+    ["Stabilized victims", snapshot.treatment.stabilizedTotal],
+    ...countRows(snapshot.treatment.strategyCounts).map(([label, value]) => [
+      `Treatment strategy - ${label}`,
+      value,
+    ] as PdfTableRow),
+  ];
 }
 
 function buildPdfWithCharts(
@@ -1442,7 +1781,7 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
       "0.72 0.76 0.82 RG",
       `${marginX} 38 ${contentWidth} 0.5 re S`,
       "0 g",
-      `BT /F1 8 Tf ${marginX} 24 Td (${escapePdfText("Incident-wide SitRep - FR, SAR, and HCFD records included")}) Tj ET`,
+      `BT /F1 8 Tf ${marginX} 24 Td (${escapePdfText("Incident-wide SitRep - FR, AMP, and HCFD records included")}) Tj ET`,
       `BT /F1 8 Tf ${pageWidth - 92} 24 Td (${escapePdfText(`Page ${pageNumber}`)}) Tj ET`,
     );
   };
@@ -1617,26 +1956,16 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
     ["Incident code", incidentCode],
     ["Incident type", incidentType],
     ["Location", location],
+    ["Incident date", formatSitrepDate(stringValue(incident, "started_at", ""))],
+    ["Incident status", formatSitrepLabel(stringValue(incident, "status", "unknown"))],
+    ["Number of records", payload.casualtySummary.total],
     ["Generated by", `${payload.generatedBy.fullName} (${formatSitrepLabel(payload.generatedBy.role)})`],
-    ["Report scope", "Full incident - FR, SAR, and HCFD"],
+    ["Report scope", "Full incident - FR, AMP, and HCFD"],
     ["Period start", formatSitrepDate(payload.period.start)],
     ["Period end", formatSitrepDate(payload.period.end)],
   ]);
 
-  addSectionTitle("Executive Summary");
-  addWrappedParagraph(sitrep.summary || "No narrative summary recorded.", marginX, 96, 9);
-
-  addSectionTitle("Operational Snapshot");
-  addKeyValueGrid([
-    ["Total casualties", payload.casualtySummary.total],
-    ["Verified records", payload.casualtySummary.byVerification.verified ?? 0],
-    ["Pending review", payload.casualtySummary.byVerification.submitted ?? 0],
-    ["Rejected records", payload.casualtySummary.byVerification.rejected ?? 0],
-    ["Triage assessments", payload.triageSummary.totalAssessments],
-    ["Transport records", payload.transportSummary.totalRecords],
-    ["Departed scene", payload.transportSummary.departedScene],
-    ["Arrived facility", payload.transportSummary.arrivedFacility],
-  ]);
+  addTable("Incident Timeline", buildSitrepTimelineRows(payload));
 
   if (payload.analyticsSnapshot) {
     const analytics = payload.analyticsSnapshot;
@@ -1660,6 +1989,16 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
       ["Arrived at facility", analytics.keyPerformanceIndicators.arrivedFacility],
       ["Safe responders", analytics.keyPerformanceIndicators.safeResponders],
       ["Unsafe responders", analytics.keyPerformanceIndicators.unsafeResponders],
+      ["Over-triage total", analytics.triageAccuracy.overTriageTotal],
+      [
+        "Over-triage percentage",
+        `${analytics.triageAccuracy.overTriagePercentage}%`,
+      ],
+      ["Under-triage total", analytics.triageAccuracy.underTriageTotal],
+      [
+        "Under-triage percentage",
+        `${analytics.triageAccuracy.underTriagePercentage}%`,
+      ],
       [
         "Cumulative timeline intervals",
         analytics.cumulativeIntervalsMinutes
@@ -1679,6 +2018,26 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
       ),
     );
   }
+
+  addTable(
+    "Incident Management Snapshot",
+    buildIncidentManagementRows(payload.incidentManagementSnapshot),
+  );
+
+  addSectionTitle("Executive Summary");
+  addWrappedParagraph(sitrep.summary || "No narrative summary recorded.", marginX, 96, 9);
+
+  addSectionTitle("Operational Snapshot");
+  addKeyValueGrid([
+    ["Total casualties", payload.casualtySummary.total],
+    ["Verified records", payload.casualtySummary.byVerification.verified ?? 0],
+    ["Pending review", payload.casualtySummary.byVerification.submitted ?? 0],
+    ["Rejected records", payload.casualtySummary.byVerification.rejected ?? 0],
+    ["Triage assessments", payload.triageSummary.totalAssessments],
+    ["Transport records", payload.transportSummary.totalRecords],
+    ["Departed scene", payload.transportSummary.departedScene],
+    ["Arrived facility", payload.transportSummary.arrivedFacility],
+  ]);
 
   addTable("Role Coverage", [
     ["Field Responder records", payload.responderFunctionSummary?.fieldResponderRecords ?? 0],
@@ -1850,7 +2209,7 @@ function buildSitrepLines(sitrep: SitrepResponseRecord): string[] {
     `Status: ${sitrep.status}`,
     `Generated At: ${sitrep.generated_at}`,
     `Generated By: ${payload.generatedBy.fullName} (${payload.generatedBy.role})`,
-    "Report Scope: Full incident - FR, SAR, and HCFD",
+    "Report Scope: Full incident - FR, AMP, and HCFD",
     `Period: ${payload.period.start ?? "Unavailable"} to ${payload.period.end}`,
     "",
     "Summary",
@@ -2803,6 +3162,9 @@ export async function updateIncidentTimeline(
       ),
       existingTimeline?.scene_demobilized_at ?? null,
     );
+    const customTimelineEvents = parseCustomTimelineEvents(
+      request.body.customTimelineEvents,
+    );
 
     assertChronologicalPair(
       firstSiteTriageAt,
@@ -2860,6 +3222,12 @@ export async function updateIncidentTimeline(
       first_transport_from_scene_at: firstTransportFromSceneAt,
       last_transport_from_scene_at: lastTransportFromSceneAt,
       scene_demobilized_at: sceneDemobilizedAt,
+      custom_events:
+        customTimelineEvents === undefined
+          ? normalizeStoredCustomTimelineEvents(
+              existingTimeline?.custom_events,
+            )
+          : customTimelineEvents,
       updated_by: user.id,
       updated_at: new Date().toISOString(),
     };
@@ -4957,7 +5325,7 @@ export async function getIncidentAnalyticsSummary(
       supabase
         .from("incident_response_timelines")
         .select(
-          "event_notification_at, dmmp_activated_at, medical_coordinator_notified_at, first_ems_on_scene_at, triage_ordered_at, scene_demobilized_at, last_facility_deactivated_at",
+          "event_notification_at, dmmp_activated_at, medical_coordinator_notified_at, first_ems_on_scene_at, triage_ordered_at, scene_demobilized_at, last_facility_deactivated_at, custom_events",
         )
         .eq("incident_id", id)
         .maybeSingle(),
@@ -5007,7 +5375,7 @@ export async function getIncidentAnalyticsSummary(
         ? await supabase
             .from("casualty_triage_assessments")
             .select(
-              "casualty_incident_id, triage_system, triage_category, responder_category, calculated_category, triage_stage, triaged_at, assessment_answers",
+              "casualty_incident_id, triage_system, triage_category, responder_category, calculated_category, triage_stage, triaged_at, assessment_answers, is_over_triage, is_under_triage",
             )
             .in("casualty_incident_id", casualtyIncidentIds)
             .order("triaged_at", { ascending: true })
@@ -5055,7 +5423,10 @@ export async function getIncidentAnalyticsSummary(
       );
     }
 
-    const timeline = timelineResult.data as Record<string, string | null> | null;
+    const timeline =
+      timelineResult.data as (Record<string, unknown> & {
+        custom_events?: unknown;
+      }) | null;
     const triageRows =
       (triageResult.data ?? []) as TriageAssessmentRow[];
     const transportRows =
@@ -5082,7 +5453,12 @@ export async function getIncidentAnalyticsSummary(
         item.verification_status ?? "",
       ),
     ).length;
-    const dmmpActivatedAt = timeline?.dmmp_activated_at ?? null;
+    const timelineDateValue = (key: string): string | null => {
+      const value = timeline?.[key];
+
+      return typeof value === "string" ? value : null;
+    };
+    const dmmpActivatedAt = timelineDateValue("dmmp_activated_at");
     const responseInitiatedAt =
       dmmpActivatedAt ?? incident.started_at ?? null;
     const sortedDates = (values: Array<string | null | undefined>) =>
@@ -5122,6 +5498,7 @@ export async function getIncidentAnalyticsSummary(
     const primaryTriageRows = triageRows.filter(isPrimaryTriage);
     const secondaryTriageRows = triageRows.filter(isSecondaryTriage);
     const facilityTriageRows = triageRows.filter(isFacilityTriage);
+    const triageAccuracy = buildAnalyticsTriageAccuracy(triageRows);
     const latestTriageByCasualty = new Map<string, TriageAssessmentRow>();
     const latestFacilityTriageByCasualty = new Map<
       string,
@@ -5350,18 +5727,18 @@ const unsafeResponders = responderSafetyResponses.filter(
       {
         key: "dmmpActivation",
         label: "Activation of DMMP",
-        at: timeline?.dmmp_activated_at ?? null,
+        at: timelineDateValue("dmmp_activated_at"),
       },
       {
         key: "medicalCoordinatorNotification",
         label:
           "Notification of first appropriate staff person to assume medical management coordination role",
-        at: timeline?.medical_coordinator_notified_at ?? null,
+        at: timelineDateValue("medical_coordinator_notified_at"),
       },
       {
         key: "triageInitiated",
         label: "Triage initiated",
-        at: timeline?.triage_ordered_at ?? null,
+        at: timelineDateValue("triage_ordered_at"),
       },
       {
         key: "firstPrimaryTriage",
@@ -5387,7 +5764,7 @@ const unsafeResponders = responderSafetyResponses.filter(
         key: "firstEmsVehicle",
         label: "First EMS vehicle arrived",
         at:
-          timeline?.first_ems_on_scene_at ??
+          timelineDateValue("first_ems_on_scene_at") ??
           firstDate(transportRows.map((row) => row.arrived_scene_at)),
       },
       {
@@ -5427,13 +5804,20 @@ const unsafeResponders = responderSafetyResponses.filter(
       {
         key: "respondersDemobilized",
         label: "Responders demobilized",
-        at: timeline?.scene_demobilized_at ?? null,
+        at: timelineDateValue("scene_demobilized_at"),
       },
       {
         key: "lastFacilityDeactivation",
         label: "Last healthcare facility deactivated its disaster response",
-        at: timeline?.last_facility_deactivated_at ?? null,
+        at: timelineDateValue("last_facility_deactivated_at"),
       },
+      ...normalizeStoredCustomTimelineEvents(timeline?.custom_events).map(
+        (event, index) => ({
+          key: `customTimelineEvent${index + 1}`,
+          label: event.label,
+          at: event.at,
+        }),
+      ),
     ];
     const timelineVisuals = addTimelineElapsedMetrics(
       rawTimelineVisuals,
@@ -5457,7 +5841,16 @@ const unsafeResponders = responderSafetyResponses.filter(
           healthcareFacilityLengthOfStayMinutes:
             healthcareStayByCategory,
         },
+        triageAccuracy,
         barGraphs: {
+          triageAccuracy: {
+            over_triage: triageAccuracy.overTriageTotal,
+            under_triage: triageAccuracy.underTriageTotal,
+            explicitly_flagged_over_triage:
+              triageAccuracy.explicitOverTriageRecords,
+            explicitly_flagged_under_triage:
+              triageAccuracy.explicitUnderTriageRecords,
+          },
           primaryTriageByCategory: countBy(
             primaryTriageRows,
             (row) => getAnalyticsTriageCategory(row),
@@ -5589,6 +5982,8 @@ export async function generateIncidentSitrep(
       timelineResult,
       casualtiesResult,
       evacuationCentersResult,
+      dmmpStaffResult,
+      coordinationResult,
     ] = await Promise.all([
       supabase
         .from("incident_response_timelines")
@@ -5634,12 +6029,27 @@ export async function generateIncidentSitrep(
         .select("id, center_name, barangay, municipality")
         .eq("incident_id", id)
         .eq("is_active", true),
+      supabase
+        .from("dmmp_staff_call_downs")
+        .select(
+          "was_contacted, has_arrived, arrived_at, status",
+        )
+        .eq("incident_id", id),
+      supabase
+        .from("medical_coordination_assessments")
+        .select(
+          "initial_actions_rating, scene_coordination_rating, system_coordination_rating, communications_rating, resource_management_rating, notes, assessed_at",
+        )
+        .eq("incident_id", id)
+        .maybeSingle(),
     ]);
 
     const firstError =
       timelineResult.error ??
       casualtiesResult.error ??
-      evacuationCentersResult.error;
+      evacuationCentersResult.error ??
+      dmmpStaffResult.error ??
+      coordinationResult.error;
 
     if (firstError) {
       throw new Error(
@@ -5656,7 +6066,7 @@ export async function generateIncidentSitrep(
         ? await supabase
             .from("casualty_triage_assessments")
             .select(
-              "casualty_incident_id, triage_system, triage_category, responder_category, calculated_category, triage_stage, triaged_at, triaged_by, assessment_answers",
+              "casualty_incident_id, triage_system, triage_category, responder_category, calculated_category, triage_stage, triaged_at, triaged_by, assessment_answers, is_over_triage, is_under_triage",
             )
             .in("casualty_incident_id", casualtyIncidentIds)
             .order("triaged_at", { ascending: false })
@@ -5962,6 +6372,39 @@ export async function generateIncidentSitrep(
       (row) => row.safety_status === "no",
     ).length;
     const edCareVictims = encounterRows.filter(soughtEdCare).length;
+    const triageAccuracy = buildAnalyticsTriageAccuracy(incidentTriageRows);
+    const sortedDateValues = (
+      values: Array<string | null | undefined>,
+    ) =>
+      values
+        .map((value) => (value ? new Date(value) : null))
+        .filter(
+          (value): value is Date =>
+            value !== null && !Number.isNaN(value.getTime()),
+        )
+        .sort((first, second) => first.getTime() - second.getTime());
+    const firstDateValue = (values: Array<string | null | undefined>) =>
+      sortedDateValues(values)[0]?.toISOString() ?? null;
+    const lastDateValue = (values: Array<string | null | undefined>) => {
+      const valuesSorted = sortedDateValues(values);
+
+      return valuesSorted[valuesSorted.length - 1]?.toISOString() ?? null;
+    };
+    const dmmpStaffRows = (dmmpStaffResult.data ?? []) as Array<{
+      was_contacted: boolean | null;
+      has_arrived?: boolean | null;
+      arrived_at: string | null;
+      status: string | null;
+    }>;
+    const coordination = coordinationResult.data as {
+      initial_actions_rating: number | null;
+      scene_coordination_rating: number | null;
+      system_coordination_rating: number | null;
+      communications_rating: number | null;
+      resource_management_rating: number | null;
+      notes: string | null;
+      assessed_at: string | null;
+    } | null;
 
     const casualtySummary = {
       total: incidentCasualties.length,
@@ -6069,7 +6512,68 @@ export async function generateIncidentSitrep(
         treatmentRows,
         (row) => row.treatment_strategy,
       ),
+      triageAccuracy,
       cumulativeIntervalsMinutes: [15, 30, 60, 120, 180],
+    };
+    const incidentManagementSnapshot: IncidentSitrepPayload["incidentManagementSnapshot"] = {
+      dmmpStaff: {
+        totalStaffRecords: dmmpStaffRows.length,
+        contacted: dmmpStaffRows.filter((row) => row.was_contacted).length,
+        arrived: dmmpStaffRows.filter(
+          (row) => row.has_arrived || row.arrived_at,
+        ).length,
+        safe: dmmpStaffRows.filter((row) => row.status === "safe").length,
+        unsafe: dmmpStaffRows.filter((row) => row.status === "unsafe").length,
+        deceased: dmmpStaffRows.filter((row) => row.status === "deceased")
+          .length,
+        lastArrivalAt: lastDateValue(
+          dmmpStaffRows.map((row) => row.arrived_at),
+        ),
+      },
+      coordinationAssessment: coordination
+        ? {
+            initialActions: coordination.initial_actions_rating,
+            sceneCoordination: coordination.scene_coordination_rating,
+            systemCoordination: coordination.system_coordination_rating,
+            communications: coordination.communications_rating,
+            resourceManagement: coordination.resource_management_rating,
+            assessedAt: coordination.assessed_at,
+            notes: coordination.notes,
+          }
+        : null,
+      responderSafety: {
+        safeResponders,
+        unsafeResponders,
+      },
+      onsiteTriage: {
+        firstSiteTriageAt: firstDateValue(
+          primaryTriageRows.map((row) => row.triaged_at),
+        ),
+        lastSiteTriageAt: lastDateValue(
+          primaryTriageRows.map((row) => row.triaged_at),
+        ),
+        totalAssessments: primaryTriageRows.length,
+      },
+      sceneClearance: {
+        firstTransportFromSceneAt: firstDateValue(
+          incidentTransportRows.map((row) => row.departed_scene_at),
+        ),
+        lastTransportFromSceneAt: lastDateValue(
+          incidentTransportRows.map((row) => row.departed_scene_at),
+        ),
+        departedScene: transportSummary.departedScene,
+        arrivedFacility: transportSummary.arrivedFacility,
+      },
+      treatment: {
+        treatmentRecordedTotal: treatmentRows.length,
+        stabilizedTotal: treatmentRows.filter((row) => row.stabilized_at)
+          .length,
+        strategyCounts: countBy(
+          treatmentRows,
+          (row) => row.treatment_strategy,
+        ),
+      },
+      facilities: facilitySummary,
     };
 
     const summary = buildSitrepSummary(
@@ -6101,6 +6605,7 @@ export async function generateIncidentSitrep(
       transportSummary,
       facilitySummary,
       analyticsSnapshot,
+      incidentManagementSnapshot,
     };
 
     const { data: sitrepData, error: sitrepError } = await supabase
@@ -6386,7 +6891,7 @@ export async function exportLatestSitrepCsv(
         [
           "report",
           "report_scope",
-          "Full incident - FR, SAR, and HCFD",
+          "Full incident - FR, AMP, and HCFD",
         ],
         ["report", "summary", sitrep.summary],
         [

@@ -1967,6 +1967,47 @@ tbody tr:hover td {
   white-space: normal;
 }
 
+.custom-timeline-events {
+  display: grid;
+  gap: 12px;
+}
+
+.custom-timeline-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(260px, 1.5fr) auto;
+  gap: 10px;
+  align-items: end;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fbfcfe;
+}
+
+.custom-timeline-remove {
+  margin-bottom: 2px;
+}
+
+.rating-guide {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.rating-guide span {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fbfcfe;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.rating-guide strong {
+  color: var(--maroon);
+}
+
 .dmmp-arrival-time-control {
   display: grid;
   gap: 6px;
@@ -3321,6 +3362,11 @@ tbody tr:hover td {
   }
 
   .timeline-timepoint-control {
+    grid-template-columns: 1fr;
+  }
+
+  .custom-timeline-row,
+  .rating-guide {
     grid-template-columns: 1fr;
   }
 

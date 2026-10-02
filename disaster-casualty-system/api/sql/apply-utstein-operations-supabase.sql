@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS public.incident_response_timelines (
   first_transport_from_scene_at timestamptz,
   last_transport_from_scene_at timestamptz,
   scene_demobilized_at timestamptz,
+  custom_events jsonb NOT NULL DEFAULT '[]'::jsonb,
   updated_by uuid REFERENCES public.users(id) ON DELETE SET NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
@@ -42,6 +43,7 @@ ALTER TABLE public.incident_response_timelines
   ADD COLUMN IF NOT EXISTS first_transport_from_scene_at timestamptz,
   ADD COLUMN IF NOT EXISTS last_transport_from_scene_at timestamptz,
   ADD COLUMN IF NOT EXISTS scene_demobilized_at timestamptz,
+  ADD COLUMN IF NOT EXISTS custom_events jsonb NOT NULL DEFAULT '[]'::jsonb,
   ADD COLUMN IF NOT EXISTS updated_by uuid,
   ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now(),
   ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();

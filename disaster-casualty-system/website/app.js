@@ -3710,6 +3710,7 @@ function renderAnalyticsGraphGrid(analytics, incidentId) {
         ${renderAnalyticsGraphSection("Immediate, Delayed, Minor, and Expectant Victims Using Primary Triage", graphs.primaryTriageByCategory, { chart: "pie" })}
         ${renderAnalyticsGraphSection("Immediate, Delayed, Minor, and Expectant Victims Using Secondary Triage", graphs.secondaryTriageByCategory, { chart: "pie" })}
         ${renderAnalyticsGraphSection("Victims Seeking ED Care According to Triage Category", graphs.edCareByTriageCategory, { chart: "pie" })}
+        ${renderAnalyticsGraphSection("Over- and Under-triage", graphs.triageAccuracy, { chart: "pie" })}
         ${renderTertiaryTriageSystemCharts(graphs)}
       </div>`,
     )}
@@ -10320,6 +10321,43 @@ function getIncidentTimelineValue(incident, timeline, name, key) {
   return name === "disasterOccurredAt" ? incident?.started_at : timeline?.[key];
 }
 
+function normalizeCustomTimelineEvents(value) {
+  return Array.isArray(value)
+    ? value
+        .map((event, index) => ({
+          id: event?.id || `custom-${index + 1}`,
+          label: String(event?.label || "").trim(),
+          at: event?.at || null,
+        }))
+        .filter((event) => event.label || event.at)
+    : [];
+}
+
+function renderCustomTimelineEventRow(event = {}, index = 0) {
+  return `
+    <div class="custom-timeline-row" data-custom-timeline-row>
+      <input type="hidden" data-custom-timeline-field="id" value="${escapeHtml(event.id || `custom-${index + 1}`)}" />
+      <label class="field">
+        <span>Custom event name</span>
+        <input data-custom-timeline-field="label" placeholder="Example: Arrival of food" value="${escapeHtml(event.label || "")}" />
+      </label>
+      <label class="field timeline-timepoint-field">
+        <span>Custom event time</span>
+        <div class="timeline-timepoint-control">
+          <input
+            data-custom-timeline-field="at"
+            inputmode="text"
+            placeholder="MM/DD/YYYY HH:MM AM/PM"
+            value="${escapeHtml(formatManualDateTimeInput(event.at))}"
+          />
+          <button class="ghost-button mini" type="button" data-use-current-custom-timeline-time>Use current time</button>
+        </div>
+      </label>
+      <button class="ghost-button mini custom-timeline-remove" type="button" data-remove-custom-timeline-event>Remove</button>
+    </div>
+  `;
+}
+
 function buildIncidentTimelineEntries(incident, details) {
   const timeline = details?.timeline?.data ?? null;
   const manualEntries = incidentTimelineFields.map(([name, label, key], index) => ({
@@ -10351,8 +10389,15 @@ function buildIncidentTimelineEntries(incident, details) {
     source: "Mobile-derived",
     order: incidentTimelineFields.length + index,
   }));
+  const customEntries = normalizeCustomTimelineEvents(timeline?.custom_events)
+    .map((event, index) => ({
+      label: event.label,
+      value: event.at,
+      source: "Manual custom",
+      order: incidentTimelineFields.length + mobileEntries.length + index,
+    }));
 
-  return [...manualEntries, ...mobileEntries].sort(
+  return [...manualEntries, ...customEntries, ...mobileEntries].sort(
     (first, second) =>
       timelineSortValue(first.value) -
         timelineSortValue(second.value) ||
@@ -10603,6 +10648,10 @@ function formatBoolean(value) {
 
 function renderTimelineManagementForm(incident, details, forModal = false) {
   const timeline = details?.timeline?.data ?? null;
+  const customEvents = normalizeCustomTimelineEvents(timeline?.custom_events);
+  const customRows = customEvents.length
+    ? customEvents
+    : [{ id: "custom-1", label: "", at: null }];
 
   return `
     <form id="${forModal ? "incidentSectionEditForm" : ""}" class="incident-section-card" data-incident-section-form="timeline">
@@ -10647,6 +10696,13 @@ function renderTimelineManagementForm(incident, details, forModal = false) {
           })
           .join("")}
       </div>
+      <div class="form-section-title">Custom timeline event</div>
+      <div class="custom-timeline-events" data-custom-timeline-events>
+        ${customRows
+          .map((event, index) => renderCustomTimelineEventRow(event, index))
+          .join("")}
+      </div>
+      <button class="ghost-button mini" type="button" data-add-custom-timeline-event>Add custom event</button>
       ${renderExtractedTimelineFacts(details)}
       <div id="timelineMessage" class="status-message" hidden></div>
     </form>
@@ -10853,14 +10909,29 @@ function renderResponderSafetySummaryView(details) {
 }
 
 function renderCoordinationManagementForm(assessment, forModal = false) {
+  const ratingGuide = [
+    ["1", "No coordination / absent"],
+    ["2", "Very poor"],
+    ["3", "Poor"],
+    ["4", "Adequate"],
+    ["5", "Good"],
+    ["6", "Very good"],
+    ["7", "Excellent / optimal"],
+  ];
+
   return `
     <form id="${forModal ? "incidentSectionEditForm" : ""}" class="incident-section-card" data-incident-section-form="coordination">
       <div class="section-card-header">
         <div>
           <h3>Coordination Assessment</h3>
-          <p class="panel-subtitle">Rate each coordination area from 1 to 7.</p>
+          <p class="panel-subtitle">Rate each coordination area using the Utstein 1 to 7 scale.</p>
         </div>
         ${forModal ? "" : `<button class="primary-button mini" type="submit">Save coordination</button>`}
+      </div>
+      <div class="rating-guide" aria-label="Utstein coordination rating guide">
+        ${ratingGuide
+          .map(([score, meaning]) => `<span><strong>${score}</strong> ${escapeHtml(meaning)}</span>`)
+          .join("")}
       </div>
       <div class="form-grid two">
         ${coordinationFields
@@ -11027,11 +11098,22 @@ const summaryFactLabels = {
   stabilizedT1Total: "Stabilized T1 total",
   stabilizedT2Total: "Stabilized T2 total",
   firstEmsVehicleOnSceneAt: "First EMS vehicle on scene",
+  lastEmsVehicleOnSceneAt: "Last EMS vehicle on scene",
   firstTransportFromSceneAt: "First transport from scene",
   lastTransportFromSceneAt: "Last transport from scene",
   emsTransportedTotal: "EMS transported total",
   totalFacilityArrivals: "Total facility arrivals",
   totalEdCareSeekers: "Total ED care seekers",
+  totalHospitalAdmissions: "Total hospital admissions",
+  totalIcuAdmissions: "Total ICU admissions",
+  totalVentilated: "Total mechanically ventilated",
+  lastFacilityDeactivatedAt: "Last facility deactivation",
+  firstFacilityTriageAt: "First facility triage",
+  lastFacilityTriageAt: "Last facility triage",
+  firstSiteTriageAt: "First site triage",
+  lastSiteTriageAt: "Last site triage",
+  firstFacilityDisasterPlanActivationAt:
+    "First facility disaster response activation",
   disasterOnsetAt: "Disaster onset",
   responseInitiatedAt: "Response initiated",
   responseInitiationSource: "Response initiation source",
@@ -11359,6 +11441,55 @@ function bindIncidentManagementActions() {
     });
   });
 
+  document.querySelectorAll("[data-custom-timeline-events]").forEach((container) => {
+    container.addEventListener("click", (event) => {
+      const currentTimeButton = event.target.closest("[data-use-current-custom-timeline-time]");
+      const removeButton = event.target.closest("[data-remove-custom-timeline-event]");
+
+      if (currentTimeButton) {
+        const row = currentTimeButton.closest("[data-custom-timeline-row]");
+        const input = row?.querySelector('[data-custom-timeline-field="at"]');
+
+        if (input) {
+          input.value = formatManualDateTimeInput(new Date().toISOString());
+        }
+      }
+
+      if (removeButton) {
+        const row = removeButton.closest("[data-custom-timeline-row]");
+        const remainingRows = container.querySelectorAll("[data-custom-timeline-row]").length;
+
+        if (row && remainingRows > 1) {
+          row.remove();
+        } else if (row) {
+          row.querySelectorAll("input").forEach((input) => {
+            if (input.type !== "hidden") {
+              input.value = "";
+            }
+          });
+        }
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-add-custom-timeline-event]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const form = button.closest("form");
+      const container = form?.querySelector("[data-custom-timeline-events]");
+
+      if (!container) return;
+
+      const index = container.querySelectorAll("[data-custom-timeline-row]").length;
+      container.insertAdjacentHTML(
+        "beforeend",
+        renderCustomTimelineEventRow(
+          { id: `custom-${Date.now()}-${index + 1}`, label: "", at: null },
+          index,
+        ),
+      );
+    });
+  });
+
   document.querySelectorAll("[data-delete-dmmp-staff]").forEach((button) => {
     button.addEventListener("click", async () => {
       const staffId = button.dataset.deleteDmmpStaff;
@@ -11625,6 +11756,35 @@ async function saveIncidentTimelineSection(incidentId, form) {
     }
 
     payload[name] = parsedValue;
+  });
+
+  payload.customTimelineEvents = Array.from(
+    form.querySelectorAll("[data-custom-timeline-row]"),
+  ).flatMap((row, index) => {
+    const valueFor = (field) =>
+      row.querySelector(`[data-custom-timeline-field="${field}"]`)?.value || "";
+    const label = valueFor("label").trim();
+    const rawAt = valueFor("at").trim();
+
+    if (!label && !rawAt) {
+      return [];
+    }
+
+    if (!label) {
+      throw new Error("Custom timeline event name is required.");
+    }
+
+    const parsedAt = toNullableIsoFromManualDateTime(rawAt);
+
+    if (!parsedAt) {
+      throw new Error(`${label} must use MM/DD/YYYY HH:MM AM/PM.`);
+    }
+
+    return [{
+      id: valueFor("id") || `custom-${index + 1}`,
+      label,
+      at: parsedAt,
+    }];
   });
 
   await apiRequest(`/incidents/${encodeURIComponent(incidentId)}/timeline`, {
