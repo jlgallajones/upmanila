@@ -33,10 +33,18 @@ const cases = [
     name: "STIEVE walking wounded or no visible injuries is minimal",
     system: "stieve",
     answers: {
-      specialPopulation: false,
       canWalkOrNoVisibleInjuries: true,
     },
     expected: "minimal",
+  },
+  {
+    name: "STIEVE non-walking special population is immediate",
+    system: "stieve",
+    answers: {
+      canWalkOrNoVisibleInjuries: false,
+      specialPopulation: true,
+    },
+    expected: "immediate",
   },
   {
     name: "STIEVE absent respiration waits for airway management",

@@ -429,13 +429,13 @@ const SIMPLE_COMMAND_OPTIONS: AppendixAnswerOption[] = [
 const APPENDIX_TRIAGE_FIELDS: Record<string, AppendixQuestion[]> = {
   stieve: [
     {
-      key: "specialPopulation",
-      label: "Considered special population?",
+      key: "canWalkOrNoVisibleInjuries",
+      label: "Can walk or has no visible injuries?",
       options: YES_NO_OPTIONS,
     },
     {
-      key: "canWalkOrNoVisibleInjuries",
-      label: "Can walk or has no visible injuries?",
+      key: "specialPopulation",
+      label: "Considered special population?",
       options: YES_NO_OPTIONS,
     },
     {
@@ -2221,20 +2221,17 @@ function calculateStartLikeTriage(
 function calculateStieveTriage(
   answers: Record<string, unknown>,
 ): TriageCategory {
-  const specialPopulation = readAssessmentBoolean(
-    answers,
-    "specialPopulation",
-  );
-
-  if (specialPopulation === true) {
-    return "immediate";
-  }
-
   if (
     readAssessmentBoolean(answers, "canWalkOrNoVisibleInjuries") ===
       true
   ) {
-    return specialPopulation === false ? "minimal" : "unknown";
+    return "minimal";
+  }
+
+  if (
+    readAssessmentBoolean(answers, "specialPopulation") === true
+  ) {
+    return "immediate";
   }
 
   if (
