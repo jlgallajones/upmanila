@@ -28,6 +28,7 @@ type RegisterAdminRequest = {
   password: string;
   role: "administrator" | "super_admin";
   phoneNumber?: string;
+  officeOrganization?: string;
   assignedMunicipality?: string;
   assignedBarangay?: string;
 };
@@ -48,6 +49,18 @@ type UpdateUnitUserRequest = {
   password?: string;
   role?: UnitUserRole;
   phoneNumber?: string;
+  assignedMunicipality?: string;
+  assignedBarangay?: string;
+  isActive?: boolean;
+};
+
+type UpdateAdminAccountRequest = {
+  fullName?: string;
+  email?: string;
+  password?: string;
+  role?: "administrator" | "admin";
+  phoneNumber?: string;
+  officeOrganization?: string;
   assignedMunicipality?: string;
   assignedBarangay?: string;
   isActive?: boolean;
@@ -101,6 +114,7 @@ const userSelect = `
   phone_number,
   role,
   reporting_context,
+  office_organization,
   assigned_barangay,
   assigned_municipality,
   is_active,
@@ -115,6 +129,7 @@ const unitUserSelect = `
   phone_number,
   role,
   reporting_context,
+  office_organization,
   assigned_barangay,
   assigned_municipality,
   is_active,
@@ -154,6 +169,7 @@ const managedAccountSelect = `
   phone_number,
   role,
   reporting_context,
+  office_organization,
   assigned_barangay,
   assigned_municipality,
   is_active,
@@ -642,6 +658,8 @@ export async function registerAdmin(
           phone_number: request.body.phoneNumber?.trim() || null,
           role,
           reporting_context: "command_admin",
+          office_organization:
+            request.body.officeOrganization?.trim() || null,
           assigned_municipality:
             request.body.assignedMunicipality?.trim() || null,
           assigned_barangay:
@@ -793,6 +811,8 @@ export async function bulkRegisterAdmins(
               phone_number: row.phoneNumber?.trim() || null,
               role,
               reporting_context: "command_admin",
+              office_organization:
+                row.officeOrganization?.trim() || null,
               assigned_municipality:
                 row.assignedMunicipality?.trim() || null,
               assigned_barangay: row.assignedBarangay?.trim() || null,
@@ -935,6 +955,150 @@ function getUnitUserContext(
         role: "responder",
         reportingContext: "scene",
       };
+  }
+}
+
+export async function updateAdminAccount(
+  request: Request<{ id: string }, unknown, UpdateAdminAccountRequest>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const currentUser = (request as Request & {
+      user?: { role?: string; id?: string };
+    }).user;
+    const { id } = request.params;
+
+    if (currentUser?.role !== "super_admin") {
+      response.status(403).json({
+        success: false,
+        message: "Only super admin accounts can edit administrator accounts.",
+      });
+      return;
+    }
+
+    if (!currentUser.id) {
+      response.status(401).json({
+        success: false,
+        message: "Authentication token is required.",
+      });
+      return;
+    }
+
+    const { data: existingUser, error: existingError } = await supabase
+      .from("users")
+      .select(userSelect)
+      .eq("id", id)
+      .maybeSingle();
+
+    if (existingError) {
+      throw new Error(`Unable to retrieve administrator account: ${existingError.message}`);
+    }
+
+    if (
+      !existingUser ||
+      !["administrator", "admin"].includes(String(existingUser.role || ""))
+    ) {
+      response.status(404).json({
+        success: false,
+        message: "Administrator account was not found.",
+      });
+      return;
+    }
+
+    const fullName = request.body.fullName?.trim();
+    const email = request.body.email?.trim().toLowerCase();
+    const requestedRole = request.body.role ?? existingUser.role;
+    const role = requestedRole === "admin" ? "administrator" : requestedRole;
+
+    if (role !== "administrator") {
+      response.status(400).json({
+        success: false,
+        message: "Administrator accounts can only be saved as administrator.",
+      });
+      return;
+    }
+
+    if (request.body.password !== undefined && request.body.password.length < 6) {
+      response.status(400).json({
+        success: false,
+        message: "Password must be at least 6 characters.",
+      });
+      return;
+    }
+
+    if (email || request.body.password || fullName) {
+      const { error: authError } = await supabaseAuth.auth.admin.updateUserById(
+        id,
+        {
+          ...(email ? { email, email_confirm: true } : {}),
+          ...(request.body.password ? { password: request.body.password } : {}),
+          ...(fullName ? { user_metadata: { full_name: fullName } } : {}),
+        },
+      );
+
+      if (authError) {
+        throw new Error(`Unable to update Supabase Auth user: ${authError.message}`);
+      }
+    }
+
+    const { data: updatedUser, error: updateError } = await supabase
+      .from("users")
+      .update({
+        ...(fullName ? { full_name: fullName } : {}),
+        ...(email ? { email } : {}),
+        phone_number: request.body.phoneNumber?.trim() || null,
+        role,
+        reporting_context: "command_admin",
+        office_organization:
+          request.body.officeOrganization?.trim() || null,
+        assigned_municipality:
+          request.body.assignedMunicipality?.trim() || null,
+        assigned_barangay: request.body.assignedBarangay?.trim() || null,
+        ...(typeof request.body.isActive === "boolean"
+          ? { is_active: request.body.isActive }
+          : {}),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .select(userSelect)
+      .single();
+
+    if (updateError || !updatedUser) {
+      throw new Error(
+        `Unable to update administrator account: ${
+          updateError?.message ?? "No profile returned."
+        }`,
+      );
+    }
+
+    await recordAuditLog({
+      actor: {
+        id: currentUser.id,
+        role: currentUser.role,
+      },
+      action: "account.updated",
+      entityType: "user",
+      entityId: updatedUser.id,
+      entityLabel: updatedUser.full_name ?? updatedUser.email,
+      metadata: {
+        accountRole: updatedUser.role,
+        email: updatedUser.email,
+        activeChanged:
+          typeof request.body.isActive === "boolean" &&
+          request.body.isActive !== existingUser.is_active,
+        isActive: updatedUser.is_active,
+      },
+      scopeAdminId: updatedUser.id,
+    });
+
+    response.status(200).json({
+      success: true,
+      message: "Administrator account updated successfully.",
+      data: updatedUser,
+    });
+  } catch (error) {
+    next(error);
   }
 }
 

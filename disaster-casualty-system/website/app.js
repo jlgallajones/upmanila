@@ -85,6 +85,7 @@ const state = {
   apiBaseUrl: getInitialApiBaseUrl(),
   user: readJson("dcms.admin.user"),
   accessToken: localStorage.getItem("dcms.admin.accessToken"),
+  hasPassedLoginLanding: false,
   sidebarCollapsed: localStorage.getItem("dcms.admin.sidebarCollapsed") === "true",
   activeView: localStorage.getItem("dcms.admin.activeView") || "home",
   incidentSearchQuery: "",
@@ -216,6 +217,11 @@ const editableUnitAccountRoles = [
   "responder",
   "medical_personnel",
   ...unitAccountRoles,
+];
+
+const editableAdminAccountRoles = [
+  "admin",
+  "administrator",
 ];
 
 const superAdminViews = [
@@ -442,6 +448,7 @@ function clearSession() {
   
   state.user = null;
   state.accessToken = null;
+  state.hasPassedLoginLanding = true;
   state.activeView = "home";
   localStorage.removeItem("dcms.admin.user");
   localStorage.removeItem("dcms.admin.accessToken");
@@ -724,6 +731,16 @@ function encoderUnitName(encoder) {
   return parts.length > 0 ? parts.join(", ") : "Unassigned unit";
 }
 
+function adminOrganizationLabel(admin) {
+  const organization = String(admin?.office_organization || "").trim();
+
+  if (organization) {
+    return organization;
+  }
+
+  return admin?.full_name || admin?.email || "Unnamed admin";
+}
+
 function getAdminAccountUsers() {
   return state.adminAccounts
     .filter((user) =>
@@ -732,8 +749,8 @@ function getAdminAccountUsers() {
     .slice()
     .sort((first, second) =>
       compareText(
-        first.full_name || first.email,
-        second.full_name || second.email,
+        adminOrganizationLabel(first),
+        adminOrganizationLabel(second),
       ),
     );
 }
@@ -1939,6 +1956,12 @@ function render() {
   const app = document.getElementById("app");
 
   if (!state.user || !state.accessToken) {
+    if (!state.hasPassedLoginLanding) {
+      app.innerHTML = renderLoginLanding();
+      bindLoginLanding();
+      return;
+    }
+
     app.innerHTML = renderLogin();
     bindLogin();
     return;
@@ -1957,6 +1980,57 @@ function render() {
       renderCurrentView(error.message);
       bindView();
     });
+}
+
+function renderAnimatedMedSortLogo() {
+  return `
+    <div class="medsort-logo-motion" aria-label="MedSort animated logo">
+      <img class="login-medsort-logo" src="./assets/medsort-login-base.png" alt="" />
+      <span class="medsort-logo-ball medsort-logo-ball-yellow"></span>
+      <span class="medsort-logo-ball medsort-logo-ball-green"></span>
+      <span class="medsort-logo-ball medsort-logo-ball-red"></span>
+    </div>
+  `;
+}
+
+function renderLoginLanding() {
+  return `
+    <main class="prelogin-landing-shell">
+      <section class="prelogin-landing-card" aria-labelledby="preloginLandingTitle">
+        <div class="logo-strip prelogin-logo-strip">
+          <img class="seal-logo" src="./assets/UP-Logo.svg" alt="University of the Philippines logo" />
+          <img class="seal-logo" src="./assets/UPM DRRMH Logo.png" alt="UPM DRRMH logo" />
+          <img class="partner-logo" src="./assets/DOST Logo.png" alt="DOST logo" />
+          <img class="partner-logo" src="./assets/DOST PCHRD Logo.png" alt="DOST PCHRD logo" />
+        </div>
+        ${renderAnimatedMedSortLogo()}
+        <span class="prelogin-kicker">Administrator Portal</span>
+        <h1 id="preloginLandingTitle">MedSORT</h1>
+        <p>Emergency response information platform for incident oversight, SitReps, and casualty operations.</p>
+        <button id="continueToLoginButton" class="prelogin-continue-button" type="button">
+          Continue
+        </button>
+        ${renderLegalLinks()}
+      </section>
+    </main>
+  `;
+}
+
+function bindLoginLanding() {
+  qs("#continueToLoginButton").addEventListener("click", () => {
+    state.hasPassedLoginLanding = true;
+    render();
+  });
+}
+
+function renderLegalLinks() {
+  return `
+    <nav class="legal-link-row" aria-label="Legal links">
+      <a href="./privacy-policy.html">Privacy Policy</a>
+      <span aria-hidden="true">|</span>
+      <a href="./terms-and-conditions.html">Terms &amp; Conditions</a>
+    </nav>
+  `;
 }
 
 function renderLogin() {
@@ -1982,15 +2056,12 @@ function renderLogin() {
 
           <div class="emblem-lockup" aria-hidden="true">
             <div class="pulse-ring">
-              <div class="shield-mark">
-                <div class="shield-cross">+</div>
-              </div>
+              ${renderAnimatedMedSortLogo()}
             </div>
-            <div class="acronym-badge">MedSORT</div>
           </div>
 
           <div class="landing-title">
-            <h1>MedSORT</h1>
+            <h1>medSORT</h1>
             <p>Emergency Response Information Platform</p>
           </div>
         </div>
@@ -1999,7 +2070,7 @@ function renderLogin() {
       <section class="login-pane">
         <form id="loginForm" class="login-card">
           <span class="eyebrow">Administrator Portal</span>
-          <h2>Sign in to MedSORT</h2>
+          <h2>Sign in to medSORT</h2>
           <p>Use an active super admin or admin account to manage official incidents, facilities, SitReps, and system oversight.</p>
 
           <div class="form-grid">
@@ -2013,6 +2084,7 @@ function renderLogin() {
             </label>
             <button class="primary-button" type="submit">Login</button>
           </div>
+          ${renderLegalLinks()}
           <div id="loginMessage" class="status-message" hidden></div>
         </form>
       </section>
@@ -2053,9 +2125,9 @@ function renderDashboardShell() {
     <div class="app-shell ${state.sidebarCollapsed ? "sidebar-collapsed" : ""}">
       <aside class="sidebar">
         <div class="sidebar-title">
-          <div class="sidebar-mark">MS</div>
+          <img class="sidebar-mark" src="./assets/medsort.png" alt="MedSort" />
           <div class="sidebar-brand-text">
-            <strong>MedSORT</strong>
+            <strong>DMCS Portal</strong>
             <span>${isSuperAdmin() ? "Super Admin Portal" : "Admin Portal"}</span>
           </div>
           <button
@@ -2821,7 +2893,7 @@ function renderAnalyticsAdminScopeFilter(incidents) {
 
             return `
               <option value="${escapeHtml(admin.id)}" ${selectedScope === admin.id ? "selected" : ""}>
-                ${escapeHtml(admin.full_name || admin.email)} (${count})
+                ${escapeHtml(adminOrganizationLabel(admin))} (${count})
               </option>
             `;
           })
@@ -3059,10 +3131,10 @@ function renderAdminView() {
     case "home":
     default:
       return `
-        <div class="grid three">
+        <div class="grid three dashboard-metrics">
           ${renderMetric("Active incidents", state.dashboard?.activeIncidents ?? 0, "emphasis")}
           ${renderMetric("Pending review", state.dashboard?.pendingRecords ?? 0)}
-          ${renderMetric("Verified records", state.dashboard?.verifiedRecords ?? 0)}
+          ${renderMetric("Certified records", state.dashboard?.verifiedRecords ?? 0)}
         </div>
         <div style="margin-top:18px">${renderOngoingIncidentSummary()}</div>
         <div class="grid two" style="margin-top:18px">
@@ -3091,7 +3163,7 @@ function renderMetric(label, value, extraClass = "", caption) {
 
 function renderSuperAdminHome() {
   return `
-    <div class="grid three">
+    <div class="grid three dashboard-metrics">
       ${renderMetric("Active incidents", state.dashboard?.activeIncidents ?? 0, "emphasis")}
       ${renderMetric("Encoded today", state.dashboard?.encodedToday ?? 0)}
       ${renderMetric("Pending review", state.dashboard?.pendingRecords ?? 0)}
@@ -3254,7 +3326,7 @@ function renderTimelineVisual(analytics) {
         </div>
       </div>
 
-      <div class="table-wrap">
+      <div class="table-wrap incident-timeline-scroll">
         <table class="incident-timeline-table">
 
           <thead>
@@ -4439,6 +4511,7 @@ const bulkImportConfigs = {
       "password",
       "role",
       "phoneNumber",
+      "officeOrganization",
       "assignedMunicipality",
       "assignedBarangay",
     ],
@@ -4449,6 +4522,7 @@ const bulkImportConfigs = {
         "Temporary123",
         "administrator",
         "09171234567",
+        "CDRRMO - City of Manila",
         "Manila",
         "Ermita",
       ],
@@ -5070,6 +5144,9 @@ const bulkHeaderAliases = {
   contactnumber: "contactNumber",
   assignedmunicipality: "assignedMunicipality",
   assignedbarangay: "assignedBarangay",
+  officeorganization: "officeOrganization",
+  office: "officeOrganization",
+  organization: "officeOrganization",
   facilityname: "facilityName",
   facilitylevel: "facilityLevel",
   level: "facilityLevel",
@@ -5460,9 +5537,23 @@ function renderRegistrationShell() {
           })}
           <label class="field"><span>Role</span><select name="role"><option value="administrator">Administrator</option><option value="super_admin">Super Admin</option></select></label>
           <label class="field"><span>Phone number</span><input name="phoneNumber" /></label>
-          <label class="field"><span>Assigned municipality</span><input name="assignedMunicipality" /></label>
+          <label class="field">
+            <span>Office / organization</span>
+            <input
+              name="officeOrganization"
+              list="adminOfficeExamples"
+              placeholder="CDRRMO - City of Manila; BDRRMO - Brgy. San Isidro"
+            />
+          </label>
+          <label class="field"><span>Assigned municipality</span><input name="assignedMunicipality" placeholder="Municipality or city address of the office" /></label>
         </div>
-        <label class="field"><span>Assigned barangay</span><input name="assignedBarangay" /></label>
+        <datalist id="adminOfficeExamples">
+          <option value="CDRRMO - City of Manila"></option>
+          <option value="BDRRMO - Brgy. San Isidro"></option>
+          <option value="MDRRMO - Municipality of"></option>
+          <option value="Other - Please specify"></option>
+        </datalist>
+        <label class="field"><span>Assigned barangay / area</span><input name="assignedBarangay" placeholder="Optional barangay or coverage area" /></label>
         <div class="button-row">
           <button class="primary-button" type="submit">Create account</button>
           <button class="ghost-button" type="button" data-save-draft="account">Save draft</button>
@@ -5524,6 +5615,7 @@ function bindRegisterAdminForm() {
           password: form.elements.password.value,
           role: formValue(form, "role"),
           phoneNumber: formValue(form, "phoneNumber"),
+          officeOrganization: formValue(form, "officeOrganization"),
           assignedMunicipality: formValue(form, "assignedMunicipality"),
           assignedBarangay: formValue(form, "assignedBarangay"),
         }),
@@ -5685,6 +5777,7 @@ function renderSuperAdminAccountRecords() {
                 .map((user) => {
                   const online = isRecentlyOnline(user);
                   const canEditHere = editableUnitAccountRoles.includes(user.role);
+                  const canEditAdmin = editableAdminAccountRoles.includes(user.role);
                   const adminGroup = canEditHere
                     ? adminScopeLabel(user.created_by)
                     : "Command account";
@@ -5697,7 +5790,7 @@ function renderSuperAdminAccountRecords() {
                       <td><span class="pill ${user.is_active ? "green" : "red"}">${user.is_active ? "Active" : "Inactive"}</span></td>
                       <td><span class="pill ${online ? "green" : ""}">${online ? "Online" : "Offline"}</span><br><span class="panel-subtitle">${user.last_seen_at ? `Last seen ${formatDate(user.last_seen_at)}` : "No login recorded"}</span></td>
                       <td>${formatDate(user.created_at)}</td>
-                      <td>${canEditHere ? `<button class="ghost-button mini" type="button" data-edit-account="${escapeHtml(user.id)}">Edit account</button>` : `<span class="panel-subtitle">Managed in registration</span>`}</td>
+                      <td>${canEditHere || canEditAdmin ? `<button class="ghost-button mini" type="button" data-edit-account="${escapeHtml(user.id)}">Edit account</button>` : `<span class="panel-subtitle">Managed in registration</span>`}</td>
                     </tr>
                   `;
                 })
@@ -5783,10 +5876,16 @@ function bindRegisterUnitUserForm() {
 }
 
 function renderAccountEditModal(user) {
+  const isCommandAdmin = editableAdminAccountRoles.includes(user.role);
+  const roleOptions = isCommandAdmin
+    ? [["administrator", "Administrator"]]
+    : editableUnitAccountRoles.map((role) => [role, roleLabel(role)]);
+  const endpointType = isCommandAdmin ? "admin" : "unit";
+
   return `
     <div class="modal-backdrop" data-close-modal>
       <section class="record-modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="accountModalTitle">
-        <form id="accountEditForm">
+        <form id="accountEditForm" data-account-edit-type="${endpointType}">
           <div class="modal-header">
             <div>
               <span class="eyebrow">Account Management</span>
@@ -5803,10 +5902,10 @@ function renderAccountEditModal(user) {
               <label class="field">
                 <span>Role</span>
                 <select name="role">
-                  ${editableUnitAccountRoles
+                  ${roleOptions
                     .map(
-                      (role) =>
-                        `<option value="${escapeHtml(role)}" ${user.role === role ? "selected" : ""}>${escapeHtml(roleLabel(role))}</option>`,
+                      ([role, label]) =>
+                        `<option value="${escapeHtml(role)}" ${user.role === role || (user.role === "admin" && role === "administrator") ? "selected" : ""}>${escapeHtml(label)}</option>`,
                     )
                     .join("")}
                 </select>
@@ -5820,8 +5919,13 @@ function renderAccountEditModal(user) {
               </label>
               <label class="field"><span>Phone number</span><input name="phoneNumber" value="${escapeHtml(user.phone_number || "")}" /></label>
               <label class="field"><span>New password</span><input name="password" type="password" minlength="6" placeholder="Leave blank to keep current password" /></label>
+              ${
+                isCommandAdmin
+                  ? `<label class="field"><span>Office / organization</span><input name="officeOrganization" value="${escapeHtml(user.office_organization || "")}" placeholder="CDRRMO - City of Manila; BDRRMO - Brgy. San Isidro" /></label>`
+                  : ""
+              }
               <label class="field"><span>Assigned municipality</span><input name="assignedMunicipality" value="${escapeHtml(user.assigned_municipality || "")}" /></label>
-              <label class="field"><span>Assigned barangay</span><input name="assignedBarangay" value="${escapeHtml(user.assigned_barangay || "")}" /></label>
+              <label class="field"><span>${isCommandAdmin ? "Assigned barangay / area" : "Assigned barangay"}</span><input name="assignedBarangay" value="${escapeHtml(user.assigned_barangay || "")}" /></label>
             </div>
             <div class="account-status-strip">
               <span class="pill ${user.is_active ? "green" : "red"}">${user.is_active ? "Active" : "Inactive"}</span>
@@ -5845,7 +5949,9 @@ function renderAccountEditModal(user) {
 }
 
 function openAccountEditModal(userId) {
-  const user = state.unitUsers.find((item) => item.id === userId);
+  const user =
+    state.unitUsers.find((item) => item.id === userId) ||
+    state.adminAccounts.find((item) => item.id === userId);
 
   if (!user) {
     setMessage("accountMessage", "Account could not be found.", "error");
@@ -5887,9 +5993,13 @@ function bindAccountEditForm(userId) {
     setMessage("accountEditMessage", "Saving account...");
 
     const password = form.elements.password.value;
+    const endpoint =
+      form.dataset.accountEditType === "admin"
+        ? `/auth/admin-accounts/${encodeURIComponent(userId)}`
+        : `/auth/unit-users/${encodeURIComponent(userId)}`;
 
     try {
-      await apiRequest(`/auth/unit-users/${encodeURIComponent(userId)}`, {
+      await apiRequest(endpoint, {
         method: "PATCH",
         body: JSON.stringify({
           fullName: formValue(form, "fullName"),
@@ -5897,6 +6007,7 @@ function bindAccountEditForm(userId) {
           role: formValue(form, "role"),
           isActive: formValue(form, "isActive") === "true",
           phoneNumber: formValue(form, "phoneNumber"),
+          officeOrganization: formValue(form, "officeOrganization"),
           assignedMunicipality: formValue(form, "assignedMunicipality"),
           assignedBarangay: formValue(form, "assignedBarangay"),
           ...(password ? { password } : {}),
@@ -12344,6 +12455,7 @@ function getAccountDraftPayload(form) {
     email: formValue(form, "email"),
     role: formValue(form, "role"),
     phoneNumber: formValue(form, "phoneNumber"),
+    officeOrganization: formValue(form, "officeOrganization"),
     assignedMunicipality: formValue(form, "assignedMunicipality"),
     assignedBarangay: formValue(form, "assignedBarangay"),
   };

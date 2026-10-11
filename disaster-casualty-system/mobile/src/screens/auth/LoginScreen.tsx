@@ -401,6 +401,26 @@ export default function LoginScreen() {
             </Text>
           </Pressable>
 
+          <View style={styles.legalLinkRow}>
+            <Pressable
+              accessibilityRole="link"
+              onPress={() => router.push("/privacy-policy")}
+              hitSlop={10}
+            >
+              <Text style={styles.legalLinkText}>Privacy Policy</Text>
+            </Pressable>
+            <Text style={styles.legalSeparator}>|</Text>
+            <Pressable
+              accessibilityRole="link"
+              onPress={() => router.push("/terms-and-conditions")}
+              hitSlop={10}
+            >
+              <Text style={styles.legalLinkText}>
+                Terms & Conditions
+              </Text>
+            </Pressable>
+          </View>
+
           <View style={styles.warningCard}>
             <Ionicons
               name="shield-outline"
@@ -653,6 +673,24 @@ const styles = StyleSheet.create({
   loginButtonText: {
     color: COLORS.white,
     fontSize: 16,
+    fontWeight: "800",
+  },
+  legalLinkRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 9,
+    marginBottom: 18,
+  },
+  legalLinkText: {
+    color: COLORS.maroon,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  legalSeparator: {
+    color: COLORS.mutedText,
+    fontSize: 12,
     fontWeight: "800",
   },
 

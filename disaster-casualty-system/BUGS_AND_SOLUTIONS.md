@@ -300,7 +300,7 @@ This document summarizes the main issues encountered during development of the D
 
 These are the improvements that matter most based on the bugs encountered so far. They are ordered by risk to data privacy, data integrity, field usability, and presentation readiness.
 
-### 1. Enforce Role Privacy In The Backend
+### 1. Enforce Role Privacy In The Backend      
 
 Frontend filtering is not enough. FR, SAR, HCFD/documenter, admin, and super admin visibility rules should be enforced by API queries and, where practical, database policies. Direct API requests from operational accounts should not be able to retrieve records outside their allowed role/account/admin scope.
 

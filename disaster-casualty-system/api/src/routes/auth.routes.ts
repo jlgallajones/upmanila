@@ -14,6 +14,7 @@ import {
   registerUnitUser,
   resetOperationalData,
   refreshSession,
+  updateAdminAccount,
   updateCurrentUser,
   updateUnitUser,
 } from "../controllers/auth.controller.js";
@@ -55,6 +56,12 @@ authRouter.get(
   requireAuth,
   requireRole(["super_admin"]),
   getManagedAccounts,
+);
+authRouter.patch(
+  "/admin-accounts/:id",
+  requireAuth,
+  requireRole(["super_admin"]),
+  updateAdminAccount,
 );
 authRouter.post(
   "/register-unit-user",
