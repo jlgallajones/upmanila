@@ -1,4 +1,7 @@
 const FALLBACK_API_BASE_URL = "/api";
+const RESPONSE_TIMELINE_SESSION_DRAFT_KEY =
+  "dcms.admin.responseTimelineSessionDraft";
+const SESSION_EXPIRED_NOTICE_KEY = "dcms.admin.sessionExpiredNotice";
 
 let realtimeClient = null;
 let dashboardRealtimeChannel = null;
@@ -123,6 +126,7 @@ const state = {
   dashboard: null,
   recentActivity: [],
   bulkImportPreviews: {},
+  restoredResponseTimelineDraftKey: null,
 };
 
 const dashboardRealtimeTables = [
@@ -430,6 +434,170 @@ function readJson(key) {
   }
 }
 
+function responseTimelineDraftKey(incidentId) {
+  return `${RESPONSE_TIMELINE_SESSION_DRAFT_KEY}.${incidentId || "unknown"}`;
+}
+
+function getResponseTimelineSessionDraft() {
+  return readJson(RESPONSE_TIMELINE_SESSION_DRAFT_KEY);
+}
+
+function clearResponseTimelineSessionDraft(incidentId) {
+  const draft = getResponseTimelineSessionDraft();
+
+  if (!incidentId || draft?.incidentId === incidentId) {
+    localStorage.removeItem(RESPONSE_TIMELINE_SESSION_DRAFT_KEY);
+  }
+
+  localStorage.removeItem(responseTimelineDraftKey(incidentId));
+}
+
+function collectResponseTimelineDraft(form, incidentId, reason = "manual") {
+  if (!form || !incidentId) return null;
+
+  return {
+    incidentId,
+    reason,
+    savedAt: new Date().toISOString(),
+    dmmpActivated: formValue(form, "dmmpActivated"),
+    dmmpActivationTrigger: formValue(form, "dmmpActivationTrigger"),
+    timelineFields: incidentTimelineFields.reduce((values, [name]) => {
+      values[name] = formValue(form, name);
+      return values;
+    }, {}),
+    customTimelineEvents: Array.from(
+      form.querySelectorAll("[data-custom-timeline-row]"),
+    ).map((row, index) => {
+      const valueFor = (field) =>
+        row.querySelector(`[data-custom-timeline-field="${field}"]`)?.value ||
+        "";
+
+      return {
+        id: valueFor("id") || `custom-${index + 1}`,
+        label: valueFor("label"),
+        at: valueFor("at"),
+      };
+    }),
+  };
+}
+
+function preserveActiveResponseTimelineDraft(reason = "manual") {
+  const modal = state.activeIncidentSectionModal;
+
+  if (modal?.section !== "timeline" || !modal.incidentId) {
+    return null;
+  }
+
+  const form = document.querySelector(
+    '[data-incident-section-form="timeline"]',
+  );
+  const draft = collectResponseTimelineDraft(
+    form,
+    modal.incidentId,
+    reason,
+  );
+
+  if (!draft) {
+    return null;
+  }
+
+  localStorage.setItem(
+    RESPONSE_TIMELINE_SESSION_DRAFT_KEY,
+    JSON.stringify(draft),
+  );
+  localStorage.setItem(
+    responseTimelineDraftKey(modal.incidentId),
+    JSON.stringify(draft),
+  );
+
+  return draft;
+}
+
+function prepareResponseTimelineDraftRestoreAfterLogin() {
+  const draft = getResponseTimelineSessionDraft();
+
+  if (!draft?.incidentId) {
+    return false;
+  }
+
+  if (!isViewAllowedForRole("incident-management", state.user?.role)) {
+    return false;
+  }
+
+  state.activeView = "incident-management";
+  localStorage.setItem("dcms.admin.activeView", "incident-management");
+  state.expandedIncidentId = draft.incidentId;
+  state.activeIncidentSectionModal = {
+    incidentId: draft.incidentId,
+    section: "timeline",
+    editMode: true,
+  };
+  state.restoredResponseTimelineDraftKey = null;
+
+  return true;
+}
+
+function restoreResponseTimelineDraftIntoForm() {
+  const draft = getResponseTimelineSessionDraft();
+  const modal = state.activeIncidentSectionModal;
+
+  if (
+    !draft?.incidentId ||
+    modal?.section !== "timeline" ||
+    modal.incidentId !== draft.incidentId
+  ) {
+    return false;
+  }
+
+  const restoreKey = `${draft.incidentId}:${draft.savedAt || ""}`;
+  if (state.restoredResponseTimelineDraftKey === restoreKey) {
+    return false;
+  }
+
+  const form = document.querySelector(
+    '[data-incident-section-form="timeline"]',
+  );
+  if (!form) {
+    return false;
+  }
+
+  if (form.elements.dmmpActivated) {
+    form.elements.dmmpActivated.value = draft.dmmpActivated || "";
+  }
+
+  if (form.elements.dmmpActivationTrigger) {
+    form.elements.dmmpActivationTrigger.value =
+      draft.dmmpActivationTrigger || "";
+  }
+
+  Object.entries(draft.timelineFields || {}).forEach(([name, value]) => {
+    if (form.elements[name]) {
+      form.elements[name].value = value || "";
+    }
+  });
+
+  const customContainer = form.querySelector("[data-custom-timeline-events]");
+  if (customContainer && Array.isArray(draft.customTimelineEvents)) {
+    customContainer.innerHTML = draft.customTimelineEvents
+      .map((event, index) => renderCustomTimelineEventRow(event, index))
+      .join("");
+  }
+
+  state.restoredResponseTimelineDraftKey = restoreKey;
+  setMessage(
+    "incidentSectionModalMessage",
+    "Unsaved Response Timeline values were restored after your session expired. Review them, then click Save.",
+    "warning",
+  );
+  setMessage(
+    "timelineMessage",
+    "Unsaved values restored from this browser. Click Save to store them.",
+    "warning",
+  );
+
+  return true;
+}
+
 function saveSession(data) {
   state.user = data.user;
   state.accessToken = data.accessToken;
@@ -634,8 +802,24 @@ async function apiRequest(path, options = {}) {
     });
 
     if (response.status === 401) {
+      const preservedDraft = preserveActiveResponseTimelineDraft(
+        "session-expired",
+      );
+      localStorage.setItem(
+        SESSION_EXPIRED_NOTICE_KEY,
+        preservedDraft
+          ? "Session expired. Please log in again. Your unsaved Response Timeline values were kept on this browser."
+          : "Session expired. Please log in again.",
+      );
       clearSession();
       render();
+      if (preservedDraft) {
+        setMessage(
+          "loginMessage",
+          "Your session expired. The unsaved Response Timeline values were kept on this browser. Sign in again to restore and save them.",
+          "warning",
+        );
+      }
     }
 
     throw new Error(getUserFriendlyMessage(message));
@@ -1975,10 +2159,12 @@ function render() {
     .then(() => {
       renderCurrentView();
       bindView();
+      restoreResponseTimelineDraftIntoForm();
     })
     .catch((error) => {
       renderCurrentView(error.message);
       bindView();
+      restoreResponseTimelineDraftIntoForm();
     });
 }
 
@@ -2030,6 +2216,27 @@ function renderLegalLinks() {
       <span aria-hidden="true">|</span>
       <a href="./terms-and-conditions.html">Terms &amp; Conditions</a>
     </nav>
+  `;
+}
+
+function renderSessionExpiredNotice() {
+  const message = localStorage.getItem(SESSION_EXPIRED_NOTICE_KEY);
+
+  if (!message) {
+    return "";
+  }
+
+  return `
+    <div class="session-expired-backdrop" role="alertdialog" aria-modal="true" aria-labelledby="sessionExpiredTitle">
+      <section class="session-expired-dialog">
+        <div class="session-expired-icon">!</div>
+        <h2 id="sessionExpiredTitle">Session expired</h2>
+        <p>${escapeHtml(message)}</p>
+        <button id="sessionExpiredNoticeButton" class="primary-button" type="button">
+          Log in again
+        </button>
+      </section>
+    </div>
   `;
 }
 
@@ -2089,10 +2296,17 @@ function renderLogin() {
         </form>
       </section>
     </main>
+    ${renderSessionExpiredNotice()}
   `;
 }
 
 function bindLogin() {
+  qs("#sessionExpiredNoticeButton")?.addEventListener("click", () => {
+    localStorage.removeItem(SESSION_EXPIRED_NOTICE_KEY);
+    qs(".session-expired-backdrop")?.remove();
+    qs("#loginForm input[name='email']")?.focus();
+  });
+
   qs("#loginForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = event.currentTarget;
@@ -2112,7 +2326,9 @@ function bindLogin() {
       }
 
       saveSession(response.data);
-      setActiveView("home");
+      if (!prepareResponseTimelineDraftRestoreAfterLogin()) {
+        setActiveView("home");
+      }
       render();
     } catch (error) {
       setMessage("loginMessage", error.message, "error");
@@ -4249,75 +4465,59 @@ const incidentLocation = selectedIncident
       </div>
     </section>
     <section class="panel analytics-incident-summary">
+      <div class="analytics-incident-overview-header">
+        <div>
+          <span class="eyebrow">Incident Overview</span>
+          <h3>${escapeHtml(selectedIncident?.incident_name || "No incident selected")}</h3>
+        </div>
+        <span class="analytics-incident-status">
+          ${
+            selectedIncident
+              ? `Status: ${escapeHtml(roleLabel(selectedIncident.status))}`
+              : "No incident selected"
+          }
+        </span>
+      </div>
 
-  <!-- INCIDENT INFORMATION -->
-  <div class="analytics-incident-details">
+      <div class="analytics-incident-overview">
+        <div class="analytics-incident-info-list">
+          <div>
+            <span>Incident Name</span>
+            <strong>${escapeHtml(selectedIncident?.incident_name || "Not recorded")}</strong>
+          </div>
+          <div>
+            <span>Date of Incident</span>
+            <strong>${escapeHtml(incidentDateLabel)}</strong>
+          </div>
+          <div>
+            <span>Location</span>
+            <strong>${escapeHtml(incidentLocation)}</strong>
+          </div>
+        </div>
 
-    <div class="analytics-incident-detail">
-      <span>Incident Name</span>
-      <strong>
-        ${escapeHtml(
-          selectedIncident?.incident_name || "Not recorded"
-        )}
-      </strong>
-    </div>
-
-    <div class="analytics-incident-detail">
-      <span>Date of Incident</span>
-      <strong>${escapeHtml(incidentDateLabel)}</strong>
-    </div>
-
-    <div class="analytics-incident-detail">
-      <span>Location</span>
-      <strong>${escapeHtml(incidentLocation)}</strong>
-    </div>
-
-  </div>
-
-
-  <!-- SMALL SUMMARY BOXES -->
-  <div class="analytics-compact-stats">
-
-    <div class="analytics-compact-stat">
-      <span>Selected Incident</span>
-
-      <strong>
-        ${selectedIncident ? 1 : 0}
-      </strong>
-
-      <small>
-        ${
-          selectedIncident
-            ? `Status: ${escapeHtml(roleLabel(selectedIncident.status))}`
-            : "No incident selected"
-        }
-      </small>
-    </div>
-
-
-    <div class="analytics-compact-stat">
-      <span>Casualty Records</span>
-      <strong>${totalCasualties}</strong>
-      <small>For selected incident</small>
-    </div>
-
-
-    <div class="analytics-compact-stat">
-      <span>Verified Records</span>
-      <strong>${verifiedRecords}</strong>
-      <small>For selected incident</small>
-    </div>
-
-
-    <div class="analytics-compact-stat">
-      <span>Pending Review</span>
-      <strong>${pendingRecords}</strong>
-      <small>For selected incident</small>
-    </div>
-
-  </div>
-
-</section>
+        <div class="analytics-incident-metrics">
+          <div>
+            <span>Selected Incident</span>
+            <strong>${selectedIncident ? 1 : 0}</strong>
+          </div>
+          <div>
+            <span>Casualty Records</span>
+            <strong>${totalCasualties}</strong>
+            <small>For selected incident</small>
+          </div>
+          <div>
+            <span>Verified Records</span>
+            <strong>${verifiedRecords}</strong>
+            <small>For selected incident</small>
+          </div>
+          <div>
+            <span>Pending Review</span>
+            <strong>${pendingRecords}</strong>
+            <small>For selected incident</small>
+          </div>
+        </div>
+      </div>
+    </section>
     ${
       !selectedIncident
         ? `<section class="panel" style="margin-top:18px"><div class="empty-state">No incidents available for analytics.</div></section>`
@@ -11855,7 +12055,7 @@ function bindIncidentManagementActions() {
       state.activeIncidentSectionModal = {
         incidentId,
         section,
-        editMode: false,
+        editMode: section === "timeline",
       };
       renderCurrentView();
       bindView();
@@ -12280,6 +12480,7 @@ async function saveIncidentTimelineSection(incidentId, form) {
     method: "PUT",
     body: JSON.stringify(payload),
   });
+  clearResponseTimelineSessionDraft(incidentId);
   await reloadExpandedIncident("Response timeline saved.");
 }
 

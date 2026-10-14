@@ -214,6 +214,60 @@ button {
   outline: none;
 }
 
+.session-expired-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.46);
+}
+
+.session-expired-dialog {
+  width: min(420px, 100%);
+  display: grid;
+  justify-items: center;
+  padding: 30px;
+  border: 1px solid rgba(0, 131, 143, 0.22);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.24);
+  text-align: center;
+}
+
+.session-expired-icon {
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--cyan);
+  font-size: 28px;
+  font-weight: 950;
+  line-height: 1;
+  margin-bottom: 16px;
+}
+
+.session-expired-dialog h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 25px;
+  line-height: 1.15;
+}
+
+.session-expired-dialog p {
+  margin: 12px 0 22px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.session-expired-dialog .primary-button {
+  min-width: 160px;
+}
+
 .login-shell {
   min-height: 100vh;
   display: grid;
@@ -2853,26 +2907,70 @@ tbody tr:hover td {
 
 .analytics-incident-summary {
   margin-top: 12px;
-  padding: 14px 16px;
+  padding: 18px 20px;
+  border-color: rgba(0, 131, 143, 0.24);
 }
 
+.analytics-incident-overview-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
 
-/* INCIDENT NAME / DATE / LOCATION */
-.analytics-incident-details {
+.analytics-incident-overview-header h3 {
+  margin: 5px 0 0;
+  color: var(--ink);
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.analytics-incident-status {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border: 1px solid rgba(0, 131, 143, 0.28);
+  border-radius: 999px;
+  background: rgba(0, 131, 143, 0.08);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.analytics-incident-overview {
   display: grid;
-  grid-template-columns: 2fr 1fr 2fr;
-  gap: 10px;
+  gap: 16px;
+  padding-top: 16px;
 }
 
-.analytics-incident-detail {
+.analytics-incident-info-list {
+  display: grid;
+  grid-template-columns: 1.6fr 0.9fr 1.7fr;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  padding-bottom: 16px;
+}
+
+.analytics-incident-info-list div,
+.analytics-incident-metrics div {
   min-width: 0;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: #fbfcfe;
 }
 
-.analytics-incident-detail span {
+.analytics-incident-info-list div {
+  padding-right: 20px;
+  margin-right: 20px;
+  border-right: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.analytics-incident-info-list div:last-child,
+.analytics-incident-metrics div:last-child {
+  padding-right: 0;
+  margin-right: 0;
+  border-right: 0;
+}
+
+.analytics-incident-info-list span,
+.analytics-incident-metrics span {
   display: block;
   color: var(--muted);
   font-size: 10px;
@@ -2881,58 +2979,37 @@ tbody tr:hover td {
   text-transform: uppercase;
 }
 
-.analytics-incident-detail strong {
+.analytics-incident-info-list strong {
   display: block;
-  margin-top: 5px;
+  margin-top: 6px;
   color: var(--ink);
-  font-size: 13px;
-  line-height: 1.4;
+  font-size: 14px;
+  line-height: 1.35;
 }
 
-
-/* SMALL ANALYTICS COUNTERS */
-.analytics-compact-stats {
+.analytics-incident-metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 10px;
 }
 
-.analytics-compact-stat {
-  min-width: 0;
-  min-height: 72px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: #fff;
+.analytics-incident-metrics div {
+  padding-right: 20px;
+  margin-right: 20px;
+  border-right: 1px solid rgba(15, 23, 42, 0.08);
 }
 
-.analytics-compact-stat:first-child {
-  border-color: rgba(0, 131, 143, 0.28);
-  background: var(--cyan-soft);
-}
-
-.analytics-compact-stat span {
+.analytics-incident-metrics strong {
   display: block;
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 850;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.analytics-compact-stat strong {
-  display: block;
-  margin-top: 5px;
+  margin-top: 6px;
   color: var(--ink);
-  font-size: 21px;
+  font-size: 30px;
   line-height: 1;
   font-weight: 900;
 }
 
-.analytics-compact-stat small {
+.analytics-incident-metrics small {
   display: block;
-  margin-top: 5px;
+  margin-top: 6px;
   color: var(--muted);
   font-size: 11px;
 }
@@ -4015,11 +4092,34 @@ tbody tr:hover td {
   .grid.two,
   .grid.three,
   .grid.four,
-  .analytics-compact-stats,
-  .analytics-incident-details,
+  .analytics-incident-info-list,
+  .analytics-incident-metrics,
   .analytics-graph-grid,
   .incident-card-grid {
     grid-template-columns: 1fr;
+  }
+
+  .analytics-incident-overview-header {
+    display: grid;
+  }
+
+  .analytics-incident-status {
+    width: fit-content;
+  }
+
+  .analytics-incident-info-list div,
+  .analytics-incident-metrics div {
+    padding: 0 0 12px;
+    margin: 0 0 12px;
+    border-right: 0;
+    border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  }
+
+  .analytics-incident-info-list div:last-child,
+  .analytics-incident-metrics div:last-child {
+    padding-bottom: 0;
+    margin-bottom: 0;
+    border-bottom: 0;
   }
 
   .metric {
@@ -4086,8 +4186,8 @@ tbody tr:hover td {
   }
 
   .summary-facts,
-  .analytics-incident-details,
-  .analytics-compact-stats {
+  .analytics-incident-info-list,
+  .analytics-incident-metrics {
     grid-template-columns: 1fr;
   }
 
