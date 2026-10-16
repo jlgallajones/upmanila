@@ -3,6 +3,8 @@ import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 
+import { ThemeModeProvider } from "@/theme/theme-mode";
+
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
     ...Ionicons.font,
@@ -17,7 +19,7 @@ export default function RootLayout() {
   }
 
   return (
-    <>
+    <ThemeModeProvider>
       <StatusBar style="light" />
 
       <Stack screenOptions={{ headerShown: false }}>
@@ -39,6 +41,6 @@ export default function RootLayout() {
           }}
         />
       </Stack>
-    </>
+    </ThemeModeProvider>
   );
 }

@@ -7,34 +7,38 @@ import {
   getAccessToken,
   getCurrentUser,
 } from "../../auth/session";
-
-const COLORS = {
-  teal: "#00838F",
-  inactive: "#FFFFFF",
-  activeIcon: "#242424",
-  white: "#FFFFFF",
-  border: "#E6E6E6",
-};
+import { useThemeMode } from "../../theme/theme-mode";
 
 function TabIcon({
   color,
   focused,
   icon,
   activeIcon,
+  activeIconColor,
+  activeBackgroundColor,
   size = 26,
 }: {
   color: ColorValue;
   focused: boolean;
   icon: keyof typeof Ionicons.glyphMap;
   activeIcon: keyof typeof Ionicons.glyphMap;
+  activeIconColor: string;
+  activeBackgroundColor: string;
   size?: number;
 }) {
   return (
-    <View style={[styles.tabIconShell, focused && styles.tabIconShellActive]}>
+    <View
+      style={[
+        styles.tabIconShell,
+        focused && {
+          backgroundColor: activeBackgroundColor,
+        },
+      ]}
+    >
       <Ionicons
         name={focused ? activeIcon : icon}
         size={size}
-        color={focused ? COLORS.activeIcon : color}
+        color={focused ? activeIconColor : color}
       />
     </View>
   );
@@ -47,6 +51,7 @@ export default function TabLayout() {
     useState(true);
   const [isAuthenticated, setIsAuthenticated] =
     useState(false);
+  const { colors } = useThemeMode();
 
   useFocusEffect(
     useCallback(() => {
@@ -89,8 +94,8 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: COLORS.white,
-        tabBarInactiveTintColor: COLORS.inactive,
+        tabBarActiveTintColor: colors.tabBarInactiveIcon,
+        tabBarInactiveTintColor: colors.tabBarInactiveIcon,
         tabBarShowLabel: false,
         tabBarLabelStyle: {
           fontSize: 10,
@@ -107,10 +112,10 @@ export default function TabLayout() {
           paddingBottom: 0,
           borderTopWidth: 1,
           borderTopColor: "transparent",
-          borderColor: COLORS.border,
+          borderColor: colors.selectedBorder,
           borderWidth: 1,
           borderRadius: 999,
-          backgroundColor: COLORS.teal,
+          backgroundColor: colors.tabBarBackground,
           overflow: "hidden",
           elevation: 10,
           shadowColor: "#000000",
@@ -142,6 +147,8 @@ export default function TabLayout() {
               focused={focused}
               icon="home-outline"
               activeIcon="home"
+              activeIconColor={colors.tabBarActiveIcon}
+              activeBackgroundColor={colors.tabBarActiveBackground}
             />
           ),
         }}
@@ -157,6 +164,8 @@ export default function TabLayout() {
               focused={focused}
               icon="folder-outline"
               activeIcon="folder"
+              activeIconColor={colors.tabBarActiveIcon}
+              activeBackgroundColor={colors.tabBarActiveBackground}
             />
           ),
         }}
@@ -173,6 +182,8 @@ export default function TabLayout() {
               focused={focused}
               icon="add-circle-outline"
               activeIcon="add-circle"
+              activeIconColor={colors.tabBarActiveIcon}
+              activeBackgroundColor={colors.tabBarActiveBackground}
               size={29}
             />
           ),
@@ -190,6 +201,8 @@ export default function TabLayout() {
               focused={focused}
               icon="document-text-outline"
               activeIcon="document-text"
+              activeIconColor={colors.tabBarActiveIcon}
+              activeBackgroundColor={colors.tabBarActiveBackground}
             />
           ),
         }}
@@ -212,6 +225,8 @@ export default function TabLayout() {
               focused={focused}
               icon="person-outline"
               activeIcon="person"
+              activeIconColor={colors.tabBarActiveIcon}
+              activeBackgroundColor={colors.tabBarActiveBackground}
             />
           ),
         }}
@@ -227,8 +242,5 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
-  },
-  tabIconShellActive: {
-    backgroundColor: COLORS.white,
   },
 });

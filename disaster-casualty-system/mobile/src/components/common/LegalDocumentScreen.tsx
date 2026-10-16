@@ -9,15 +9,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-const COLORS = {
-  cyan: "#00838F",
-  cyanSoft: "#E0F7FA",
-  ink: "#000000",
-  muted: "#6B6B6B",
-  border: "#E6E6E6",
-  white: "#FFFFFF",
-  background: "#FAFAFA",
-};
+import ThemeToggleButton from "../theme-toggle-button";
+import { useThemeMode } from "../../theme/theme-mode";
 
 type LegalSection = {
   title: string;
@@ -38,25 +31,45 @@ export default function LegalDocumentScreen({
   intro,
   sections,
 }: LegalDocumentScreenProps) {
+  const { colors, isDark } = useThemeMode();
+
   return (
-    <View style={styles.screen}>
-      <SafeAreaView edges={["top"]} style={styles.headerSafeArea}>
-        <View style={styles.header}>
+    <View style={[styles.screen, { backgroundColor: colors.background }]}>
+      <SafeAreaView
+        edges={["top"]}
+        style={[
+          styles.headerSafeArea,
+          { backgroundColor: isDark ? colors.background : colors.primary },
+        ]}
+      >
+        <View
+          style={[
+            styles.header,
+            { backgroundColor: isDark ? colors.background : colors.primary },
+          ]}
+        >
           <Pressable
             accessibilityRole="button"
             onPress={() => router.back()}
             style={({ pressed }) => [
               styles.backButton,
+              {
+                backgroundColor: colors.surface,
+              },
               pressed && styles.backButtonPressed,
             ]}
           >
             <Ionicons
               name="chevron-back"
               size={20}
-              color={COLORS.cyan}
+              color={colors.primary}
             />
-            <Text style={styles.backButtonText}>Back</Text>
+            <Text style={[styles.backButtonText, { color: colors.primary }]}>Back</Text>
           </Pressable>
+
+          <View style={styles.themeToggleSlot}>
+            <ThemeToggleButton compact inverted />
+          </View>
 
           <Text style={styles.headerTitle}>{title}</Text>
           <Text style={styles.headerSubtitle}>
@@ -69,20 +82,53 @@ export default function LegalDocumentScreen({
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.intro}>{intro}</Text>
+        <Text
+          style={[
+            styles.intro,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              color: colors.text,
+            },
+          ]}
+        >
+          {intro}
+        </Text>
 
         {sections.map((section) => (
-          <View key={section.title} style={styles.section}>
-            <Text style={styles.sectionTitle}>{section.title}</Text>
+          <View
+            key={section.title}
+            style={[
+              styles.section,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              {section.title}
+            </Text>
 
             {section.body ? (
-              <Text style={styles.bodyText}>{section.body}</Text>
+              <Text style={[styles.bodyText, { color: colors.textSecondary }]}>
+                {section.body}
+              </Text>
             ) : null}
 
             {section.bullets?.map((item) => (
               <View key={item} style={styles.bulletRow}>
-                <View style={styles.bulletDot} />
-                <Text style={styles.bodyText}>{item}</Text>
+                <View
+                  style={[
+                    styles.bulletDot,
+                    {
+                      backgroundColor: colors.primary,
+                    },
+                  ]}
+                />
+                <Text style={[styles.bodyText, { color: colors.textSecondary }]}>
+                  {item}
+                </Text>
               </View>
             ))}
           </View>
@@ -95,10 +141,8 @@ export default function LegalDocumentScreen({
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: COLORS.background,
   },
   headerSafeArea: {
-    backgroundColor: COLORS.cyan,
   },
   header: {
     paddingHorizontal: 20,
@@ -111,21 +155,25 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     borderRadius: 999,
-    backgroundColor: COLORS.white,
     paddingHorizontal: 12,
     marginBottom: 18,
+  },
+  themeToggleSlot: {
+    position: "absolute",
+    top: 12,
+    right: 20,
+    zIndex: 2,
   },
   backButtonPressed: {
     opacity: 0.86,
     transform: [{ scale: 0.98 }],
   },
   backButtonText: {
-    color: COLORS.cyan,
     fontSize: 13,
     fontWeight: "900",
   },
   headerTitle: {
-    color: COLORS.white,
+    color: "#FFFFFF",
     fontSize: 31,
     lineHeight: 36,
     fontWeight: "900",
@@ -143,32 +191,25 @@ const styles = StyleSheet.create({
     paddingTop: 20,
   },
   intro: {
-    color: COLORS.ink,
     fontSize: 15,
     lineHeight: 23,
     borderWidth: 1,
-    borderColor: COLORS.border,
     borderRadius: 14,
-    backgroundColor: COLORS.white,
     padding: 16,
   },
   section: {
     borderWidth: 1,
-    borderColor: COLORS.border,
     borderRadius: 14,
-    backgroundColor: COLORS.white,
     padding: 16,
     marginTop: 14,
   },
   sectionTitle: {
-    color: COLORS.ink,
     fontSize: 17,
     fontWeight: "900",
     marginBottom: 9,
   },
   bodyText: {
     flex: 1,
-    color: COLORS.muted,
     fontSize: 14,
     lineHeight: 22,
   },
@@ -182,7 +223,6 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 999,
-    backgroundColor: COLORS.cyan,
     marginTop: 8,
   },
 });

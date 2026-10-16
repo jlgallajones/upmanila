@@ -19,6 +19,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { login, requestPasswordReset } from "../../api/auth";
 import { saveSession } from "../../auth/session";
 import EmergencyShield from "../../components/common/EmergencyShield";
+import ThemeToggleButton from "../../components/theme-toggle-button";
+import { useThemeMode } from "../../theme/theme-mode";
 import {
   getUserFriendlyMessage,
   logUiError,
@@ -54,6 +56,7 @@ export default function LoginScreen() {
   >(null);
   const [passwordResetMessageType, setPasswordResetMessageType] =
     useState<"success" | "error">("success");
+  const { colors, isDark } = useThemeMode();
 
   function getLoginErrorMessage(error: unknown): string {
     const message =
@@ -188,14 +191,36 @@ export default function LoginScreen() {
   }
 
   return (
-    <View style={styles.screen}>
+    <View
+      style={[
+        styles.screen,
+        {
+          backgroundColor: colors.background,
+        },
+      ]}
+    >
       <StatusBar
         barStyle="light-content"
-        backgroundColor={COLORS.maroon}
+        backgroundColor={isDark ? colors.background : COLORS.maroon}
       />
 
-      <SafeAreaView edges={["top"]} style={styles.headerSafeArea}>
-        <View style={styles.header}>
+      <SafeAreaView
+        edges={["top"]}
+        style={[
+          styles.headerSafeArea,
+          {
+            backgroundColor: isDark ? colors.background : COLORS.maroon,
+          },
+        ]}
+      >
+        <View
+          style={[
+            styles.header,
+            {
+              backgroundColor: isDark ? colors.background : COLORS.maroon,
+            },
+          ]}
+        >
           <View style={styles.headerCircleLarge} />
           <View style={styles.headerCircleSmall} />
 
@@ -214,6 +239,9 @@ export default function LoginScreen() {
               </Text>
             </View>
           </View>
+          <View style={styles.themeToggleSlot}>
+            <ThemeToggleButton compact inverted />
+          </View>
         </View>
       </SafeAreaView>
 
@@ -226,15 +254,30 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.description}>
+          <Text
+            style={[
+              styles.description,
+              {
+                color: colors.textSecondary,
+              },
+            ]}
+          >
             Sign in with your official responder credentials to
             access MedSORT casualty and incident tools.
           </Text>
 
           <View style={styles.formGroup}>
-            <Text style={styles.label}>EMAIL ADDRESS</Text>
+            <Text style={[styles.label, { color: colors.text }]}>EMAIL ADDRESS</Text>
 
-            <View style={styles.inputContainer}>
+            <View
+              style={[
+                styles.inputContainer,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
               <Ionicons
                 name="mail-outline"
                 size={19}
@@ -244,7 +287,7 @@ export default function LoginScreen() {
               <TextInput
                 value={email}
                 onChangeText={handleEmailChange}
-                style={styles.input}
+                style={[styles.input, { color: colors.text }]}
                 placeholder="responder@ndrrmc.gov.ph"
                 placeholderTextColor={COLORS.mutedText}
                 keyboardType="email-address"
@@ -257,9 +300,17 @@ export default function LoginScreen() {
           </View>
 
           <View style={styles.formGroup}>
-            <Text style={styles.label}>PASSWORD</Text>
+            <Text style={[styles.label, { color: colors.text }]}>PASSWORD</Text>
 
-            <View style={styles.inputContainer}>
+            <View
+              style={[
+                styles.inputContainer,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
               <Ionicons
                 name="lock-closed-outline"
                 size={19}
@@ -269,7 +320,7 @@ export default function LoginScreen() {
               <TextInput
                 value={password}
                 onChangeText={handlePasswordChange}
-                style={styles.input}
+                style={[styles.input, { color: colors.text }]}
                 placeholder="Enter your password"
                 placeholderTextColor={COLORS.mutedText}
                 secureTextEntry={!showPassword}
@@ -324,6 +375,10 @@ export default function LoginScreen() {
                 <View
                   style={[
                     styles.checkbox,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    },
                     rememberMe && styles.checkboxChecked,
                   ]}
                 >
@@ -336,7 +391,7 @@ export default function LoginScreen() {
                   ) : null}
                 </View>
 
-                <Text style={styles.rememberText}>
+                <Text style={[styles.rememberText, { color: colors.textSecondary }]}>
                   Remember me
                 </Text>
               </Pressable>
@@ -345,7 +400,7 @@ export default function LoginScreen() {
                 disabled={isRequestingPasswordReset}
                 onPress={handleForgotPassword}
               >
-                <Text style={styles.forgotText}>
+                <Text style={[styles.forgotText, { color: colors.primary }]}>
                   {isRequestingPasswordReset
                     ? "Sending reset link..."
                     : "Forgot Password?"}
@@ -357,6 +412,10 @@ export default function LoginScreen() {
               <View
                 style={[
                   styles.passwordResetCard,
+                    {
+                    backgroundColor: colors.primarySoft,
+                    borderColor: colors.selectedBorder,
+                    },
                   passwordResetMessageType === "error" &&
                     styles.passwordResetCardError,
                 ]}
@@ -371,14 +430,18 @@ export default function LoginScreen() {
                   color={
                     passwordResetMessageType === "error"
                       ? COLORS.warningText
-                      : COLORS.maroon
+                      : colors.primary
                   }
                 />
                 <Text
                   style={[
                     styles.passwordResetText,
-                    passwordResetMessageType === "error" &&
-                      styles.passwordResetTextError,
+                    {
+                      color:
+                        passwordResetMessageType === "error"
+                          ? COLORS.warningText
+                          : colors.primary,
+                    },
                   ]}
                 >
                   {passwordResetMessage}
@@ -392,6 +455,10 @@ export default function LoginScreen() {
             onPress={handleLogin}
             style={({ pressed }) => [
               styles.loginButton,
+              {
+                backgroundColor: colors.primary,
+                shadowColor: colors.primary,
+              },
               pressed && styles.loginButtonPressed,
               isSubmitting && styles.loginButtonDisabled,
             ]}
@@ -407,21 +474,29 @@ export default function LoginScreen() {
               onPress={() => router.push("/privacy-policy")}
               hitSlop={10}
             >
-              <Text style={styles.legalLinkText}>Privacy Policy</Text>
+              <Text style={[styles.legalLinkText, { color: colors.primary }]}>Privacy Policy</Text>
             </Pressable>
-            <Text style={styles.legalSeparator}>|</Text>
+            <Text style={[styles.legalSeparator, { color: colors.textSecondary }]}>|</Text>
             <Pressable
               accessibilityRole="link"
               onPress={() => router.push("/terms-and-conditions")}
               hitSlop={10}
             >
-              <Text style={styles.legalLinkText}>
+              <Text style={[styles.legalLinkText, { color: colors.primary }]}>
                 Terms & Conditions
               </Text>
             </Pressable>
           </View>
 
-          <View style={styles.warningCard}>
+          <View
+            style={[
+              styles.warningCard,
+              {
+                backgroundColor: colors.warningBackground,
+                borderColor: colors.warningBorder,
+              },
+            ]}
+          >
             <Ionicons
               name="shield-outline"
               size={20}
@@ -443,7 +518,7 @@ export default function LoginScreen() {
               )
             }
           >
-            <Text style={styles.supportText}>
+            <Text style={[styles.supportText, { color: colors.textSecondary }]}>
               Having trouble? Contact your Barangay IT Officer
             </Text>
           </Pressable>
@@ -473,6 +548,12 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 22,
     justifyContent: "center",
+  },
+  themeToggleSlot: {
+    position: "absolute",
+    top: 12,
+    right: 16,
+    zIndex: 2,
   },
   headerCircleLarge: {
     position: "absolute",

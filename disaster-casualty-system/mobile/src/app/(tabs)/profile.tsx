@@ -23,6 +23,8 @@ import {
 } from "../../api/profile";
 import { isAuthenticationTokenError } from "../../api/client";
 import { clearSession, getCurrentUserId } from "../../auth/session";
+import ThemeToggleButton from "../../components/theme-toggle-button";
+import { useThemeMode } from "../../theme/theme-mode";
 
 const COLORS = {
   maroon: "#242424",
@@ -62,22 +64,45 @@ function InformationRow({
   label,
   value,
 }: InformationRowProps) {
+  const { colors } = useThemeMode();
+
   return (
     <View style={styles.informationRow}>
-      <View style={styles.informationIcon}>
+      <View
+        style={[
+          styles.informationIcon,
+          {
+            backgroundColor: colors.backgroundElement,
+          },
+        ]}
+      >
         <Ionicons
           name={icon}
           size={17}
-          color="#8D9AB0"
+          color={colors.primary}
         />
       </View>
 
       <View style={styles.informationContent}>
-        <Text style={styles.informationLabel}>
+        <Text
+          style={[
+            styles.informationLabel,
+            {
+              color: colors.textSecondary,
+            },
+          ]}
+        >
           {label}
         </Text>
 
-        <Text style={styles.informationValue}>
+        <Text
+          style={[
+            styles.informationValue,
+            {
+              color: colors.text,
+            },
+          ]}
+        >
           {value}
         </Text>
       </View>
@@ -98,6 +123,8 @@ function Statistic({
   color,
   loading,
 }: StatisticProps) {
+  const { colors } = useThemeMode();
+
   return (
     <View style={styles.statistic}>
       {loading ? (
@@ -118,7 +145,14 @@ function Statistic({
         </Text>
       )}
 
-      <Text style={styles.statisticLabel}>
+      <Text
+        style={[
+          styles.statisticLabel,
+          {
+            color: colors.textSecondary,
+          },
+        ]}
+      >
         {label}
       </Text>
     </View>
@@ -228,6 +262,7 @@ function getInitials(fullName: string): string {
 }
 
 export default function ProfileScreen() {
+  const { colors, isDark } = useThemeMode();
   const [profile, setProfile] =
     useState<ProfileData | null>(null);
 
@@ -396,10 +431,17 @@ export default function ProfileScreen() {
     : "Not synced";
 
   return (
-    <View style={styles.screen}>
+    <View
+      style={[
+        styles.screen,
+        {
+          backgroundColor: colors.background,
+        },
+      ]}
+    >
       <StatusBar
         barStyle="light-content"
-        backgroundColor={COLORS.maroon}
+        backgroundColor={isDark ? colors.background : COLORS.maroon}
       />
 
       <Modal
@@ -461,9 +503,21 @@ export default function ProfileScreen() {
 
       <SafeAreaView
         edges={["top"]}
-        style={styles.headerSafeArea}
+        style={[
+          styles.headerSafeArea,
+          {
+            backgroundColor: isDark ? colors.background : COLORS.maroon,
+          },
+        ]}
       >
-        <View style={styles.header}>
+        <View
+          style={[
+            styles.header,
+            {
+              backgroundColor: isDark ? colors.background : COLORS.maroon,
+            },
+          ]}
+        >
           <View style={styles.headerDecorationOne} />
           <View style={styles.headerDecorationTwo} />
 
@@ -474,11 +528,23 @@ export default function ProfileScreen() {
           <Text style={styles.headerSubtitle}>
             {profileSubtitle}
           </Text>
+
+          <View style={styles.themeToggleSlot}>
+            <ThemeToggleButton compact inverted />
+          </View>
         </View>
       </SafeAreaView>
 
       <View style={styles.profileCardWrapper}>
-        <View style={styles.profileCard}>
+        <View
+          style={[
+            styles.profileCard,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+            },
+          ]}
+        >
           <View style={styles.profileTopRow}>
             <View style={styles.avatarWrapper}>
               <View style={styles.avatar}>
@@ -500,14 +566,19 @@ export default function ProfileScreen() {
 
             <View style={styles.profileInformation}>
               <Text
-                style={styles.profileName}
+                style={[styles.profileName, { color: colors.text }]}
                 numberOfLines={1}
               >
                 {fullName}
               </Text>
 
               <Text
-                style={styles.profileId}
+                style={[
+                  styles.profileId,
+                  {
+                    color: colors.textSecondary,
+                  },
+                ]}
                 numberOfLines={2}
               >
                 {role} · ID:{" "}
@@ -546,7 +617,14 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          <View style={styles.divider} />
+          <View
+            style={[
+              styles.divider,
+              {
+                backgroundColor: colors.border,
+              },
+            ]}
+          />
 
           <View style={styles.statisticsRow}>
             <Statistic
@@ -639,8 +717,16 @@ export default function ProfileScreen() {
           </View>
         ) : null}
 
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>
+        <View
+          style={[
+            styles.sectionCard,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+            },
+          ]}
+        >
+          <Text style={[styles.sectionTitle, { color: colors.primary }]}>
             {informationSectionTitle}
           </Text>
 
@@ -676,8 +762,16 @@ export default function ProfileScreen() {
           />
         </View>
 
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>
+        <View
+          style={[
+            styles.sectionCard,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+            },
+          ]}
+        >
+          <Text style={[styles.sectionTitle, { color: colors.primary }]}>
             ASSIGNMENT
           </Text>
 
@@ -718,8 +812,16 @@ export default function ProfileScreen() {
           />
         </View>
 
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>
+        <View
+          style={[
+            styles.sectionCard,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+            },
+          ]}
+        >
+          <Text style={[styles.sectionTitle, { color: colors.primary }]}>
             SYSTEM
           </Text>
 
@@ -944,6 +1046,13 @@ const styles = StyleSheet.create({
     marginTop: 7,
   },
 
+  themeToggleSlot: {
+    position: "absolute",
+    top: 12,
+    right: SCREEN_PADDING,
+    zIndex: 2,
+  },
+
   profileCardWrapper: {
     marginTop: -52,
     paddingHorizontal: SCREEN_PADDING,
@@ -952,6 +1061,7 @@ const styles = StyleSheet.create({
   },
 
   profileCard: {
+    borderWidth: 1,
     borderRadius: 20,
     paddingHorizontal: 20,
     paddingTop: 22,
@@ -1199,6 +1309,7 @@ const styles = StyleSheet.create({
   },
 
   sectionCard: {
+    borderWidth: 1,
     borderRadius: 17,
     paddingHorizontal: 16,
     paddingTop: 18,

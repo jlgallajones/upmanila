@@ -2,6 +2,7 @@ const FALLBACK_API_BASE_URL = "/api";
 const RESPONSE_TIMELINE_SESSION_DRAFT_KEY =
   "dcms.admin.responseTimelineSessionDraft";
 const SESSION_EXPIRED_NOTICE_KEY = "dcms.admin.sessionExpiredNotice";
+const THEME_STORAGE_KEY = "dcms.admin.theme";
 
 let realtimeClient = null;
 let dashboardRealtimeChannel = null;
@@ -84,10 +85,77 @@ function getInitialApiBaseUrl() {
   return defaultUrl;
 }
 
+function getSystemTheme() {
+  if (
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-color-scheme: dark)").matches
+  ) {
+    return "dark";
+  }
+
+  return "light";
+}
+
+function getInitialTheme() {
+  const storedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+
+  if (storedTheme === "light" || storedTheme === "dark") {
+    return storedTheme;
+  }
+
+  return getSystemTheme();
+}
+
+function applyTheme() {
+  const theme = state.theme === "dark" ? "dark" : "light";
+  document.documentElement.dataset.theme = theme;
+  document.documentElement.style.colorScheme = theme;
+}
+
+function toggleTheme() {
+  state.theme = state.theme === "dark" ? "light" : "dark";
+  localStorage.setItem(THEME_STORAGE_KEY, state.theme);
+  applyTheme();
+  document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
+    button.setAttribute(
+      "aria-label",
+      `Switch to ${state.theme === "dark" ? "light" : "dark"} mode`,
+    );
+    button.setAttribute(
+      "title",
+      `Switch to ${state.theme === "dark" ? "light" : "dark"} mode`,
+    );
+    button.innerHTML = state.theme === "dark" ? "Light" : "Dark";
+  });
+}
+
+function renderThemeToggle(className = "") {
+  const nextTheme = state.theme === "dark" ? "light" : "dark";
+
+  return `
+    <button
+      class="theme-toggle ${escapeHtml(className)}"
+      type="button"
+      data-theme-toggle
+      aria-label="Switch to ${nextTheme} mode"
+      title="Switch to ${nextTheme} mode"
+    >
+      ${state.theme === "dark" ? "Light" : "Dark"}
+    </button>
+  `;
+}
+
+function bindThemeToggles() {
+  document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
+    button.addEventListener("click", toggleTheme);
+  });
+}
+
 const state = {
   apiBaseUrl: getInitialApiBaseUrl(),
   user: readJson("dcms.admin.user"),
   accessToken: localStorage.getItem("dcms.admin.accessToken"),
+  theme: getInitialTheme(),
   hasPassedLoginLanding: false,
   sidebarCollapsed: localStorage.getItem("dcms.admin.sidebarCollapsed") === "true",
   activeView: localStorage.getItem("dcms.admin.activeView") || "home",
@@ -2137,22 +2205,26 @@ async function stopDashboardRealtime() {
 }
 
 function render() {
+  applyTheme();
   const app = document.getElementById("app");
 
   if (!state.user || !state.accessToken) {
     if (!state.hasPassedLoginLanding) {
       app.innerHTML = renderLoginLanding();
       bindLoginLanding();
+      bindThemeToggles();
       return;
     }
 
     app.innerHTML = renderLogin();
     bindLogin();
+    bindThemeToggles();
     return;
   }
 
   app.innerHTML = renderDashboardShell();
   bindShell();
+  bindThemeToggles();
 
   void startDashboardRealtime();
   void loadSharedData()
@@ -2182,6 +2254,7 @@ function renderAnimatedMedSortLogo() {
 function renderLoginLanding() {
   return `
     <main class="prelogin-landing-shell">
+      ${renderThemeToggle("theme-toggle-floating")}
       <section class="prelogin-landing-card" aria-labelledby="preloginLandingTitle">
         <div class="logo-strip prelogin-logo-strip">
           <img class="seal-logo" src="./assets/UP-Logo.svg" alt="University of the Philippines logo" />
@@ -2191,7 +2264,7 @@ function renderLoginLanding() {
         </div>
         ${renderAnimatedMedSortLogo()}
         <span class="prelogin-kicker">Administrator Portal</span>
-        <h1 id="preloginLandingTitle">MedSORT</h1>
+        <h1 id="preloginLandingTitle">medSORT</h1>
         <p>Emergency response information platform for incident oversight, SitReps, and casualty operations.</p>
         <button id="continueToLoginButton" class="prelogin-continue-button" type="button">
           Continue
@@ -2243,6 +2316,7 @@ function renderSessionExpiredNotice() {
 function renderLogin() {
   return `
     <main class="login-shell">
+      ${renderThemeToggle("theme-toggle-floating")}
       <section class="landing-pane">
         <div class="landing-content">
           <div class="logo-strip">
@@ -2343,7 +2417,7 @@ function renderDashboardShell() {
         <div class="sidebar-title">
           <img class="sidebar-mark" src="./assets/medsort.png" alt="MedSort" />
           <div class="sidebar-brand-text">
-            <strong>DMCS Portal</strong>
+            <strong>medSort Portal</strong>
             <span>${isSuperAdmin() ? "Super Admin Portal" : "Admin Portal"}</span>
           </div>
           <button
@@ -2363,6 +2437,7 @@ function renderDashboardShell() {
         </nav>
 
         <div class="sidebar-footer">
+          ${renderThemeToggle("sidebar-theme-toggle")}
           <button class="user-chip" type="button" id="profileButton" title="Open profile">
             <div class="user-avatar">${escapeHtml(state.user.full_name?.slice(0, 1) || "A")}</div>
             <div class="user-chip-text">

@@ -16,6 +16,8 @@ import {
   getAccessToken,
   getCurrentUser,
 } from "../auth/session";
+import ThemeToggleButton from "../components/theme-toggle-button";
+import { useThemeMode } from "../theme/theme-mode";
 
 const medsortLogoBase = require("../../assets/images/medsort-login-base.png");
 const medsortBallYellow = require("../../assets/images/medsort-ball-yellow.png");
@@ -46,6 +48,7 @@ export default function LandingScreen() {
   const [isCheckingSession, setIsCheckingSession] = useState(true);
   const yellowBounce = useRef(new Animated.Value(0)).current;
   const redBounce = useRef(new Animated.Value(0)).current;
+  const { colors, isDark } = useThemeMode();
 
   useEffect(() => {
     let isMounted = true;
@@ -121,13 +124,24 @@ export default function LandingScreen() {
   }
 
   return (
-    <View style={styles.screen}>
+    <View
+      style={[
+        styles.screen,
+        {
+          backgroundColor: isDark ? colors.background : COLORS.cyan,
+        },
+      ]}
+    >
       <StatusBar
         barStyle="light-content"
-        backgroundColor={COLORS.cyan}
+        backgroundColor={isDark ? colors.background : COLORS.cyan}
       />
 
       <SafeAreaView style={styles.safeArea}>
+        <View style={styles.themeToggleSlot}>
+          <ThemeToggleButton compact inverted />
+        </View>
+
         <View style={styles.brandBlock}>
           <View style={styles.partnerLogoRow}>
             <ExpoImage
@@ -218,10 +232,22 @@ export default function LandingScreen() {
             onPress={() => router.replace("/login")}
             style={({ pressed }) => [
               styles.continueButton,
+              {
+                backgroundColor: colors.surface,
+              },
               pressed && styles.continueButtonPressed,
             ]}
           >
-            <Text style={styles.continueButtonText}>Continue</Text>
+            <Text
+              style={[
+                styles.continueButtonText,
+                {
+                  color: colors.primary,
+                },
+              ]}
+            >
+              Continue
+            </Text>
           </Pressable>
 
           <View style={styles.legalLinkRow}>
@@ -260,6 +286,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     paddingBottom: 42,
     paddingTop: 30,
+  },
+  themeToggleSlot: {
+    alignItems: "flex-end",
   },
   brandBlock: {
     flex: 1,

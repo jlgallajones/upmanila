@@ -4949,6 +4949,16 @@ function DatePickerSheet({
   onSelect,
   onClose,
 }: DatePickerSheetProps) {
+  const [dateParts, setDateParts] = useState(() => {
+    const normalized = normalizeDate(value);
+    const [year = "", month = "", day = ""] = normalized?.split("-") ?? [];
+
+    return {
+      month: month ? String(Number(month)) : "",
+      day: day ? String(Number(day)) : "",
+      year,
+    };
+  });
   const [visibleMonth, setVisibleMonth] = useState(() =>
     parseDateInput(value),
   );
@@ -4967,6 +4977,15 @@ function DatePickerSheet({
 
       setVisibleMonth(selectedDate);
       setPickerMode("calendar");
+      const normalized = normalizeDate(value);
+      const [selectedYear = "", selectedMonth = "", selectedDay = ""] =
+        normalized?.split("-") ?? [];
+
+      setDateParts({
+        month: selectedMonth ? String(Number(selectedMonth)) : "",
+        day: selectedDay ? String(Number(selectedDay)) : "",
+        year: selectedYear,
+      });
       setYearPageStart(
         selectedDate.getFullYear() - (selectedDate.getFullYear() % 12),
       );
@@ -5000,6 +5019,53 @@ function DatePickerSheet({
       next.setMonth(current.getMonth() + offset);
       return next;
     });
+  }
+
+  function updateDatePart(
+    part: keyof typeof dateParts,
+    rawValue: string,
+    maxLength: number,
+  ) {
+    setDateParts((current) => ({
+      ...current,
+      [part]: rawValue.replace(/\D/g, "").slice(0, maxLength),
+    }));
+  }
+
+  function applyTypedDate() {
+    const monthNumber = Number(dateParts.month);
+    const dayNumber = Number(dateParts.day);
+    const yearNumber = Number(dateParts.year);
+    const candidate = new Date(yearNumber, monthNumber - 1, dayNumber);
+    const isValid =
+      dateParts.month.length > 0 &&
+      dateParts.day.length > 0 &&
+      dateParts.year.length === 4 &&
+      monthNumber >= 1 &&
+      monthNumber <= 12 &&
+      dayNumber >= 1 &&
+      candidate.getFullYear() === yearNumber &&
+      candidate.getMonth() === monthNumber - 1 &&
+      candidate.getDate() === dayNumber;
+
+    if (!isValid) {
+      Alert.alert(
+        "Invalid date",
+        "Enter a valid date using MM / DD / YYYY.",
+      );
+      return;
+    }
+
+    if (candidate > new Date()) {
+      Alert.alert(
+        "Invalid date",
+        "Date of birth cannot be in the future.",
+      );
+      return;
+    }
+
+    onSelect(formatDateForInput(candidate));
+    onClose();
   }
 
   return (
@@ -5072,6 +5138,61 @@ function DatePickerSheet({
                 color={COLORS.maroon}
               />
             </Pressable>
+          </View>
+
+          <View style={styles.directDateEntry}>
+            <Text style={styles.directDateEntryLabel}>
+              Quick entry
+            </Text>
+            <View style={styles.datePartRow}>
+              <TextInput
+                value={dateParts.month}
+                onChangeText={(nextValue) =>
+                  updateDatePart("month", nextValue, 2)
+                }
+                placeholder="MM"
+                placeholderTextColor={COLORS.muted}
+                keyboardType="number-pad"
+                maxLength={2}
+                selectTextOnFocus
+                style={styles.datePartInput}
+              />
+              <Text style={styles.datePartSeparator}>/</Text>
+              <TextInput
+                value={dateParts.day}
+                onChangeText={(nextValue) =>
+                  updateDatePart("day", nextValue, 2)
+                }
+                placeholder="DD"
+                placeholderTextColor={COLORS.muted}
+                keyboardType="number-pad"
+                maxLength={2}
+                selectTextOnFocus
+                style={styles.datePartInput}
+              />
+              <Text style={styles.datePartSeparator}>/</Text>
+              <TextInput
+                value={dateParts.year}
+                onChangeText={(nextValue) =>
+                  updateDatePart("year", nextValue, 4)
+                }
+                placeholder="YYYY"
+                placeholderTextColor={COLORS.muted}
+                keyboardType="number-pad"
+                maxLength={4}
+                selectTextOnFocus
+                style={[styles.datePartInput, styles.dateYearInput]}
+              />
+              <Pressable
+                onPress={applyTypedDate}
+                style={({ pressed }) => [
+                  styles.applyDateButton,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.applyDateButtonText}>Use date</Text>
+              </Pressable>
+            </View>
           </View>
 
           {pickerMode === "year" ? (
@@ -15518,6 +15639,62 @@ exitButtonText: {
     fontSize: 10,
     fontWeight: "700",
     marginTop: 2,
+  },
+  directDateEntry: {
+    marginTop: 4,
+    padding: 10,
+    borderRadius: 14,
+    backgroundColor: COLORS.fieldBackground,
+    borderWidth: 1,
+    borderColor: COLORS.fieldBorder,
+  },
+  directDateEntryLabel: {
+    color: COLORS.secondaryText,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.4,
+    marginBottom: 7,
+    textTransform: "uppercase",
+  },
+  datePartRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  datePartInput: {
+    width: 48,
+    height: 42,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.fieldBorder,
+    backgroundColor: COLORS.white,
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  dateYearInput: {
+    width: 66,
+  },
+  datePartSeparator: {
+    color: COLORS.secondaryText,
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  applyDateButton: {
+    minHeight: 42,
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 10,
+    marginLeft: 3,
+    paddingHorizontal: 9,
+    backgroundColor: COLORS.maroon,
+  },
+  applyDateButtonText: {
+    color: COLORS.white,
+    fontSize: 11,
+    fontWeight: "900",
   },
   weekRow: {
     flexDirection: "row",
