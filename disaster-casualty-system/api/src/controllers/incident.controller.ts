@@ -2139,16 +2139,16 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
       currentPage.push("h f");
 
       const roundedPercentage = Math.round(percentage * 1000) / 10;
+      const middleAngle = (startAngle + endAngle) / 2;
+      const percentageLabel =
+        roundedPercentage % 1 === 0
+          ? roundedPercentage.toFixed(0)
+          : roundedPercentage.toFixed(1);
+      const sliceLabel = `${count} (${percentageLabel}%)`;
+      const sliceLabelWidth = sliceLabel.length * 3.1;
 
       if (roundedPercentage >= 5) {
-        const middleAngle = (startAngle + endAngle) / 2;
         const labelRadius = radius * 0.58;
-        const percentageLabel =
-          roundedPercentage % 1 === 0
-            ? roundedPercentage.toFixed(0)
-            : roundedPercentage.toFixed(1);
-        const sliceLabel = `${count} (${percentageLabel}%)`;
-        const sliceLabelWidth = sliceLabel.length * 3.1;
         const sliceLuminance =
           color[0] * 0.299 + color[1] * 0.587 + color[2] * 0.114;
         currentPage.push(sliceLuminance > 0.58 ? "0 g" : "1 1 1 rg");
@@ -2159,15 +2159,31 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
           6.5,
           "F2",
         );
+      } else {
+        const calloutRadius = radius + 14;
+        const anchorX = centerX + Math.cos(middleAngle) * radius;
+        const anchorY = centerY + Math.sin(middleAngle) * radius;
+        const calloutX = centerX + Math.cos(middleAngle) * calloutRadius;
+        const calloutY = centerY + Math.sin(middleAngle) * calloutRadius;
+        const textX =
+          Math.cos(middleAngle) >= 0
+            ? calloutX + 4
+            : calloutX - sliceLabelWidth - 4;
+
+        currentPage.push(
+          "0.35 0.38 0.42 RG",
+          `${anchorX.toFixed(2)} ${anchorY.toFixed(2)} m ${calloutX.toFixed(2)} ${calloutY.toFixed(2)} l S`,
+          "0 g",
+        );
+        text(sliceLabel, textX, calloutY, 6.5, "F2");
       }
 
       startAngle = endAngle;
     });
 
-    entries.forEach(([label, count], index) => {
+    entries.forEach(([label], index) => {
       const legendY = cursorY - 68 - index * 18;
       const color = sitrepAnalyticsColor(label, index);
-      const percentage = total > 0 ? Math.round((count / total) * 1000) / 10 : 0;
 
       currentPage.push(
         `${color[0]} ${color[1]} ${color[2]} rg`,
@@ -2175,7 +2191,6 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
         "0 g",
       );
       text(formatSitrepLabel(label), marginX + 196, legendY, 8);
-      text(`${count} (${percentage}%)`, pageWidth - marginX - 74, legendY, 8, "F2");
     });
 
     cursorY -= chartHeight;
