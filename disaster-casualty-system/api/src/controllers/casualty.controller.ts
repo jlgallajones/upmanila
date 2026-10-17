@@ -3599,7 +3599,8 @@ export async function getCasualtyTreatmentHistory(
       .select(
         "id, casualty_incident_id, treatment_strategy, treatment_area_name, stabilization_started_at, stabilized_at, treatment_details, notes, performed_by",
       )
-      .eq("casualty_incident_id", id);
+      .eq("casualty_incident_id", id)
+      .order("created_at", { ascending: false });
 
     if (error) {
       throw new Error(
@@ -4006,7 +4007,7 @@ export async function updateCasualty(
       isResponderTransportOnlyUpdate &&
       existingRecord.encoded_by === user.id;
     const isHealthcareDocumenterSectionUpdate =
-      user.role === "documenter" &&
+      (user.role === "documenter" || user.role === "medical_personnel") &&
       existingRecord.encoded_by === user.id &&
       !person &&
       !incidentDetails &&

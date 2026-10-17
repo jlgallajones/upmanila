@@ -1059,6 +1059,23 @@ export default function CasualtyDetailScreen() {
   const facilityEncounter = record?.latest_facility_encounter ?? null;
   const treatmentDetails =
     casualty.latestTreatment?.treatment_details ?? {};
+  const admittedUnitFromFacility =
+    facilityEncounter?.icu_admitted_at
+      ? "ICU"
+      : facilityEncounter?.hospital_admitted_at ||
+          facilityEncounter?.admitted_to_hospital === true
+        ? "Ward"
+        : null;
+  const admittedUnit =
+    extractRecordSectionValue(
+      treatmentNotes,
+      "Management",
+      "Admitted to unit",
+    ) ??
+    (typeof treatmentDetails.admittedToUnit === "string"
+      ? treatmentDetails.admittedToUnit
+      : null) ??
+    admittedUnitFromFacility;
 
   return (
     <View style={styles.screen}>
@@ -1825,13 +1842,7 @@ export default function CasualtyDetailScreen() {
 
               <DetailRow
                 label="Admitted to Unit"
-                value={formatDetailUnknown(
-                  extractRecordSectionValue(
-                    treatmentNotes,
-                    "Management",
-                    "Admitted to unit",
-                  ) ?? treatmentDetails.admittedToUnit,
-                )}
+                value={formatDetailUnknown(admittedUnit)}
               />
 
               <DetailRow

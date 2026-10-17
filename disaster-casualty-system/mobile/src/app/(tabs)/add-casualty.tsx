@@ -6075,6 +6075,10 @@ const victimCodeAlreadyExists = useMemo(() => {
     );
     const ctRequired = normalizeYesNoUnknown(form.ctRequired);
     const isIcuAdmission = form.admittedToUnit === "ICU";
+    const isHospitalUnitAdmission =
+      isIcuAdmission ||
+      form.admittedToUnit === "Ward" ||
+      form.admittedToUnit === "Other Unit";
     const mechanicalVentilationRequired = normalizeYesNoUnknown(
       form.mechanicalVentilationRequired,
     );
@@ -6091,7 +6095,9 @@ const victimCodeAlreadyExists = useMemo(() => {
       arrivedAt: parseDateTimeInput(form.arrivedFacilityTime),
       referredOrTransferred,
       soughtEdCare: soughtEdCare ?? (hasFacilityCare ? true : null),
-      admittedToHospital,
+      admittedToHospital: isHospitalUnitAdmission
+        ? true
+        : admittedToHospital,
       dischargedHome,
       edAdmittedAt: parseDateTimeInput(form.edAdmissionTime),
       edDepartedAt: parseDateTimeInput(form.edTransferOutTime),
@@ -6101,7 +6107,9 @@ const victimCodeAlreadyExists = useMemo(() => {
           : undefined,
       hospitalAdmittedAt: parseDateTimeInput(
         form.hospitalAdmissionTime,
-      ),
+      ) ?? (isHospitalUnitAdmission
+        ? parseDateTimeInput(form.unitAdmissionTime)
+        : undefined),
       hospitalDischargedAt: parseDateTimeInput(
         form.hospitalDischargeTime,
       ),
@@ -6264,6 +6272,14 @@ const victimCodeAlreadyExists = useMemo(() => {
         };
       }
 
+      if (isEditing && isHealthcareDocumenterFlow) {
+        return {
+          treatmentRecord: treatmentRecordPayload,
+          facilityEncounter: facilityEncounterPayload,
+          casualtyOutcome: casualtyOutcomePayload,
+        };
+      }
+
       return {
         incidentId: form.incidentId || undefined,
         person: personPayload,
@@ -6280,6 +6296,8 @@ const victimCodeAlreadyExists = useMemo(() => {
       facilityEncounterPayload,
       form.incidentId,
       incidentDetailsPayload,
+      isEditing,
+      isHealthcareDocumenterFlow,
       isResponderTransportFocusedEdit,
       personPayload,
       treatmentRecordPayload,
