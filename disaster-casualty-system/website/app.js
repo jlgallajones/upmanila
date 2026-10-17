@@ -194,6 +194,7 @@ const state = {
   dashboard: null,
   recentActivity: [],
   bulkImportPreviews: {},
+  sitrepMetadata: {},
   restoredResponseTimelineDraftKey: null,
   responseTimelineFormSnapshot: null,
   responseTimelineFormSnapshotKey: null,
@@ -1447,6 +1448,26 @@ function sanitizeFileName(value) {
   return String(value || "download")
     .replace(/[^a-z0-9._-]+/gi, "-")
     .replace(/^-|-$/g, "");
+}
+
+function formatSitrepFileDate(value) {
+  const date = new Date(value || Date.now());
+  if (Number.isNaN(date.getTime())) {
+    return formatSitrepFileDate();
+  }
+
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${month}${day}${date.getFullYear()}`;
+}
+
+function buildSitrepFileName({
+  officeName,
+  incidentName,
+  generatedAt,
+  extension,
+}) {
+  return `SITREP-${officeName || "DCMS"}-${incidentName || "Incident"}-${formatSitrepFileDate(generatedAt)}.${extension}`;
 }
 
 function getUserFriendlyMessage(
@@ -12221,6 +12242,11 @@ function flattenSummaryFacts(data, prefix = "") {
 
 function renderSitrepAndCloseSection(incident) {
   const isClosed = String(incident?.status || "").toLowerCase() === "closed";
+  const sitrepOfficeName =
+    state.user?.office_organization ||
+    state.user?.assigned_municipality ||
+    "ManilaDRRMO";
+  const sitrepIncidentName = incident.incident_name || "Incident";
   const finalSitrepExportDisabled = isClosed
     ? ""
     : `disabled aria-disabled="true" title="Close incident before exporting the Final SitRep."`;
@@ -12245,9 +12271,9 @@ function renderSitrepAndCloseSection(incident) {
           </div>`
         : `<div class="status-message warning">Close this incident before exporting the Final SitRep.</div>`}
       <div class="button-row">
-        <button class="secondary-button" type="button" data-generate-sitrep="${escapeHtml(incident.id)}" data-incident-status="${escapeHtml(incident.status || "")}">Generate Selected Incident SitRep</button>
-        <button class="ghost-button" type="button" data-download-sitrep="pdf" data-incident-id="${escapeHtml(incident.id)}" ${finalSitrepExportDisabled}>Download Latest PDF</button>
-        <button class="ghost-button" type="button" data-download-sitrep="csv" data-incident-id="${escapeHtml(incident.id)}" ${finalSitrepExportDisabled}>Download Latest CSV</button>
+         <button class="secondary-button" type="button" data-generate-sitrep="${escapeHtml(incident.id)}" data-incident-status="${escapeHtml(incident.status || "")}" data-office-name="${escapeHtml(sitrepOfficeName)}" data-incident-name="${escapeHtml(sitrepIncidentName)}">Generate Selected Incident SitRep</button>
+         <button class="ghost-button" type="button" data-download-sitrep="pdf" data-incident-id="${escapeHtml(incident.id)}" data-office-name="${escapeHtml(sitrepOfficeName)}" data-incident-name="${escapeHtml(sitrepIncidentName)}" ${finalSitrepExportDisabled}>Download Latest PDF</button>
+         <button class="ghost-button" type="button" data-download-sitrep="csv" data-incident-id="${escapeHtml(incident.id)}" data-office-name="${escapeHtml(sitrepOfficeName)}" data-incident-name="${escapeHtml(sitrepIncidentName)}" ${finalSitrepExportDisabled}>Download Latest CSV</button>
         <button class="ghost-button" type="button" data-export-download="/incidents/${escapeHtml(incident.id)}/export/casualties.csv" data-export-file="${escapeHtml(incident.incident_code || incident.id)}-casualties.csv">Download Victim CSV</button>
         <button class="ghost-button" type="button" data-export-download="/exports/incidents/${escapeHtml(incident.id)}/package.json" data-export-file="${escapeHtml(incident.incident_code || incident.id)}-incident-package.json">Download Incident Package</button>
         ${
@@ -12612,18 +12638,28 @@ function bindIncidentManagementActions() {
           body: JSON.stringify({}),
         });
         const reportNumber = response.data?.report_number || "latest-sitrep";
+        const generatedAt = response.data?.generated_at || new Date().toISOString();
+        state.sitrepMetadata[incidentId] = {
+          generatedAt,
+          reportNumber,
+        };
         if (incidentStatus !== "closed") {
           setMessage(
             "incidentActionMessage",
             `SitRep generated: ${reportNumber}. Close the incident before exporting the Final SitRep.`,
-            "success",
+            "error",
           );
           return;
         }
 
         await downloadApiFile(
           `/incidents/${encodeURIComponent(incidentId)}/export/sitrep.pdf`,
-          `${reportNumber}-incident.pdf`,
+          buildSitrepFileName({
+            officeName: button.dataset.officeName,
+            incidentName: button.dataset.incidentName,
+            generatedAt,
+            extension: "pdf",
+          }),
         );
         setMessage(
           "incidentActionMessage",
@@ -12650,9 +12686,15 @@ function bindIncidentManagementActions() {
 
       try {
         setMessage("incidentActionMessage", `Preparing SitRep ${format.toUpperCase()}...`);
+        const metadata = state.sitrepMetadata[incidentId] || {};
         await downloadApiFile(
           `/incidents/${encodeURIComponent(incidentId)}/export/sitrep.${format}`,
-          `dcms-${incidentId}-incident-sitrep.${format}`,
+          buildSitrepFileName({
+            officeName: button.dataset.officeName,
+            incidentName: button.dataset.incidentName,
+            generatedAt: metadata.generatedAt,
+            extension: format,
+          }),
         );
         setMessage(
           "incidentActionMessage",
