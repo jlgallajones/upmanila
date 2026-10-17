@@ -1915,7 +1915,7 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
   const contentWidth = pageWidth - marginX * 2;
   const pages: string[][] = [[]];
   let currentPage = pages[0]!;
-  let cursorY = 724;
+  let cursorY = 704;
 
   const drawHeader = () => {
     currentPage.push(
@@ -1948,7 +1948,7 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
     drawFooter(pages.length);
     currentPage = [];
     pages.push(currentPage);
-    cursorY = 724;
+    cursorY = 704;
     drawHeader();
   };
 
@@ -2040,28 +2040,47 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
 
   const addTable = (tableTitle: string, rows: PdfTableRow[]) => {
     addSectionTitle(tableTitle);
-    const rowHeight = 20;
-    const labelWidth = 330;
+    const headerHeight = 26;
+    const labelWidth = 270;
+    const labelChars = 38;
+    const valueChars = 32;
 
-    ensureSpace(rowHeight + 8);
+    ensureSpace(headerHeight + 8);
     currentPage.push(
       "0.92 0.94 0.97 rg",
-      `${marginX} ${cursorY - rowHeight + 5} ${contentWidth} ${rowHeight} re f`,
+      `${marginX} ${cursorY - headerHeight + 5} ${contentWidth} ${headerHeight} re f`,
       "0 g",
     );
-    text("Item", marginX + 8, cursorY - 8, 8, "F2");
-    text("Value", marginX + labelWidth + 12, cursorY - 8, 8, "F2");
-    cursorY -= rowHeight;
+    text("Item", marginX + 8, cursorY - 10, 8, "F2");
+    text("Value", marginX + labelWidth + 12, cursorY - 10, 8, "F2");
+    cursorY -= headerHeight;
 
     for (const [label, value] of rows) {
+      const labelLines = wrapText(String(label), labelChars).slice(0, 4);
+      const valueLines = wrapText(String(value), valueChars).slice(0, 4);
+      const rowHeight = Math.max(
+        24,
+        10 + Math.max(labelLines.length, valueLines.length) * 11,
+      );
+
       ensureSpace(rowHeight + 3);
       currentPage.push(
         "0.86 0.89 0.93 RG",
-        `${marginX} ${cursorY - rowHeight + 5} ${contentWidth} 0.5 re S`,
+        `${marginX} ${cursorY - rowHeight + 5} ${contentWidth} 0.6 re S`,
         "0 g",
       );
-      text(String(label), marginX + 8, cursorY - 8, 8);
-      text(String(value), marginX + labelWidth + 12, cursorY - 8, 8, "F2");
+      labelLines.forEach((line, lineIndex) => {
+        text(line, marginX + 8, cursorY - 10 - lineIndex * 11, 8);
+      });
+      valueLines.forEach((line, lineIndex) => {
+        text(
+          line,
+          marginX + labelWidth + 12,
+          cursorY - 10 - lineIndex * 11,
+          8,
+          "F2",
+        );
+      });
       cursorY -= rowHeight;
     }
 
@@ -2124,11 +2143,17 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
       if (roundedPercentage >= 5) {
         const middleAngle = (startAngle + endAngle) / 2;
         const labelRadius = radius * 0.58;
+        const percentageLabel =
+          roundedPercentage % 1 === 0
+            ? roundedPercentage.toFixed(0)
+            : roundedPercentage.toFixed(1);
+        const sliceLabel = `${count} (${percentageLabel}%)`;
+        const sliceLabelWidth = sliceLabel.length * 3.1;
         text(
-          `${roundedPercentage % 1 === 0 ? roundedPercentage.toFixed(0) : roundedPercentage}%`,
-          centerX + Math.cos(middleAngle) * labelRadius - 8,
+          sliceLabel,
+          centerX + Math.cos(middleAngle) * labelRadius - sliceLabelWidth / 2,
           centerY + Math.sin(middleAngle) * labelRadius,
-          7,
+          6.5,
           "F2",
         );
       }
