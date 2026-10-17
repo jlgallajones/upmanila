@@ -64,7 +64,7 @@ function roleLabel(role: string): string {
   const labels: Record<string, string> = {
     responder: "Legacy Responder",
     field_responder: "Field Responder",
-    sa_responder: "SAR Responder",
+    sa_responder: "Advanced Medical Post Responder",
     documenter: "Healthcare Facility Documenter",
   };
 

@@ -9,7 +9,7 @@ import { Platform } from 'react-native';
 
 export const Colors = {
   light: {
-    text: '#000000',
+    text: '#6B6B6B',
     background: '#FAFAFA',
     backgroundElement: '#F2F2F2',
     backgroundSelected: '#E6E6E6',
@@ -32,7 +32,7 @@ export const Colors = {
   },
   dark: {
     text: '#ffffff',
-    background: '#000000',
+    background: '#6B6B6B',
     backgroundElement: '#242424',
     backgroundSelected: '#3A3A3A',
     textSecondary: '#E6E6E6',
@@ -46,7 +46,7 @@ export const Colors = {
     selectedBorder: '#23C8D5',
     tabBarBackground: '#006873',
     tabBarActiveBackground: '#FFFFFF',
-    tabBarActiveIcon: '#000000',
+    tabBarActiveIcon: '#6B6B6B',
     tabBarInactiveIcon: '#FFFFFF',
     danger: '#FF7B7B',
     warningBackground: 'rgba(255, 123, 123, 0.14)',

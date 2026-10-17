@@ -28,13 +28,13 @@ import {
 
 const COLORS = {
   maroon: "#242424",
-  darkMaroon: "#000000",
+  darkMaroon: "#6B6B6B",
   lightMaroon: "#3A3A3A",
   white: "#FFFFFF",
   background: "#FAFAFA",
   fieldBackground: "#FFFFFF",
   fieldBorder: "#E6E6E6",
-  primaryText: "#000000",
+  primaryText: "#6B6B6B",
   secondaryText: "#3A3A3A",
   mutedText: "#6B6B6B",
   warningBackground: "#FFF5F5",

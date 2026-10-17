@@ -1919,13 +1919,13 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
 
   const drawHeader = () => {
     currentPage.push(
-      "0.48 0.07 0.08 rg",
+      "0 0.51 0.56 rg",
       `0 742 ${pageWidth} 50 re f`,
       "0.99 0.73 0.19 rg",
       `${marginX} 742 112 4 re f`,
       "0 g",
       "1 1 1 rg",
-      `BT /F2 14 Tf ${marginX} 770 Td (${escapePdfText("DCMS INCIDENT SITUATION REPORT")}) Tj ET`,
+      `BT /F2 14 Tf ${marginX} 770 Td (${escapePdfText("INCIDENT SITUATION REPORT")}) Tj ET`,
       `BT /F1 8 Tf ${marginX} 754 Td (${escapePdfText(`${incidentCode} | ${sitrep.report_number}`)}) Tj ET`,
       `BT /F1 8 Tf ${pageWidth - 174} 754 Td (${escapePdfText(formatSitrepDate(sitrep.generated_at))}) Tj ET`,
       "0 g",
@@ -1973,7 +1973,7 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
   const addSectionTitle = (sectionTitle: string) => {
     ensureSpace(34);
     currentPage.push(
-      "0.48 0.07 0.08 rg",
+      "0 0.51 0.56 rg",
       `${marginX} ${cursorY - 11} 5 16 re f`,
       "0.82 0.86 0.91 RG",
       `${marginX} ${cursorY - 17} ${contentWidth} 0.6 re S`,

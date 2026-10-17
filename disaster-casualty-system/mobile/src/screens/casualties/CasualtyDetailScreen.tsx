@@ -1041,7 +1041,9 @@ export default function CasualtyDetailScreen() {
   }
 
   const triageCategory =
+    casualty.latestTriage?.calculated_category ??
     casualty.latestTriage?.triage_category ??
+    record?.latest_triage_assessment?.calculated_category ??
     record?.latest_triage_assessment?.triage_category ??
     casualty.status;
   const triageCategoryLabel = formatTriageCategory(triageCategory);
@@ -1270,7 +1272,8 @@ export default function CasualtyDetailScreen() {
                   <DetailRow
                     label="Final Triage"
                     value={formatTriageCategory(
-                      casualty.latestTriage.triage_category,
+                      casualty.latestTriage.calculated_category ??
+                        casualty.latestTriage.triage_category,
                     )}
                     valueColor={COLORS.maroon}
                   />
@@ -1462,7 +1465,8 @@ export default function CasualtyDetailScreen() {
                   <DetailRow
                     label="Final Triage"
                     value={formatTriageCategory(
-                      casualty.latestTriage.triage_category,
+                      casualty.latestTriage.calculated_category ??
+                        casualty.latestTriage.triage_category,
                     )}
                     valueColor={COLORS.maroon}
                   />
@@ -1679,7 +1683,8 @@ export default function CasualtyDetailScreen() {
                   <DetailRow
                     label="Triage Assessment"
                     value={formatTriageCategory(
-                      casualty.latestTriage.triage_category,
+                      casualty.latestTriage.calculated_category ??
+                        casualty.latestTriage.triage_category,
                     )}
                     valueColor={COLORS.maroon}
                   />
@@ -2022,7 +2027,8 @@ export default function CasualtyDetailScreen() {
               <DetailRow
                 label="Category"
                 value={formatTriageCategory(
-                  casualty.latestTriage.triage_category,
+                      casualty.latestTriage.calculated_category ??
+                        casualty.latestTriage.triage_category,
                 )}
                 valueColor={COLORS.maroon}
               />
@@ -2057,7 +2063,7 @@ export default function CasualtyDetailScreen() {
               {triageHistory.map((triage, index) => (
                 <TimelineItem
                   key={triage.id}
-                  title={`${formatTriageCategory(triage.triage_category)} - ${formatTriageSystem(triage.triage_system)}`}
+                  title={`${formatTriageCategory(triage.calculated_category ?? triage.triage_category)} - ${formatTriageSystem(triage.triage_system)}`}
                   time={formatDateTime(triage.triaged_at)}
                   user={
                     triage.triaged_by_user?.full_name ?? "System"

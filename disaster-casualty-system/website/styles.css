@@ -1,10 +1,10 @@
 :root {
   --maroon: #242424;
-  --maroon-dark: #000000;
+  --maroon-dark: #6B6B6B;
   --maroon-bright: #3a3a3a;
   --up-green: #014421;
   --gold: #f2c94c;
-  --ink: #000000;
+  --ink: #6B6B6B;
   --muted: #6b6b6b;
   --line: #e6e6e6;
   --soft: #f2f2f2;
@@ -43,14 +43,14 @@
   --cyan-soft: rgba(35, 200, 213, 0.18);
   --neutral-light: #242424;
   --neutral-mid: #e6e6e6;
-  --bg: #000000;
+  --bg: #6B6B6B;
   --surface: #242424;
   --surface-raised: #2f2f2f;
   --surface-soft: #3a3a3a;
   --surface-input: #1b1b1b;
   --selected-bg: rgba(35, 200, 213, 0.22);
   --selected-border: #23c8d5;
-  --shadow-color: rgba(0, 0, 0, 0.42);
+  --shadow-color: rgba(107, 107, 107, 0.42);
   --green: #74d99b;
   --blue: #8fc5ff;
   --orange: #ffb86c;
@@ -58,13 +58,13 @@
 }
 
 :root[data-theme="dark"] .prelogin-landing-shell {
-  background: #000000;
+  background: #6B6B6B;
 }
 
 :root[data-theme="dark"] .landing-pane {
   background:
-    linear-gradient(180deg, rgba(0, 131, 143, 0.08), rgba(0, 0, 0, 0.28)),
-    #000000;
+    linear-gradient(180deg, rgba(0, 131, 143, 0.08), rgba(107, 107, 107, 0.28)),
+    #6B6B6B;
 }
 
 :root[data-theme="dark"] .sidebar .danger-button,
@@ -189,7 +189,7 @@ button {
   padding: 14px 28px;
   color: var(--cyan);
   background: #fff;
-  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 18px 38px rgba(107, 107, 107, 0.18);
   font-weight: 950;
   transition:
     transform 140ms ease,
@@ -200,7 +200,7 @@ button {
 .prelogin-continue-button:hover,
 .prelogin-continue-button:focus-visible {
   background: var(--cyan-soft);
-  box-shadow: 0 20px 42px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 20px 42px rgba(107, 107, 107, 0.2);
   transform: translateY(-1px);
   outline: none;
 }
@@ -350,7 +350,7 @@ button {
   display: grid;
   place-items: center;
   padding: 20px;
-  background: rgba(0, 0, 0, 0.46);
+  background: rgba(107, 107, 107, 0.46);
 }
 
 .session-expired-dialog {
@@ -361,7 +361,7 @@ button {
   border: 1px solid rgba(0, 131, 143, 0.22);
   border-radius: 14px;
   background: var(--surface);
-  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.24);
+  box-shadow: 0 28px 70px rgba(107, 107, 107, 0.24);
   text-align: center;
 }
 
@@ -411,7 +411,7 @@ button {
   padding: 42px 32px;
   color: #fff;
   background:
-    linear-gradient(180deg, rgba(0, 0, 0, 0.02), rgba(0, 0, 0, 0.28)),
+    linear-gradient(180deg, rgba(107, 107, 107, 0.02), rgba(107, 107, 107, 0.28)),
     #242424;
 }
 
@@ -436,7 +436,7 @@ button {
 .logo-strip img {
   display: block;
   object-fit: contain;
-  filter: drop-shadow(0 5px 12px rgba(0, 0, 0, 0.14));
+  filter: drop-shadow(0 5px 12px rgba(107, 107, 107, 0.14));
 }
 
 .seal-logo {
@@ -517,7 +517,7 @@ button {
   border: 5px solid #fff;
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.28),
-    0 16px 28px rgba(0, 0, 0, 0.2);
+    0 16px 28px rgba(107, 107, 107, 0.2);
   isolation: isolate;
   overflow: hidden;
 }
@@ -547,7 +547,7 @@ button {
   background-repeat: no-repeat;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 5px 12px rgba(0, 0, 0, 0.12);
+    0 5px 12px rgba(107, 107, 107, 0.12);
 }
 
 .medsort-logo-ball-green {
@@ -1676,7 +1676,7 @@ button:disabled {
   border-radius: 12px;
   color: var(--maroon);
   background: #fff;
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.14);
+  box-shadow: 0 8px 18px rgba(107, 107, 107, 0.14);
   transform: scale(0.98);
 }
 
@@ -2343,7 +2343,7 @@ tbody tr:hover td {
   max-height: calc(100vh - 210px);
   object-fit: contain;
   border-radius: 12px;
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 18px 44px rgba(107, 107, 107, 0.28);
 }
 
 .attachment-preview-frame {

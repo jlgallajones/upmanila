@@ -86,7 +86,7 @@ import {
 
 const COLORS = {
   maroon: "#242424",
-  darkMaroon: "#000000",
+  darkMaroon: "#6B6B6B",
   white: "#FFFFFF",
   background: "#FFFFFF",
   fieldBackground: "#F7F9FC",
@@ -98,7 +98,7 @@ const COLORS = {
 };
 
 const AMP_RESPONDER_FULL_LABEL =
-  "Advanced Medical Responder";
+  "Advanced Medical Post Responder";
 
 const AMP_RESPONDER_SHORT_LABEL =
   "AMP Responder";
@@ -287,7 +287,6 @@ const PRIMARY_TRIAGE_SYSTEM_OPTIONS = [
   "START",
   "mSTART",
   "JumpSTART",
-  "SIEVE",
   "Care Flight",
   "SALT",
   "PTT",
@@ -302,7 +301,6 @@ const FIELD_RESPONDER_TRIAGE_SYSTEM_OPTIONS = [
   "START",
   "mSTART",
   "JumpSTART",
-  "SIEVE",
   "Care Flight",
   "SALT",
   "PTT",
@@ -1385,6 +1383,10 @@ const STEP_PROGRESS_LABELS: Record<StepName, string> = {
   Transport: "TRANS",
   "Hospital Care": "CARE",
   Remarks: "NOTES",
+};
+
+const STEP_DISPLAY_LABELS: Partial<Record<StepName, string>> = {
+  Treatment: "On-site stabilization",
 };
 
 type ChoiceSheetName =
@@ -3499,6 +3501,33 @@ function normalizeTreatmentStrategy(
   }
 }
 
+function getAutomaticTreatmentStrategyForTriageSystem(
+  value: string,
+): string {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "");
+
+  if (["stieve", "salt"].includes(normalized)) {
+    return "Stay and Play";
+  }
+
+  if (
+    ["start", "ptt", "mptt", "mstart", "jumpstart", "mitt"].includes(
+      normalized,
+    )
+  ) {
+    return "Play and Run";
+  }
+
+  if (["careflight", "homebush"].includes(normalized)) {
+    return "Scoop and Run";
+  }
+
+  return "";
+}
+
 function normalizeTransferredOut(
   value: string,
 ): boolean | null {
@@ -4069,6 +4098,60 @@ function getTreatmentFormSignature(form: FormState): string {
   });
 }
 
+function getFacilityEncounterFormSignature(form: FormState): string {
+  return JSON.stringify({
+    facilityId: form.healthcareFacilityId.trim(),
+    arrivedAt: parseDateTimeInput(form.arrivedFacilityTime) ?? "",
+    transferredOut: normalizeTransferredOut(form.transferredOutOfHospital),
+    soughtEdCare: normalizeYesNoUnknown(form.soughtEdCare),
+    admittedAfterEd: normalizeYesNoUnknown(form.admittedAfterEd),
+    dischargedAfterEd: normalizeYesNoUnknown(form.dischargedAfterEd),
+    edAdmissionTime: parseDateTimeInput(form.edAdmissionTime) ?? "",
+    edTransferOutTime: parseDateTimeInput(form.edTransferOutTime) ?? "",
+    edResuscitationTime:
+      parseDateTimeInput(form.edResuscitationTime) ?? "",
+    resuscitationRoomUsed: normalizeYesNoUnknown(
+      form.resuscitationRoomUsed,
+    ),
+    surgicalInterventionRequired: normalizeYesNoUnknown(
+      form.surgicalInterventionRequired,
+    ),
+    surgicalInterventionStartTime:
+      parseDateTimeInput(form.surgicalInterventionStartTime) ?? "",
+    surgicalInterventionEndTime:
+      parseDateTimeInput(form.surgicalInterventionEndTime) ?? "",
+    operatingRoomUsed: normalizeYesNoUnknown(form.operatingRoomUsed),
+    operatingRoomTime: parseDateTimeInput(form.operatingRoomTime) ?? "",
+    xrayRequired: normalizeYesNoUnknown(form.xrayRequired),
+    xrayTime: parseDateTimeInput(form.xrayTime) ?? "",
+    ultrasoundRequired: normalizeYesNoUnknown(form.ultrasoundRequired),
+    ultrasoundTime: parseDateTimeInput(form.ultrasoundTime) ?? "",
+    ctRequired: normalizeYesNoUnknown(form.ctRequired),
+    ctTime: parseDateTimeInput(form.ctTime) ?? "",
+    admittedToUnit: form.admittedToUnit.trim(),
+    dispositionUponHospitalArrival:
+      form.dispositionUponHospitalArrival.trim(),
+    inActiveCare: normalizeYesNoUnknown(form.inActiveCare),
+    unitAdmissionTime: parseDateTimeInput(form.unitAdmissionTime) ?? "",
+    currentlyAdmittedInIcu: normalizeYesNoUnknown(
+      form.currentlyAdmittedInIcu,
+    ),
+    transferredToWard: normalizeYesNoUnknown(form.transferredToWard),
+    hospitalAdmissionTime:
+      parseDateTimeInput(form.hospitalAdmissionTime) ?? "",
+    hospitalDischargeTime:
+      parseDateTimeInput(form.hospitalDischargeTime) ?? "",
+    mechanicalVentilationRequired: normalizeYesNoUnknown(
+      form.mechanicalVentilationRequired,
+    ),
+    ventilationStartTime:
+      parseDateTimeInput(form.ventilationStartTime) ?? "",
+    ventilationEndTime:
+      parseDateTimeInput(form.ventilationEndTime) ?? "",
+    alternativeIcuUsed: normalizeYesNoUnknown(form.alternativeIcuUsed),
+  });
+}
+
 function parseDateInput(value: string): Date {
   const normalized = normalizeDate(value);
 
@@ -4536,7 +4619,7 @@ function buildFieldResponderTriageNotes(form: FormState): string {
 
 function buildSaResponderTreatmentNotes(form: FormState): string {
   return appendSectionNote(form.treatmentNotes, "Patient Care Report", [
-    ["PCR photo attached", form.fillPatientCareReport],
+    ["Patient Care Report (PCR) photo attached", form.fillPatientCareReport],
     ["Stabilized time", form.stabilizedTime],
   ]);
 }
@@ -5286,15 +5369,6 @@ function DatePickerSheet({
             </>
           )}
 
-          <Pressable
-            onPress={() => {
-              onSelect(formatTodayForInput());
-              onClose();
-            }}
-            style={styles.todayButton}
-          >
-            <Text style={styles.todayButtonText}>Use Today</Text>
-          </Pressable>
         </Pressable>
       </Pressable>
     </Modal>
@@ -5366,6 +5440,10 @@ export default function AddCasualtyScreen() {
     useState("");
   const [initialTreatmentSignature, setInitialTreatmentSignature] =
     useState("");
+  const [
+    initialFacilityEncounterSignature,
+    setInitialFacilityEncounterSignature,
+  ] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [loadedDraftId, setLoadedDraftId] = useState<string | null>(
@@ -5497,8 +5575,9 @@ const [
     useState(true);
   const [selectedPhoto, setSelectedPhoto] =
     useState<SelectedPhoto | null>(null);
-  const [selectedPcrPhoto, setSelectedPcrPhoto] =
-  useState<SelectedPhoto | null>(null);
+  const [selectedPcrPhotos, setSelectedPcrPhotos] = useState<
+    SelectedPhoto[]
+  >([]);
 
   const [photoTarget, setPhotoTarget] =
   useState<PhotoTarget>("casualty");
@@ -5537,6 +5616,7 @@ const [
         : [...DEFAULT_STEPS];
   const stepName: AddCasualtyStep =
     activeSteps[currentStep] ?? activeSteps[0];
+  const stepDisplayName = STEP_DISPLAY_LABELS[stepName] ?? stepName;
   const isResponderEditLockedStep =
     isResponderEditFlow && stepName !== "Transport";
   const isHealthcareDocumenterEditLockedStep =
@@ -5579,7 +5659,14 @@ const [
     isFieldResponderFlow &&
     (stepName === "Triage" || stepName === "Status")
   );
-  const stickyVictimNumber = form.victimCode.trim() || "No victim code entered";
+  const stickyVictimNumber =
+    form.victimCode.trim() ||
+    (isFieldResponderFlow
+      ? generateVictimCode(
+          generateUserCodeFromName(currentUserFullName),
+          nextCasualtySequence,
+        )
+      : "No victim code entered");
   const healthcareDocumenterPatientName =
     [form.firstName, form.middleName, form.lastName]
       .map((part) => part.trim())
@@ -5625,6 +5712,7 @@ const [
           form?: Partial<FormState>;
           selectedPhoto?: SelectedPhoto | null;
           selectedPcrPhoto?: SelectedPhoto | null;
+          selectedPcrPhotos?: SelectedPhoto[];
           currentStep?: number;
         };
         const draftForm =
@@ -5641,7 +5729,13 @@ const [
           ...draftForm,
         }));
         setSelectedPhoto(payload.selectedPhoto ?? null);
-        setSelectedPcrPhoto(payload.selectedPcrPhoto ?? null);
+        setSelectedPcrPhotos(
+          Array.isArray(payload.selectedPcrPhotos)
+            ? payload.selectedPcrPhotos
+            : payload.selectedPcrPhoto
+              ? [payload.selectedPcrPhoto]
+              : [],
+        );
         setCurrentStep(
           Math.min(
             Math.max(savedStep, 0),
@@ -5950,7 +6044,8 @@ const victimCodeAlreadyExists = useMemo(() => {
 
     if (
       isEditing &&
-      getTreatmentFormSignature(form) === initialTreatmentSignature
+      getFacilityEncounterFormSignature(form) ===
+        initialFacilityEncounterSignature
     ) {
       return undefined;
     }
@@ -6074,7 +6169,7 @@ const victimCodeAlreadyExists = useMemo(() => {
                   ? "active_care"
                   : "unknown",
     };
-  }, [form, initialTreatmentSignature, isEditing]);
+  }, [form, initialFacilityEncounterSignature, isEditing]);
 
   const casualtyOutcomePayload = useMemo<
     CreateCasualtyPayload["casualtyOutcome"]
@@ -6476,10 +6571,17 @@ const victimCodeAlreadyExists = useMemo(() => {
       const currentSystemIsAllowed = allowedSystems.includes(
         current.triageSystem as TriageSystemOption,
       );
+      const nextTriageSystem = currentSystemIsAllowed
+        ? current.triageSystem
+        : allowedSystems[0] ?? "";
+      const automaticTreatment = isFieldResponderFlow
+        ? getAutomaticTreatmentStrategyForTriageSystem(nextTriageSystem)
+        : current.treatmentStrategy;
 
       if (
         triageStage === current.triageStage &&
-        currentSystemIsAllowed
+        currentSystemIsAllowed &&
+        current.treatmentStrategy === automaticTreatment
       ) {
         return current;
       }
@@ -6487,17 +6589,17 @@ const victimCodeAlreadyExists = useMemo(() => {
       return {
         ...current,
         triageStage,
-        triageSystem: currentSystemIsAllowed
-          ? current.triageSystem
-          : allowedSystems[0] ?? "",
+        triageSystem: nextTriageSystem,
         triageAssessmentAnswers: currentSystemIsAllowed
           ? current.triageAssessmentAnswers
           : {},
+        treatmentStrategy: automaticTreatment,
       };
     });
   }, [
     currentReportingContext,
     currentUserRole,
+    isFieldResponderFlow,
     isEditing,
   ]);
 
@@ -6942,6 +7044,9 @@ const victimCodeAlreadyExists = useMemo(() => {
           setInitialTreatmentSignature(
             getTreatmentFormSignature(mappedForm),
           );
+           setInitialFacilityEncounterSignature(
+             getFacilityEncounterFormSignature(mappedForm),
+           );
         }
       } catch (error) {
         console.error("Failed to load victim for editing:", error);
@@ -7004,23 +7109,22 @@ const victimCodeAlreadyExists = useMemo(() => {
       }
 
       if (key === "triageSystem") {
-  const nextSystem = String(value);
-  const manualOnly = isManualOnlyTriageSystem(nextSystem);
+        const nextSystem = String(value);
+        const manualOnly = isManualOnlyTriageSystem(nextSystem);
 
-  return {
-    ...current,
-    [key]: value,
-
-    triageSystemOther:
-      value === "Other"
-        ? current.triageSystemOther
-        : "",
-
-    triageAssessmentAnswers: {},
-    triageAssistanceMode: manualOnly ? "unassisted" : "assisted",
-    triageAssistanceLocked: false,
-  };
-}
+        return {
+          ...current,
+          [key]: value,
+          triageSystemOther:
+            value === "Other" ? current.triageSystemOther : "",
+          triageAssessmentAnswers: {},
+          triageAssistanceMode: manualOnly ? "unassisted" : "assisted",
+          triageAssistanceLocked: false,
+          treatmentStrategy: isFieldResponderFlow
+            ? getAutomaticTreatmentStrategyForTriageSystem(nextSystem)
+            : current.treatmentStrategy,
+        };
+      }
 
       if (key === "triageStage") {
         const nextStage = String(value);
@@ -7042,6 +7146,13 @@ const victimCodeAlreadyExists = useMemo(() => {
           triageAssessmentAnswers: {},
           triageAssistanceMode: "assisted",
           triageAssistanceLocked: false,
+          treatmentStrategy: isFieldResponderFlow
+            ? getAutomaticTreatmentStrategyForTriageSystem(
+                currentSystemIsAllowed
+                  ? current.triageSystem
+                  : allowedSystems[0] ?? "",
+              )
+            : current.treatmentStrategy,
         };
       }
 
@@ -7593,7 +7704,7 @@ function handleTriageAssessmentDone() {
     setCurrentStep(0);
 
     setSelectedPhoto(null);
-    setSelectedPcrPhoto(null);
+    setSelectedPcrPhotos([]);
 
     setSelectedFieldResponderRecordId(null);
     setActiveChoiceSheet(null);
@@ -7660,7 +7771,7 @@ function handleTriageAssessmentDone() {
         payload: {
           form,
           selectedPhoto,
-          selectedPcrPhoto,
+          selectedPcrPhotos,
           currentStep,
         },
       });
@@ -8327,8 +8438,8 @@ if (
       case "Treatment": {
         if (!form.treatmentStrategy.trim()) {
           Alert.alert(
-            "Treatment required",
-            "Select the treatment type.",
+            "On-site stabilization required",
+            "Select the on-site stabilization type.",
           );
           return false;
         }
@@ -8345,18 +8456,18 @@ if (
 
         if (!form.fillPatientCareReport.trim()) {
           Alert.alert(
-            "PCR selection required",
-            "Select whether you want to add a photo of the currently used PCR.",
+            "Patient Care Report selection required",
+            "Select whether you want to add a photo of the currently used Patient Care Report (PCR).",
           );
           return false;
         }
 
         if (
           form.fillPatientCareReport === "Yes" &&
-          !selectedPcrPhoto
+          selectedPcrPhotos.length === 0
         ) {
           Alert.alert(
-            "PCR photo required",
+            "Patient Care Report photo required",
             "Attach or capture a photo of the currently used Patient Care Report before continuing.",
           );
           return false;
@@ -9308,8 +9419,8 @@ if (
       case "Treatment": {
         if (!form.treatmentStrategy.trim()) {
           Alert.alert(
-            "Treatment required",
-            "Select the treatment type.",
+            "On-site stabilization required",
+            "Select the on-site stabilization type.",
           );
           return false;
         }
@@ -9328,18 +9439,18 @@ if (
 
         if (!form.fillPatientCareReport.trim()) {
           Alert.alert(
-            "PCR selection required",
-            "Select whether you want to add a photo of the currently used PCR.",
+            "Patient Care Report selection required",
+            "Select whether you want to add a photo of the currently used Patient Care Report (PCR).",
           );
           return false;
         }
 
         if (
           form.fillPatientCareReport === "Yes" &&
-          !selectedPcrPhoto
+          selectedPcrPhotos.length === 0
         ) {
           Alert.alert(
-            "PCR photo required",
+            "Patient Care Report photo required",
             "Attach or capture a photo of the currently used Patient Care Report before continuing.",
           );
           return false;
@@ -9403,7 +9514,7 @@ if (
         ) {
           Alert.alert(
             "Stabilized time required",
-            "Enter the time this victim was stabilized in the treatment area.",
+            "Enter the time this victim was stabilized in the on-site stabilization area.",
           );
           return false;
         }
@@ -9659,7 +9770,7 @@ if (
         ) {
           Alert.alert(
             "Stabilized time required",
-            "Enter the time this victim was stabilized in the treatment area.",
+            "Enter the time this victim was stabilized in the on-site stabilization area.",
           );
           return false;
         }
@@ -10068,7 +10179,15 @@ if (
 
   function saveSelectedPhoto(photo: SelectedPhoto) {
   if (photoTarget === "pcr") {
-    setSelectedPcrPhoto(photo);
+    setSelectedPcrPhotos((current) =>
+      current.some(
+        (existing) =>
+          existing.uri === photo.uri ||
+          existing.fileName === photo.fileName,
+      )
+        ? current
+        : [...current, photo],
+    );
     return;
   }
 
@@ -10082,25 +10201,24 @@ if (
     return;
   }
 
-  const asset = result.assets[0];
-
   const prefix =
     photoTarget === "pcr"
       ? "pcr"
       : "casualty";
 
-  const fallbackName =
-    `${prefix}-photo-${Date.now()}.jpg`;
+  result.assets.forEach((asset, index) => {
+    const fallbackName =
+      `${prefix}-photo-${Date.now()}-${index + 1}.jpg`;
+    const fileName = asset.fileName
+      ? `${prefix}-${asset.fileName}`
+      : fallbackName;
 
-  const fileName = asset.fileName
-    ? `${prefix}-${asset.fileName}`
-    : fallbackName;
-
-  saveSelectedPhoto({
-    uri: asset.uri,
-    fileName,
-    mimeType: asset.mimeType ?? "image/jpeg",
-    fileSize: asset.fileSize,
+    saveSelectedPhoto({
+      uri: asset.uri,
+      fileName,
+      mimeType: asset.mimeType ?? "image/jpeg",
+      fileSize: asset.fileSize,
+    });
   });
 }
 
@@ -10122,6 +10240,7 @@ if (
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.72,
       allowsEditing: false,
+      allowsMultipleSelection: photoTarget === "pcr",
     });
 
     await setPhotoFromPickerResult(result);
@@ -10174,7 +10293,7 @@ if (
         video.style.maxHeight = "72vh";
         video.style.objectFit = "cover";
         video.style.borderRadius = "18px";
-        video.style.background = "#000";
+        video.style.background = "#6B6B6B";
 
         const actionRow = document.createElement("div");
         actionRow.style.display = "flex";
@@ -10432,12 +10551,12 @@ if (
     });
   }
 
-  if (selectedPcrPhoto) {
+  selectedPcrPhotos.forEach((photo, index) => {
     photos.push({
-      label: "PCR photo",
-      photo: selectedPcrPhoto,
+      label: `Patient Care Report photo ${index + 1}`,
+      photo,
     });
-  }
+  });
 
   if (photos.length === 0) {
     return null;
@@ -10485,12 +10604,9 @@ if (
   const attachments: QueuedCasualtyAttachment[] = [];
 
   const photos = [
-    selectedPhoto,
-    selectedPcrPhoto,
-  ].filter(
-    (photo): photo is SelectedPhoto =>
-      photo !== null,
-  );
+    ...(selectedPhoto ? [selectedPhoto] : []),
+    ...selectedPcrPhotos,
+  ];
 
   for (const photo of photos) {
     const base64Data =
@@ -10584,7 +10700,7 @@ if (
       case "emsUnitType":
         return "Select EMS Unit Type";
       case "treatmentStrategy":
-        return "Select On-site Care";
+        return "Select On-site stabilization";
       case "transferredOutOfHospital":
         return "Transferred Out of Hospital";
       case "soughtEdCare":
@@ -10694,7 +10810,7 @@ if (
             updateField("fillPatientCareReport", option);
 
             if (option === "No") {
-              setSelectedPcrPhoto(null);
+              setSelectedPcrPhotos([]);
             }
           },
         }));
@@ -11642,18 +11758,18 @@ async function ensureResponderSafetyResponseSaved() {
 
     case "Treatment":
       if (!form.treatmentStrategy.trim()) {
-        return "Treatment Type is required.";
+        return "On-site stabilization type is required.";
       }
 
       if (!form.fillPatientCareReport.trim()) {
-        return "PCR photo selection is required. Select Yes or No.";
+        return "Patient Care Report (PCR) photo selection is required. Select Yes or No.";
       }
 
       if (
         form.fillPatientCareReport === "Yes" &&
-        !selectedPcrPhoto
+        selectedPcrPhotos.length === 0
       ) {
-        return "PCR Photo is required because you selected Yes.";
+        return "Patient Care Report (PCR) photo is required because you selected Yes.";
       }
 
       return null;
@@ -14211,18 +14327,18 @@ form.triageAssistanceMode === "assisted" ? (
         />
 
         <SelectField
-          label="ON-SITE STABILIZATION / TREATMENT"
+          label="ON-SITE STABILIZATION"
           value={form.treatmentStrategy}
-          placeholder="Select treatment type"
+          placeholder="Select on-site stabilization"
           onPress={() => openChoiceSheet("treatmentStrategy")}
         />
 
         <SectionLabel title="On-site care" />
 
         <FormField
-          label="TREATMENT AREA"
+          label="ON-SITE STABILIZATION AREA"
           value={form.treatmentAreaName}
-          placeholder="Treatment area name"
+          placeholder="On-site stabilization area name"
           onChangeText={(value) =>
             updateField("treatmentAreaName", value)
           }
@@ -14262,9 +14378,9 @@ form.triageAssistanceMode === "assisted" ? (
         />
 
         <FormField
-          label="TREATMENT NOTES"
+          label="ON-SITE STABILIZATION NOTES"
           value={form.treatmentNotes}
-          placeholder="On-site treatment or stabilization details"
+          placeholder="On-site stabilization details"
           multiline
           onChangeText={(value) =>
             updateField("treatmentNotes", value)
@@ -14321,10 +14437,10 @@ form.triageAssistanceMode === "assisted" ? (
 
   return (
     <>
-      <SelectField
-        label="TREATMENT"
+        <SelectField
+          label="ON-SITE STABILIZATION"
         value={form.treatmentStrategy}
-        placeholder="Select treatment type"
+          placeholder="Select on-site stabilization"
         onPress={() => openChoiceSheet("treatmentStrategy")}
       />
 
@@ -14346,7 +14462,7 @@ form.triageAssistanceMode === "assisted" ? (
       />
 
       <SelectField
-        label="ADD PHOTO OF YOUR CURRENTLY USED PCR?"
+        label="ADD PHOTO OF YOUR CURRENTLY USED PATIENT CARE REPORT (PCR)?"
         value={form.fillPatientCareReport}
         placeholder="Yes or No"
         onPress={() =>
@@ -14356,16 +14472,16 @@ form.triageAssistanceMode === "assisted" ? (
 
       {showPcr ? (
         <>
-          <SectionLabel title="PCR Attachment" />
+          <SectionLabel title="Patient Care Report (PCR) Attachment" />
 
           {renderPcrPhotoAttachmentCard()}
         </>
       ) : null}
 
       <FormField
-        label="TREATMENT NOTES"
+        label="ON-SITE STABILIZATION NOTES"
         value={form.treatmentNotes}
-        placeholder="Treatment observations"
+        placeholder="On-site stabilization observations"
         multiline
         onChangeText={(value) =>
           updateField("treatmentNotes", value)
@@ -14729,46 +14845,51 @@ form.triageAssistanceMode === "assisted" ? (
   }
 
   function renderPcrPhotoAttachmentCard() {
-  return (
-    <Pressable
-      onPress={() => {
-        handlePickPhoto("pcr");
-      }}
-      style={({ pressed }) => [
-        styles.uploadCard,
-        pressed && styles.pressed,
-      ]}
-    >
-      <View style={styles.uploadIcon}>
+    const photoCount = selectedPcrPhotos.length;
+    const fileNames = selectedPcrPhotos
+      .map((photo) => photo.fileName)
+      .join(", ");
+
+    return (
+      <Pressable
+        onPress={() => {
+          handlePickPhoto("pcr");
+        }}
+        style={({ pressed }) => [
+          styles.uploadCard,
+          pressed && styles.pressed,
+        ]}
+      >
+        <View style={styles.uploadIcon}>
+          <Ionicons
+            name="document-attach-outline"
+            size={25}
+            color={COLORS.maroon}
+          />
+        </View>
+
+        <View style={styles.uploadTextWrapper}>
+          <Text style={styles.uploadTitle}>
+            {photoCount > 0
+              ? `${photoCount} Patient Care Report photo${photoCount === 1 ? "" : "s"} selected`
+              : "Attach Patient Care Report photo(s)"}
+          </Text>
+
+          <Text style={styles.uploadDescription}>
+            {photoCount > 0
+              ? `${fileNames} - uploads when saved. Tap to add more.`
+              : "Capture or import one or more photos of the currently used Patient Care Report."}
+          </Text>
+        </View>
+
         <Ionicons
-          name="document-attach-outline"
-          size={25}
-          color={COLORS.maroon}
+          name="chevron-forward-outline"
+          size={20}
+          color={COLORS.secondaryText}
         />
-      </View>
-
-      <View style={styles.uploadTextWrapper}>
-        <Text style={styles.uploadTitle}>
-          {selectedPcrPhoto
-            ? "PCR photo selected"
-            : "Attach PCR photo"}
-        </Text>
-
-        <Text style={styles.uploadDescription}>
-          {selectedPcrPhoto
-            ? `${selectedPcrPhoto.fileName} - uploads when saved.`
-            : "Capture or import a photo of the currently used Patient Care Report."}
-        </Text>
-      </View>
-
-      <Ionicons
-        name="chevron-forward-outline"
-        size={20}
-        color={COLORS.secondaryText}
-      />
-    </Pressable>
-  );
-}
+      </Pressable>
+    );
+  }
 
 
 
@@ -14908,7 +15029,7 @@ form.triageAssistanceMode === "assisted" ? (
             </Text>
             <Text style={styles.headerSubtitle}>
               Step {currentStep + 1} of {activeSteps.length} -{" "}
-              {stepName}
+              {stepDisplayName}
             </Text>
           </View>
 
@@ -15252,7 +15373,7 @@ form.triageAssistanceMode === "assisted" ? (
         visible={isPhotoSourceSheetVisible}
         title={
           photoTarget === "pcr"
-            ? "Add PCR photo"
+            ? "Add Patient Care Report photo(s)"
             : "Add victim photo"
         }
         options={[

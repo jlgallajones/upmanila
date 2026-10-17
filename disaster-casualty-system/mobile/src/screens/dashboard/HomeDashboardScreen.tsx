@@ -49,13 +49,13 @@ import {
 
 const COLORS = {
   maroon: "#242424",
-  black: "#000000",
+  black: "#6B6B6B",
   charcoal: "#3A3A3A",
   teal: "#00838F",
   white: "#FFFFFF",
   background: "#FAFAFA",
   surface: "#F2F2F2",
-  text: "#000000",
+  text: "#6B6B6B",
   secondaryText: "#6B6B6B",
 
   green: "#388E3C",
@@ -1865,6 +1865,33 @@ export default function HomeDashboardScreen() {
               style={styles.quickTimeInput}
             />
 
+            <Pressable
+              disabled={isSavingQuickAction}
+              onPress={() =>
+                setQuickTimePrompt((current) =>
+                  current
+                    ? {
+                        ...current,
+                        value: formatDateTimeForInput(new Date()),
+                      }
+                    : current,
+                )
+              }
+              style={({ pressed }) => [
+                styles.quickTimeCurrentButton,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Ionicons
+                name="time-outline"
+                size={16}
+                color={COLORS.maroon}
+              />
+              <Text style={styles.quickTimeCurrentText}>
+                Use current time
+              </Text>
+            </Pressable>
+
             <View style={styles.quickTimeActions}>
               <Pressable
                 disabled={isSavingQuickAction}
@@ -2051,7 +2078,7 @@ const styles = StyleSheet.create({
     borderColor: "#DADADA",
     marginRight: 8,
     position: "relative",
-    shadowColor: "#000000",
+    shadowColor: "#6B6B6B",
     shadowOpacity: 0.08,
     shadowRadius: 6,
     shadowOffset: {
@@ -2269,7 +2296,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 15,
     elevation: 2,
-    shadowColor: "#000000",
+    shadowColor: "#6B6B6B",
     shadowOpacity: 0.08,
     shadowRadius: 12,
     shadowOffset: {
@@ -2735,6 +2762,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     backgroundColor: "#FAFBFD",
+  },
+
+  quickTimeCurrentButton: {
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    marginTop: 9,
+    borderWidth: 1,
+    borderColor: COLORS.maroon,
+    borderRadius: 12,
+    backgroundColor: "#FFF8F8",
+  },
+
+  quickTimeCurrentText: {
+    color: COLORS.maroon,
+    fontSize: 12,
+    fontWeight: "900",
   },
 
   quickTimeActions: {

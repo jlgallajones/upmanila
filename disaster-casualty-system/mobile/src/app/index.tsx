@@ -322,7 +322,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.white,
     backgroundColor: COLORS.white,
     marginBottom: 34,
-    shadowColor: "#000000",
+    shadowColor: "#6B6B6B",
     shadowOpacity: 0.24,
     shadowRadius: 18,
     shadowOffset: {
@@ -394,7 +394,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: COLORS.white,
     paddingHorizontal: 24,
-    shadowColor: "#000000",
+    shadowColor: "#6B6B6B",
     shadowOpacity: 0.2,
     shadowRadius: 16,
     shadowOffset: {

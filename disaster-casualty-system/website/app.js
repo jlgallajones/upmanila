@@ -3542,16 +3542,16 @@ function renderAdminView() {
         <div class="grid three dashboard-metrics">
           ${renderMetric("Active incidents", state.dashboard?.activeIncidents ?? 0, "emphasis")}
           ${renderMetric("Pending review", state.dashboard?.pendingRecords ?? 0)}
-          ${renderMetric("Certified records", state.dashboard?.verifiedRecords ?? 0)}
+           ${renderMetric("Approved records", state.dashboard?.verifiedRecords ?? 0)}
         </div>
         <div style="margin-top:18px">${renderOngoingIncidentSummary()}</div>
         <div class="grid two" style="margin-top:18px">
-          ${renderAdminScopeCard()}
-          ${renderRecentActivity()}
+           ${renderIncidentCreator(true)}
+           ${renderAdminCasualtyRecords(true)}
         </div>
         <div class="grid two" style="margin-top:18px">
-          ${renderIncidentCreator(true)}
-          ${renderAdminCasualtyRecords(true)}
+           ${renderAdminScopeCard()}
+           ${renderRecentActivity()}
         </div>
       `;
   }
@@ -4377,7 +4377,7 @@ function renderAnalyticsGraphGrid(analytics, incidentId) {
       "Treatment / Stabilization & Responder Safety",
       "Stabilization strategies and responder safety responses for the selected incident.",
       `<div class="analytics-graph-grid">
-        ${renderAnalyticsGraphSection("Victims Stabilized Using Each Evacuation Strategy", graphs.stabilizationStrategies, { chart: "pie" })}
+        ${renderAnalyticsGraphSection("On-site stabilization", graphs.stabilizationStrategies, { chart: "pie" })}
         ${renderAnalyticsGraphSection("Safe and Unsafe Responders", graphs.responderSafety, { chart: "pie", viewResponders: true, incidentId })}
       </div>`,
     )}
@@ -8478,6 +8478,62 @@ function renderFieldResponderTriageContent(records) {
     `;
 }
 
+function formatTreatmentStrategy(value) {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
+
+  const labels = {
+    scoop_and_run: "Scoop and Run",
+    stay_and_play: "Stay and Play",
+    play_and_run: "Play and Run",
+    scooter: "Scooter",
+    unknown: "Unknown",
+  };
+
+  return labels[normalized] || roleLabel(value);
+}
+
+function renderFieldResponderTreatmentContent(records) {
+  const treatment = (records || [])[0];
+
+  if (!treatment) {
+    return `
+      <div class="empty-state" style="margin-top:12px">
+        No automatic treatment record yet.
+      </div>
+    `;
+  }
+
+  return `
+    <div
+      style="
+        margin-top:14px;
+        padding:16px;
+        border:1px solid #e2e7ef;
+        border-radius:12px;
+      "
+    >
+      <div class="casualty-detail-grid">
+        ${detailItem(
+          "Treatment Strategy",
+          formatTreatmentStrategy(treatment.treatment_strategy),
+        )}
+        ${detailItem(
+          "Stabilized Time",
+          treatment.stabilized_at
+            ? formatDate(treatment.stabilized_at)
+            : "Not recorded",
+        )}
+        ${detailItem(
+          "Treatment Notes",
+          extractRecordBaseText(treatment.notes) || "No notes",
+        )}
+      </div>
+    </div>
+  `;
+}
+
 function renderSaTransportHistoryContent(records) {
   const saRecords = (records || []).filter((record) =>
     String(record.notes || "")
@@ -9122,6 +9178,28 @@ const religion =
                     : "Not recorded",
                 )}
               </div>
+            </div>
+
+
+            <!-- CARE / TREATMENT -->
+            <div
+              style="
+                margin-top:20px;
+                padding-top:16px;
+                border-top:1px solid #e2e7ef;
+              "
+            >
+              <h4 style="margin:0 0 4px">
+                Care / Treatment
+              </h4>
+
+              <p class="panel-subtitle">
+                Automatically assigned from the selected triage system
+              </p>
+
+              ${renderFieldResponderTreatmentContent(
+                fieldRecordDetails?.treatmentHistory || [],
+              )}
             </div>
           </section>
 

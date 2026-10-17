@@ -118,7 +118,7 @@ export default function TabLayout() {
           backgroundColor: colors.tabBarBackground,
           overflow: "hidden",
           elevation: 10,
-          shadowColor: "#000000",
+          shadowColor: "#6B6B6B",
           shadowOpacity: 0.12,
           shadowRadius: 12,
           shadowOffset: {

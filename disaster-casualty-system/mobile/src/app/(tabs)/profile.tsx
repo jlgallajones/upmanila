@@ -160,6 +160,10 @@ function Statistic({
 }
 
 function formatRole(role: string): string {
+  if (role === "sa_responder") {
+    return "Advanced Medical Post Responder";
+  }
+
   return role
     .split("_")
     .map(

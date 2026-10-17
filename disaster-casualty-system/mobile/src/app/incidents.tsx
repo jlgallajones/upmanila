@@ -100,7 +100,10 @@ const SITREP_RESPONDER_FUNCTION_OPTIONS: Array<{
 }> = [
   { label: "Both", value: "both" },
   { label: "FR only", value: "field_responder" },
-  { label: "Advaced Medical Responder only", value: "sa_responder" },
+    {
+      label: "Advanced Medical Post Responder only",
+      value: "sa_responder",
+    },
 ];
 
 const REFERENCE_MANAGER_ROLES = [
@@ -3617,7 +3620,7 @@ export default function IncidentsPage() {
 
     return renderSitrepBarChart("RESPONDER FUNCTION", {
       "Field Responder": summary?.fieldResponderRecords ?? 0,
-      "Advanced Medical Responder":
+      "Advanced Medical Post Responder":
         summary?.stabilizationAreaResponderRecords ?? 0,
       "Unspecified Responder":
         summary?.unspecifiedResponderRecords ?? 0,
@@ -6993,8 +6996,8 @@ export default function IncidentsPage() {
                       ? "Field Responder only"
                       : sitrep.generated_payload
                             .responderFunctionFilter === "sa_responder"
-                        ? "Advanced Medical Responder only"
-                        : "Field Responder and Advanced Medical Responder"}
+      ? "Advanced Medical Post Responder only"
+      : "Field Responder and Advanced Medical Post Responder"}
                   </Text>
                 </View>
 
