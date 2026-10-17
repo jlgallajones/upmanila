@@ -273,13 +273,44 @@ button {
   top: 18px;
   right: 18px;
   z-index: 20;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 20px;
+}
+
+.theme-toggle-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1em;
+  height: 1em;
+  line-height: 1;
 }
 
 .sidebar-theme-toggle {
-  width: 100%;
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
   min-height: 42px;
+  padding: 0;
   border-radius: 12px;
 }
+
+.sidebar-account-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sidebar-account-row .user-chip {
+  flex: 1;
+  min-width: 0;
+}
+
 
 .prelogin-landing-card .legal-link-row a:hover,
 .prelogin-landing-card .legal-link-row a:focus-visible {
@@ -3107,7 +3138,7 @@ tbody tr:hover td {
   justify-content: space-between;
   gap: 16px;
   padding-bottom: 14px;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  border-bottom: 2px solid rgba(15, 23, 42, 0.16);
 }
 
 .analytics-incident-overview-header h3 {
@@ -3137,7 +3168,7 @@ tbody tr:hover td {
 .analytics-incident-info-list {
   display: grid;
   grid-template-columns: 1.6fr 0.9fr 1.7fr;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  border-bottom: 2px solid rgba(15, 23, 42, 0.16);
   padding-bottom: 16px;
 }
 
@@ -3149,7 +3180,7 @@ tbody tr:hover td {
 .analytics-incident-info-list div {
   padding-right: 20px;
   margin-right: 20px;
-  border-right: 1px solid rgba(15, 23, 42, 0.08);
+  border-right: 2px solid rgba(15, 23, 42, 0.16);
 }
 
 .analytics-incident-info-list div:last-child,
@@ -3185,7 +3216,7 @@ tbody tr:hover td {
 .analytics-incident-metrics div {
   padding-right: 20px;
   margin-right: 20px;
-  border-right: 1px solid rgba(15, 23, 42, 0.08);
+  border-right: 2px solid rgba(15, 23, 42, 0.16);
 }
 
 .analytics-incident-metrics strong {
@@ -4415,4 +4446,111 @@ tbody tr:hover td {
   .analytics-line-svg {
     min-width: 680px;
   }
+}
+
+:root[data-theme="dark"] .incident-management-body,
+:root[data-theme="dark"] .incident-section-card,
+:root[data-theme="dark"] .match-casing-selected-record,
+:root[data-theme="dark"] .scope-item,
+:root[data-theme="dark"] .account-status-strip,
+:root[data-theme="dark"] .empty-state,
+:root[data-theme="dark"] .attachment-card,
+:root[data-theme="dark"] .custom-timeline-row,
+:root[data-theme="dark"] .rating-guide span {
+  color: var(--ink);
+  background: var(--surface-raised);
+}
+
+:root[data-theme="dark"] .section-launcher:not(.section-launcher-accent) {
+  color: var(--ink);
+  background: linear-gradient(180deg, var(--surface-raised), var(--surface));
+  border-color: var(--line);
+}
+
+:root[data-theme="dark"] .section-launcher-accent {
+  color: #fff;
+  background: var(--cyan);
+  border-color: var(--cyan);
+}
+
+:root[data-theme="dark"] .selected-incident-summary {
+  background: linear-gradient(180deg, var(--cyan-soft), var(--surface));
+}
+
+:root[data-theme="dark"] .dashboard-dialog-field input,
+:root[data-theme="dark"] .dashboard-dialog-field textarea,
+:root[data-theme="dark"] .field input,
+:root[data-theme="dark"] .field select,
+:root[data-theme="dark"] .field textarea {
+  color: var(--ink);
+  background: var(--surface-input);
+  border-color: var(--line);
+}
+
+:root[data-theme="dark"] .dashboard-dialog-field input:focus,
+:root[data-theme="dark"] .dashboard-dialog-field textarea:focus,
+:root[data-theme="dark"] .field input:focus,
+:root[data-theme="dark"] .field select:focus,
+:root[data-theme="dark"] .field textarea:focus {
+  background: var(--surface-input);
+}
+
+:root[data-theme="dark"] .dashboard-toast,
+:root[data-theme="dark"] .attachment-preview-modal,
+:root[data-theme="dark"] .attachment-preview-frame,
+:root[data-theme="dark"] .modal-body,
+:root[data-theme="dark"] .modal-header,
+:root[data-theme="dark"] .modal-footer {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+:root[data-theme="dark"] .metric.emphasis span,
+:root[data-theme="dark"] .metric.emphasis small {
+  color: var(--ink);
+}
+
+:root[data-theme="dark"] .sidebar-collapsed .sidebar-toggle,
+:root[data-theme="dark"] .sidebar-collapsed .user-chip,
+:root[data-theme="dark"] .sidebar-collapsed .user-avatar,
+:root[data-theme="dark"] .sidebar-collapsed .nav-group-summary.active .nav-glyph {
+  color: var(--ink);
+  background: var(--surface-raised);
+  border-color: var(--line);
+}
+
+:root[data-theme="dark"] .analytics-bar-row div {
+  background: var(--surface-soft);
+}
+
+:root[data-theme="dark"] .match-casing-slot,
+:root[data-theme="dark"] .match-casing-slot.filled,
+:root[data-theme="dark"] .match-casing-card.selected,
+:root[data-theme="dark"] .bulk-import-panel,
+:root[data-theme="dark"] .bulk-preview-card,
+:root[data-theme="dark"] .bulk-preview-table,
+:root[data-theme="dark"] .table-wrap {
+  color: var(--ink);
+  background: var(--surface-raised);
+  border-color: var(--line);
+}
+
+:root[data-theme="dark"] .match-casing-slot,
+:root[data-theme="dark"] .bulk-import-panel {
+  background: linear-gradient(180deg, var(--surface-raised), var(--surface));
+}
+
+:root[data-theme="dark"] .match-casing-slot.filled,
+:root[data-theme="dark"] .match-casing-card.selected {
+  background: linear-gradient(180deg, var(--cyan-soft), var(--surface));
+}
+
+:root[data-theme="dark"] .analytics-incident-overview-header,
+:root[data-theme="dark"] .analytics-incident-info-list {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+:root[data-theme="dark"] .analytics-incident-info-list div,
+:root[data-theme="dark"] .analytics-incident-metrics div {
+  border-right-color: rgba(255, 255, 255, 0.2);
 }

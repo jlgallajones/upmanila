@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { createThemePalette } from "@/constants/theme";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -24,7 +25,7 @@ import {
 import { getAccessToken } from "../../auth/session";
 import { getQueuedCasualtyCount } from "../../offline/casualtyQueue";
 
-const COLORS = {
+const COLORS = createThemePalette({
   maroon: "#242424",
   white: "#FFFFFF",
   background: "#F3F5F9",
@@ -46,8 +47,8 @@ const COLORS = {
   orangeBackground: "#FFF0DA",
 
   gray: "#68758A",
-  grayBackground: "#EEF1F5",
-};
+  grayBackground: "#F3F5F9",
+});
 
 type NotificationKind =
   | "emergency"
@@ -587,7 +588,7 @@ export default function NotificationsScreen() {
     <View style={styles.screen}>
       <StatusBar
         barStyle="light-content"
-        backgroundColor={COLORS.maroon}
+        backgroundColor={COLORS.text}
       />
 
       <SafeAreaView
@@ -653,8 +654,8 @@ export default function NotificationsScreen() {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            colors={[COLORS.maroon]}
-            tintColor={COLORS.maroon}
+            colors={[COLORS.text]}
+            tintColor={COLORS.text}
           />
         }
       >
@@ -678,7 +679,7 @@ export default function NotificationsScreen() {
           <View style={styles.loadingCard}>
             <ActivityIndicator
               size="small"
-              color={COLORS.maroon}
+              color={COLORS.text}
             />
             <Text style={styles.loadingText}>
               Loading notifications...
@@ -882,7 +883,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 15,
     borderRadius: 14,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
     elevation: 2,
@@ -974,7 +975,7 @@ const styles = StyleSheet.create({
     padding: 13,
     borderRadius: 13,
     borderWidth: 1,
-    borderColor: "#F3C5C7",
+    borderColor: COLORS.warningBorder,
     backgroundColor: COLORS.redBackground,
   },
 
@@ -1002,7 +1003,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 14,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
     gap: 10,
   },
 
@@ -1016,7 +1017,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 14,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
     paddingHorizontal: 24,
   },
 

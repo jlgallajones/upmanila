@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { createThemePalette } from "@/constants/theme";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import {
@@ -17,15 +18,15 @@ import {
   type LocalFormDraft,
 } from "../../offline/formDrafts";
 
-const COLORS = {
+const COLORS = createThemePalette({
   maroon: "#242424",
   text: "#17213A",
   muted: "#69758C",
   border: "#DCE3EE",
-  background: "#F7F9FC",
+  background: "#F3F5F9",
   white: "#FFFFFF",
   red: "#C92D32",
-};
+});
 
 function formatDraftDate(value: string): string {
   const date = new Date(value);
@@ -117,7 +118,7 @@ async function confirmDeleteDraft() {
                 <Ionicons
                   name="document-outline"
                   size={20}
-                  color={COLORS.maroon}
+                  color={COLORS.text}
                 />
               </View>
               <View style={styles.cardTitleGroup}>
@@ -279,7 +280,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     borderStyle: "dashed",
     borderRadius: 14,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
   emptyTitle: {
     color: COLORS.text,
@@ -298,7 +299,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: 14,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
   cardHeader: {
     flexDirection: "row",
@@ -311,7 +312,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 12,
-    backgroundColor: "#FFF4F4",
+    backgroundColor: COLORS.warningBackground,
   },
   cardTitleGroup: {
     flex: 1,
@@ -347,10 +348,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#F0C5C5",
+    borderColor: COLORS.warningBorder,
     borderRadius: 12,
     paddingHorizontal: 16,
-    backgroundColor: "#FFF4F4",
+    backgroundColor: COLORS.warningBackground,
   },
   deleteText: {
     color: COLORS.red,
@@ -374,7 +375,7 @@ modalCard: {
   borderWidth: 1,
   borderColor: COLORS.border,
   borderRadius: 18,
-  backgroundColor: COLORS.white,
+  backgroundColor: COLORS.surface,
 },
 
 modalIcon: {
@@ -384,7 +385,7 @@ modalIcon: {
   justifyContent: "center",
   marginBottom: 16,
   borderRadius: 16,
-  backgroundColor: "#FFF1F1",
+  backgroundColor: COLORS.warningBackground,
 },
 
 modalTitle: {
@@ -414,7 +415,7 @@ modalCancelButton: {
   borderWidth: 1,
   borderColor: COLORS.border,
   borderRadius: 12,
-  backgroundColor: COLORS.white,
+  backgroundColor: COLORS.surface,
 },
 
 modalCancelText: {

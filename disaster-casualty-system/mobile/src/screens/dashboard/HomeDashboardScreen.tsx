@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { createThemePalette } from "@/constants/theme";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import {
@@ -47,7 +48,7 @@ import {
   type QueueSyncResult,
 } from "../../offline/casualtyQueue";
 
-const COLORS = {
+const COLORS = createThemePalette({
   maroon: "#242424",
   black: "#6B6B6B",
   charcoal: "#3A3A3A",
@@ -73,7 +74,7 @@ const COLORS = {
   paleGray: "#F2F2F2",
 
   border: "#E6E6E6",
-};
+});
 
 const initialSummary: DashboardSummary = {
   encodedToday: 0,
@@ -182,7 +183,7 @@ function SummaryCard({
           <Ionicons
             name="chevron-forward"
             size={14}
-            color={COLORS.maroon}
+            color={COLORS.text}
           />
         </View>
       ) : null}
@@ -844,7 +845,7 @@ export default function HomeDashboardScreen() {
             .filter(Boolean)
             .join(", "),
           icon: "warning-outline",
-          color: COLORS.maroon,
+          color: COLORS.text,
           onSelect: () => onIncidentSelected(incident),
         })),
       });
@@ -939,7 +940,7 @@ export default function HomeDashboardScreen() {
           label: facility.facility_name,
           caption: formatFacilityLabel(facility),
           icon: "business-outline",
-          color: COLORS.maroon,
+          color: COLORS.text,
           onSelect: () => onFacilitySelected(incident, facility),
         })),
       });
@@ -1393,8 +1394,8 @@ export default function HomeDashboardScreen() {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            colors={[COLORS.maroon]}
-            tintColor={COLORS.maroon}
+            colors={[COLORS.text]}
+            tintColor={COLORS.text}
           />
         }
       >
@@ -1526,7 +1527,7 @@ export default function HomeDashboardScreen() {
               icon="add-circle-outline"
               label="Add Casualty"
               caption="New record"
-              iconColor={COLORS.maroon}
+              iconColor={COLORS.text}
               iconBackground="#F5E9EB"
               onPress={() =>
                 router.push("/add-casualty")
@@ -1597,7 +1598,7 @@ export default function HomeDashboardScreen() {
                   ? "Admin accounts"
                   : "Unit users"
               }
-              iconColor={COLORS.maroon}
+              iconColor={COLORS.text}
               iconBackground="#F5E9EB"
               onPress={() =>
                 router.push("/account-management" as never)
@@ -1610,7 +1611,7 @@ export default function HomeDashboardScreen() {
               icon="warning-outline"
               label="Manage Incidents"
               caption="Reports"
-              iconColor={COLORS.maroon}
+              iconColor={COLORS.text}
               iconBackground="#F5E9EB"
               onPress={() => router.push("/incidents" as never)}
             />
@@ -1704,7 +1705,7 @@ export default function HomeDashboardScreen() {
           <View style={styles.activityLoadingCard}>
             <ActivityIndicator
               size="small"
-              color={COLORS.maroon}
+              color={COLORS.text}
             />
 
             <Text style={styles.activityLoadingText}>
@@ -1885,7 +1886,7 @@ export default function HomeDashboardScreen() {
               <Ionicons
                 name="time-outline"
                 size={16}
-                color={COLORS.maroon}
+                color={COLORS.text}
               />
               <Text style={styles.quickTimeCurrentText}>
                 Use current time
@@ -2002,7 +2003,7 @@ export default function HomeDashboardScreen() {
                     <Ionicons
                       name={option.icon ?? "ellipse-outline"}
                       size={20}
-                      color={option.color ?? COLORS.maroon}
+                      color={option.color ?? COLORS.text}
                     />
                   </View>
 
@@ -2024,7 +2025,7 @@ export default function HomeDashboardScreen() {
               <View style={styles.quickSavingRow}>
                 <ActivityIndicator
                   size="small"
-                  color={COLORS.maroon}
+                  color={COLORS.text}
                 />
                 <Text style={styles.quickSavingText}>
                   Saving quick action...
@@ -2156,7 +2157,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: 8,
     paddingHorizontal: 11,
-    backgroundColor: "#EDEDED",
+    backgroundColor: COLORS.fieldBackground,
   },
 
   activeStatusPillLive: {
@@ -2186,7 +2187,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 8,
-    backgroundColor: "#EDEDED",
+    backgroundColor: COLORS.fieldBackground,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2215,9 +2216,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     borderWidth: 1,
-    borderColor: "#F2C4C6",
+    borderColor: COLORS.warningBorder,
     borderRadius: 14,
-    backgroundColor: "#FFF2F2",
+    backgroundColor: COLORS.warningBackground,
     padding: 13,
     marginBottom: 17,
   },
@@ -2246,7 +2247,7 @@ const styles = StyleSheet.create({
   },
 
   retryText: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 11,
     fontWeight: "800",
   },
@@ -2274,7 +2275,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.gray,
     borderRadius: 999,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: COLORS.surface,
     paddingHorizontal: 12,
     marginBottom: 20,
     gap: 8,
@@ -2292,7 +2293,7 @@ const styles = StyleSheet.create({
     width: "48.5%",
     minHeight: 140,
     borderRadius: 12,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
     paddingHorizontal: 20,
     paddingVertical: 15,
     elevation: 2,
@@ -2365,7 +2366,7 @@ const styles = StyleSheet.create({
   },
 
   summaryActionText: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 10,
     fontWeight: "900",
   },
@@ -2381,7 +2382,7 @@ const styles = StyleSheet.create({
     minHeight: 120,
     flexShrink: 0,
     borderRadius: 14,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
     alignItems: "center",
     paddingHorizontal: 5,
     paddingTop: 14,
@@ -2425,7 +2426,7 @@ const styles = StyleSheet.create({
   },
 
   seeAllText: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 12,
     fontWeight: "700",
     marginBottom: 13,
@@ -2440,7 +2441,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     borderRadius: 15,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
     paddingHorizontal: 16,
     elevation: 2,
     shadowColor: "#758197",
@@ -2511,7 +2512,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 15,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
 
   activityLoadingText: {
@@ -2525,7 +2526,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 15,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
     paddingHorizontal: 25,
   },
 
@@ -2553,7 +2554,7 @@ const styles = StyleSheet.create({
   syncFeedbackCard: {
     margin: 16,
     borderRadius: 18,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
     padding: 20,
     alignItems: "center",
     borderWidth: 1,
@@ -2625,7 +2626,7 @@ const styles = StyleSheet.create({
     maxHeight: "78%",
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
     paddingHorizontal: 16,
     paddingTop: 10,
     paddingBottom: 20,
@@ -2634,7 +2635,7 @@ const styles = StyleSheet.create({
   quickTimeSheet: {
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
     paddingHorizontal: 16,
     paddingTop: 10,
     paddingBottom: 20,
@@ -2645,7 +2646,7 @@ const styles = StyleSheet.create({
     height: 4,
     alignSelf: "center",
     borderRadius: 99,
-    backgroundColor: "#D8DEE8",
+    backgroundColor: COLORS.fieldBorder,
     marginBottom: 16,
   },
 
@@ -2699,7 +2700,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     borderRadius: 14,
     paddingHorizontal: 12,
-    backgroundColor: "#FAFBFD",
+    backgroundColor: COLORS.background,
   },
 
   quickChoiceIcon: {
@@ -2739,7 +2740,7 @@ const styles = StyleSheet.create({
   },
 
   quickSavingText: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 12,
     fontWeight: "800",
   },
@@ -2761,7 +2762,7 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontSize: 14,
     fontWeight: "700",
-    backgroundColor: "#FAFBFD",
+    backgroundColor: COLORS.background,
   },
 
   quickTimeCurrentButton: {
@@ -2772,13 +2773,13 @@ const styles = StyleSheet.create({
     gap: 7,
     marginTop: 9,
     borderWidth: 1,
-    borderColor: COLORS.maroon,
+    borderColor: COLORS.text,
     borderRadius: 12,
-    backgroundColor: "#FFF8F8",
+    backgroundColor: COLORS.warningBackground,
   },
 
   quickTimeCurrentText: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 12,
     fontWeight: "900",
   },
@@ -2797,7 +2798,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: 13,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
 
   quickTimeCancelText: {

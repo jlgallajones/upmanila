@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { createThemePalette } from "@/constants/theme";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -75,7 +76,7 @@ import {
 import { isAuthenticationTokenError } from "../api/client";
 import { getCurrentUser } from "../auth/session";
 
-const COLORS = {
+const COLORS = createThemePalette({
   maroon: "#242424",
   white: "#FFFFFF",
   background: "#F3F5F9",
@@ -84,13 +85,13 @@ const COLORS = {
   secondaryText: "#69758C",
   mutedText: "#9AA6BA",
   border: "#E5E9F0",
-  fieldBackground: "#F7F9FC",
+  fieldBackground: "#F3F5F9",
   fieldBorder: "#D9E0EA",
   green: "#2E7D4F",
   orange: "#D96D12",
   blue: "#267ABD",
   red: "#C92D32",
-};
+});
 
 const SCREEN_PADDING = 16;
 
@@ -1002,7 +1003,7 @@ function IncidentCard({
           <Ionicons
             name="warning-outline"
             size={20}
-            color={COLORS.maroon}
+            color={COLORS.text}
           />
         </View>
 
@@ -1093,7 +1094,7 @@ function IncidentCard({
             <Ionicons
               name="time-outline"
               size={17}
-              color={COLORS.maroon}
+              color={COLORS.text}
             />
             <Text style={styles.timelineButtonText}>
               Response Timeline
@@ -1175,7 +1176,7 @@ function IncidentCard({
               <Ionicons
                 name={icon as keyof typeof Ionicons.glyphMap}
                 size={17}
-                color={COLORS.maroon}
+                color={COLORS.text}
               />
               <Text style={styles.timelineButtonText}>
                 {label as string}
@@ -3111,7 +3112,7 @@ export default function IncidentsPage() {
               <Ionicons
                 name="time-outline"
                 size={16}
-                color={COLORS.maroon}
+                color={COLORS.text}
               />
               <Text style={styles.currentTimeButtonText}>
                 Use current time
@@ -3349,7 +3350,7 @@ export default function IncidentsPage() {
           <Ionicons
             name="analytics-outline"
             size={17}
-            color={COLORS.maroon}
+            color={COLORS.text}
           />
           <Text style={styles.summaryPanelTitle}>
             Extracted from records
@@ -3924,7 +3925,7 @@ export default function IncidentsPage() {
       <View style={styles.centerState}>
         <ActivityIndicator
           size="large"
-          color={COLORS.maroon}
+          color={COLORS.text}
         />
         <Text style={styles.centerStateText}>
           Loading active incidents...
@@ -3937,7 +3938,7 @@ export default function IncidentsPage() {
     <View style={styles.screen}>
       <StatusBar
         barStyle="light-content"
-        backgroundColor={COLORS.maroon}
+        backgroundColor={COLORS.text}
       />
 
       <SafeAreaView
@@ -4134,8 +4135,8 @@ export default function IncidentsPage() {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            colors={[COLORS.maroon]}
-            tintColor={COLORS.maroon}
+            colors={[COLORS.text]}
+            tintColor={COLORS.text}
           />
         }
         ListEmptyComponent={
@@ -4179,7 +4180,7 @@ export default function IncidentsPage() {
                 <Ionicons
                   name="chevron-back"
                   size={19}
-                  color={COLORS.maroon}
+                  color={COLORS.text}
                 />
               </Pressable>
 
@@ -4197,7 +4198,7 @@ export default function IncidentsPage() {
                 <Ionicons
                   name="chevron-forward"
                   size={19}
-                  color={COLORS.maroon}
+                  color={COLORS.text}
                 />
               </Pressable>
             </View>
@@ -4620,7 +4621,7 @@ export default function IncidentsPage() {
                       <Ionicons
                         name="checkmark-circle"
                         size={19}
-                        color={COLORS.maroon}
+                        color={COLORS.text}
                       />
                     ) : null}
                   </Pressable>
@@ -4673,7 +4674,7 @@ export default function IncidentsPage() {
               <View style={styles.timelineLoading}>
                 <ActivityIndicator
                   size="small"
-                  color={COLORS.maroon}
+                  color={COLORS.text}
                 />
                 <Text style={styles.timelineLoadingText}>
                   Loading timeline...
@@ -4868,7 +4869,7 @@ export default function IncidentsPage() {
               <View style={styles.timelineLoading}>
                 <ActivityIndicator
                   size="small"
-                  color={COLORS.maroon}
+                  color={COLORS.text}
                 />
                 <Text style={styles.timelineLoadingText}>
                   Loading staff call-down...
@@ -5182,7 +5183,7 @@ export default function IncidentsPage() {
               <View style={styles.timelineLoading}>
                 <ActivityIndicator
                   size="small"
-                  color={COLORS.maroon}
+                  color={COLORS.text}
                 />
                 <Text style={styles.timelineLoadingText}>
                   Loading coordination ratings...
@@ -5355,7 +5356,7 @@ export default function IncidentsPage() {
               <View style={styles.timelineLoading}>
                 <ActivityIndicator
                   size="small"
-                  color={COLORS.maroon}
+                  color={COLORS.text}
                 />
                 <Text style={styles.timelineLoadingText}>
                   Loading responder safety...
@@ -5597,7 +5598,7 @@ export default function IncidentsPage() {
               <View style={styles.timelineLoading}>
                 <ActivityIndicator
                   size="small"
-                  color={COLORS.maroon}
+                  color={COLORS.text}
                 />
                 <Text style={styles.timelineLoadingText}>
                   Loading deactivation...
@@ -5810,7 +5811,7 @@ export default function IncidentsPage() {
               <View style={styles.timelineLoading}>
                 <ActivityIndicator
                   size="small"
-                  color={COLORS.maroon}
+                  color={COLORS.text}
                 />
                 <Text style={styles.timelineLoadingText}>
                   Loading on-site triage...
@@ -5952,7 +5953,7 @@ export default function IncidentsPage() {
               <View style={styles.timelineLoading}>
                 <ActivityIndicator
                   size="small"
-                  color={COLORS.maroon}
+                  color={COLORS.text}
                 />
                 <Text style={styles.timelineLoadingText}>
                   Loading facility triage...
@@ -6073,7 +6074,7 @@ export default function IncidentsPage() {
               <View style={styles.timelineLoading}>
                 <ActivityIndicator
                   size="small"
-                  color={COLORS.maroon}
+                  color={COLORS.text}
                 />
                 <Text style={styles.timelineLoadingText}>
                   Loading on-site care...
@@ -6197,7 +6198,7 @@ export default function IncidentsPage() {
               <View style={styles.timelineLoading}>
                 <ActivityIndicator
                   size="small"
-                  color={COLORS.maroon}
+                  color={COLORS.text}
                 />
                 <Text style={styles.timelineLoadingText}>
                   Loading scene clearance...
@@ -6339,7 +6340,7 @@ export default function IncidentsPage() {
               <View style={styles.timelineLoading}>
                 <ActivityIndicator
                   size="small"
-                  color={COLORS.maroon}
+                  color={COLORS.text}
                 />
                 <Text style={styles.timelineLoadingText}>
                   Loading distribution...
@@ -6494,7 +6495,7 @@ export default function IncidentsPage() {
               <View style={styles.timelineLoading}>
                 <ActivityIndicator
                   size="small"
-                  color={COLORS.maroon}
+                  color={COLORS.text}
                 />
                 <Text style={styles.timelineLoadingText}>
                   Loading ED resources...
@@ -6623,7 +6624,7 @@ export default function IncidentsPage() {
               <View style={styles.timelineLoading}>
                 <ActivityIndicator
                   size="small"
-                  color={COLORS.maroon}
+                  color={COLORS.text}
                 />
                 <Text style={styles.timelineLoadingText}>
                   Loading hospital resources...
@@ -6829,7 +6830,7 @@ export default function IncidentsPage() {
               <View style={styles.timelineLoading}>
                 <ActivityIndicator
                   size="small"
-                  color={COLORS.maroon}
+                  color={COLORS.text}
                 />
                 <Text style={styles.timelineLoadingText}>
                   Loading morbidity and mortality...
@@ -7050,13 +7051,13 @@ export default function IncidentsPage() {
                     {exportingKind === "sitrep-pdf" ? (
                       <ActivityIndicator
                         size="small"
-                        color={COLORS.maroon}
+                        color={COLORS.text}
                       />
                     ) : (
                       <Ionicons
                         name="document-outline"
                         size={16}
-                        color={COLORS.maroon}
+                        color={COLORS.text}
                       />
                     )}
                     <Text style={styles.exportButtonText}>PDF</Text>
@@ -7336,7 +7337,7 @@ const styles = StyleSheet.create({
     maxWidth: 390,
     borderRadius: 24,
     padding: 18,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
   datePickerHeader: {
     flexDirection: "row",
@@ -7351,7 +7352,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FCE6E7",
+    backgroundColor: COLORS.warningBackground,
   },
   datePickerTitle: {
     color: COLORS.text,
@@ -7370,7 +7371,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 8,
-    backgroundColor: "#EEF1F5",
+    backgroundColor: COLORS.fieldBackground,
   },
   datePickerModeButtonActive: {
     backgroundColor: COLORS.maroon,
@@ -7409,13 +7410,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#EEF1F5",
+    backgroundColor: COLORS.fieldBackground,
   },
   datePickerDaySelected: {
     backgroundColor: COLORS.maroon,
   },
   datePickerDayInRange: {
-    backgroundColor: "#FCE6E7",
+    backgroundColor: COLORS.warningBackground,
   },
   datePickerDayText: {
     color: COLORS.text,
@@ -7436,7 +7437,7 @@ const styles = StyleSheet.create({
     borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#EEF1F5",
+    backgroundColor: COLORS.fieldBackground,
   },
   datePickerGhostButtonText: {
     color: COLORS.secondaryText,
@@ -7462,8 +7463,8 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#F4C3C5",
-    backgroundColor: "#FFF1F1",
+    borderColor: COLORS.warningBorder,
+    backgroundColor: COLORS.warningBackground,
     gap: 8,
   },
   errorText: {
@@ -7485,7 +7486,7 @@ const styles = StyleSheet.create({
     paddingTop: 15,
     paddingBottom: 14,
     borderRadius: 16,
-    backgroundColor: COLORS.card,
+    backgroundColor: COLORS.surface,
     elevation: 2,
     shadowColor: "#728099",
     shadowOpacity: 0.08,
@@ -7506,7 +7507,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginRight: 11,
-    backgroundColor: "#FFF2F2",
+    backgroundColor: COLORS.warningBackground,
   },
   cardMain: {
     flex: 1,
@@ -7528,7 +7529,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 6,
     marginLeft: 8,
-    backgroundColor: "#EAF7EF",
+    backgroundColor: COLORS.greenBackground,
   },
   statusText: {
     color: COLORS.green,
@@ -7589,9 +7590,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 11,
     borderWidth: 1,
-    borderColor: "#F4C3C5",
+    borderColor: COLORS.warningBorder,
     marginTop: 10,
-    backgroundColor: "#FFF4F4",
+    backgroundColor: COLORS.warningBackground,
     gap: 7,
   },
   closeIncidentText: {
@@ -7606,13 +7607,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 11,
     borderWidth: 1,
-    borderColor: "#E7D4D5",
+    borderColor: COLORS.warningBorder,
     marginTop: 10,
-    backgroundColor: "#FFF8F8",
+    backgroundColor: COLORS.warningBackground,
     gap: 7,
   },
   timelineButtonText: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 12,
     fontWeight: "800",
   },
@@ -7630,7 +7631,7 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     borderWidth: 1,
     borderColor: COLORS.border,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
     gap: 6,
   },
   operationActionText: {
@@ -7645,9 +7646,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 11,
     borderWidth: 1,
-    borderColor: "#E7D4D5",
+    borderColor: COLORS.warningBorder,
     marginTop: 9,
-    backgroundColor: "#FFF8F8",
+    backgroundColor: COLORS.warningBackground,
     gap: 7,
   },
   sitrepButton: {
@@ -7659,7 +7660,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#D6E7DE",
     marginTop: 9,
-    backgroundColor: "#F4FBF7",
+    backgroundColor: COLORS.greenBackground,
     gap: 7,
   },
   sitrepButtonText: {
@@ -7671,8 +7672,8 @@ const styles = StyleSheet.create({
     padding: 13,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#E7D4D5",
-    backgroundColor: "#FFF8F8",
+    borderColor: COLORS.warningBorder,
+    backgroundColor: COLORS.warningBackground,
     gap: 9,
     marginBottom: 12,
   },
@@ -7682,7 +7683,7 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   summaryPanelTitle: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 12,
     fontWeight: "900",
   },
@@ -7711,7 +7712,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: COLORS.border,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
     marginBottom: 10,
     gap: 6,
   },
@@ -7758,7 +7759,7 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
   createScroll: {
     marginTop: 2,
@@ -7779,7 +7780,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     borderWidth: 1,
     borderColor: COLORS.secondaryText,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
   sectionHeading: {
     color: COLORS.text,
@@ -7794,7 +7795,7 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
   timelineSheet: {
     height: "88%",
@@ -7803,7 +7804,7 @@ const styles = StyleSheet.create({
     paddingBottom: 0,
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
     overflow: "hidden",
   },
   sheetHandle: {
@@ -7913,13 +7914,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.fieldBorder,
     borderRadius: 13,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
     marginBottom: 9,
     gap: 10,
   },
   choiceOptionSelected: {
-    borderColor: COLORS.maroon,
-    backgroundColor: "#FFF4F4",
+    borderColor: COLORS.text,
+    backgroundColor: COLORS.warningBackground,
   },
   choiceOptionText: {
     flex: 1,
@@ -7928,7 +7929,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   choiceOptionTextSelected: {
-    color: COLORS.maroon,
+    color: COLORS.text,
   },
   choiceEmptyState: {
     alignItems: "center",
@@ -7982,14 +7983,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 13,
     borderWidth: 1,
-    borderColor: COLORS.maroon,
+    borderColor: COLORS.text,
     paddingHorizontal: 8,
-    backgroundColor: "#FFF8F8",
+    backgroundColor: COLORS.warningBackground,
     gap: 6,
   },
   currentTimeButtonText: {
     flexShrink: 1,
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 11,
     lineHeight: 14,
     fontWeight: "900",
@@ -8010,8 +8011,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.fieldBackground,
   },
   timelineOptionChipActive: {
-    borderColor: COLORS.maroon,
-    backgroundColor: "#FFF2F2",
+    borderColor: COLORS.text,
+    backgroundColor: COLORS.warningBackground,
   },
   timelineOptionText: {
     color: COLORS.secondaryText,
@@ -8019,7 +8020,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   timelineOptionTextActive: {
-    color: COLORS.maroon,
+    color: COLORS.text,
   },
   staffFormulaText: {
     color: COLORS.secondaryText,
@@ -8033,7 +8034,7 @@ const styles = StyleSheet.create({
     borderRadius: 13,
     borderWidth: 1,
     borderColor: COLORS.border,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
     marginBottom: 9,
   },
   staffRecordHeader: {
@@ -8056,13 +8057,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 8,
     paddingVertical: 5,
-    backgroundColor: "#F1F4F8",
+    backgroundColor: COLORS.fieldBackground,
   },
   staffStatusPillGood: {
-    backgroundColor: "#EAF7EF",
+    backgroundColor: COLORS.greenBackground,
   },
   staffStatusPillLate: {
-    backgroundColor: "#FFF3E8",
+    backgroundColor: COLORS.orangeBackground,
   },
   staffStatusPillText: {
     color: COLORS.secondaryText,
@@ -8093,8 +8094,8 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   smallDeleteButton: {
-    borderColor: "#F4C3C5",
-    backgroundColor: "#FFF4F4",
+    borderColor: COLORS.warningBorder,
+    backgroundColor: COLORS.warningBackground,
   },
   smallActionText: {
     color: COLORS.blue,
@@ -8120,8 +8121,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.fieldBackground,
   },
   ratingChipActive: {
-    borderColor: COLORS.maroon,
-    backgroundColor: "#FFF2F2",
+    borderColor: COLORS.text,
+    backgroundColor: COLORS.warningBackground,
   },
   ratingChipValue: {
     color: COLORS.secondaryText,
@@ -8129,7 +8130,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   ratingChipValueActive: {
-    color: COLORS.maroon,
+    color: COLORS.text,
   },
   ratingChipText: {
     color: COLORS.secondaryText,
@@ -8138,7 +8139,7 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   ratingChipTextActive: {
-    color: COLORS.maroon,
+    color: COLORS.text,
   },
   disruptionGrid: {
     flexDirection: "row",
@@ -8156,8 +8157,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.fieldBackground,
   },
   disruptionChipActive: {
-    borderColor: COLORS.maroon,
-    backgroundColor: "#FFF2F2",
+    borderColor: COLORS.text,
+    backgroundColor: COLORS.warningBackground,
   },
   disruptionChipText: {
     color: COLORS.secondaryText,
@@ -8166,7 +8167,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   disruptionChipTextActive: {
-    color: COLORS.maroon,
+    color: COLORS.text,
   },
   notesInput: {
     minHeight: 90,
@@ -8207,7 +8208,7 @@ const styles = StyleSheet.create({
     borderRightWidth: 1,
     borderBottomWidth: 1,
     borderColor: COLORS.border,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
   triageIntervalText: {
     flex: 1,
@@ -8218,7 +8219,7 @@ const styles = StyleSheet.create({
   },
   triageIntervalValue: {
     flex: 1,
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 12,
     fontWeight: "900",
     textAlign: "center",
@@ -8230,7 +8231,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     borderRadius: 14,
     padding: 12,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
   sitrepChartRow: {
     minHeight: 30,
@@ -8268,7 +8269,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     borderRadius: 12,
     overflow: "hidden",
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
   triageAccuracyRow: {
     minHeight: 58,
@@ -8296,7 +8297,7 @@ const styles = StyleSheet.create({
   },
   triageAccuracyValue: {
     minWidth: 74,
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 12,
     fontWeight: "900",
     textAlign: "right",
@@ -8309,7 +8310,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.fieldBackground,
   },
   sitrepReportNumber: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 12,
     fontWeight: "900",
     marginBottom: 7,
@@ -8342,14 +8343,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     paddingHorizontal: 10,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
   compactMetric: {
     minHeight: 58,
     paddingHorizontal: 8,
   },
   sitrepMetricValue: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 22,
     fontWeight: "900",
   },
@@ -8377,11 +8378,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: COLORS.border,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
     gap: 5,
   },
   exportButtonText: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 11,
     fontWeight: "900",
   },
@@ -8406,7 +8407,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 12,
     borderRadius: 18,
-    backgroundColor: "#F4F5F8",
+    backgroundColor: COLORS.fieldBackground,
   },
   typeChipActive: {
     backgroundColor: COLORS.maroon,
@@ -8447,7 +8448,7 @@ const styles = StyleSheet.create({
     borderRadius: 13,
     borderWidth: 1,
     borderColor: COLORS.fieldBorder,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
   secondaryButtonText: {
     color: COLORS.secondaryText,

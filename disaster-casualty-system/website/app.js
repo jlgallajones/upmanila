@@ -117,6 +117,8 @@ function toggleTheme() {
   localStorage.setItem(THEME_STORAGE_KEY, state.theme);
   applyTheme();
   document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
+    const iconOnly = button.classList.contains("theme-toggle-floating");
+    const nextTheme = state.theme === "dark" ? "light" : "dark";
     button.setAttribute(
       "aria-label",
       `Switch to ${state.theme === "dark" ? "light" : "dark"} mode`,
@@ -125,7 +127,9 @@ function toggleTheme() {
       "title",
       `Switch to ${state.theme === "dark" ? "light" : "dark"} mode`,
     );
-    button.innerHTML = state.theme === "dark" ? "Light" : "Dark";
+    button.innerHTML = iconOnly
+      ? `<span class="theme-toggle-icon" aria-hidden="true">${state.theme === "dark" ? "&#9728;" : "&#9790;"}</span>`
+      : `<span class="theme-toggle-icon" aria-hidden="true">${nextTheme === "light" ? "&#9728;" : "&#9790;"}</span>`;
   });
 }
 
@@ -140,7 +144,9 @@ function renderThemeToggle(className = "") {
       aria-label="Switch to ${nextTheme} mode"
       title="Switch to ${nextTheme} mode"
     >
-      ${state.theme === "dark" ? "Light" : "Dark"}
+      ${className.includes("theme-toggle-floating")
+        ? `<span class="theme-toggle-icon" aria-hidden="true">${state.theme === "dark" ? "&#9728;" : "&#9790;"}</span>`
+        : `<span class="theme-toggle-icon" aria-hidden="true">${nextTheme === "light" ? "&#9728;" : "&#9790;"}</span>`}
     </button>
   `;
 }
@@ -2575,14 +2581,16 @@ function renderDashboardShell() {
         </nav>
 
         <div class="sidebar-footer">
-          ${renderThemeToggle("sidebar-theme-toggle")}
-          <button class="user-chip" type="button" id="profileButton" title="Open profile">
-            <div class="user-avatar">${escapeHtml(state.user.full_name?.slice(0, 1) || "A")}</div>
-            <div class="user-chip-text">
-            <strong>${escapeHtml(state.user.full_name)}</strong>
-            <span>${roleLabel(state.user.role)}</span>
-            </div>
-          </button>
+          <div class="sidebar-account-row">
+            <button class="user-chip" type="button" id="profileButton" title="Open profile">
+              <div class="user-avatar">${escapeHtml(state.user.full_name?.slice(0, 1) || "A")}</div>
+              <div class="user-chip-text">
+              <strong>${escapeHtml(state.user.full_name)}</strong>
+              <span>${roleLabel(state.user.role)}</span>
+              </div>
+            </button>
+            ${renderThemeToggle("sidebar-theme-toggle")}
+          </div>
           <button id="logoutButton" class="danger-button">Logout</button>
         </div>
       </aside>
@@ -4146,7 +4154,11 @@ function renderAnalyticsLineChart(title, series, options = {}) {
           )
         : [],
     }))
-    .filter((item) => item.data.length);
+    .filter((item) =>
+      item.data.some(
+        (row) => Number(row.total || 0) > 0 && Boolean(row.cutoffAt),
+      ),
+    );
   const hasKnownDenominator = normalizedSeries.some((item) =>
     item.data.some((row) => Number(row.total || 0) > 0),
   );
@@ -4155,17 +4167,7 @@ function renderAnalyticsLineChart(title, series, options = {}) {
   );
 
   if (!normalizedSeries.length || !hasKnownDenominator || !hasActivationReference) {
-    return `
-      <section class="panel analytics-graph-card">
-        <div class="panel-header">
-          <div>
-            <h2>${escapeHtml(title)}</h2>
-            ${options.note ? `<p class="panel-subtitle">${escapeHtml(options.note)}</p>` : ""}
-          </div>
-        </div>
-        <div class="empty-state">${hasKnownDenominator ? "DMMP activation time is not recorded yet." : "No line graph data available yet."}</div>
-      </section>
-    `;
+    return "";
   }
 
   const width = 640;
@@ -4290,7 +4292,7 @@ function getAnalyticsLineGraphs(analytics) {
 }
 
 function renderAnalyticsGraphSection(title, data, options = {}) {
-  const rows = Array.isArray(data)
+  const rows = (Array.isArray(data)
     ? data.map((row) => ({
         label: normalizeIntervalLabel(row),
         value: Number(options.chart === "pie" ? row.count ?? row.percentage ?? 0 : row.percentage ?? row.count ?? 0),
@@ -4316,7 +4318,13 @@ function renderAnalyticsGraphSection(title, data, options = {}) {
           value: Number(value || 0),
           detail: String(value || 0),
         };
-      });
+      }))
+    .filter((row) => Number.isFinite(row.value) && row.value > 0);
+
+  if (!rows.length) {
+    return "";
+  }
+
   const max = Math.max(
     options.percent ? 100 : 1,
     ...rows.map((row) => row.value),
@@ -4377,24 +4385,35 @@ function renderTertiaryTriageSystemCharts(graphs) {
     .join("");
 }
 
+function renderAnalyticsSectionIfVisible(title, subtitle, content) {
+  return String(content).includes("analytics-graph-card")
+    ? renderAnalyticsSection(title, subtitle, content)
+    : "";
+}
+
 function renderAnalyticsGraphGrid(analytics, incidentId) {
   const graphs = analytics?.barGraphs || {};
   const lineGraphs = getAnalyticsLineGraphs(analytics);
   const cumulativeNote = "Cumulative after disaster plan activation: 15 minutes, 30 minutes, 1 hour, 2 hours, and 3 hours.";
 
   return `
-    ${renderAnalyticsSection(
+    ${renderAnalyticsSectionIfVisible(
       "Triage & Patient Distribution",
       "Primary triage, secondary triage, and ED-care distribution with count and percentage labels.",
       `<div class="analytics-graph-grid">
         ${renderAnalyticsGraphSection("Immediate, Delayed, Minor, and Expectant Victims Using Primary Triage", graphs.primaryTriageByCategory, { chart: "pie" })}
         ${renderAnalyticsGraphSection("Immediate, Delayed, Minor, and Expectant Victims Using Secondary Triage", graphs.secondaryTriageByCategory, { chart: "pie" })}
         ${renderAnalyticsGraphSection("Victims Seeking ED Care According to Triage Category", graphs.edCareByTriageCategory, { chart: "pie" })}
-        ${renderAnalyticsGraphSection("Over- and Under-triage", graphs.triageAccuracy, { chart: "pie" })}
+        ${renderAnalyticsGraphSection("Over- and Under-Triage in Primary Triage", graphs.primaryOverUnderTriageDistribution, { chart: "pie", note: "Primary triage from Field Responder records." })}
+        ${renderAnalyticsGraphSection("Overtriage Distribution in Primary Triage", graphs.primaryOverTriageTransitions, { chart: "pie", note: "Primary triage from Field Responder records." })}
+        ${renderAnalyticsGraphSection("Undertriage Distribution in Primary Triage", graphs.primaryUnderTriageTransitions, { chart: "pie", note: "Primary triage from Field Responder records." })}
+        ${renderAnalyticsGraphSection("Over- and Under-Triage in Secondary Triage", graphs.secondaryOverUnderTriageDistribution, { chart: "pie", note: "Secondary triage from AMP Responder records." })}
+        ${renderAnalyticsGraphSection("Overtriage Distribution in Secondary Triage", graphs.secondaryOverTriageTransitions, { chart: "pie", note: "Secondary triage from AMP Responder records." })}
+        ${renderAnalyticsGraphSection("Undertriage Distribution in Secondary Triage", graphs.secondaryUnderTriageTransitions, { chart: "pie", note: "Secondary triage from AMP Responder records." })}
         ${renderTertiaryTriageSystemCharts(graphs)}
       </div>`,
     )}
-    ${renderAnalyticsSection(
+    ${renderAnalyticsSectionIfVisible(
       "Treatment / Stabilization & Responder Safety",
       "Stabilization strategies and responder safety responses for the selected incident.",
       `<div class="analytics-graph-grid">
@@ -4402,7 +4421,7 @@ function renderAnalyticsGraphGrid(analytics, incidentId) {
         ${renderAnalyticsGraphSection("Safe and Unsafe Responders", graphs.responderSafety, { chart: "pie", viewResponders: true, incidentId })}
       </div>`,
     )}
-    ${renderAnalyticsSection(
+    ${renderAnalyticsSectionIfVisible(
       "Time-to-Action / Cumulative Progress",
       cumulativeNote,
       `<div class="analytics-graph-grid">
@@ -4412,7 +4431,7 @@ function renderAnalyticsGraphGrid(analytics, incidentId) {
         ${renderAnalyticsLineChart("Victims Arriving at a Healthcare Facility", lineGraphs.facilityArrivalByActivation, { note: cumulativeNote })}
       </div>`,
     )}
-    ${renderAnalyticsSection(
+    ${renderAnalyticsSectionIfVisible(
       "HCFD Time-Interval Graphs",
       "Cumulative HCFD-derived ED resources, hospital resources, morbidity, and mortality events.",
       `<div class="analytics-graph-grid">
@@ -12271,11 +12290,8 @@ function renderSitrepAndCloseSection(incident) {
           </div>`
         : `<div class="status-message warning">Close this incident before exporting the Final SitRep.</div>`}
       <div class="button-row">
-         <button class="secondary-button" type="button" data-generate-sitrep="${escapeHtml(incident.id)}" data-incident-status="${escapeHtml(incident.status || "")}" data-office-name="${escapeHtml(sitrepOfficeName)}" data-incident-name="${escapeHtml(sitrepIncidentName)}">Generate Selected Incident SitRep</button>
-         <button class="ghost-button" type="button" data-download-sitrep="pdf" data-incident-id="${escapeHtml(incident.id)}" data-office-name="${escapeHtml(sitrepOfficeName)}" data-incident-name="${escapeHtml(sitrepIncidentName)}" ${finalSitrepExportDisabled}>Download Latest PDF</button>
-         <button class="ghost-button" type="button" data-download-sitrep="csv" data-incident-id="${escapeHtml(incident.id)}" data-office-name="${escapeHtml(sitrepOfficeName)}" data-incident-name="${escapeHtml(sitrepIncidentName)}" ${finalSitrepExportDisabled}>Download Latest CSV</button>
-        <button class="ghost-button" type="button" data-export-download="/incidents/${escapeHtml(incident.id)}/export/casualties.csv" data-export-file="${escapeHtml(incident.incident_code || incident.id)}-casualties.csv">Download Victim CSV</button>
-        <button class="ghost-button" type="button" data-export-download="/exports/incidents/${escapeHtml(incident.id)}/package.json" data-export-file="${escapeHtml(incident.incident_code || incident.id)}-incident-package.json">Download Incident Package</button>
+         <button class="secondary-button" type="button" data-generate-sitrep="${escapeHtml(incident.id)}" data-incident-status="${escapeHtml(incident.status || "")}" data-office-name="${escapeHtml(sitrepOfficeName)}" data-incident-name="${escapeHtml(sitrepIncidentName)}">Generate Final Incident SitRep</button>
+         <button class="ghost-button" type="button" data-download-sitrep="pdf" data-incident-id="${escapeHtml(incident.id)}" data-office-name="${escapeHtml(sitrepOfficeName)}" data-incident-name="${escapeHtml(sitrepIncidentName)}" ${finalSitrepExportDisabled}>Download Incident SitRep Draft</button>
         ${
           incident.status === "closed"
             ? isSuperAdmin()

@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { createThemePalette } from "@/constants/theme";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -35,7 +36,7 @@ import {
   type QueuedCasualtySubmission,
 } from "../offline/casualtyQueue";
 
-const COLORS = {
+const COLORS = createThemePalette({
   maroon: "#242424",
   white: "#FFFFFF",
   background: "#F3F5F9",
@@ -45,14 +46,14 @@ const COLORS = {
   border: "#E4E8EF",
   paleGreen: "#E8F4EA",
   green: "#2E7D4F",
-  paleRed: "#FCE6E7",
+  paleRed: "#FFF4F4",
   red: "#C92D32",
   paleOrange: "#FFF0DF",
   orange: "#D96D12",
   paleBlue: "#DFF2FC",
   blue: "#0B6B9B",
-  fieldBackground: "#F7F9FC",
-};
+  fieldBackground: "#F3F5F9",
+});
 
 const RESPONDER_ROLES = new Set([
   "responder",
@@ -538,7 +539,7 @@ function ActionLogListItem({
         <Ionicons
           name="clipboard-outline"
           size={20}
-          color={COLORS.maroon}
+          color={COLORS.text}
         />
       </View>
 
@@ -634,7 +635,7 @@ function ActionLogDetailsModal({
                 <Ionicons
                   name="clipboard-outline"
                   size={20}
-                  color={COLORS.maroon}
+                  color={COLORS.text}
                 />
               </View>
 
@@ -962,7 +963,7 @@ function openDatePicker() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.maroon} />
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.text} />
 
       <View style={styles.header}>
         <Pressable
@@ -981,7 +982,7 @@ function openDatePicker() {
 
       {isLoading ? (
         <View style={styles.centerState}>
-          <ActivityIndicator size="large" color={COLORS.maroon} />
+          <ActivityIndicator size="large" color={COLORS.text} />
           <Text style={styles.centerText}>Loading action logs...</Text>
         </View>
       ) : (
@@ -999,7 +1000,7 @@ function openDatePicker() {
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={handleRefresh}
-              tintColor={COLORS.maroon}
+              tintColor={COLORS.text}
             />
           }
           ListHeaderComponent={
@@ -1039,7 +1040,7 @@ function openDatePicker() {
                     <Ionicons
                       name="calendar-outline"
                       size={20}
-                      color={COLORS.maroon}
+                      color={COLORS.text}
                     />
                   </Pressable>
 
@@ -1124,7 +1125,7 @@ function openDatePicker() {
           <Ionicons
             name="chevron-back"
             size={20}
-            color={COLORS.maroon}
+            color={COLORS.text}
           />
         </Pressable>
 
@@ -1141,7 +1142,7 @@ function openDatePicker() {
           <Ionicons
             name="chevron-forward"
             size={20}
-            color={COLORS.maroon}
+            color={COLORS.text}
           />
         </Pressable>
       </View>
@@ -1254,7 +1255,7 @@ datePickerCard: {
   maxWidth: 390,
   padding: 18,
   borderRadius: 14,
-  backgroundColor: COLORS.white,
+  backgroundColor: COLORS.surface,
   borderWidth: 1,
   borderColor: COLORS.border,
 },
@@ -1332,7 +1333,7 @@ datePickerCancel: {
 },
 
 datePickerCancelText: {
-  color: COLORS.maroon,
+  color: COLORS.text,
   fontSize: 13,
   fontWeight: "900",
 },
@@ -1345,7 +1346,7 @@ datePickerCancelText: {
   borderRadius: 8,
   borderWidth: 1,
   borderColor: COLORS.border,
-  backgroundColor: COLORS.white,
+  backgroundColor: COLORS.surface,
 },
 
 calendarButtonPressed: {
@@ -1394,7 +1395,7 @@ calendarButtonPressed: {
     gap: 12,
   },
   filterCard: {
-    backgroundColor: COLORS.card,
+    backgroundColor: COLORS.surface,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -1431,10 +1432,10 @@ calendarButtonPressed: {
     paddingHorizontal: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
   clearFilterText: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 13,
     fontWeight: "900",
   },
@@ -1446,7 +1447,7 @@ calendarButtonPressed: {
   listItem: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: COLORS.card,
+    backgroundColor: COLORS.surface,
     borderRadius: 8,
     padding: 12,
     borderWidth: 1,
@@ -1495,7 +1496,7 @@ calendarButtonPressed: {
     padding: 12,
   },
   modalCard: {
-    backgroundColor: COLORS.card,
+    backgroundColor: COLORS.surface,
     borderRadius: 8,
     maxHeight: "88%",
     borderWidth: 1,
@@ -1530,7 +1531,7 @@ calendarButtonPressed: {
     minWidth: 0,
   },
   modalEyebrow: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 11,
     fontWeight: "900",
     letterSpacing: 0,
@@ -1619,7 +1620,7 @@ calendarButtonPressed: {
     gap: 10,
   },
   statusLabel: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 11,
     fontWeight: "900",
     textTransform: "uppercase",
@@ -1635,7 +1636,7 @@ calendarButtonPressed: {
   },
   statusCell: {
     flex: 1,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -1651,7 +1652,7 @@ calendarButtonPressed: {
     backgroundColor: COLORS.paleRed,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#F4B7BA",
+    borderColor: COLORS.warningBorder,
     padding: 10,
     gap: 5,
   },
@@ -1680,7 +1681,7 @@ calendarButtonPressed: {
     backgroundColor: COLORS.paleRed,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#F4B7BA",
+    borderColor: COLORS.warningBorder,
     padding: 12,
   },
   errorText: {
@@ -1692,7 +1693,7 @@ calendarButtonPressed: {
   emptyState: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: COLORS.card,
+    backgroundColor: COLORS.surface,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: COLORS.border,

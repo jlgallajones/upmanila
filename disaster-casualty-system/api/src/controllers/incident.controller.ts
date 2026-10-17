@@ -76,6 +76,8 @@ type CustomTimelineEvent = {
 type AnalyticsTriageAccuracySummary = ReturnType<
   typeof buildTriageAccuracySummary
 > & {
+  totalRecordedVictims: number;
+  unassistedRecords: number;
   assessedRecords: number;
   overTriageTotal: number;
   overTriagePercentage: number;
@@ -83,6 +85,16 @@ type AnalyticsTriageAccuracySummary = ReturnType<
   underTriagePercentage: number;
   explicitOverTriageRecords: number;
   explicitUnderTriageRecords: number;
+  overUnderTriageDistribution: Record<
+    string,
+    { count: number; total: number; percentage: number }
+  >;
+  underTriageTransitions: CountMap;
+  overTriageTransitions: CountMap;
+};
+type AnalyticsTriageAccuracyByStage = {
+  primary: AnalyticsTriageAccuracySummary;
+  secondary: AnalyticsTriageAccuracySummary;
 };
 type ResponderFunctionFilter =
   | "field_responder"
@@ -159,6 +171,7 @@ type IncidentSitrepPayload = {
     edCareByTriageCategory: Record<string, { count: number; total: number; percentage: number }>;
     stabilizationStrategies: CountMap;
     triageAccuracy: AnalyticsTriageAccuracySummary;
+    triageAccuracyByStage: AnalyticsTriageAccuracyByStage;
     cumulativeIntervalsMinutes: number[];
     lineGraphs: {
       primaryTriageByActivation: SitrepLineSeries[];
@@ -430,11 +443,18 @@ function getCalculatedTriageCategory(
   return "unknown";
 }
 
+function countDistinctTriageVictims(rows: TriageAssessmentRow[]): number {
+  return new Set(rows.map((row) => row.casualty_incident_id)).size;
+}
+
 function buildAnalyticsTriageAccuracy(
   rows: TriageAssessmentRow[],
+  totalRecordedVictims = rows.length,
 ): AnalyticsTriageAccuracySummary {
   const accuracyRows = rows
     .map((row) => ({
+      casualty_incident_id: row.casualty_incident_id,
+      triaged_at: row.triaged_at,
       responder_category: normalizeAnalyticsTriageCategory(
         row.responder_category ?? row.triage_category,
       ),
@@ -442,26 +462,102 @@ function buildAnalyticsTriageAccuracy(
         row.triage_category,
       ),
       calculated_category: getCalculatedTriageCategory(row),
+      assessment_answers: row.assessment_answers,
     }))
     .filter((row) => row.calculated_category !== "unknown");
   const summary = buildTriageAccuracySummary(accuracyRows);
-  const overTriageTotal =
-    summary.overtriagedT2.numerator + summary.overtriagedT3.numerator;
-  const underTriageTotal =
-    summary.undertriagedT1.numerator + summary.undertriagedT2.numerator;
+  const unassistedRows = accuracyRows.filter((row) => {
+    const mode = row.assessment_answers?.triageAssistanceMode;
+    return String(mode ?? "").trim().toLowerCase() === "unassisted";
+  });
+  const latestUnassistedRows = new Map<
+    string,
+    (typeof unassistedRows)[number]
+  >();
+
+  for (const row of unassistedRows) {
+    const existing = latestUnassistedRows.get(row.casualty_incident_id);
+    if (!existing) {
+      latestUnassistedRows.set(row.casualty_incident_id, row);
+      continue;
+    }
+
+    const existingAt = existing.triaged_at
+      ? new Date(existing.triaged_at).getTime()
+      : 0;
+    const currentAt = row.triaged_at
+      ? new Date(row.triaged_at).getTime()
+      : 0;
+
+    if (currentAt >= existingAt) {
+      latestUnassistedRows.set(row.casualty_incident_id, row);
+    }
+  }
+
+  const triagePriority: Record<AnalyticsTriageCategory, number> = {
+    expectant: 1,
+    minimal: 2,
+    delayed: 3,
+    immediate: 4,
+    unknown: 0,
+  };
+  const underTriageTransitions: CountMap = {};
+  const overTriageTransitions: CountMap = {};
+  let overTriageTotal = 0;
+  let underTriageTotal = 0;
+
+  for (const row of latestUnassistedRows.values()) {
+    const assignedCategory = row.responder_category;
+    const calculatedCategory = row.calculated_category;
+    const assignedPriority = triagePriority[assignedCategory];
+    const calculatedPriority = triagePriority[calculatedCategory];
+
+    if (
+      !assignedPriority ||
+      !calculatedPriority ||
+      assignedCategory === calculatedCategory
+    ) {
+      continue;
+    }
+
+    const transition = `${formatTriageTransitionCategory(calculatedCategory)} -> ${formatTriageTransitionCategory(assignedCategory)}`;
+
+    if (assignedPriority > calculatedPriority) {
+      overTriageTotal += 1;
+      overTriageTransitions[transition] =
+        (overTriageTransitions[transition] ?? 0) + 1;
+    } else {
+      underTriageTotal += 1;
+      underTriageTransitions[transition] =
+        (underTriageTransitions[transition] ?? 0) + 1;
+    }
+  }
+
+  const triageDenominator = Math.max(0, totalRecordedVictims);
+  const correctTriageTotal = Math.max(
+    0,
+    triageDenominator - overTriageTotal - underTriageTotal,
+  );
+  const buildDistributionMetric = (count: number) => ({
+    count,
+    total: triageDenominator,
+    percentage: calculatePercentage(count, triageDenominator),
+  });
 
   return {
     ...summary,
-    assessedRecords: accuracyRows.length,
+    totalRecordedVictims: triageDenominator,
+    unassistedRecords: latestUnassistedRows.size,
+    assessedRecords: latestUnassistedRows.size,
     overTriageTotal,
     overTriagePercentage: calculatePercentage(
       overTriageTotal,
-      accuracyRows.length,
+      triageDenominator,
     ),
     underTriageTotal,
     underTriagePercentage: calculatePercentage(
       underTriageTotal,
-      accuracyRows.length,
+      triageDenominator,
     ),
     explicitOverTriageRecords: rows.filter(
       (row) => row.is_over_triage === true,
@@ -469,7 +565,20 @@ function buildAnalyticsTriageAccuracy(
     explicitUnderTriageRecords: rows.filter(
       (row) => row.is_under_triage === true,
     ).length,
+    overUnderTriageDistribution: {
+      "Over Triage": buildDistributionMetric(overTriageTotal),
+      "Under Triage": buildDistributionMetric(underTriageTotal),
+      "Correct Triage": buildDistributionMetric(correctTriageTotal),
+    },
+    underTriageTransitions,
+    overTriageTransitions,
   };
+}
+
+function formatTriageTransitionCategory(
+  category: AnalyticsTriageCategory,
+): string {
+  return category.charAt(0).toUpperCase() + category.slice(1);
 }
 
 type TransportRecordRow = {
@@ -1435,6 +1544,45 @@ function buildSitrepCharts(payload: IncidentSitrepPayload): PdfChart[] {
     counts[category] = value.count;
     return counts;
   }, {});
+  const triageAccuracyByStage = analytics?.triageAccuracyByStage;
+  const stageTriageCharts: PdfChart[] = triageAccuracyByStage
+    ? [
+        {
+          title: "Over- and Under-Triage in Primary Triage",
+          counts: Object.entries(
+            triageAccuracyByStage.primary.overUnderTriageDistribution,
+          ).reduce<CountMap>((counts, [category, value]) => {
+            counts[category] = value.count;
+            return counts;
+          }, {}),
+        },
+        {
+          title: "Overtriage Distribution in Primary Triage",
+          counts: triageAccuracyByStage.primary.overTriageTransitions,
+        },
+        {
+          title: "Undertriage Distribution in Primary Triage",
+          counts: triageAccuracyByStage.primary.underTriageTransitions,
+        },
+        {
+          title: "Over- and Under-Triage in Secondary Triage",
+          counts: Object.entries(
+            triageAccuracyByStage.secondary.overUnderTriageDistribution,
+          ).reduce<CountMap>((counts, [category, value]) => {
+            counts[category] = value.count;
+            return counts;
+          }, {}),
+        },
+        {
+          title: "Overtriage Distribution in Secondary Triage",
+          counts: triageAccuracyByStage.secondary.overTriageTransitions,
+        },
+        {
+          title: "Undertriage Distribution in Secondary Triage",
+          counts: triageAccuracyByStage.secondary.underTriageTransitions,
+        },
+      ]
+    : [];
   const charts: PdfChart[] = [
     ...(analytics
       ? [
@@ -1458,13 +1606,7 @@ function buildSitrepCharts(payload: IncidentSitrepPayload): PdfChart[] {
             title: "Stabilization Strategies",
             counts: analytics.stabilizationStrategies,
           },
-          {
-            title: "Over- and Under-triage",
-            counts: {
-              "Over-triage": analytics.triageAccuracy.overTriageTotal,
-              "Under-triage": analytics.triageAccuracy.underTriageTotal,
-            },
-          },
+          ...stageTriageCharts,
         ]
       : []),
   ];
@@ -1558,13 +1700,16 @@ function buildSitrepLineCharts(payload: IncidentSitrepPayload): PdfLineChart[] {
     },
   ];
 
-  return charts.filter((chart) =>
-    chart.series.some((series) =>
-      series.data.some(
-        (point) => point.total > 0 && point.cutoffAt !== null,
+  return charts
+    .map((chart) => ({
+      ...chart,
+      series: chart.series.filter((series) =>
+        series.data.some(
+          (point) => point.total > 0 && point.cutoffAt !== null,
+        ),
       ),
-    ),
-  );
+    }))
+    .filter((chart) => chart.series.length > 0);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -2361,6 +2506,14 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
       ["Arrived at facility", analytics.keyPerformanceIndicators.arrivedFacility],
       ["Safe responders", analytics.keyPerformanceIndicators.safeResponders],
       ["Unsafe responders", analytics.keyPerformanceIndicators.unsafeResponders],
+      [
+        "Triage denominator (all recorded victims)",
+        analytics.triageAccuracy.totalRecordedVictims,
+      ],
+      [
+        "Unassisted triage comparisons",
+        analytics.triageAccuracy.unassistedRecords,
+      ],
       ["Over-triage total", analytics.triageAccuracy.overTriageTotal],
       [
         "Over-triage percentage",
@@ -2370,6 +2523,11 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
       [
         "Under-triage percentage",
         `${analytics.triageAccuracy.underTriagePercentage}%`,
+      ],
+      [
+        "Correct triage total",
+        analytics.triageAccuracy.overUnderTriageDistribution["Correct Triage"]
+          ?.count ?? 0,
       ],
       [
         "Cumulative timeline intervals",
@@ -5943,7 +6101,20 @@ export async function getIncidentAnalyticsSummary(
     const primaryTriageRows = triageRows.filter(isPrimaryTriage);
     const secondaryTriageRows = triageRows.filter(isSecondaryTriage);
     const facilityTriageRows = triageRows.filter(isFacilityTriage);
-    const triageAccuracy = buildAnalyticsTriageAccuracy(triageRows);
+    const triageAccuracy = buildAnalyticsTriageAccuracy(
+      triageRows,
+      casualtyIncidentRows.length,
+    );
+    const triageAccuracyByStage: AnalyticsTriageAccuracyByStage = {
+      primary: buildAnalyticsTriageAccuracy(
+        primaryTriageRows,
+        countDistinctTriageVictims(primaryTriageRows),
+      ),
+      secondary: buildAnalyticsTriageAccuracy(
+        secondaryTriageRows,
+        countDistinctTriageVictims(secondaryTriageRows),
+      ),
+    };
     const latestTriageByCasualty = new Map<string, TriageAssessmentRow>();
     const latestFacilityTriageByCasualty = new Map<
       string,
@@ -6422,6 +6593,7 @@ const unsafeResponders = responderSafetyResponses.filter(
             healthcareStayByCategory,
         },
         triageAccuracy,
+        triageAccuracyByStage,
         barGraphs: {
           triageAccuracy: {
             over_triage: triageAccuracy.overTriageTotal,
@@ -6431,6 +6603,22 @@ const unsafeResponders = responderSafetyResponses.filter(
             explicitly_flagged_under_triage:
               triageAccuracy.explicitUnderTriageRecords,
           },
+          overUnderTriageDistribution:
+            triageAccuracy.overUnderTriageDistribution,
+          underTriageTransitions: triageAccuracy.underTriageTransitions,
+          overTriageTransitions: triageAccuracy.overTriageTransitions,
+          primaryOverUnderTriageDistribution:
+            triageAccuracyByStage.primary.overUnderTriageDistribution,
+          primaryUnderTriageTransitions:
+            triageAccuracyByStage.primary.underTriageTransitions,
+          primaryOverTriageTransitions:
+            triageAccuracyByStage.primary.overTriageTransitions,
+          secondaryOverUnderTriageDistribution:
+            triageAccuracyByStage.secondary.overUnderTriageDistribution,
+          secondaryUnderTriageTransitions:
+            triageAccuracyByStage.secondary.underTriageTransitions,
+          secondaryOverTriageTransitions:
+            triageAccuracyByStage.secondary.overTriageTransitions,
           primaryTriageByCategory: countBy(
             primaryTriageRows,
             (row) => getAnalyticsTriageCategory(row),
@@ -7029,6 +7217,16 @@ export async function generateIncidentSitrep(
     const primaryTriageRows = incidentTriageRows.filter(isPrimaryTriage);
     const secondaryTriageRows = incidentTriageRows.filter(isSecondaryTriage);
     const facilityTriageRows = incidentTriageRows.filter(isFacilityTriage);
+    const triageAccuracyByStage: AnalyticsTriageAccuracyByStage = {
+      primary: buildAnalyticsTriageAccuracy(
+        primaryTriageRows,
+        countDistinctTriageVictims(primaryTriageRows),
+      ),
+      secondary: buildAnalyticsTriageAccuracy(
+        secondaryTriageRows,
+        countDistinctTriageVictims(secondaryTriageRows),
+      ),
+    };
     const latestFacilityTriageByCasualty = new Map<
       string,
       TriageAssessmentRow
@@ -7202,7 +7400,10 @@ export async function generateIncidentSitrep(
       (row) => row.safety_status === "no",
     ).length;
     const edCareVictims = encounterRows.filter(soughtEdCare).length;
-    const triageAccuracy = buildAnalyticsTriageAccuracy(incidentTriageRows);
+    const triageAccuracy = buildAnalyticsTriageAccuracy(
+      incidentTriageRows,
+      incidentCasualties.length,
+    );
     const sortedDateValues = (
       values: Array<string | null | undefined>,
     ) =>
@@ -7596,6 +7797,7 @@ export async function generateIncidentSitrep(
         (row) => row.treatment_strategy,
       ),
       triageAccuracy,
+      triageAccuracyByStage,
       cumulativeIntervalsMinutes: [15, 30, 60, 120, 180],
       lineGraphs,
     };

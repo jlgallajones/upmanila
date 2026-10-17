@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { createThemePalette } from "@/constants/theme";
 import * as Linking from "expo-linking";
 import { router } from "expo-router";
 import { useState } from "react";
@@ -26,7 +27,7 @@ import {
   logUiError,
 } from "../../utils/uiMessages";
 
-const COLORS = {
+const COLORS = createThemePalette({
   maroon: "#242424",
   darkMaroon: "#6B6B6B",
   lightMaroon: "#3A3A3A",
@@ -37,10 +38,10 @@ const COLORS = {
   primaryText: "#6B6B6B",
   secondaryText: "#3A3A3A",
   mutedText: "#6B6B6B",
-  warningBackground: "#FFF5F5",
+  warningBackground: "#FFF4F4",
   warningBorder: "#FFB7B7",
   warningText: "#D32626",
-};
+});
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
@@ -278,18 +279,31 @@ export default function LoginScreen() {
                 },
               ]}
             >
-              <Ionicons
-                name="mail-outline"
-                size={19}
-                color={COLORS.mutedText}
-              />
+              <View
+                style={[
+                  styles.inputIcon,
+                  {
+                    backgroundColor: colors.surface,
+                    borderRightColor: colors.border,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="mail-outline"
+                  size={19}
+                  color={colors.primary}
+                />
+              </View>
 
               <TextInput
                 value={email}
                 onChangeText={handleEmailChange}
-                style={[styles.input, { color: colors.text }]}
+                style={[
+                  styles.input,
+                  { color: colors.text, backgroundColor: colors.surface },
+                ]}
                 placeholder="responder@ndrrmc.gov.ph"
-                placeholderTextColor={COLORS.mutedText}
+                placeholderTextColor={colors.textSecondary}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -311,18 +325,31 @@ export default function LoginScreen() {
                 },
               ]}
             >
-              <Ionicons
-                name="lock-closed-outline"
-                size={19}
-                color={COLORS.mutedText}
-              />
+              <View
+                style={[
+                  styles.inputIcon,
+                  {
+                    backgroundColor: colors.surface,
+                    borderRightColor: colors.border,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={19}
+                  color={colors.primary}
+                />
+              </View>
 
               <TextInput
                 value={password}
                 onChangeText={handlePasswordChange}
-                style={[styles.input, { color: colors.text }]}
+                style={[
+                  styles.input,
+                  { color: colors.text, backgroundColor: colors.surface },
+                ]}
                 placeholder="Enter your password"
-                placeholderTextColor={COLORS.mutedText}
+                placeholderTextColor={colors.textSecondary}
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -332,6 +359,7 @@ export default function LoginScreen() {
               />
 
               <Pressable
+                style={styles.passwordToggle}
                 onPress={() => setShowPassword((current) => !current)}
                 hitSlop={10}
                 accessibilityRole="button"
@@ -346,7 +374,7 @@ export default function LoginScreen() {
                       : "eye-off-outline"
                   }
                   size={20}
-                  color={COLORS.mutedText}
+                  color={colors.primary}
                 />
               </Pressable>
             </View>
@@ -636,14 +664,31 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.fieldBorder,
     borderRadius: 13,
+    overflow: "hidden",
     backgroundColor: COLORS.fieldBackground,
+  },
+  inputIcon: {
+    width: 40,
+    alignSelf: "stretch",
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: -14,
+    marginRight: 10,
+    borderRightWidth: 1,
   },
   input: {
     flex: 1,
     minHeight: 51,
-    paddingHorizontal: 13,
+    paddingHorizontal: 0,
     color: COLORS.primaryText,
     fontSize: 14,
+  },
+  passwordToggle: {
+    width: 32,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 6,
   },
   loginErrorCard: {
     flexDirection: "row",
@@ -685,10 +730,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginRight: 8,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
   checkboxChecked: {
-    borderColor: COLORS.maroon,
+    borderColor: COLORS.text,
     backgroundColor: COLORS.maroon,
   },
   rememberText: {
@@ -696,7 +741,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   forgotText: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 13,
     fontWeight: "600",
   },
@@ -709,7 +754,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#F0D8D9",
     borderRadius: 11,
-    backgroundColor: "#FFF8F8",
+    backgroundColor: COLORS.warningBackground,
   },
   passwordResetCardError: {
     borderColor: COLORS.warningBorder,
@@ -718,7 +763,7 @@ const styles = StyleSheet.create({
   passwordResetText: {
     flex: 1,
     marginLeft: 8,
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 12,
     lineHeight: 17,
     fontWeight: "600",
@@ -735,7 +780,7 @@ const styles = StyleSheet.create({
     marginTop: 5,
     marginBottom: 20,
     backgroundColor: COLORS.maroon,
-    shadowColor: COLORS.maroon,
+    shadowColor: COLORS.text,
     shadowOffset: {
       width: 0,
       height: 6,
@@ -765,7 +810,7 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   legalLinkText: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 12,
     fontWeight: "800",
   },

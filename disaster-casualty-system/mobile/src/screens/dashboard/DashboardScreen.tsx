@@ -2,9 +2,13 @@ import { router } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useThemeMode } from "../../theme/theme-mode";
+
 export default function DashboardScreen() {
+  const { colors } = useThemeMode();
+
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <View style={styles.container}>
         <Text style={styles.title}>Responder Dashboard</Text>
 
@@ -13,10 +17,10 @@ export default function DashboardScreen() {
         </Text>
 
         <Pressable
-          style={styles.button}
+          style={[styles.button, { backgroundColor: colors.primary }]}
           onPress={() => router.push("/incidents")}
         >
-          <Text style={styles.buttonText}>View active incidents</Text>
+          <Text style={[styles.buttonText, { color: colors.surface }]}>View active incidents</Text>
         </Pressable>
       </View>
     </SafeAreaView>

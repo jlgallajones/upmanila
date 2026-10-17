@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { createThemePalette } from "@/constants/theme";
 import {
   router,
   useFocusEffect,
@@ -29,7 +30,7 @@ import {
 import { isAuthenticationTokenError } from "../api/client";
 import { getCurrentUser } from "../auth/session";
 
-const COLORS = {
+const COLORS = createThemePalette({
   maroon: "#242424",
   white: "#FFFFFF",
   background: "#F3F5F9",
@@ -37,7 +38,7 @@ const COLORS = {
   text: "#17213A",
   secondaryText: "#7C88A0",
   border: "#E4E8EF",
-  fieldBackground: "#F7F9FC",
+  fieldBackground: "#F3F5F9",
   fieldBorder: "#D9E0EA",
   paleOrange: "#FFF0DF",
   orange: "#D96D12",
@@ -45,11 +46,11 @@ const COLORS = {
   blue: "#0B6B9B",
   paleGreen: "#E8F4EA",
   green: "#2E7D4F",
-  paleRed: "#FCE6E7",
+  paleRed: "#FFF4F4",
   red: "#C92D32",
-  paleGray: "#EEF1F5",
+  paleGray: "#F3F5F9",
   gray: "#68758A",
-};
+});
 
 const SCREEN_PADDING = 16;
 
@@ -473,7 +474,7 @@ export default function VerificationReviewScreen() {
           <Ionicons
             name="document-text-outline"
             size={16}
-            color={COLORS.maroon}
+            color={COLORS.text}
           />
           <Text style={styles.viewButtonText}>View Record</Text>
         </Pressable>
@@ -542,7 +543,7 @@ export default function VerificationReviewScreen() {
   if (isLoading) {
     return (
       <View style={styles.centerState}>
-        <ActivityIndicator size="large" color={COLORS.maroon} />
+        <ActivityIndicator size="large" color={COLORS.text} />
         <Text style={styles.centerStateText}>
           Loading verification review queue...
         </Text>
@@ -554,7 +555,7 @@ export default function VerificationReviewScreen() {
     <View style={styles.screen}>
       <StatusBar
         barStyle="light-content"
-        backgroundColor={COLORS.maroon}
+        backgroundColor={COLORS.text}
       />
 
       <SafeAreaView
@@ -602,7 +603,7 @@ export default function VerificationReviewScreen() {
           <Ionicons
             name="warning-outline"
             size={18}
-            color={COLORS.maroon}
+            color={COLORS.text}
           />
           <View style={styles.incidentFilterTextGroup}>
             <Text style={styles.incidentFilterLabel}>
@@ -669,8 +670,8 @@ export default function VerificationReviewScreen() {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            colors={[COLORS.maroon]}
-            tintColor={COLORS.maroon}
+            colors={[COLORS.text]}
+            tintColor={COLORS.text}
           />
         }
         ListEmptyComponent={
@@ -855,8 +856,8 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#E7D4D5",
-    backgroundColor: COLORS.white,
+    borderColor: COLORS.warningBorder,
+    backgroundColor: COLORS.surface,
     gap: 10,
   },
   incidentFilterTextGroup: {
@@ -889,7 +890,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 14,
     borderRadius: 17,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
   filterChipActive: {
     backgroundColor: COLORS.maroon,
@@ -910,8 +911,8 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#F4C3C5",
-    backgroundColor: "#FFF1F1",
+    borderColor: COLORS.warningBorder,
+    backgroundColor: COLORS.warningBackground,
     gap: 8,
   },
   errorText: {
@@ -930,7 +931,7 @@ const styles = StyleSheet.create({
   reviewCard: {
     padding: 14,
     borderRadius: 16,
-    backgroundColor: COLORS.card,
+    backgroundColor: COLORS.surface,
     elevation: 2,
     shadowColor: "#758197",
     shadowOpacity: 0.09,
@@ -960,7 +961,7 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
   unitText: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 11,
     fontWeight: "900",
     marginTop: 12,
@@ -1002,13 +1003,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 11,
     borderWidth: 1,
-    borderColor: "#E7D4D5",
+    borderColor: COLORS.warningBorder,
     marginTop: 12,
-    backgroundColor: "#FFF8F8",
+    backgroundColor: COLORS.warningBackground,
     gap: 7,
   },
   viewButtonText: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 12,
     fontWeight: "800",
   },
@@ -1036,7 +1037,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.paleGreen,
   },
   reviewActionReject: {
-    borderColor: "#F4C3C5",
+    borderColor: COLORS.warningBorder,
     backgroundColor: COLORS.paleRed,
   },
   reviewActionText: {
@@ -1074,7 +1075,7 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
   modalHeader: {
     minHeight: 42,
@@ -1137,7 +1138,7 @@ const styles = StyleSheet.create({
     borderRadius: 13,
     borderWidth: 1,
     borderColor: COLORS.fieldBorder,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
   cancelButtonText: {
     color: COLORS.secondaryText,

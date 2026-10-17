@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { createThemePalette } from "@/constants/theme";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -46,7 +47,7 @@ import {
   type QueuedCasualtySubmission,
 } from "../../offline/casualtyQueue";
 
-const COLORS = {
+const COLORS = createThemePalette({
   maroon: "#242424",
   white: "#FFFFFF",
   background: "#F3F5F9",
@@ -54,7 +55,7 @@ const COLORS = {
   secondaryText: "#7C88A0",
   border: "#E4E8EF",
 
-  paleRed: "#FCE6E7",
+  paleRed: "#FFF4F4",
   red: "#C92D32",
 
   paleOrange: "#FFF0DF",
@@ -66,12 +67,12 @@ const COLORS = {
   paleGreen: "#E8F4EA",
   green: "#3C6D4A",
 
-  paleGray: "#EEF1F5",
+  paleGray: "#F3F5F9",
   gray: "#68758A",
 
   synced: "#28B463",
   pending: "#F0A000",
-};
+});
 
 const filters = [
   "All",
@@ -1174,7 +1175,7 @@ function IncidentRecordCard({
           <Ionicons
             name="warning-outline"
             size={20}
-            color={COLORS.maroon}
+            color={COLORS.text}
           />
         </View>
 
@@ -1279,7 +1280,7 @@ function IncidentRecordCard({
           <Ionicons
             name="information-circle-outline"
             size={16}
-            color={COLORS.maroon}
+            color={COLORS.text}
           />
           <Text style={styles.incidentActionText}>
             Incident Information
@@ -1296,7 +1297,7 @@ function IncidentRecordCard({
           <Ionicons
             name="people-outline"
             size={16}
-            color={COLORS.maroon}
+            color={COLORS.text}
           />
           <Text style={styles.incidentActionText}>
             Victim Summary
@@ -1313,7 +1314,7 @@ function IncidentRecordCard({
           <Ionicons
             name="file-tray-full-outline"
             size={16}
-            color={COLORS.maroon}
+            color={COLORS.text}
           />
           <Text style={styles.incidentActionText}>
             Manage Reports
@@ -1331,7 +1332,7 @@ function IncidentRecordCard({
           <Ionicons
             name="download-outline"
             size={16}
-            color={COLORS.maroon}
+            color={COLORS.text}
           />
           <Text style={styles.incidentActionText}>
             {isExporting ? "Exporting..." : "Export Report"}
@@ -1382,7 +1383,7 @@ function FilterCheckbox({
           accent &&
             selected && {
               borderColor: COLORS.white,
-              backgroundColor: COLORS.white,
+              backgroundColor: COLORS.surface,
             },
         ]}
       >
@@ -1390,7 +1391,7 @@ function FilterCheckbox({
           <Ionicons
             name="checkmark"
             size={13}
-            color={accent ? accent.color : COLORS.maroon}
+            color={accent ? accent.color : COLORS.text}
           />
         ) : null}
       </View>
@@ -2331,7 +2332,7 @@ function toggleHealthcareLocationFilter(
       <View style={styles.centerState}>
         <ActivityIndicator
           size="large"
-          color={COLORS.maroon}
+          color={COLORS.text}
         />
 
         <Text style={styles.centerStateText}>
@@ -2355,7 +2356,7 @@ function toggleHealthcareLocationFilter(
       <View style={styles.screen}>
         <StatusBar
           barStyle="light-content"
-          backgroundColor={COLORS.maroon}
+          backgroundColor={COLORS.text}
         />
 
         <SafeAreaView
@@ -2530,8 +2531,8 @@ function toggleHealthcareLocationFilter(
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={handleRefresh}
-              colors={[COLORS.maroon]}
-              tintColor={COLORS.maroon}
+              colors={[COLORS.text]}
+              tintColor={COLORS.text}
             />
           }
           ListEmptyComponent={
@@ -2575,7 +2576,7 @@ function toggleHealthcareLocationFilter(
                   <Ionicons
                     name="chevron-back"
                     size={19}
-                    color={COLORS.maroon}
+                    color={COLORS.text}
                   />
                 </Pressable>
 
@@ -2593,7 +2594,7 @@ function toggleHealthcareLocationFilter(
                   <Ionicons
                     name="chevron-forward"
                     size={19}
-                    color={COLORS.maroon}
+                    color={COLORS.text}
                   />
                 </Pressable>
               </View>
@@ -2746,7 +2747,7 @@ function toggleHealthcareLocationFilter(
     <View style={styles.screen}>
       <StatusBar
         barStyle="light-content"
-        backgroundColor={COLORS.maroon}
+        backgroundColor={COLORS.text}
       />
 
       <SafeAreaView
@@ -2818,7 +2819,7 @@ function toggleHealthcareLocationFilter(
             <Ionicons
               name="warning-outline"
               size={15}
-              color={COLORS.maroon}
+              color={COLORS.text}
             />
             <Text
               style={styles.recordFilterSelectText}
@@ -2843,7 +2844,7 @@ function toggleHealthcareLocationFilter(
             <Ionicons
               name="car-outline"
               size={15}
-              color={COLORS.maroon}
+              color={COLORS.text}
             />
             <Text
               style={styles.recordFilterSelectText}
@@ -2890,7 +2891,7 @@ function toggleHealthcareLocationFilter(
                     : "chevron-down-outline"
                 }
                 size={20}
-                color={COLORS.maroon}
+                color={COLORS.text}
               />
             </Pressable>
 
@@ -3164,7 +3165,7 @@ function toggleHealthcareLocationFilter(
                       <Ionicons
                         name="radio-button-on-outline"
                         size={16}
-                        color={COLORS.maroon}
+                        color={COLORS.text}
                       />
                     </View>
 
@@ -3323,8 +3324,8 @@ function toggleHealthcareLocationFilter(
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            colors={[COLORS.maroon]}
-            tintColor={COLORS.maroon}
+            colors={[COLORS.text]}
+            tintColor={COLORS.text}
           />
         }
         ListEmptyComponent={
@@ -3487,7 +3488,7 @@ const styles = StyleSheet.create({
     maxWidth: 390,
     borderRadius: 24,
     padding: 18,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
   datePickerHeader: {
     flexDirection: "row",
@@ -3607,7 +3608,7 @@ const styles = StyleSheet.create({
   },
 
   filterSection: {
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
@@ -3634,7 +3635,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: 12,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: COLORS.fieldBackground,
     paddingHorizontal: 10,
     gap: 6,
   },
@@ -3721,13 +3722,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: COLORS.red,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
     marginRight: 7,
   },
 
   checkboxBoxSelected: {
     borderColor: COLORS.gray,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
 
   checkboxLabel: {
@@ -3747,7 +3748,7 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F4F5F8",
+    backgroundColor: COLORS.fieldBackground,
   },
 
   filterChipActive: {
@@ -3772,8 +3773,8 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#F4C3C5",
-    backgroundColor: "#FFF1F1",
+    borderColor: COLORS.warningBorder,
+    backgroundColor: COLORS.warningBackground,
   },
 
   errorContent: {
@@ -3800,7 +3801,7 @@ const styles = StyleSheet.create({
   },
 
   retryButtonText: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 11,
     fontWeight: "800",
   },
@@ -3813,7 +3814,7 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     borderWidth: 1,
     borderColor: "#F2D7A6",
-    backgroundColor: "#FFF9EE",
+    backgroundColor: COLORS.warningBackground,
   },
 
   offlineQueueHeader: {
@@ -3868,7 +3869,7 @@ const styles = StyleSheet.create({
   },
 
   offlineQueueStatusMessage: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontWeight: "800",
   },
 
@@ -3883,7 +3884,7 @@ const styles = StyleSheet.create({
     maxHeight: "82%",
     borderRadius: 24,
     padding: 18,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
 
   incidentAssignTitle: {
@@ -3914,7 +3915,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     padding: 11,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: COLORS.fieldBackground,
   },
 
   incidentAssignOptionIcon: {
@@ -3932,7 +3933,7 @@ const styles = StyleSheet.create({
   },
 
   recordFilterOptionActive: {
-    borderColor: COLORS.maroon,
+    borderColor: COLORS.text,
     backgroundColor: COLORS.paleRed,
   },
 
@@ -3989,7 +3990,7 @@ const styles = StyleSheet.create({
     paddingTop: 15,
     paddingBottom: 13,
     borderRadius: 17,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
     elevation: 3,
     shadowColor: "#728099",
     shadowOpacity: 0.1,
@@ -4003,7 +4004,7 @@ const styles = StyleSheet.create({
   incidentRecordCard: {
     padding: 15,
     borderRadius: 17,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
     elevation: 3,
@@ -4099,7 +4100,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: COLORS.border,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: COLORS.fieldBackground,
     padding: 10,
   },
 
@@ -4153,17 +4154,17 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: COLORS.border,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: COLORS.fieldBackground,
     paddingHorizontal: 10,
   },
 
   incidentDangerAction: {
-    borderColor: "#F4C3C5",
+    borderColor: COLORS.warningBorder,
     backgroundColor: COLORS.paleRed,
   },
 
   incidentActionText: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 11,
     fontWeight: "900",
     textAlign: "center",
@@ -4286,7 +4287,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: COLORS.maroon,
     elevation: 10,
-    shadowColor: COLORS.maroon,
+    shadowColor: COLORS.text,
     shadowOpacity: 0.34,
     shadowRadius: 11,
     shadowOffset: {

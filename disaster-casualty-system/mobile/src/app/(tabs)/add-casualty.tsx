@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { createThemePalette } from "@/constants/theme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   router,
@@ -84,18 +85,18 @@ import {
   saveLocalFormDraft,
 } from "../../offline/formDrafts";
 
-const COLORS = {
+const COLORS = createThemePalette({
   maroon: "#242424",
   darkMaroon: "#6B6B6B",
   white: "#FFFFFF",
   background: "#FFFFFF",
-  fieldBackground: "#F7F9FC",
+  fieldBackground: "#F3F5F9",
   fieldBorder: "#D9E0EA",
   text: "#17213A",
   secondaryText: "#7D889E",
   muted: "#A5ADBB",
   green: "#2E7D4F",
-};
+});
 
 const AMP_RESPONDER_FULL_LABEL =
   "Advanced Medical Post Responder";
@@ -4764,7 +4765,7 @@ function CurrentTimeField({
         <Ionicons
           name={icon}
           size={16}
-          color={COLORS.maroon}
+          color={COLORS.text}
         />
         <Text
           style={[
@@ -5007,7 +5008,7 @@ function ChoiceSheet({
                   <Ionicons
                     name="checkmark-circle"
                     size={20}
-                    color={COLORS.maroon}
+                    color={COLORS.text}
                   />
                 ) : null}
               </Pressable>
@@ -5177,7 +5178,7 @@ function DatePickerSheet({
               <Ionicons
                 name="chevron-back"
                 size={20}
-                color={COLORS.maroon}
+                color={COLORS.text}
               />
             </Pressable>
 
@@ -5218,7 +5219,7 @@ function DatePickerSheet({
               <Ionicons
                 name="chevron-forward"
                 size={20}
-                color={COLORS.maroon}
+                color={COLORS.text}
               />
             </Pressable>
           </View>
@@ -11950,7 +11951,7 @@ function confirmExitAddCasualty() {
                 <Ionicons
                   name="alert-circle-outline"
                   size={18}
-                  color={COLORS.maroon}
+                  color={COLORS.text}
                 />
                 <Text style={styles.inlineWarningText}>
                   {incidentError}
@@ -11992,7 +11993,7 @@ function confirmExitAddCasualty() {
             <Ionicons
               name="alert-circle-outline"
               size={18}
-              color={COLORS.maroon}
+              color={COLORS.text}
             />
             <Text style={styles.inlineWarningText}>
               {responderSafetyResponseError}
@@ -12036,7 +12037,7 @@ function confirmExitAddCasualty() {
                         ? COLORS.white
                         : option === "Yes"
                           ? COLORS.green
-                          : COLORS.maroon
+                          : COLORS.text
                     }
                   />
                   <Text
@@ -12674,7 +12675,7 @@ function confirmExitAddCasualty() {
     <Ionicons
       name="alert-circle-outline"
       size={18}
-      color={COLORS.maroon}
+      color={COLORS.text}
     />
     <Text style={styles.inlineWarningText}>
       Victim code {form.victimCode.trim()} already exists
@@ -12805,7 +12806,7 @@ function confirmExitAddCasualty() {
             <Ionicons
               name="person-outline"
               size={18}
-              color={COLORS.maroon}
+              color={COLORS.text}
             />
             <Text style={styles.inlineWarningText}>
               Personal details are hidden because this patient is marked unidentified.
@@ -12825,7 +12826,7 @@ function confirmExitAddCasualty() {
               <Ionicons
                 name="warning-outline"
                 size={18}
-                color={COLORS.maroon}
+                color={COLORS.text}
               />
             </View>
             <View style={styles.selectedIncidentTextGroup}>
@@ -12993,7 +12994,7 @@ function confirmExitAddCasualty() {
             <Ionicons
               name="cloud-offline-outline"
               size={18}
-              color={COLORS.maroon}
+              color={COLORS.text}
             />
             <Text style={styles.inlineWarningText}>
               You are capturing as a guest. This record will stay on this device until you log in and assign it to an active incident.
@@ -13006,7 +13007,7 @@ function confirmExitAddCasualty() {
             <Ionicons
               name="alert-circle-outline"
               size={18}
-              color={COLORS.maroon}
+              color={COLORS.text}
             />
             <Text style={styles.inlineWarningText}>
               {incidentError}
@@ -13042,7 +13043,7 @@ function confirmExitAddCasualty() {
                 <Ionicons
                   name="add-circle-outline"
                   size={20}
-                  color={COLORS.maroon}
+                  color={COLORS.text}
                 />
                 <Text style={styles.quickCreateTitle}>
                   Quick create incident
@@ -13140,7 +13141,7 @@ function confirmExitAddCasualty() {
             <Ionicons
               name="alert-circle-outline"
               size={18}
-              color={COLORS.maroon}
+              color={COLORS.text}
             />
             <Text style={styles.inlineWarningText}>
               {evacuationCenterError}
@@ -13167,7 +13168,7 @@ function confirmExitAddCasualty() {
                 <Ionicons
                   name="business-outline"
                   size={20}
-                  color={COLORS.maroon}
+                  color={COLORS.text}
                 />
                 <Text style={styles.quickCreateTitle}>
                   Quick create evacuation center
@@ -13286,13 +13287,13 @@ function confirmExitAddCasualty() {
           {isCapturingLocation ? (
             <ActivityIndicator
               size="small"
-              color={COLORS.maroon}
+              color={COLORS.text}
             />
           ) : (
             <Ionicons
               name="locate-outline"
               size={19}
-              color={COLORS.maroon}
+              color={COLORS.text}
             />
           )}
           <Text style={styles.locationButtonText}>
@@ -13739,7 +13740,7 @@ form.triageAssistanceMode === "assisted" ? (
             <Ionicons
               name="alert-circle-outline"
               size={18}
-              color={COLORS.maroon}
+              color={COLORS.text}
             />
 
             <Text style={styles.inlineWarningText}>
@@ -13916,7 +13917,7 @@ form.triageAssistanceMode === "assisted" ? (
                   <Ionicons
                     name="alert-circle-outline"
                     size={18}
-                    color={COLORS.maroon}
+                    color={COLORS.text}
                   />
 
                   <Text style={styles.inlineWarningText}>
@@ -14152,7 +14153,7 @@ form.triageAssistanceMode === "assisted" ? (
             <Ionicons
               name="alert-circle-outline"
               size={18}
-              color={COLORS.maroon}
+              color={COLORS.text}
             />
             <Text style={styles.inlineWarningText}>
               {healthcareFacilityError}
@@ -14179,7 +14180,7 @@ form.triageAssistanceMode === "assisted" ? (
                 <Ionicons
                   name="medkit-outline"
                   size={20}
-                  color={COLORS.maroon}
+                  color={COLORS.text}
                 />
                 <Text style={styles.quickCreateTitle}>
                   Quick create healthcare facility
@@ -14310,7 +14311,7 @@ form.triageAssistanceMode === "assisted" ? (
               size={22}
               color={
                 form.victimCodeMarked === "Yes"
-                  ? COLORS.maroon
+                  ? COLORS.text
                   : COLORS.secondaryText
               }
             />
@@ -14808,7 +14809,7 @@ form.triageAssistanceMode === "assisted" ? (
           <Ionicons
             name="information-circle-outline"
             size={22}
-            color={COLORS.maroon}
+            color={COLORS.text}
           />
 
           <Text style={styles.reviewText}>
@@ -14836,7 +14837,7 @@ form.triageAssistanceMode === "assisted" ? (
           <Ionicons
             name="camera-outline"
             size={25}
-            color={COLORS.maroon}
+            color={COLORS.text}
           />
         </View>
 
@@ -14882,7 +14883,7 @@ form.triageAssistanceMode === "assisted" ? (
           <Ionicons
             name="document-attach-outline"
             size={25}
-            color={COLORS.maroon}
+            color={COLORS.text}
           />
         </View>
 
@@ -14968,7 +14969,7 @@ form.triageAssistanceMode === "assisted" ? (
       <View style={styles.centerState}>
         <ActivityIndicator
           size="large"
-          color={COLORS.maroon}
+          color={COLORS.text}
         />
 
         <Text style={styles.centerStateText}>
@@ -14987,7 +14988,7 @@ form.triageAssistanceMode === "assisted" ? (
         <Ionicons
           name="alert-circle-outline"
           size={42}
-          color={COLORS.maroon}
+          color={COLORS.text}
         />
 
         <Text style={styles.centerStateTitle}>
@@ -15093,7 +15094,7 @@ form.triageAssistanceMode === "assisted" ? (
               <Ionicons
                 name="shield-checkmark-outline"
                 size={18}
-                color={COLORS.maroon}
+                color={COLORS.text}
               />
             </View>
             <View style={styles.responderFunctionTextGroup}>
@@ -15180,7 +15181,7 @@ form.triageAssistanceMode === "assisted" ? (
               <Ionicons
                 name="lock-closed-outline"
                 size={18}
-                color={COLORS.maroon}
+                color={COLORS.text}
               />
               <Text style={styles.inlineWarningText}>
                 Filled responder fields are locked while editing. Use the Transport section for updates.
@@ -15193,7 +15194,7 @@ form.triageAssistanceMode === "assisted" ? (
               <Ionicons
                 name="lock-closed-outline"
                 size={18}
-                color={COLORS.maroon}
+                color={COLORS.text}
               />
               <Text style={styles.inlineWarningText}>
                 This section is locked after submission. Use Management and Disposition for editable HCFD updates.
@@ -15228,7 +15229,7 @@ form.triageAssistanceMode === "assisted" ? (
               <Ionicons
                 name="alert-circle-outline"
                 size={18}
-                color={COLORS.maroon}
+                color={COLORS.text}
               />
 
               <Text style={styles.inlineWarningText}>
@@ -15522,7 +15523,7 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
   assessmentSheet: {
     maxHeight: "82%",
@@ -15531,7 +15532,7 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
   sheetHandle: {
     width: 42,
@@ -15582,7 +15583,7 @@ const styles = StyleSheet.create({
     paddingTop: 26,
     paddingBottom: 20,
     borderRadius: 18,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
   feedbackIcon: {
     width: 56,
@@ -15646,7 +15647,7 @@ exitCancelButton: {
   borderRadius: 12,
   borderWidth: 1,
   borderColor: COLORS.fieldBorder,
-  backgroundColor: COLORS.white,
+  backgroundColor: COLORS.surface,
 },
 
 exitCancelButtonText: {
@@ -15723,8 +15724,8 @@ exitButtonText: {
     backgroundColor: COLORS.fieldBackground,
   },
   choiceOptionSelected: {
-    borderColor: COLORS.maroon,
-    backgroundColor: "#FFF4F4",
+    borderColor: COLORS.text,
+    backgroundColor: COLORS.warningBackground,
   },
   choiceOptionText: {
     flex: 1,
@@ -15733,7 +15734,7 @@ exitButtonText: {
     fontWeight: "700",
   },
   choiceOptionTextSelected: {
-    color: COLORS.maroon,
+    color: COLORS.text,
   },
 
   dateSheet: {
@@ -15742,7 +15743,7 @@ exitButtonText: {
     paddingBottom: 24,
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
   dateHeader: {
     minHeight: 44,
@@ -15757,7 +15758,7 @@ exitButtonText: {
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FFF4F4",
+    backgroundColor: COLORS.warningBackground,
   },
   dateTitle: {
     color: COLORS.text,
@@ -15806,7 +15807,7 @@ exitButtonText: {
     borderRadius: 10,
     borderWidth: 1,
     borderColor: COLORS.fieldBorder,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
     color: COLORS.text,
     fontSize: 14,
     fontWeight: "800",
@@ -15886,8 +15887,8 @@ exitButtonText: {
     backgroundColor: COLORS.fieldBackground,
   },
   yearCellSelected: {
-    borderColor: COLORS.maroon,
-    backgroundColor: "#FFF4F4",
+    borderColor: COLORS.text,
+    backgroundColor: COLORS.warningBackground,
   },
   yearText: {
     color: COLORS.text,
@@ -15895,7 +15896,7 @@ exitButtonText: {
     fontWeight: "800",
   },
   yearTextSelected: {
-    color: COLORS.maroon,
+    color: COLORS.text,
   },
   todayButton: {
     minHeight: 45,
@@ -15961,7 +15962,7 @@ exitButtonText: {
     backgroundColor: "rgba(255,255,255,0.24)",
   },
   progressLineActive: {
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.primary,
   },
   progressLabel: {
     color: "rgba(255,255,255,0.42)",
@@ -15990,8 +15991,8 @@ exitButtonText: {
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#E8D4D6",
-    backgroundColor: COLORS.white,
+    borderBottomColor: COLORS.warningBorder,
+    backgroundColor: COLORS.surface,
     gap: 10,
   },
   responderFunctionIcon: {
@@ -16000,7 +16001,7 @@ exitButtonText: {
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FFF0F0",
+    backgroundColor: COLORS.warningBackground,
   },
   responderFunctionTextGroup: {
     flex: 1,
@@ -16012,7 +16013,7 @@ exitButtonText: {
     fontWeight: "800",
   },
   responderFunctionValue: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 15,
     fontWeight: "900",
     marginTop: 2,
@@ -16022,8 +16023,8 @@ exitButtonText: {
   alignItems: "center",
   justifyContent: "flex-start",
   borderBottomWidth: 1,
-  borderBottomColor: "#E8D4D6",
-  backgroundColor: "#FFF8F8",
+  borderBottomColor: COLORS.fieldBorder,
+  backgroundColor: COLORS.surface,
   paddingHorizontal: 14,
   paddingVertical: 9,
   gap: 12,
@@ -16040,7 +16041,7 @@ victimUserCodeGroup: {
 },
 
 victimUserCodeValue: {
-  color: COLORS.maroon,
+  color: COLORS.text,
   fontSize: 16,
   fontWeight: "900",
   marginTop: 2,
@@ -16052,7 +16053,7 @@ victimUserCodeValue: {
     letterSpacing: 0.4,
   },
   victimNumberStickyValue: {
-  color: COLORS.maroon,
+  color: COLORS.text,
   fontSize: 16,
   fontWeight: "900",
   marginTop: 2,
@@ -16082,7 +16083,7 @@ victimUserCodeValue: {
   },
   triageStageOptionSelected: {
     backgroundColor: COLORS.maroon,
-    borderColor: COLORS.maroon,
+    borderColor: COLORS.text,
   },
   triageStageOptionText: {
     color: COLORS.secondaryText,
@@ -16103,12 +16104,12 @@ victimUserCodeValue: {
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#E8D4D6",
+    borderColor: COLORS.warningBorder,
     borderRadius: 13,
     paddingHorizontal: 12,
     paddingVertical: 10,
     marginBottom: 17,
-    backgroundColor: "#FFF8F8",
+    backgroundColor: COLORS.warningBackground,
     gap: 10,
   },
   selectedIncidentIcon: {
@@ -16117,14 +16118,14 @@ victimUserCodeValue: {
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
   selectedIncidentTextGroup: {
     flex: 1,
     minWidth: 0,
   },
   selectedIncidentLabel: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 0.4,
@@ -16149,7 +16150,7 @@ victimUserCodeValue: {
     backgroundColor: COLORS.fieldBorder,
   },
   sectionLabelText: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 12,
     fontWeight: "800",
     letterSpacing: 0.4,
@@ -16174,7 +16175,7 @@ victimUserCodeValue: {
   },
   inputDisabled: {
     color: COLORS.secondaryText,
-    backgroundColor: "#EEF2F7",
+    backgroundColor: COLORS.fieldBackground,
   },
   multilineInput: {
     minHeight: 105,
@@ -16235,12 +16236,12 @@ victimUserCodeValue: {
     justifyContent: "center",
     borderRadius: 13,
     borderWidth: 1,
-    borderColor: COLORS.maroon,
-    backgroundColor: "#FFF8F8",
+    borderColor: COLORS.fieldBorder,
+    backgroundColor: COLORS.surface,
     gap: 9,
   },
   locationButtonText: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 13,
     fontWeight: "700",
   },
@@ -16253,7 +16254,7 @@ victimUserCodeValue: {
     paddingTop: 12,
     paddingBottom: 4,
     marginBottom: 17,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
   appendixHeader: {
     flexDirection: "row",
@@ -16262,7 +16263,7 @@ victimUserCodeValue: {
     gap: 7,
   },
   appendixTitle: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 13,
     fontWeight: "900",
   },
@@ -16380,8 +16381,8 @@ triageModeOptionTextSelected: {
     opacity: 0.4,
   },
   appendixOptionSelected: {
-    borderColor: COLORS.maroon,
-    backgroundColor: "#FFF4F4",
+    borderColor: COLORS.text,
+    backgroundColor: COLORS.warningBackground,
   },
   finalTriageOptionSelected: {
     borderWidth: 2,
@@ -16407,7 +16408,7 @@ triageModeOptionTextSelected: {
   },
   finalTriageWhite: {
     borderColor: COLORS.fieldBorder,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
   appendixNumericInput: {
     minHeight: 42,
@@ -16428,7 +16429,7 @@ triageModeOptionTextSelected: {
     textAlign: "center",
   },
   appendixOptionTextSelected: {
-    color: COLORS.maroon,
+    color: COLORS.text,
   },
   gcsTotalCard: {
     marginTop: 8,
@@ -16436,11 +16437,11 @@ triageModeOptionTextSelected: {
     paddingVertical: 9,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: COLORS.maroon,
-    backgroundColor: "#FFF8F8",
+    borderColor: COLORS.text,
+    backgroundColor: COLORS.warningBackground,
   },
   gcsTotalText: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 12,
     fontWeight: "900",
   },
@@ -16481,12 +16482,12 @@ triageModeOptionTextSelected: {
     borderWidth: 1,
     borderColor: COLORS.fieldBorder,
     borderRadius: 12,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
     gap: 7,
   },
 
   safetyOptionSelected: {
-    borderColor: COLORS.maroon,
+    borderColor: COLORS.text,
     backgroundColor: COLORS.maroon,
   },
 
@@ -16511,8 +16512,8 @@ triageModeOptionTextSelected: {
     paddingHorizontal: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#F1C8CA",
-    backgroundColor: "#FFF6F6",
+    borderColor: COLORS.warningBorder,
+    backgroundColor: COLORS.warningBackground,
     marginTop: -5,
     marginBottom: 17,
     gap: 8,
@@ -16530,8 +16531,8 @@ triageModeOptionTextSelected: {
     paddingHorizontal: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#BFE9CD",
-    backgroundColor: "#EFFAF3",
+    borderColor: COLORS.greenBackground,
+    backgroundColor: COLORS.greenBackground,
     marginTop: -5,
     marginBottom: 17,
     gap: 8,
@@ -16556,8 +16557,8 @@ triageModeOptionTextSelected: {
     gap: 10,
   },
   confirmationCheckboxSelected: {
-    borderColor: "#D5A0A3",
-    backgroundColor: "#FFF5F5",
+    borderColor: COLORS.warningBorder,
+    backgroundColor: COLORS.warningBackground,
   },
   confirmationCheckboxText: {
     flex: 1,
@@ -16572,12 +16573,12 @@ triageModeOptionTextSelected: {
 
   quickCreateCard: {
     borderWidth: 1,
-    borderColor: "#E8D4D6",
+    borderColor: COLORS.warningBorder,
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 12,
     marginBottom: 17,
-    backgroundColor: "#FFF9F9",
+    backgroundColor: COLORS.warningBackground,
   },
   quickCreateHeader: {
     minHeight: 32,
@@ -16594,7 +16595,7 @@ triageModeOptionTextSelected: {
   },
   quickCreateTitle: {
     flex: 1,
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 13,
     fontWeight: "900",
   },
@@ -16632,7 +16633,7 @@ triageModeOptionTextSelected: {
     borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F6E9EB",
+    backgroundColor: COLORS.warningBackground,
     marginRight: 13,
   },
   uploadTextWrapper: {
@@ -16656,9 +16657,9 @@ triageModeOptionTextSelected: {
     marginTop: 18,
     borderRadius: 13,
     padding: 14,
-    backgroundColor: "#FFF6F6",
+    backgroundColor: COLORS.warningBackground,
     borderWidth: 1,
-    borderColor: "#F1C8CA",
+    borderColor: COLORS.warningBorder,
   },
   reviewText: {
     flex: 1,
@@ -16669,7 +16670,7 @@ triageModeOptionTextSelected: {
   },
   conditionalChildGroup: {
     borderLeftWidth: 3,
-    borderLeftColor: "#E8D4D6",
+    borderLeftColor: COLORS.warningBorder,
     paddingLeft: 12,
     marginLeft: 6,
     marginBottom: 14,
@@ -16683,15 +16684,15 @@ triageModeOptionTextSelected: {
   },
   releaseTextCard: {
     borderWidth: 1,
-    borderColor: "#E8D4D6",
+    borderColor: COLORS.warningBorder,
     borderRadius: 14,
     paddingHorizontal: 13,
     paddingVertical: 12,
-    backgroundColor: "#FFF9F9",
+    backgroundColor: COLORS.warningBackground,
     marginBottom: 14,
   },
   releaseTextTitle: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 12,
     fontWeight: "900",
     marginBottom: 6,
@@ -16704,7 +16705,7 @@ triageModeOptionTextSelected: {
   },
 
   footerSafeArea: {
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
     borderTopWidth: 1,
     borderTopColor: "#E8EBF0",
     paddingBottom: FLOATING_TAB_BAR_CLEARANCE,
@@ -16754,7 +16755,7 @@ triageModeOptionTextSelected: {
     justifyContent: "center",
     borderWidth: 1,
     borderColor: COLORS.fieldBorder,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
   secondaryButtonText: {
     color: COLORS.text,

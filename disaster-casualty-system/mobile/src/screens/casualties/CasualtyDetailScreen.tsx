@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { createThemePalette } from "@/constants/theme";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -39,7 +40,7 @@ import {
   type ResponderAssignment,
 } from "../../auth/responderAssignment";
 
-const COLORS = {
+const COLORS = createThemePalette({
   maroon: "#242424",
   white: "#FFFFFF",
   background: "#F3F5F9",
@@ -59,10 +60,10 @@ const COLORS = {
   blueBackground: "#E4F3FD",
 
   red: "#C92D32",
-  redBackground: "#FCE6E7",
+  redBackground: "#FFF4F4",
 
   grayBackground: "#F2F5F9",
-};
+});
 
 function canEditRecord(
   role: string | null,
@@ -240,7 +241,7 @@ function AttachmentCard({ item }: { item: Attachment }) {
           <Ionicons
             name="document-attach-outline"
             size={22}
-            color={COLORS.maroon}
+            color={COLORS.text}
           />
         </View>
       )}
@@ -579,7 +580,7 @@ function getTriagePalette(category: string | null | undefined) {
       return {
         color: COLORS.red,
         backgroundColor: COLORS.redBackground,
-        borderColor: "#F2B6B8",
+        borderColor: COLORS.warningBorder,
       };
     case "delayed":
     case "yellow":
@@ -594,7 +595,7 @@ function getTriagePalette(category: string | null | undefined) {
       return {
         color: COLORS.green,
         backgroundColor: COLORS.greenBackground,
-        borderColor: "#A9E7C2",
+        borderColor: COLORS.greenBackground,
       };
     case "expectant":
     case "black":
@@ -727,7 +728,7 @@ function getStatusPalette(status: string) {
       return {
         color: COLORS.red,
         backgroundColor: COLORS.redBackground,
-        borderColor: "#F2B6B8",
+        borderColor: COLORS.warningBorder,
       };
     case "safe":
     case "rescued":
@@ -735,7 +736,7 @@ function getStatusPalette(status: string) {
       return {
         color: COLORS.green,
         backgroundColor: COLORS.greenBackground,
-        borderColor: "#A9E7C2",
+        borderColor: COLORS.greenBackground,
       };
     default:
       return {
@@ -990,7 +991,7 @@ export default function CasualtyDetailScreen() {
       <View style={styles.centerState}>
         <ActivityIndicator
           size="large"
-          color={COLORS.maroon}
+          color={COLORS.text}
         />
 
         <Text style={styles.centerStateText}>
@@ -1006,7 +1007,7 @@ export default function CasualtyDetailScreen() {
         <Ionicons
           name="alert-circle-outline"
           size={42}
-          color={COLORS.maroon}
+          color={COLORS.text}
         />
 
         <Text style={styles.centerStateTitle}>
@@ -1081,7 +1082,7 @@ export default function CasualtyDetailScreen() {
     <View style={styles.screen}>
       <StatusBar
         barStyle="light-content"
-        backgroundColor={COLORS.maroon}
+        backgroundColor={COLORS.text}
       />
 
       <SafeAreaView
@@ -1199,7 +1200,7 @@ export default function CasualtyDetailScreen() {
               <Ionicons
                 name="create-outline"
                 size={20}
-                color={COLORS.maroon}
+                color={COLORS.text}
               />
             </Pressable>
           ) : null}
@@ -1292,7 +1293,7 @@ export default function CasualtyDetailScreen() {
                       casualty.latestTriage.calculated_category ??
                         casualty.latestTriage.triage_category,
                     )}
-                    valueColor={COLORS.maroon}
+                    valueColor={COLORS.text}
                   />
 
                   <DetailRow
@@ -1485,7 +1486,7 @@ export default function CasualtyDetailScreen() {
                       casualty.latestTriage.calculated_category ??
                         casualty.latestTriage.triage_category,
                     )}
-                    valueColor={COLORS.maroon}
+                    valueColor={COLORS.text}
                   />
 
                   <DetailRow
@@ -1602,7 +1603,7 @@ export default function CasualtyDetailScreen() {
                           "Receiving facility",
                         ),
                     )}
-                    valueColor={COLORS.maroon}
+                    valueColor={COLORS.text}
                   />
 
                   <DetailRow
@@ -1636,7 +1637,7 @@ export default function CasualtyDetailScreen() {
               <DetailRow
                 label="Receiving Facility"
                 value={casualty.receivingFacility}
-                valueColor={COLORS.maroon}
+                valueColor={COLORS.text}
               />
 
               <DetailRow
@@ -1703,7 +1704,7 @@ export default function CasualtyDetailScreen() {
                       casualty.latestTriage.calculated_category ??
                         casualty.latestTriage.triage_category,
                     )}
-                    valueColor={COLORS.maroon}
+                    valueColor={COLORS.text}
                   />
 
                   <DetailRow
@@ -1766,7 +1767,7 @@ export default function CasualtyDetailScreen() {
                     <Ionicons
                       name="create-outline"
                       size={15}
-                      color={COLORS.maroon}
+                      color={COLORS.text}
                     />
                     <Text style={styles.sectionEditButtonText}>
                       Edit
@@ -1871,7 +1872,7 @@ export default function CasualtyDetailScreen() {
                     <Ionicons
                       name="create-outline"
                       size={15}
-                      color={COLORS.maroon}
+                      color={COLORS.text}
                     />
                     <Text style={styles.sectionEditButtonText}>
                       Edit
@@ -1965,7 +1966,7 @@ export default function CasualtyDetailScreen() {
           <DetailRow
             label="GPS Location"
             value={casualty.gpsLocation}
-            valueColor={COLORS.maroon}
+            valueColor={COLORS.text}
           />
 
           <DetailRow
@@ -2041,7 +2042,7 @@ export default function CasualtyDetailScreen() {
                       casualty.latestTriage.calculated_category ??
                         casualty.latestTriage.triage_category,
                 )}
-                valueColor={COLORS.maroon}
+                valueColor={COLORS.text}
               />
 
               <DetailRow
@@ -2104,7 +2105,7 @@ export default function CasualtyDetailScreen() {
                 <Ionicons
                   name="create-outline"
                   size={15}
-                  color={COLORS.maroon}
+                  color={COLORS.text}
                 />
                 <Text style={styles.sectionEditButtonText}>
                   Edit
@@ -2156,7 +2157,7 @@ export default function CasualtyDetailScreen() {
                   casualty.latestTransport.receiving_facility
                     ?.facility_name,
                 )}
-                valueColor={COLORS.maroon}
+                valueColor={COLORS.text}
               />
             </>
           ) : (
@@ -2330,7 +2331,7 @@ const styles = StyleSheet.create({
     height: 7,
     borderRadius: 4,
     marginRight: 6,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
 
   headerStatusText: {
@@ -2359,7 +2360,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 20,
     borderRadius: 20,
-    backgroundColor: COLORS.card,
+    backgroundColor: COLORS.surface,
     elevation: 12,
     shadowColor: "#71809A",
     shadowOpacity: 0.13,
@@ -2442,7 +2443,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: COLORS.border,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
 
   scrollView: {
@@ -2461,7 +2462,7 @@ const styles = StyleSheet.create({
     paddingTop: 19,
     paddingBottom: 13,
     borderRadius: 18,
-    backgroundColor: COLORS.card,
+    backgroundColor: COLORS.surface,
     elevation: 2,
     shadowColor: "#718099",
     shadowOpacity: 0.08,
@@ -2482,7 +2483,7 @@ const styles = StyleSheet.create({
   },
 
   sectionTitle: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.3,
@@ -2495,13 +2496,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 9,
     borderWidth: 1,
-    borderColor: "#E8D4D6",
-    backgroundColor: "#FFF6F6",
+    borderColor: COLORS.warningBorder,
+    backgroundColor: COLORS.warningBackground,
     gap: 5,
   },
 
   sectionEditButtonText: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 11,
     fontWeight: "900",
   },
@@ -2584,12 +2585,12 @@ const styles = StyleSheet.create({
   },
 
   reviewActionApprove: {
-    borderColor: "#A9E7C2",
+    borderColor: COLORS.greenBackground,
     backgroundColor: COLORS.greenBackground,
   },
 
   reviewActionReject: {
-    borderColor: "#F2B6B8",
+    borderColor: COLORS.warningBorder,
     backgroundColor: COLORS.redBackground,
   },
 
@@ -2768,7 +2769,7 @@ const styles = StyleSheet.create({
     paddingBottom: 22,
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
 
   reviewModalHeader: {
@@ -2835,7 +2836,7 @@ const styles = StyleSheet.create({
     borderRadius: 13,
     borderWidth: 1,
     borderColor: COLORS.border,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
 
   reviewCancelText: {

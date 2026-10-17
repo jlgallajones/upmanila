@@ -1,4 +1,5 @@
 import { router } from "expo-router";
+import { createThemePalette } from "@/constants/theme";
 import { Image as ExpoImage } from "expo-image";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -35,14 +36,14 @@ const BALL_INSET = 10;
 const BALL_TRAVEL = 64;
 const RED_BALL_TRAVEL = 50;
 
-const COLORS = {
+const COLORS = createThemePalette({
   cyan: "#00838F",
   darkCyan: "#005B63",
   paleCyan: "#E0F7FA",
   white: "#FFFFFF",
   softWhite: "#F7FFFF",
   mutedWhite: "rgba(255, 255, 255, 0.78)",
-};
+});
 
 export default function LandingScreen() {
   const [isCheckingSession, setIsCheckingSession] = useState(true);
@@ -320,7 +321,7 @@ const styles = StyleSheet.create({
     borderRadius: 38,
     borderWidth: 5,
     borderColor: COLORS.white,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
     marginBottom: 34,
     shadowColor: "#6B6B6B",
     shadowOpacity: 0.24,
@@ -392,7 +393,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 999,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
     paddingHorizontal: 24,
     shadowColor: "#6B6B6B",
     shadowOpacity: 0.2,

@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { createThemePalette } from "@/constants/theme";
 import * as Linking from "expo-linking";
 import { router } from "expo-router";
 import { useMemo, useState } from "react";
@@ -19,7 +20,7 @@ import {
   logUiError,
 } from "../utils/uiMessages";
 
-const COLORS = {
+const COLORS = createThemePalette({
   maroon: "#242424",
   white: "#FFFFFF",
   background: "#F7F8FB",
@@ -28,7 +29,7 @@ const COLORS = {
   text: "#15213A",
   muted: "#667085",
   danger: "#C92D32",
-};
+});
 
 function getAccessTokenFromUrl(url: string | null): string {
   const candidates: string[] = [];
@@ -138,7 +139,7 @@ export default function ResetPasswordScreen() {
           <Ionicons
             name="key-outline"
             size={30}
-            color={COLORS.maroon}
+            color={COLORS.text}
           />
         </View>
 
@@ -250,7 +251,7 @@ const styles = StyleSheet.create({
   borderRadius: 12,
   borderWidth: 1,
   borderColor: "#B9DEC5",
-  backgroundColor: "#EFF8F2",
+  backgroundColor: COLORS.greenBackground,
 },
 
 successText: {
@@ -272,7 +273,7 @@ successText: {
     borderRadius: 18,
     borderWidth: 1,
     borderColor: COLORS.border,
-    backgroundColor: COLORS.card,
+    backgroundColor: COLORS.surface,
   },
   iconCircle: {
     width: 58,
@@ -280,10 +281,10 @@ successText: {
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 18,
-    backgroundColor: "#FFF2F2",
+    backgroundColor: COLORS.warningBackground,
   },
   eyebrow: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.8,
@@ -305,8 +306,8 @@ successText: {
     padding: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#F0C5C5",
-    backgroundColor: "#FFF4F4",
+    borderColor: COLORS.warningBorder,
+    backgroundColor: COLORS.warningBackground,
   },
   warningText: {
     flex: 1,
@@ -332,7 +333,7 @@ successText: {
     borderColor: COLORS.border,
     borderRadius: 12,
     paddingHorizontal: 13,
-    backgroundColor: "#F6F8FB",
+    backgroundColor: COLORS.fieldBackground,
   },
   input: {
     flex: 1,
@@ -362,7 +363,7 @@ successText: {
     paddingVertical: 8,
   },
   backButtonText: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 14,
     fontWeight: "800",
   },

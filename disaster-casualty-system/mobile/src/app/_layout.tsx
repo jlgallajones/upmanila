@@ -3,24 +3,14 @@ import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 
-import { ThemeModeProvider } from "@/theme/theme-mode";
+import { ThemeModeProvider, useThemeMode } from "@/theme/theme-mode";
 
-export default function RootLayout() {
-  const [fontsLoaded, fontError] = useFonts({
-    ...Ionicons.font,
-  });
-
-  if (fontError) {
-    throw fontError;
-  }
-
-  if (!fontsLoaded) {
-    return null;
-  }
+function AppStack() {
+  const { isDark } = useThemeMode();
 
   return (
-    <ThemeModeProvider>
-      <StatusBar style="light" />
+    <>
+      <StatusBar style={isDark ? "light" : "dark"} />
 
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
@@ -41,6 +31,26 @@ export default function RootLayout() {
           }}
         />
       </Stack>
+    </>
+  );
+}
+
+export default function RootLayout() {
+  const [fontsLoaded, fontError] = useFonts({
+    ...Ionicons.font,
+  });
+
+  if (fontError) {
+    throw fontError;
+  }
+
+  if (!fontsLoaded) {
+    return null;
+  }
+
+  return (
+    <ThemeModeProvider>
+      <AppStack />
     </ThemeModeProvider>
   );
 }

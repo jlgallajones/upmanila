@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { createThemePalette } from "@/constants/theme";
 import Constants from "expo-constants";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
@@ -26,7 +27,7 @@ import { clearSession, getCurrentUserId } from "../../auth/session";
 import ThemeToggleButton from "../../components/theme-toggle-button";
 import { useThemeMode } from "../../theme/theme-mode";
 
-const COLORS = {
+const COLORS = createThemePalette({
   maroon: "#242424",
   white: "#FFFFFF",
   background: "#F3F5F9",
@@ -46,8 +47,8 @@ const COLORS = {
   orange: "#E67E22",
   orangeBackground: "#FFF3E5",
 
-  iconBackground: "#F7F9FC",
-};
+  iconBackground: "#F3F5F9",
+});
 
 const SCREEN_PADDING = 16;
 const FLOATING_TAB_BAR_CLEARANCE =
@@ -634,7 +635,7 @@ export default function ProfileScreen() {
             <Statistic
               value={statistics.encoded}
               label="Encoded"
-              color={COLORS.maroon}
+              color={COLORS.text}
               loading={isLoading}
             />
 
@@ -667,8 +668,8 @@ export default function ProfileScreen() {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            colors={[COLORS.maroon]}
-            tintColor={COLORS.maroon}
+            colors={[COLORS.text]}
+            tintColor={COLORS.text}
           />
         }
       >
@@ -926,7 +927,7 @@ const styles = StyleSheet.create({
     maxWidth: 420,
     borderRadius: 20,
     padding: 22,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
     shadowColor: "#111827",
     shadowOpacity: 0.24,
     shadowRadius: 28,
@@ -938,7 +939,7 @@ const styles = StyleSheet.create({
   },
 
   confirmEyebrow: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 11,
     fontWeight: "900",
     letterSpacing: 0.8,
@@ -974,7 +975,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     borderRadius: 12,
     paddingHorizontal: 16,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
 
   confirmDangerButton: {
@@ -1070,7 +1071,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 22,
     paddingBottom: 19,
-    backgroundColor: COLORS.card,
+    backgroundColor: COLORS.surface,
     elevation: 12,
     shadowColor: "#72809A",
     shadowOpacity: 0.13,
@@ -1115,7 +1116,7 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
   },
 
   onlineIndicatorInner: {
@@ -1160,13 +1161,13 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     paddingHorizontal: 9,
     paddingVertical: 5,
-    backgroundColor: "#FFF2F2",
+    backgroundColor: COLORS.warningBackground,
     borderWidth: 1,
-    borderColor: "#F4BFC1",
+    borderColor: COLORS.warningBorder,
   },
 
   levelBadgeText: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 9,
     fontWeight: "800",
   },
@@ -1177,7 +1178,7 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     backgroundColor: COLORS.greenBackground,
     borderWidth: 1,
-    borderColor: "#B9E8C9",
+    borderColor: COLORS.greenBackground,
   },
 
   activeBadgeText: {
@@ -1188,7 +1189,7 @@ const styles = StyleSheet.create({
 
   inactiveBadge: {
     backgroundColor: COLORS.redBackground,
-    borderColor: "#F3BFC1",
+    borderColor: COLORS.warningBorder,
   },
 
   inactiveBadgeText: {
@@ -1249,7 +1250,7 @@ const styles = StyleSheet.create({
     padding: 13,
     borderRadius: 13,
     borderWidth: 1,
-    borderColor: "#F3C5C7",
+    borderColor: COLORS.warningBorder,
     backgroundColor: COLORS.redBackground,
   },
 
@@ -1307,7 +1308,7 @@ const styles = StyleSheet.create({
   },
 
   retryText: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 11,
     fontWeight: "800",
   },
@@ -1319,7 +1320,7 @@ const styles = StyleSheet.create({
     paddingTop: 18,
     paddingBottom: 9,
     marginBottom: 17,
-    backgroundColor: COLORS.card,
+    backgroundColor: COLORS.surface,
     elevation: 2,
     shadowColor: "#718099",
     shadowOpacity: 0.08,
@@ -1331,7 +1332,7 @@ const styles = StyleSheet.create({
   },
 
   sectionTitle: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.3,
@@ -1353,7 +1354,7 @@ const styles = StyleSheet.create({
     marginRight: 10,
     backgroundColor: COLORS.iconBackground,
     borderWidth: 1,
-    borderColor: "#EDF0F5",
+    borderColor: COLORS.fieldBackground,
   },
 
   informationContent: {
@@ -1381,7 +1382,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#FFCACA",
+    borderColor: COLORS.warningBorder,
     backgroundColor: COLORS.redBackground,
     gap: 9,
   },

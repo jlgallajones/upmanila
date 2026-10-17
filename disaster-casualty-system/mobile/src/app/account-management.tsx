@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { createThemePalette } from "@/constants/theme";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -26,7 +27,7 @@ import {
 import { isAuthenticationTokenError } from "../api/client";
 import { getCurrentUser } from "../auth/session";
 
-const COLORS = {
+const COLORS = createThemePalette({
   maroon: "#242424",
   white: "#FFFFFF",
   background: "#F3F5F9",
@@ -35,8 +36,8 @@ const COLORS = {
   border: "#E4E8EF",
   green: "#2E7D4F",
   orange: "#E47A18",
-  paleRed: "#FFF0F0",
-};
+  paleRed: "#FFF4F4",
+});
 
 type FilterMode = "all" | "unit";
 type AccountRole = RegisterAdminAccountPayload["role"] | RegisterUnitUserPayload["role"];
@@ -289,7 +290,7 @@ export default function AccountManagementScreen() {
     <View style={styles.screen}>
       <StatusBar
         barStyle="light-content"
-        backgroundColor={COLORS.maroon}
+        backgroundColor={COLORS.text}
       />
 
       <SafeAreaView
@@ -444,7 +445,7 @@ export default function AccountManagementScreen() {
               <Ionicons
                 name="refresh-outline"
                 size={20}
-                color={COLORS.maroon}
+                color={COLORS.text}
               />
             </Pressable>
           </View>
@@ -520,7 +521,7 @@ export default function AccountManagementScreen() {
 
           {isLoading ? (
             <View style={styles.loadingCard}>
-              <ActivityIndicator color={COLORS.maroon} />
+              <ActivityIndicator color={COLORS.text} />
               <Text style={styles.loadingText}>Loading accounts...</Text>
             </View>
           ) : visibleAccounts.length > 0 ? (
@@ -625,7 +626,7 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 16,
     padding: 16,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
     gap: 12,
@@ -656,7 +657,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: COLORS.border,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: COLORS.fieldBackground,
     paddingHorizontal: 13,
     color: COLORS.text,
     fontSize: 14,
@@ -673,11 +674,11 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F8FAFC",
+    backgroundColor: COLORS.fieldBackground,
     paddingHorizontal: 10,
   },
   segmentButtonActive: {
-    borderColor: COLORS.maroon,
+    borderColor: COLORS.text,
     backgroundColor: COLORS.paleRed,
   },
   segmentText: {
@@ -686,7 +687,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   segmentTextActive: {
-    color: COLORS.maroon,
+    color: COLORS.text,
   },
   primaryButton: {
     minHeight: 50,
@@ -709,7 +710,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: COLORS.border,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: COLORS.fieldBackground,
   },
   unitFilterRow: {
     gap: 8,
@@ -723,10 +724,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F8FAFC",
+    backgroundColor: COLORS.fieldBackground,
   },
   unitChipActive: {
-    borderColor: COLORS.maroon,
+    borderColor: COLORS.text,
     backgroundColor: COLORS.paleRed,
   },
   unitChipText: {
@@ -735,7 +736,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   unitChipTextActive: {
-    color: COLORS.maroon,
+    color: COLORS.text,
   },
   accountList: {
     gap: 10,
@@ -749,7 +750,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     padding: 11,
-    backgroundColor: "#FBFCFE",
+    backgroundColor: COLORS.surface,
   },
   accountAvatar: {
     width: 42,
@@ -760,7 +761,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.paleRed,
   },
   accountAvatarText: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 16,
     fontWeight: "900",
   },
@@ -789,10 +790,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FFF4E7",
+    backgroundColor: COLORS.orangeBackground,
   },
   statusPillActive: {
-    backgroundColor: "#EDF8F1",
+    backgroundColor: COLORS.greenBackground,
   },
   statusPillText: {
     color: COLORS.orange,
@@ -816,12 +817,12 @@ const styles = StyleSheet.create({
   noticeCard: {
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#F0C5C5",
-    backgroundColor: "#FFF4F4",
+    borderColor: COLORS.warningBorder,
+    backgroundColor: COLORS.warningBackground,
     padding: 13,
   },
   noticeText: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 13,
     fontWeight: "800",
   },

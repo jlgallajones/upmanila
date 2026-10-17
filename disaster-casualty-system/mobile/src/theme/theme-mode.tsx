@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useColorScheme } from "react-native";
+import { Platform, useColorScheme } from "react-native";
 
 import { Colors } from "@/constants/theme";
 
@@ -76,6 +76,118 @@ export function ThemeModeProvider({
 
   const resolvedTheme = resolveTheme(mode, systemScheme);
   const isDark = resolvedTheme === "dark";
+
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof document === "undefined") {
+      return;
+    }
+
+    const root = document.documentElement;
+    const themeColors = Colors[resolvedTheme];
+    const variables: Record<string, string> = {
+      background: themeColors.background,
+      backgroundElement: themeColors.backgroundElement,
+      backgroundSelected: themeColors.backgroundSelected,
+      surface: themeColors.surface,
+      surfaceRaised: themeColors.surfaceRaised,
+      border: themeColors.border,
+      text: themeColors.text,
+      textSecondary: themeColors.textSecondary,
+      primary: themeColors.primary,
+      primaryDark: themeColors.primaryDark,
+      primarySoft: themeColors.primarySoft,
+      selectedBackground: themeColors.selectedBackground,
+      selectedBorder: themeColors.selectedBorder,
+      tabBarBackground: themeColors.tabBarBackground,
+      tabBarActiveBackground: themeColors.tabBarActiveBackground,
+      tabBarActiveIcon: themeColors.tabBarActiveIcon,
+      tabBarInactiveIcon: themeColors.tabBarInactiveIcon,
+      danger: themeColors.danger,
+      warningBackground: themeColors.warningBackground,
+      warningBorder: themeColors.warningBorder,
+      blueBackground: themeColors.primarySoft,
+      white: "#FFFFFF",
+      card: themeColors.surface,
+      fieldBackground: themeColors.backgroundElement,
+      fieldBorder: themeColors.border,
+      iconBackground: themeColors.backgroundElement,
+      mutedText: themeColors.textSecondary,
+      secondaryText: themeColors.textSecondary,
+      maroon: resolvedTheme === "dark" ? themeColors.primaryDark : "#6B6B6B",
+      black: themeColors.textSecondary,
+      charcoal: themeColors.surfaceRaised,
+      darkCyan: themeColors.primaryDark,
+      darkMaroon: themeColors.textSecondary,
+      gray: themeColors.textSecondary,
+      grayBackground: themeColors.backgroundElement,
+      teal: themeColors.primary,
+      cyan: themeColors.primary,
+      red: themeColors.danger,
+      orange: resolvedTheme === "dark" ? "#FFB86C" : "#D96D12",
+      blue: resolvedTheme === "dark" ? "#8FC5FF" : "#1976D2",
+      green: resolvedTheme === "dark" ? "#74D99B" : "#388E3C",
+      paleRed: themeColors.warningBackground,
+      paleOrange: resolvedTheme === "dark" ? "rgba(255, 184, 108, 0.14)" : "#FFF8D9",
+      paleBlue: themeColors.primarySoft,
+      paleGreen: resolvedTheme === "dark" ? "rgba(116, 217, 155, 0.14)" : "#E8F4EA",
+      paleCyan: themeColors.primarySoft,
+      paleGray: themeColors.backgroundElement,
+      greenBackground: resolvedTheme === "dark" ? "rgba(116, 217, 155, 0.14)" : "#ECFAF1",
+      greenDark: themeColors.textSecondary,
+      lightMaroon: themeColors.surfaceRaised,
+      muted: themeColors.textSecondary,
+      mutedWhite: "rgba(255,255,255,0.78)",
+      orangeBorder: resolvedTheme === "dark" ? "rgba(255, 184, 108, 0.42)" : "#F4C3C5",
+      primaryText: themeColors.text,
+      redBackground: themeColors.warningBackground,
+      orangeBackground: resolvedTheme === "dark" ? "rgba(255, 184, 108, 0.14)" : "#FFF4E7",
+      secondary: themeColors.textSecondary,
+      softWhite: themeColors.surface,
+      warningText: themeColors.danger,
+      synced: resolvedTheme === "dark" ? "#74D99B" : "#28B463",
+      pending: resolvedTheme === "dark" ? "#FFB86C" : "#F0A000",
+    };
+
+    root.dataset.theme = resolvedTheme;
+
+    for (const [key, value] of Object.entries(variables)) {
+      root.style.setProperty(`--mobile-${key}`, value);
+    }
+
+    const autofillStyle = document.createElement("style");
+    autofillStyle.dataset.mobileThemeAutofill = "true";
+    autofillStyle.textContent = `
+      :root[data-theme="dark"] input:-webkit-autofill,
+      :root[data-theme="dark"] input:-webkit-autofill:hover,
+      :root[data-theme="dark"] input:-webkit-autofill:focus,
+      :root[data-theme="dark"] input:-webkit-autofill:active {
+        background-color: var(--mobile-surface) !important;
+        -webkit-box-shadow: 0 0 0 1000px var(--mobile-surface) inset !important;
+        -webkit-text-fill-color: var(--mobile-text) !important;
+        caret-color: var(--mobile-text) !important;
+      }
+
+      :root[data-theme="light"] input:-webkit-autofill,
+      :root[data-theme="light"] input:-webkit-autofill:hover,
+      :root[data-theme="light"] input:-webkit-autofill:focus,
+      :root[data-theme="light"] input:-webkit-autofill:active {
+        background-color: var(--mobile-surface) !important;
+        -webkit-box-shadow: 0 0 0 1000px var(--mobile-surface) inset !important;
+        -webkit-text-fill-color: var(--mobile-text) !important;
+        caret-color: var(--mobile-text) !important;
+      }
+    `;
+    document.head.appendChild(autofillStyle);
+
+    return () => {
+      autofillStyle.remove();
+      root.removeAttribute("data-theme");
+
+      for (const key of Object.keys(variables)) {
+        root.style.removeProperty(`--mobile-${key}`);
+      }
+    };
+  }, [resolvedTheme]);
 
   const value = useMemo(
     () => ({
