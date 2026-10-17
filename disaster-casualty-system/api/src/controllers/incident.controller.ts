@@ -55,6 +55,19 @@ type UpdateIncidentTimelineRequest = {
 };
 
 type CountMap = Record<string, number>;
+type SitrepLinePoint = {
+  minutes: number;
+  label: string;
+  cutoffAt: string | null;
+  count: number;
+  total: number;
+  percentage: number;
+};
+type SitrepLineSeries = {
+  key: string;
+  label: string;
+  data: SitrepLinePoint[];
+};
 type CustomTimelineEvent = {
   id: string;
   label: string;
@@ -147,6 +160,16 @@ type IncidentSitrepPayload = {
     stabilizationStrategies: CountMap;
     triageAccuracy: AnalyticsTriageAccuracySummary;
     cumulativeIntervalsMinutes: number[];
+    lineGraphs: {
+      primaryTriageByActivation: SitrepLineSeries[];
+      stabilizationByActivation: SitrepLineSeries[];
+      departedAndArrivedByActivation: SitrepLineSeries[];
+      facilityArrivalByActivation: SitrepLineSeries[];
+      edResourcesUtilization: SitrepLineSeries[];
+      hospitalResourcesUtilization: SitrepLineSeries[];
+      morbidityByActivation: SitrepLineSeries[];
+      mortalityByActivation: SitrepLineSeries[];
+    };
   };
   incidentManagementSnapshot?: {
     dmmpStaff: {
@@ -468,6 +491,7 @@ type TreatmentRecordRow = {
   stabilization_started_at: string | null;
   stabilized_at: string | null;
   treatment_details?: Record<string, unknown> | null;
+  performed_by?: string | null;
   created_at: string | null;
 };
 
@@ -1344,16 +1368,63 @@ type PdfChart = {
   counts: CountMap;
 };
 
+type PdfLineChart = {
+  title: string;
+  series: SitrepLineSeries[];
+};
+
 type PdfTableRow = [string, string | number];
 
 function getChartEntries(counts: CountMap): Array<[string, number]> {
   return Object.entries(counts)
     .filter(([, count]) => count > 0)
-    .sort(
-      ([firstLabel, firstCount], [secondLabel, secondCount]) =>
-        secondCount - firstCount || firstLabel.localeCompare(secondLabel),
-    )
     .slice(0, 8);
+}
+
+function sitrepAnalyticsColor(
+  label: string,
+  index: number,
+): [number, number, number] {
+  const key = String(label || "").toLowerCase();
+  const colors: Record<string, [number, number, number]> = {
+    immediate: [0.79, 0.18, 0.2],
+    red: [0.79, 0.18, 0.2],
+    critical: [0.79, 0.18, 0.2],
+    t1: [0.79, 0.18, 0.2],
+    delayed: [0.94, 0.71, 0.16],
+    yellow: [0.94, 0.71, 0.16],
+    urgent: [0.94, 0.71, 0.16],
+    t2: [0.94, 0.71, 0.16],
+    minor: [0.18, 0.49, 0.31],
+    minimal: [0.18, 0.49, 0.31],
+    green: [0.18, 0.49, 0.31],
+    t3: [0.18, 0.49, 0.31],
+    expectant: [0.12, 0.16, 0.22],
+    black: [0.12, 0.16, 0.22],
+    deceased: [0.12, 0.16, 0.22],
+    t4: [0.12, 0.16, 0.22],
+    safe: [0.15, 0.48, 0.74],
+    unsafe: [0.85, 0.43, 0.07],
+    all: [0.15, 0.48, 0.74],
+    "all victims": [0.15, 0.48, 0.74],
+    "scoop and run": [0.83, 0.18, 0.18],
+    scooter: [0.15, 0.48, 0.74],
+    "stay and play": [0.18, 0.49, 0.31],
+    "1+3": [0.94, 0.71, 0.16],
+    "play and run": [0.85, 0.43, 0.07],
+    unknown: [0.41, 0.46, 0.55],
+  };
+
+  return colors[key] ??
+    ([
+      [0.83, 0.18, 0.18],
+      [0.15, 0.48, 0.74],
+      [0.18, 0.49, 0.31],
+      [0.94, 0.71, 0.16],
+      [0.85, 0.43, 0.07],
+      [0.55, 0.36, 0.72],
+      [0.39, 0.45, 0.58],
+    ][index % 7] as [number, number, number]);
 }
 
 function buildSitrepCharts(payload: IncidentSitrepPayload): PdfChart[] {
@@ -1398,8 +1469,7 @@ function buildSitrepCharts(payload: IncidentSitrepPayload): PdfChart[] {
       : []),
   ];
 
-  return [
-    ...charts,
+  charts.push(
     {
       title: "Role Coverage",
       counts: {
@@ -1439,7 +1509,62 @@ function buildSitrepCharts(payload: IncidentSitrepPayload): PdfChart[] {
       title: "EMS Unit Type",
       counts: payload.transportSummary.emsUnits,
     },
+  );
+
+  return charts.filter((chart) =>
+    Object.values(chart.counts).some((value) => Number(value) > 0),
+  );
+}
+
+function buildSitrepLineCharts(payload: IncidentSitrepPayload): PdfLineChart[] {
+  const lineGraphs = payload.analyticsSnapshot?.lineGraphs;
+
+  if (!lineGraphs) {
+    return [];
+  }
+
+  const charts: PdfLineChart[] = [
+    {
+      title: "Immediate and Delayed Victims Primary Triaged",
+      series: lineGraphs.primaryTriageByActivation,
+    },
+    {
+      title: "Immediate and Delayed Victims Stabilized in the Stabilization Area",
+      series: lineGraphs.stabilizationByActivation,
+    },
+    {
+      title: "Immediate and Delayed Victims Departed Scene and Arrived at a Healthcare Facility",
+      series: lineGraphs.departedAndArrivedByActivation,
+    },
+    {
+      title: "Victims Arriving at a Healthcare Facility",
+      series: lineGraphs.facilityArrivalByActivation,
+    },
+    {
+      title: "ED Resources Utilization",
+      series: lineGraphs.edResourcesUtilization,
+    },
+    {
+      title: "Hospital Resources Utilization",
+      series: lineGraphs.hospitalResourcesUtilization,
+    },
+    {
+      title: "Morbidity Events",
+      series: lineGraphs.morbidityByActivation,
+    },
+    {
+      title: "Mortality Events",
+      series: lineGraphs.mortalityByActivation,
+    },
   ];
+
+  return charts.filter((chart) =>
+    chart.series.some((series) =>
+      series.data.some(
+        (point) => point.total > 0 && point.cutoffAt !== null,
+      ),
+    ),
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1481,6 +1606,8 @@ function formatSitrepDate(value: string | null | undefined): string {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: "Asia/Manila",
+    timeZoneName: "short",
   });
 }
 
@@ -1780,6 +1907,7 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
     .filter(Boolean)
     .join(", ") || "Not recorded";
   const charts = buildSitrepCharts(payload);
+  const lineCharts = buildSitrepLineCharts(payload);
   const pageWidth = 612;
   const pageHeight = 792;
   const marginX = 42;
@@ -1942,36 +2070,209 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
 
   const addChart = (chart: PdfChart) => {
     const entries = getChartEntries(chart.counts);
-    const chartHeight = entries.length > 0 ? 34 + entries.length * 21 : 52;
-
-    ensureSpace(chartHeight);
-    text(chart.title, marginX, cursorY, 10, "F2");
-    cursorY -= 18;
 
     if (entries.length === 0) {
-      addWrappedParagraph("No chart data recorded.", marginX + 8, 92, 8);
-      cursorY -= 4;
       return;
     }
 
-    const maxCount = Math.max(...entries.map(([, count]) => count), 1);
-    const labelWidth = 190;
-    const barX = marginX + labelWidth;
-    const maxBarWidth = contentWidth - labelWidth - 46;
+    const total = entries.reduce((sum, [, count]) => sum + count, 0);
+    const chartHeight = 208;
 
-    for (const [label, count] of entries) {
-      ensureSpace(20);
-      text(formatSitrepLabel(label), marginX + 6, cursorY, 8);
+    ensureSpace(chartHeight);
+    currentPage.push(
+      "0.99 0.995 1 rg",
+      `${marginX} ${cursorY - chartHeight + 8} ${contentWidth} ${chartHeight - 8} re f`,
+      "0.82 0.86 0.91 RG",
+      `${marginX} ${cursorY - chartHeight + 8} ${contentWidth} ${chartHeight - 8} re S`,
+      "0 g",
+    );
+
+    const titleLines = wrapText(chart.title, 52).slice(0, 2);
+    titleLines.forEach((line, index) => {
+      text(line, marginX + 14, cursorY - 22 - index * 14, 10, "F2");
+    });
+
+    const centerX = marginX + 88;
+    const centerY = cursorY - 118;
+    const radius = 62;
+    let startAngle = -Math.PI / 2;
+
+    entries.forEach(([label, count], index) => {
+      const percentage = total > 0 ? count / total : 0;
+      const endAngle = startAngle + percentage * Math.PI * 2;
+      const color = sitrepAnalyticsColor(label, index);
+      const steps = Math.max(2, Math.ceil(Math.abs(endAngle - startAngle) * 12));
+
       currentPage.push(
-        "0.48 0.07 0.08 rg",
-        `${barX} ${cursorY - 4} ${Math.max(3, (count / maxCount) * maxBarWidth).toFixed(2)} 10 re f`,
+        `${color[0]} ${color[1]} ${color[2]} rg`,
+        `${centerX} ${centerY} m`,
+        `${(centerX + Math.cos(startAngle) * radius).toFixed(2)} ${(centerY + Math.sin(startAngle) * radius).toFixed(2)} l`,
+      );
+
+      for (let step = 1; step <= steps; step += 1) {
+        const angle =
+          startAngle + ((endAngle - startAngle) * step) / steps;
+        currentPage.push(
+          `${(centerX + Math.cos(angle) * radius).toFixed(2)} ${(centerY + Math.sin(angle) * radius).toFixed(2)} l`,
+        );
+      }
+
+      currentPage.push("h f");
+
+      const roundedPercentage = Math.round(percentage * 1000) / 10;
+
+      if (roundedPercentage >= 5) {
+        const middleAngle = (startAngle + endAngle) / 2;
+        const labelRadius = radius * 0.58;
+        text(
+          `${roundedPercentage % 1 === 0 ? roundedPercentage.toFixed(0) : roundedPercentage}%`,
+          centerX + Math.cos(middleAngle) * labelRadius - 8,
+          centerY + Math.sin(middleAngle) * labelRadius,
+          7,
+          "F2",
+        );
+      }
+
+      startAngle = endAngle;
+    });
+
+    entries.forEach(([label, count], index) => {
+      const legendY = cursorY - 68 - index * 18;
+      const color = sitrepAnalyticsColor(label, index);
+      const percentage = total > 0 ? Math.round((count / total) * 1000) / 10 : 0;
+
+      currentPage.push(
+        `${color[0]} ${color[1]} ${color[2]} rg`,
+        `${marginX + 184} ${legendY - 3} 7 7 re f`,
         "0 g",
       );
-      text(String(count), pageWidth - marginX - 28, cursorY, 8, "F2");
-      cursorY -= 20;
+      text(formatSitrepLabel(label), marginX + 196, legendY, 8);
+      text(`${count} (${percentage}%)`, pageWidth - marginX - 74, legendY, 8, "F2");
+    });
+
+    cursorY -= chartHeight;
+  };
+
+  const addLineChart = (chart: PdfLineChart) => {
+    const series = chart.series.filter((item) =>
+      item.data.some((point) => point.total > 0 && point.cutoffAt !== null),
+    );
+
+    if (series.length === 0) {
+      return;
     }
 
-    cursorY -= 8;
+    const points = series[0]?.data ?? [];
+    const chartHeight = 210;
+
+    ensureSpace(chartHeight);
+    currentPage.push(
+      "0.99 0.995 1 rg",
+      `${marginX} ${cursorY - chartHeight + 8} ${contentWidth} ${chartHeight - 8} re f`,
+      "0.82 0.86 0.91 RG",
+      `${marginX} ${cursorY - chartHeight + 8} ${contentWidth} ${chartHeight - 8} re S`,
+      "0 g",
+    );
+    const chartX = marginX + 28;
+    const chartBottom = cursorY - 142;
+    const plotWidth = contentWidth - 42;
+    const plotHeight = 112;
+    text(chart.title, marginX, cursorY, 10, "F2");
+    cursorY -= 18;
+
+    currentPage.push("0.88 0.90 0.93 RG", "0.6 w");
+
+    for (const tick of [100, 75, 50, 25, 0]) {
+      const y = chartBottom + (tick / 100) * plotHeight;
+
+      currentPage.push(
+        `${chartX} ${y} m ${chartX + plotWidth} ${y} l S`,
+      );
+      text(`${tick}%`, marginX + 2, y - 3, 7);
+    }
+
+    currentPage.push(
+      `${chartX} ${chartBottom} m ${chartX} ${chartBottom + plotHeight} l S`,
+      `${chartX} ${chartBottom} m ${chartX + plotWidth} ${chartBottom} l S`,
+      "0 g",
+    );
+
+    series.forEach((item, seriesIndex) => {
+      const color = sitrepAnalyticsColor(item.label, seriesIndex);
+      const data = item.data;
+
+      currentPage.push(`${color[0]} ${color[1]} ${color[2]} RG`, "1.4 w");
+
+      data.forEach((point, pointIndex) => {
+        const x =
+          chartX +
+          (pointIndex / Math.max(1, data.length - 1)) * plotWidth;
+        const y =
+          chartBottom +
+          (Math.max(0, Math.min(100, point.percentage)) / 100) * plotHeight;
+        currentPage.push(
+          `${x.toFixed(2)} ${y.toFixed(2)} ${pointIndex === 0 ? "m" : "l"}`,
+        );
+      });
+
+      if (data.length > 0) {
+        currentPage.push("S");
+      }
+
+      data.forEach((point, pointIndex) => {
+        const x =
+          chartX +
+          (pointIndex / Math.max(1, data.length - 1)) * plotWidth;
+        const y =
+          chartBottom +
+          (Math.max(0, Math.min(100, point.percentage)) / 100) * plotHeight;
+        const radius = 4;
+        const control = radius * 0.5522848;
+
+        currentPage.push(
+          `${color[0]} ${color[1]} ${color[2]} RG`,
+          "1 1 1 rg",
+          `${(x + radius).toFixed(2)} ${y.toFixed(2)} m`,
+          `${(x + radius).toFixed(2)} ${(y + control).toFixed(2)} ${(x + control).toFixed(2)} ${(y + radius).toFixed(2)} ${x.toFixed(2)} ${(y + radius).toFixed(2)} c`,
+          `${(x - control).toFixed(2)} ${(y + radius).toFixed(2)} ${(x - radius).toFixed(2)} ${(y + control).toFixed(2)} ${(x - radius).toFixed(2)} ${y.toFixed(2)} c`,
+          `${(x - radius).toFixed(2)} ${(y - control).toFixed(2)} ${(x - control).toFixed(2)} ${(y - radius).toFixed(2)} ${x.toFixed(2)} ${(y - radius).toFixed(2)} c`,
+          `${(x + control).toFixed(2)} ${(y - radius).toFixed(2)} ${(x + radius).toFixed(2)} ${(y - control).toFixed(2)} ${(x + radius).toFixed(2)} ${y.toFixed(2)} c`,
+          "B",
+        );
+      });
+
+      const legendX = marginX + seriesIndex * 145;
+      currentPage.push(
+        `${color[0]} ${color[1]} ${color[2]} rg`,
+        `${legendX} ${cursorY - 156} 8 8 re f`,
+        "0 g",
+      );
+      text(item.label, legendX + 12, cursorY - 155, 7);
+    });
+
+    points.forEach((point, pointIndex) => {
+      const x =
+        chartX +
+        (pointIndex / Math.max(1, points.length - 1)) * plotWidth;
+      text(
+        point.minutes >= 60
+          ? `${point.minutes / 60}h`
+          : `${point.minutes}m`,
+        x - 8,
+        chartBottom - 15,
+        7,
+      );
+    });
+
+    text("Cumulative percentage", marginX, chartBottom + plotHeight + 12, 7);
+    text(
+      "Minutes after DMMP activation",
+      chartX + plotWidth / 2 - 48,
+      chartBottom - 28,
+      7,
+    );
+
+    cursorY -= chartHeight;
   };
 
   text("Incident Situation Report", marginX, cursorY, 22, "F2");
@@ -2045,6 +2346,12 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
           ] as PdfTableRow,
       ),
     );
+  }
+
+  if (charts.length > 0 || lineCharts.length > 0) {
+    addSectionTitle("Charts");
+    charts.forEach(addChart);
+    lineCharts.forEach(addLineChart);
   }
 
   addTable(
@@ -5425,7 +5732,7 @@ export async function getIncidentAnalyticsSummary(
         ? await supabase
             .from("casualty_treatments")
             .select(
-              "casualty_incident_id, treatment_strategy, treatment_area_name, stabilization_started_at, stabilized_at, treatment_details, created_at",
+              "casualty_incident_id, treatment_strategy, treatment_area_name, stabilization_started_at, stabilized_at, treatment_details, performed_by, created_at",
             )
             .in("casualty_incident_id", casualtyIncidentIds)
             .order("created_at", { ascending: true })
@@ -5473,6 +5780,41 @@ export async function getIncidentAnalyticsSummary(
       (transportResult.data ?? []) as TransportRecordRow[];
     const treatmentRows =
       (treatmentResult.data ?? []) as TreatmentRecordRow[];
+    const treatmentPerformerIds = [
+      ...new Set(
+        treatmentRows
+          .map((row) => row.performed_by)
+          .filter(
+            (value): value is string =>
+              typeof value === "string" && value.trim().length > 0,
+          ),
+      ),
+    ];
+    const treatmentPerformerRolesById = new Map<string, string | null>();
+
+    if (treatmentPerformerIds.length > 0) {
+      const { data: treatmentPerformers, error: treatmentPerformersError } =
+        await supabase
+          .from("users")
+          .select("id, role")
+          .in("id", treatmentPerformerIds);
+
+      if (treatmentPerformersError) {
+        throw new Error(
+          `Unable to collect treatment responder roles: ${treatmentPerformersError.message}`,
+        );
+      }
+
+      for (const performer of treatmentPerformers ?? []) {
+        treatmentPerformerRolesById.set(performer.id, performer.role);
+      }
+    }
+
+    const ampTreatmentRows = treatmentRows.filter(
+      (row) =>
+        typeof row.performed_by === "string" &&
+        treatmentPerformerRolesById.get(row.performed_by) === "sa_responder",
+    );
     const encounterRows =
       (encounterResult.data ?? []) as FacilityEncounterRow[];
     const outcomeRows =
@@ -6059,7 +6401,7 @@ const unsafeResponders = responderSafetyResponses.filter(
             facilityTriageRows,
           ),
           stabilizationStrategies: countBy(
-            treatmentRows,
+            ampTreatmentRows,
             (row) => row.treatment_strategy,
           ),
           responderSafety: {
@@ -6440,7 +6782,7 @@ export async function generateIncidentSitrep(
         ? await supabase
             .from("facility_encounters")
             .select(
-              "casualty_incident_id, facility_id, arrived_at, sought_ed_care, admitted_to_hospital, ed_admitted_at, ed_departed_at, hospital_admitted_at, hospital_discharged_at, created_at",
+              "casualty_incident_id, facility_id, arrived_at, sought_ed_care, admitted_to_hospital, ed_admitted_at, ed_departed_at, hospital_admitted_at, hospital_discharged_at, ed_resuscitation_started_at, surgical_intervention_started_at, operating_room_started_at, xray_performed_at, ultrasound_performed_at, ct_performed_at, icu_admitted_at, icu_discharged_at, ventilation_started_at, ventilation_ended_at, referred_or_transferred, created_at",
             )
             .in("casualty_incident_id", casualtyIncidentIds)
             .order("created_at", { ascending: true })
@@ -6449,6 +6791,22 @@ export async function generateIncidentSitrep(
     if (encounterResult.error) {
       throw new Error(
         `Unable to collect facility analytics data: ${encounterResult.error.message}`,
+      );
+    }
+
+    const outcomeResult =
+      casualtyIncidentIds.length > 0
+        ? await supabase
+            .from("casualty_outcomes")
+            .select(
+              "casualty_incident_id, reached_hospital, medical_contact_before_death, died, death_stage, death_at, final_disposition",
+            )
+            .in("casualty_incident_id", casualtyIncidentIds)
+        : { data: [], error: null };
+
+    if (outcomeResult.error) {
+      throw new Error(
+        `Unable to collect outcome analytics data: ${outcomeResult.error.message}`,
       );
     }
 
@@ -6475,6 +6833,8 @@ export async function generateIncidentSitrep(
       (treatmentResult.data ?? []) as TreatmentRecordRow[];
     const encounterRows =
       (encounterResult.data ?? []) as FacilityEncounterRow[];
+    const outcomeRows =
+      (outcomeResult.data ?? []) as CasualtyOutcomeRow[];
     const responderSafetyResponses =
       responderSafetyResponsesResult.error
         ? []
@@ -6486,6 +6846,7 @@ export async function generateIncidentSitrep(
           ...casualties.map((item) => item.encoded_by),
           ...triageRows.map((item) => item.triaged_by),
           ...transportRows.map((item) => item.recorded_by),
+          ...treatmentRows.map((item) => item.performed_by),
         ].filter(
           (value): value is string =>
             typeof value === "string" && value.trim().length > 0,
@@ -6525,6 +6886,12 @@ export async function generateIncidentSitrep(
         );
       }
     }
+
+    const ampTreatmentRows = treatmentRows.filter(
+      (row) =>
+        typeof row.performed_by === "string" &&
+        userFunctionsById.get(row.performed_by) === "sa_responder",
+    );
 
     const triageRowsByCasualty = groupRowsByCasualtyId(triageRows);
     const transportRowsByCasualty =
@@ -6640,6 +7007,103 @@ export async function generateIncidentSitrep(
       );
     const countTriageRowsByCategory = (rows: TriageAssessmentRow[]) =>
       countBy(rows, (row) => getAnalyticsTriageCategory(row));
+    const categoryForCasualty = (casualtyIncidentId: string) =>
+      getAnalyticsTriageCategory(
+        latestTriageByCasualty.get(casualtyIncidentId),
+      );
+    const timelineData = (timelineResult.data ?? {}) as Record<
+      string,
+      unknown
+    >;
+    const dmmpActivatedAt =
+      typeof timelineData.dmmp_activated_at === "string"
+        ? timelineData.dmmp_activated_at
+        : null;
+    const intervalMinutes = [15, 30, 60, 120, 180];
+    const categoryRows = (
+      rows: Array<{
+        casualty_incident_id: string;
+        occurred_at: string | null;
+      }>,
+      category: string,
+    ) =>
+      rows.filter(
+        (row) =>
+          categoryForCasualty(row.casualty_incident_id) === category &&
+          Boolean(row.occurred_at),
+      );
+    const buildIntervalRows = (
+      rows: Array<{
+        casualty_incident_id: string;
+        occurred_at: string | null;
+      }>,
+      denominator = casualtyIncidentIds.length,
+    ) =>
+      buildCumulativeIntervalRows({
+        rows,
+        activationAt: dmmpActivatedAt,
+        intervalMinutes,
+        denominator,
+      });
+    const primaryEvents = dedupeEarliestEventRows(
+      primaryTriageRows.map((row) => ({
+        casualty_incident_id: row.casualty_incident_id,
+        occurred_at: row.triaged_at,
+      })),
+    );
+    const stabilizedEvents = dedupeEarliestEventRows(
+      treatmentRows.map((row) => ({
+        casualty_incident_id: row.casualty_incident_id,
+        occurred_at: row.stabilized_at,
+      })),
+    );
+    const departedAndArrivedEvents = dedupeEarliestEventRows(
+      transportRows.map((row) => ({
+        casualty_incident_id: row.casualty_incident_id,
+        occurred_at:
+          row.departed_scene_at && row.arrived_facility_at
+            ? row.arrived_facility_at
+            : null,
+      })),
+    );
+    const arrivalEvents = dedupeEarliestEventRows([
+      ...transportRows.map((row) => ({
+        casualty_incident_id: row.casualty_incident_id,
+        occurred_at: row.arrived_facility_at,
+      })),
+      ...encounterRows.map((row) => ({
+        casualty_incident_id: row.casualty_incident_id,
+        occurred_at: row.arrived_at,
+      })),
+    ]);
+    const buildHcfdIntervalRows = (
+      rows: Array<{
+        casualty_incident_id: string;
+        occurred_at: string | null;
+      }>,
+      denominator = casualtyIncidentIds.length,
+    ) => buildIntervalRows(dedupeEarliestEventRows(rows), denominator);
+    const facilityEncounterEvents = (
+      getTime: (row: FacilityEncounterRow) => string | null | undefined,
+    ) =>
+      encounterRows.map((row) => ({
+        casualty_incident_id: row.casualty_incident_id,
+        occurred_at: getTime(row) ?? null,
+      }));
+    const deathEvents = (
+      filter: (row: CasualtyOutcomeRow) => boolean,
+    ) =>
+      outcomeRows
+        .filter(
+          (row) =>
+            row.death_at &&
+            (row.died === true || row.final_disposition === "deceased") &&
+            filter(row),
+        )
+        .map((row) => ({
+          casualty_incident_id: row.casualty_incident_id,
+          occurred_at: row.death_at,
+        }));
     const tertiaryTriageBySystem = Object.entries(
       tertiaryTriageSystemLabels,
     ).reduce<
@@ -6809,6 +7273,259 @@ export async function generateIncidentSitrep(
       activeEvacuationCenterCount:
         evacuationCentersResult.data?.length ?? 0,
     };
+    const lineGraphs = {
+      primaryTriageByActivation: [
+        {
+          key: "immediate",
+          label: "Immediate",
+          data: buildIntervalRows(
+            categoryRows(primaryEvents, "immediate"),
+            casualtyIncidentIds.filter(
+              (casualtyIncidentId) =>
+                categoryForCasualty(casualtyIncidentId) === "immediate",
+            ).length,
+          ),
+        },
+        {
+          key: "delayed",
+          label: "Delayed",
+          data: buildIntervalRows(
+            categoryRows(primaryEvents, "delayed"),
+            casualtyIncidentIds.filter(
+              (casualtyIncidentId) =>
+                categoryForCasualty(casualtyIncidentId) === "delayed",
+            ).length,
+          ),
+        },
+      ],
+      stabilizationByActivation: [
+        {
+          key: "immediate",
+          label: "Immediate",
+          data: buildIntervalRows(
+            categoryRows(stabilizedEvents, "immediate"),
+            casualtyIncidentIds.filter(
+              (casualtyIncidentId) =>
+                categoryForCasualty(casualtyIncidentId) === "immediate",
+            ).length,
+          ),
+        },
+        {
+          key: "delayed",
+          label: "Delayed",
+          data: buildIntervalRows(
+            categoryRows(stabilizedEvents, "delayed"),
+            casualtyIncidentIds.filter(
+              (casualtyIncidentId) =>
+                categoryForCasualty(casualtyIncidentId) === "delayed",
+            ).length,
+          ),
+        },
+      ],
+      departedAndArrivedByActivation: [
+        {
+          key: "immediate",
+          label: "Immediate",
+          data: buildIntervalRows(
+            categoryRows(departedAndArrivedEvents, "immediate"),
+            casualtyIncidentIds.filter(
+              (casualtyIncidentId) =>
+                categoryForCasualty(casualtyIncidentId) === "immediate",
+            ).length,
+          ),
+        },
+        {
+          key: "delayed",
+          label: "Delayed",
+          data: buildIntervalRows(
+            categoryRows(departedAndArrivedEvents, "delayed"),
+            casualtyIncidentIds.filter(
+              (casualtyIncidentId) =>
+                categoryForCasualty(casualtyIncidentId) === "delayed",
+            ).length,
+          ),
+        },
+      ],
+      facilityArrivalByActivation: [
+        {
+          key: "all",
+          label: "All victims",
+          data: buildIntervalRows(arrivalEvents),
+        },
+      ],
+      edResourcesUtilization: [
+        {
+          key: "arrived",
+          label: "Arrived at ED / facility",
+          data: buildHcfdIntervalRows(
+            facilityEncounterEvents((row) => row.arrived_at),
+          ),
+        },
+        {
+          key: "ed_admitted",
+          label: "Admitted to ED",
+          data: buildHcfdIntervalRows(
+            facilityEncounterEvents((row) => row.ed_admitted_at),
+          ),
+        },
+        {
+          key: "resuscitation",
+          label: "Resuscitation started",
+          data: buildHcfdIntervalRows(
+            facilityEncounterEvents((row) => row.ed_resuscitation_started_at),
+          ),
+        },
+        {
+          key: "ed_departed",
+          label: "Discharged from ED",
+          data: buildHcfdIntervalRows(
+            facilityEncounterEvents((row) => row.ed_departed_at),
+          ),
+        },
+      ],
+      hospitalResourcesUtilization: [
+        {
+          key: "hospital_admitted",
+          label: "Admitted to hospital",
+          data: buildHcfdIntervalRows(
+            facilityEncounterEvents((row) => row.hospital_admitted_at),
+          ),
+        },
+        {
+          key: "surgery_started",
+          label: "Surgery started",
+          data: buildHcfdIntervalRows(
+            facilityEncounterEvents(
+              (row) => row.surgical_intervention_started_at,
+            ),
+          ),
+        },
+        {
+          key: "operating_room_started",
+          label: "Operating room used",
+          data: buildHcfdIntervalRows(
+            facilityEncounterEvents((row) => row.operating_room_started_at),
+          ),
+        },
+        {
+          key: "xray_performed",
+          label: "X-ray performed",
+          data: buildHcfdIntervalRows(
+            facilityEncounterEvents((row) => row.xray_performed_at),
+          ),
+        },
+        {
+          key: "ultrasound_performed",
+          label: "Ultrasound performed",
+          data: buildHcfdIntervalRows(
+            facilityEncounterEvents((row) => row.ultrasound_performed_at),
+          ),
+        },
+        {
+          key: "ct_performed",
+          label: "CT scan performed",
+          data: buildHcfdIntervalRows(
+            facilityEncounterEvents((row) => row.ct_performed_at),
+          ),
+        },
+      ],
+      morbidityByActivation: [
+        {
+          key: "icu_admitted",
+          label: "Admitted to ICU",
+          data: buildHcfdIntervalRows(
+            facilityEncounterEvents((row) => row.icu_admitted_at),
+          ),
+        },
+        {
+          key: "ventilation_started",
+          label: "Mechanical ventilation started",
+          data: buildHcfdIntervalRows(
+            facilityEncounterEvents((row) => row.ventilation_started_at),
+          ),
+        },
+        {
+          key: "hospital_discharged",
+          label: "Discharged from hospital",
+          data: buildHcfdIntervalRows(
+            facilityEncounterEvents((row) => row.hospital_discharged_at),
+          ),
+        },
+        {
+          key: "icu_discharged",
+          label: "Discharged from ICU",
+          data: buildHcfdIntervalRows(
+            facilityEncounterEvents((row) => row.icu_discharged_at),
+          ),
+        },
+        {
+          key: "ventilation_ended",
+          label: "Mechanical ventilation ended",
+          data: buildHcfdIntervalRows(
+            facilityEncounterEvents((row) => row.ventilation_ended_at),
+          ),
+        },
+      ],
+      mortalityByActivation: [
+        {
+          key: "all_deaths",
+          label: "All deaths",
+          data: buildHcfdIntervalRows(deathEvents(() => true)),
+        },
+        {
+          key: "impact_deaths",
+          label: "Impact deaths",
+          data: buildHcfdIntervalRows(
+            deathEvents(
+              (row) =>
+                row.death_stage === "impact" ||
+                row.medical_contact_before_death === false,
+            ),
+          ),
+        },
+        {
+          key: "prehospital_deaths",
+          label: "Prehospital deaths",
+          data: buildHcfdIntervalRows(
+            deathEvents(
+              (row) =>
+                row.death_stage === "prehospital" ||
+                (row.medical_contact_before_death === true &&
+                  row.reached_hospital === false),
+            ),
+          ),
+        },
+        {
+          key: "in_hospital_deaths",
+          label: "In-hospital deaths",
+          data: buildHcfdIntervalRows(
+            deathEvents(
+              (row) =>
+                row.death_stage === "in_hospital" ||
+                row.reached_hospital === true,
+            ),
+          ),
+        },
+        {
+          key: "immediate_deaths",
+          label: "Immediate deaths",
+          data: buildHcfdIntervalRows(
+            deathEvents(
+              (row) =>
+                facilityCategoryForCasualty(row.casualty_incident_id) ===
+                "immediate",
+            ),
+            casualtyIncidentIds.filter(
+              (casualtyIncidentId) =>
+                facilityCategoryForCasualty(casualtyIncidentId) ===
+                "immediate",
+            ).length,
+          ),
+        },
+      ],
+    } satisfies NonNullable<
+      IncidentSitrepPayload["analyticsSnapshot"]
+    >["lineGraphs"];
     const analyticsSnapshot: IncidentSitrepPayload["analyticsSnapshot"] = {
       keyPerformanceIndicators: {
         totalVictims: casualtySummary.total,
@@ -6832,11 +7549,12 @@ export async function generateIncidentSitrep(
       },
       edCareByTriageCategory,
       stabilizationStrategies: countBy(
-        treatmentRows,
+        ampTreatmentRows,
         (row) => row.treatment_strategy,
       ),
       triageAccuracy,
       cumulativeIntervalsMinutes: [15, 30, 60, 120, 180],
+      lineGraphs,
     };
     const incidentManagementSnapshot: IncidentSitrepPayload["incidentManagementSnapshot"] = {
       dmmpStaff: {

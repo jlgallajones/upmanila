@@ -195,6 +195,8 @@ const state = {
   recentActivity: [],
   bulkImportPreviews: {},
   restoredResponseTimelineDraftKey: null,
+  responseTimelineFormSnapshot: null,
+  responseTimelineFormSnapshotKey: null,
 };
 
 const dashboardRealtimeTables = [
@@ -520,6 +522,70 @@ function clearResponseTimelineSessionDraft(incidentId) {
   localStorage.removeItem(responseTimelineDraftKey(incidentId));
 }
 
+function getResponseTimelineFormSnapshot(form) {
+  if (!form) return null;
+
+  return JSON.stringify(
+    Array.from(form.elements).map((element) => ({
+      name: element.name || element.id || "",
+      type: element.type || "",
+      value:
+        element.type === "checkbox" || element.type === "radio"
+          ? element.checked
+          : element.value,
+    })),
+  );
+}
+
+function resetResponseTimelineFormSnapshot() {
+  state.responseTimelineFormSnapshot = null;
+  state.responseTimelineFormSnapshotKey = null;
+}
+
+function captureResponseTimelineFormSnapshot() {
+  const modal = state.activeIncidentSectionModal;
+
+  if (modal?.section !== "timeline" || !modal.editMode) {
+    return;
+  }
+
+  const form = document.querySelector(
+    '[data-incident-section-form="timeline"]',
+  );
+
+  if (!form) return;
+
+  state.responseTimelineFormSnapshot = getResponseTimelineFormSnapshot(form);
+  state.responseTimelineFormSnapshotKey = modal.incidentId;
+}
+
+function hasUnsavedResponseTimelineChanges() {
+  const modal = state.activeIncidentSectionModal;
+
+  if (
+    modal?.section !== "timeline" ||
+    !modal.editMode ||
+    !modal.incidentId
+  ) {
+    return false;
+  }
+
+  const form = document.querySelector(
+    '[data-incident-section-form="timeline"]',
+  );
+  const currentSnapshot = getResponseTimelineFormSnapshot(form);
+
+  if (!currentSnapshot) return false;
+
+  if (state.responseTimelineFormSnapshotKey !== modal.incidentId) {
+    state.responseTimelineFormSnapshot = currentSnapshot;
+    state.responseTimelineFormSnapshotKey = modal.incidentId;
+    return false;
+  }
+
+  return currentSnapshot !== state.responseTimelineFormSnapshot;
+}
+
 function collectResponseTimelineDraft(form, incidentId, reason = "manual") {
   if (!form || !incidentId) return null;
 
@@ -652,6 +718,8 @@ function restoreResponseTimelineDraftIntoForm() {
   }
 
   state.restoredResponseTimelineDraftKey = restoreKey;
+  resetResponseTimelineFormSnapshot();
+  captureResponseTimelineFormSnapshot();
   setMessage(
     "incidentSectionModalMessage",
     "Unsaved Response Timeline values were restored after your session expired. Review them, then click Save.",
@@ -1610,6 +1678,55 @@ function showDashboardConfirm({
           close(false);
         }
       });
+  });
+}
+
+function showResponseTimelineClosePrompt() {
+  document.querySelector("[data-response-timeline-close-dialog]")?.remove();
+
+  return new Promise((resolve) => {
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      `
+        <div class="dashboard-dialog-backdrop" data-response-timeline-close-dialog>
+          <section class="dashboard-dialog" role="dialog" aria-modal="true" aria-labelledby="responseTimelineCloseTitle">
+            <div>
+              <span class="eyebrow">Unsaved Changes</span>
+              <h2 id="responseTimelineCloseTitle">Save Response Timeline entries?</h2>
+              <p>There are entries that have not been saved yet. Choose whether to save them before closing.</p>
+            </div>
+            <div class="dashboard-dialog-actions response-timeline-close-actions">
+              <button class="ghost-button" type="button" data-response-timeline-close-choice="cancel">Cancel</button>
+              <button class="ghost-button" type="button" data-response-timeline-close-choice="discard">Don't Save</button>
+              <button class="primary-button" type="button" data-response-timeline-close-choice="save">Save</button>
+            </div>
+          </section>
+        </div>
+      `,
+    );
+
+    const backdrop = document.querySelector(
+      "[data-response-timeline-close-dialog]",
+    );
+
+    const close = (choice) => {
+      backdrop?.remove();
+      resolve(choice);
+    };
+
+    backdrop?.querySelectorAll("[data-response-timeline-close-choice]").forEach(
+      (button) => {
+        button.addEventListener("click", () => {
+          close(button.dataset.responseTimelineCloseChoice);
+        });
+      },
+    );
+
+    backdrop?.addEventListener("click", (event) => {
+      if (event.target === event.currentTarget) {
+        close("cancel");
+      }
+    });
   });
 }
 
@@ -10603,7 +10720,7 @@ const incidentManagementSections = [
   ["ed-resources", "ED Resources", false],
   ["hospital-resources", "Hospital Resources", false],
   ["morbidity-mortality", "Morbidity & Mortality", false],
-  ["sitrep-close", "SitRep & Close Incident", false],
+  ["sitrep-close", "SitRep & Close Incident", true, "accent"],
 ];
 
 async function loadIncidentManagementDetails(incidentId, options = {}) {
@@ -10839,7 +10956,7 @@ function renderIncidentSectionModal() {
           <div class="modal-footer-spacer"></div>
           <button class="ghost-button" type="button" data-close-incident-section-modal>Close</button>
           ${
-            meta.canEdit && !isLocked
+            meta.canEdit && !isLocked && meta.id !== "sitrep-close"
               ? isEditMode
                 ? `<button class="primary-button" type="submit" form="incidentSectionEditForm">Save</button>`
                 : `<button class="primary-button" type="button" data-edit-incident-section>Edit</button>`
@@ -11442,13 +11559,15 @@ function renderTimelineManagementForm(incident, details, forModal = false) {
           })
           .join("")}
       </div>
-      <div class="form-section-title">Custom timeline event</div>
-      <div class="custom-timeline-events" data-custom-timeline-events>
-        ${customRows
-          .map((event, index) => renderCustomTimelineEventRow(event, index))
-          .join("")}
+      <div class="custom-timeline-section">
+        <div class="form-section-title">Custom timeline event</div>
+        <div class="custom-timeline-events" data-custom-timeline-events>
+          ${customRows
+            .map((event, index) => renderCustomTimelineEventRow(event, index))
+            .join("")}
+        </div>
+        <button class="ghost-button mini" type="button" data-add-custom-timeline-event>Add custom event</button>
       </div>
-      <button class="ghost-button mini" type="button" data-add-custom-timeline-event>Add custom event</button>
       ${renderExtractedTimelineFacts(details)}
       <div id="timelineMessage" class="status-message" hidden></div>
     </form>
@@ -11457,6 +11576,13 @@ function renderTimelineManagementForm(incident, details, forModal = false) {
 
 function renderDmmpStaffManagement(staffRecords, summary, forModal = false) {
   const rosterRows = getDmmpStaffRosterRows(staffRecords);
+  const hasRosterRows = rosterRows.length > 0;
+  const allContacted =
+    hasRosterRows &&
+    rosterRows.every(({ record }) => Boolean(record?.was_contacted));
+  const allArrived =
+    hasRosterRows &&
+    rosterRows.every(({ record }) => Boolean(record?.has_arrived || record?.arrived_at));
   const totalStaffRecords = Math.max(
     summary?.totalStaffRecords ?? 0,
     rosterRows.length,
@@ -11484,8 +11610,30 @@ function renderDmmpStaffManagement(staffRecords, summary, forModal = false) {
               <tr>
                 <th>Staff</th>
                 <th>Role / Team</th>
-                <th>Contacted?</th>
-                <th>Arrived?</th>
+                <th class="dmmp-bulk-header">
+                  <label class="dmmp-bulk-toggle">
+                    <input
+                      type="checkbox"
+                      data-dmmp-select-all="wasContacted"
+                      ${allContacted ? "checked" : ""}
+                      ${hasRosterRows ? "" : "disabled"}
+                      aria-label="Select all contacted staff"
+                    />
+                    <span>Contacted?</span>
+                  </label>
+                </th>
+                <th class="dmmp-bulk-header">
+                  <label class="dmmp-bulk-toggle">
+                    <input
+                      type="checkbox"
+                      data-dmmp-select-all="hasArrived"
+                      ${allArrived ? "checked" : ""}
+                      ${hasRosterRows ? "" : "disabled"}
+                      aria-label="Select all arrived staff"
+                    />
+                    <span>Arrived?</span>
+                  </label>
+                </th>
                 <th>Status</th>
                 <th>Arrival time</th>
               </tr>
@@ -12132,15 +12280,42 @@ function bindIncidentManagementActions() {
         section,
         editMode: section === "timeline",
       };
+      resetResponseTimelineFormSnapshot();
       renderCurrentView();
       bindView();
+      captureResponseTimelineFormSnapshot();
     });
   });
 
   document.querySelectorAll("[data-close-incident-section-modal]").forEach((element) => {
-    element.addEventListener("click", (event) => {
+    element.addEventListener("click", async (event) => {
       if (event.target !== element && !element.matches("button")) return;
+
+      const modal = state.activeIncidentSectionModal;
+
+      if (hasUnsavedResponseTimelineChanges()) {
+        const choice = await showResponseTimelineClosePrompt();
+
+        if (choice === "cancel") return;
+
+        if (choice === "save") {
+          const form = document.querySelector(
+            '[data-incident-section-form="timeline"]',
+          );
+          const saved = form ? await handleIncidentSectionSubmit(form) : false;
+
+          if (!saved) return;
+        } else if (choice === "discard") {
+          clearResponseTimelineSessionDraft(modal?.incidentId);
+        }
+      }
+
+      if (modal?.section === "timeline") {
+        clearResponseTimelineSessionDraft(modal.incidentId);
+      }
+
       state.activeIncidentSectionModal = null;
+      resetResponseTimelineFormSnapshot();
       renderCurrentView();
       bindView();
     });
@@ -12165,8 +12340,10 @@ function bindIncidentManagementActions() {
         ...state.activeIncidentSectionModal,
         editMode: true,
       };
+      resetResponseTimelineFormSnapshot();
       renderCurrentView();
       bindView();
+      captureResponseTimelineFormSnapshot();
     });
   }
 
@@ -12192,6 +12369,58 @@ function bindIncidentManagementActions() {
       }
     });
   });
+
+  const syncDmmpSelectAllState = (selectAll) => {
+    const field = selectAll.dataset.dmmpSelectAll;
+    const table = selectAll.closest("table");
+    const rowInputs = field
+      ? Array.from(
+          table?.querySelectorAll(`[data-dmmp-field="${field}"]`) || [],
+        )
+      : [];
+    const checkedCount = rowInputs.filter((input) => input.checked).length;
+
+    selectAll.disabled = rowInputs.length === 0;
+    selectAll.checked = rowInputs.length > 0 && checkedCount === rowInputs.length;
+    selectAll.indeterminate = checkedCount > 0 && checkedCount < rowInputs.length;
+  };
+
+  document.querySelectorAll("[data-dmmp-select-all]").forEach((selectAll) => {
+    selectAll.addEventListener("change", () => {
+      const field = selectAll.dataset.dmmpSelectAll;
+      const table = selectAll.closest("table");
+
+      if (!field || !table) return;
+
+      table
+        .querySelectorAll(`[data-dmmp-field="${field}"]`)
+        .forEach((input) => {
+          input.checked = selectAll.checked;
+        });
+
+      syncDmmpSelectAllState(selectAll);
+    });
+
+    syncDmmpSelectAllState(selectAll);
+  });
+
+  document
+    .querySelectorAll(
+      '[data-dmmp-field="wasContacted"], [data-dmmp-field="hasArrived"]',
+    )
+    .forEach((input) => {
+      input.addEventListener("change", () => {
+        const field = input.dataset.dmmpField;
+        const table = input.closest("table");
+        const selectAll = table?.querySelector(
+          `[data-dmmp-select-all="${field}"]`,
+        );
+
+        if (selectAll) {
+          syncDmmpSelectAllState(selectAll);
+        }
+      });
+    });
 
   document.querySelectorAll("[data-use-current-timeline-time]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -12413,7 +12642,7 @@ async function handleIncidentSectionSubmit(form) {
     state.expandedIncidentId;
   const section = form.dataset.incidentSectionForm;
 
-  if (!incidentId || !section) return;
+  if (!incidentId || !section) return false;
 
   const sectionHandlers = {
     "edit-incident": saveIncidentDetailsSection,
@@ -12425,7 +12654,7 @@ async function handleIncidentSectionSubmit(form) {
   };
 
   const handler = sectionHandlers[section];
-  if (!handler) return;
+  if (!handler) return false;
 
   const incident = getIncidentById(incidentId);
   if (isIncidentManagementLocked(incident)) {
@@ -12441,11 +12670,12 @@ async function handleIncidentSectionSubmit(form) {
 
     setMessage(messageId, message, "warning");
     setMessage("incidentSectionModalMessage", message, "warning");
-    return;
+    return false;
   }
 
   try {
     await handler(incidentId, form);
+    return true;
   } catch (error) {
     const messageId = {
       "edit-incident": "editIncidentMessage",
@@ -12457,6 +12687,7 @@ async function handleIncidentSectionSubmit(form) {
     }[section];
 
     setMessage(messageId, error.message, "error");
+    return false;
   }
 }
 
@@ -12497,6 +12728,8 @@ async function reloadExpandedIncident(successMessage) {
       editMode: false,
     };
   }
+
+  resetResponseTimelineFormSnapshot();
 
   renderCurrentView();
   bindView();
