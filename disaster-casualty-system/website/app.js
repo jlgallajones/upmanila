@@ -2,7 +2,7 @@ const FALLBACK_API_BASE_URL = "/api";
 const RESPONSE_TIMELINE_SESSION_DRAFT_KEY =
   "dcms.admin.responseTimelineSessionDraft";
 const SESSION_EXPIRED_NOTICE_KEY = "dcms.admin.sessionExpiredNotice";
-const THEME_STORAGE_KEY = "dcms.admin.theme";
+const THEME_STORAGE_KEY = "dcms.admin.themeMode";
 
 let realtimeClient = null;
 let dashboardRealtimeChannel = null;
@@ -96,26 +96,40 @@ function getSystemTheme() {
   return "light";
 }
 
-function getInitialTheme() {
+function getInitialThemeMode() {
   const storedTheme = localStorage.getItem(THEME_STORAGE_KEY);
 
-  if (storedTheme === "light" || storedTheme === "dark") {
+  if (
+    storedTheme === "system" ||
+    storedTheme === "light" ||
+    storedTheme === "dark"
+  ) {
     return storedTheme;
   }
 
-  return getSystemTheme();
+  return "system";
+}
+
+function resolveThemeMode(themeMode) {
+  return themeMode === "system" ? getSystemTheme() : themeMode;
 }
 
 function applyTheme() {
-  const theme = state.theme === "dark" ? "dark" : "light";
+  const theme = resolveThemeMode(state.themeMode);
+  state.theme = theme;
   document.documentElement.dataset.theme = theme;
   document.documentElement.style.colorScheme = theme;
 }
 
 function toggleTheme() {
-  state.theme = state.theme === "dark" ? "light" : "dark";
-  localStorage.setItem(THEME_STORAGE_KEY, state.theme);
+  state.themeMode = state.theme === "dark" ? "light" : "dark";
+  state.theme = state.themeMode;
+  localStorage.setItem(THEME_STORAGE_KEY, state.themeMode);
   applyTheme();
+  updateThemeToggleButtons();
+}
+
+function updateThemeToggleButtons() {
   document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
     const iconOnly = button.classList.contains("theme-toggle-floating");
     const nextTheme = state.theme === "dark" ? "light" : "dark";
@@ -157,11 +171,30 @@ function bindThemeToggles() {
   });
 }
 
+function bindSystemThemeListener() {
+  if (typeof window === "undefined" || !window.matchMedia) return;
+
+  const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+  const handleSystemThemeChange = () => {
+    if (state.themeMode !== "system") return;
+
+    applyTheme();
+    updateThemeToggleButtons();
+  };
+
+  if (typeof mediaQuery.addEventListener === "function") {
+    mediaQuery.addEventListener("change", handleSystemThemeChange);
+  } else if (typeof mediaQuery.addListener === "function") {
+    mediaQuery.addListener(handleSystemThemeChange);
+  }
+}
+
 const state = {
   apiBaseUrl: getInitialApiBaseUrl(),
   user: readJson("dcms.admin.user"),
   accessToken: localStorage.getItem("dcms.admin.accessToken"),
-  theme: getInitialTheme(),
+  themeMode: getInitialThemeMode(),
+  theme: "light",
   hasPassedLoginLanding: false,
   sidebarCollapsed: localStorage.getItem("dcms.admin.sidebarCollapsed") === "true",
   activeView: localStorage.getItem("dcms.admin.activeView") || "home",
@@ -13829,4 +13862,5 @@ function incidentOptions() {
     .join("");
 }
 
+bindSystemThemeListener();
 render();

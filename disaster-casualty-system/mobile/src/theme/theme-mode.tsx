@@ -14,7 +14,7 @@ import { Colors } from "@/constants/theme";
 export type ThemeMode = "system" | "light" | "dark";
 export type ResolvedTheme = "light" | "dark";
 
-const THEME_STORAGE_KEY = "dcms.mobile.themeMode";
+const THEME_STORAGE_KEY = "dcms.mobile.themePreference";
 
 type ThemeModeContextValue = {
   colors: typeof Colors.light | typeof Colors.dark;
