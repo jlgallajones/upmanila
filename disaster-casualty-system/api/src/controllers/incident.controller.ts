@@ -2149,6 +2149,9 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
             : roundedPercentage.toFixed(1);
         const sliceLabel = `${count} (${percentageLabel}%)`;
         const sliceLabelWidth = sliceLabel.length * 3.1;
+        const sliceLuminance =
+          color[0] * 0.299 + color[1] * 0.587 + color[2] * 0.114;
+        currentPage.push(sliceLuminance > 0.58 ? "0 g" : "1 1 1 rg");
         text(
           sliceLabel,
           centerX + Math.cos(middleAngle) * labelRadius - sliceLabelWidth / 2,
