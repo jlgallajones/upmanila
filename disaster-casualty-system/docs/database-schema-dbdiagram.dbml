@@ -11,6 +11,9 @@ Enum user_role {
   admin
   administrator
   responder
+  field_responder
+  sa_responder
+  minor_incident_documenter
   documenter
   encoder
   medical_personnel

@@ -66,6 +66,7 @@ function roleLabel(role: string): string {
     responder: "Legacy Responder",
     field_responder: "Field Responder",
     sa_responder: "Advanced Medical Post Responder",
+    minor_incident_documenter: "Minor Incident Documenter",
     documenter: "Healthcare Facility Documenter",
   };
 
@@ -200,16 +201,21 @@ export default function AccountManagementScreen() {
   const isSuperAdmin = currentRole === "super_admin";
   const roleOptions: AccountRole[] = isSuperAdmin
     ? ["administrator", "super_admin"]
-    : ["field_responder", "sa_responder", "documenter"];
+    : [
+        "field_responder",
+        "sa_responder",
+        "minor_incident_documenter",
+        "documenter",
+      ];
   const formTitle = isSuperAdmin
     ? "Create admin account"
-    : "Create FR/SAR/HCFD account";
+    : "Create FR/AMP/MID/HCFD account";
   const formSubtitle = isSuperAdmin
     ? "Admin accounts are assigned to a unit or location."
-    : "Field Responder, SAR, and HCFD accounts are assigned under your unit.";
+    : "Field Responder, AMP, Minor Incident Documenter, and HCFD accounts are assigned under your unit.";
   const directorySubtitle = isSuperAdmin
     ? "Alphabetical directory of all managed user accounts."
-    : "FR, SAR, HCFD, and legacy responder accounts under your admin/unit scope.";
+    : "FR, AMP, Minor Incident Documenter, HCFD, and legacy responder accounts under your admin/unit scope.";
   const headerSubtitle = isSuperAdmin
     ? "Super admin account controls"
     : "Admin unit account controls";
@@ -259,6 +265,8 @@ export default function AccountManagementScreen() {
           role:
             payload.role === "sa_responder"
               ? "sa_responder"
+              : payload.role === "minor_incident_documenter"
+                ? "minor_incident_documenter"
               : payload.role === "documenter"
                 ? "documenter"
                 : "field_responder",

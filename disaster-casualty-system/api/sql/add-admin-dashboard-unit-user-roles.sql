@@ -2,12 +2,18 @@
 -- Add every role label the app may store in public.users.
 -- Admin-created unit users are still limited by the backend endpoint to:
 --   responder
+--   field_responder
+--   sa_responder
+--   minor_incident_documenter
 --   documenter
 
 alter type public.user_role add value if not exists 'super_admin';
 alter type public.user_role add value if not exists 'admin';
 alter type public.user_role add value if not exists 'administrator';
 alter type public.user_role add value if not exists 'responder';
+alter type public.user_role add value if not exists 'field_responder';
+alter type public.user_role add value if not exists 'sa_responder';
+alter type public.user_role add value if not exists 'minor_incident_documenter';
 alter type public.user_role add value if not exists 'bystander';
 alter type public.user_role add value if not exists 'encoder';
 alter type public.user_role add value if not exists 'documenter';

@@ -15,6 +15,7 @@ const responderIncidentViewerRoles = new Set([
   "responder",
   "field_responder",
   "sa_responder",
+  "minor_incident_documenter",
   "documenter",
 ]);
 
@@ -688,6 +689,7 @@ function isFieldOrAmpResponderSafetyResponse(
     [
       "field_responder",
       "sa_responder",
+      "minor_incident_documenter",
       "advanced_medical_responder",
       "amp_responder",
       "responder",
@@ -1023,7 +1025,7 @@ function normalizeResponderFunctionFromRole(
     return "field_responder";
   }
 
-  if (role === "sa_responder") {
+  if (role === "sa_responder" || role === "minor_incident_documenter") {
     return "sa_responder";
   }
 

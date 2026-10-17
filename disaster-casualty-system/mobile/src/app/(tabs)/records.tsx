@@ -524,6 +524,7 @@ function isSaResponderView(
 ): boolean {
   return (
     role === "sa_responder" ||
+    role === "minor_incident_documenter" ||
     (role === "responder" && assignment === "sa_responder")
   );
 }

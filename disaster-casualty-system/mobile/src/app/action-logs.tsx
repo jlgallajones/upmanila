@@ -59,6 +59,7 @@ const RESPONDER_ROLES = new Set([
   "responder",
   "field_responder",
   "sa_responder",
+  "minor_incident_documenter",
 ]);
 
 type DisplayActionLog = {

@@ -92,6 +92,7 @@ type UnitUserRole =
   | "responder"
   | "field_responder"
   | "sa_responder"
+  | "minor_incident_documenter"
   | "documenter"
   | "medical_personnel";
 
@@ -99,6 +100,7 @@ const unitUserRoles: UnitUserRole[] = [
   "responder",
   "field_responder",
   "sa_responder",
+  "minor_incident_documenter",
   "documenter",
   "medical_personnel",
 ];
@@ -944,6 +946,11 @@ function getUnitUserContext(
         role: "sa_responder",
         reportingContext: "transport",
       };
+    case "minor_incident_documenter":
+      return {
+        role: "minor_incident_documenter",
+        reportingContext: "transport",
+      };
     case "field_responder":
       return {
         role: "field_responder",
@@ -1154,7 +1161,7 @@ export async function registerUnitUser(
       response.status(400).json({
         success: false,
         message:
-          "Admins can only assign FR, Advanced Medical Responder, or healthcare facility documenter roles.",
+          "Admins can only assign FR, AMP, Minor Incident Documenter, or healthcare facility documenter roles.",
       });
       return;
     }
@@ -2215,7 +2222,7 @@ export async function updateUnitUser(
       response.status(400).json({
         success: false,
         message:
-          "Admins can only create FR, Advanced Medical Responder, or healthcare facility documenter accounts.",
+          "Admins can only create FR, AMP, Minor Incident Documenter, or healthcare facility documenter accounts.",
       });
       return;
     }

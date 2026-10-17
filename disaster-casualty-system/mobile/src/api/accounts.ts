@@ -32,7 +32,11 @@ export type RegisterUnitUserPayload = {
   fullName: string;
   email: string;
   password: string;
-  role: "field_responder" | "sa_responder" | "documenter";
+  role:
+    | "field_responder"
+    | "sa_responder"
+    | "minor_incident_documenter"
+    | "documenter";
   phoneNumber?: string;
   assignedMunicipality?: string;
   assignedBarangay?: string;

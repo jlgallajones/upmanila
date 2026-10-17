@@ -165,6 +165,10 @@ function formatRole(role: string): string {
     return "Advanced Medical Post Responder";
   }
 
+  if (role === "minor_incident_documenter") {
+    return "Minor Incident Documenter";
+  }
+
   return role
     .split("_")
     .map(
@@ -179,7 +183,8 @@ function isResponderRole(role: string | null | undefined): boolean {
   return (
     role === "responder" ||
     role === "field_responder" ||
-    role === "sa_responder"
+    role === "sa_responder" ||
+    role === "minor_incident_documenter"
   );
 }
 

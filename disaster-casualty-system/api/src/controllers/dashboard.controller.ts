@@ -11,6 +11,7 @@ const responderIncidentViewerRoles = new Set([
   "responder",
   "field_responder",
   "sa_responder",
+  "minor_incident_documenter",
   "documenter",
   "medical_personnel",
 ]);

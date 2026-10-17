@@ -7,6 +7,7 @@ export type UserRole =
   | "field_responder"
   | "responder"
   | "sa_responder"
+  | "minor_incident_documenter"
   | "encoder"
   | "documenter"
   | "medical_personnel"

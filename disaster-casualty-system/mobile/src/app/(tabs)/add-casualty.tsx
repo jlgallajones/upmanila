@@ -104,6 +104,9 @@ const AMP_RESPONDER_FULL_LABEL =
 const AMP_RESPONDER_SHORT_LABEL =
   "AMP Responder";
 
+const MINOR_INCIDENT_DOCUMENTER_LABEL =
+  "Minor Incident Documenter";
+
 const FLOATING_TAB_BAR_CLEARANCE =
   Platform.OS === "android" ? 66 : 78;
 
@@ -120,11 +123,19 @@ const DEFAULT_STEPS = [
 
 const FIELD_RESPONDER_STEPS = ["Safety", "Triage", "Status"] as const;
 
-const SA_RESPONDER_STEPS = [
+const MINOR_INCIDENT_DOCUMENTER_STEPS = [
   "Safety",
   "Intro",
   "Info",
   "Address",
+  "Triage",
+  "Treatment",
+  "Transport",
+  "Remarks",
+] as const;
+
+const SA_RESPONDER_STEPS = [
+  "Safety",
   "Triage",
   "Treatment",
   "Transport",
@@ -145,6 +156,7 @@ const ALL_STEPS = [
   ...DEFAULT_STEPS,
   ...FIELD_RESPONDER_STEPS,
   ...SA_RESPONDER_STEPS,
+  ...MINOR_INCIDENT_DOCUMENTER_STEPS,
   ...HEALTHCARE_DOCUMENTER_STEPS,
 ] as const;
 
@@ -1287,6 +1299,7 @@ const TRIAGE_STAGE_OPTIONS_BY_ROLE: Record<string, TriageStageOption[]> = {
   field_responder: ["Primary Triage"],
   responder: ["Primary Triage", "Secondary Triage"],
   sa_responder: ["Secondary Triage"],
+  minor_incident_documenter: ["Secondary Triage"],
   medical_personnel: ["Tertiary Triage"],
   documenter: ["Tertiary Triage"],
 };
@@ -3382,6 +3395,10 @@ function getTriageStageOptionsForRole(
     return ["Secondary Triage"];
   }
 
+  if (role === "minor_incident_documenter") {
+    return ["Secondary Triage"];
+  }
+
 
   const roleOptions = role
     ? TRIAGE_STAGE_OPTIONS_BY_ROLE[role]
@@ -3417,6 +3434,12 @@ function isFieldResponderCaptureFlow(role: string | null): boolean {
 
 function isSaResponderCaptureFlow(role: string | null): boolean {
   return role === "sa_responder";
+}
+
+function isMinorIncidentDocumenterCaptureFlow(
+  role: string | null,
+): boolean {
+  return role === "minor_incident_documenter";
 }
 
 function isHealthcareDocumenterCaptureFlow(role: string | null): boolean {
@@ -4590,8 +4613,14 @@ function appendSectionNote(
   return [baseValue.trim(), section].filter(Boolean).join("\n\n");
 }
 
-function buildSaResponderRemarks(form: FormState): string {
-  return appendSectionNote(buildResponderSafetyRemarks(form), `${AMP_RESPONDER_FULL_LABEL} Details`, [
+function buildSaResponderRemarks(
+  form: FormState,
+  responderLabel = AMP_RESPONDER_FULL_LABEL,
+): string {
+  return appendSectionNote(
+    buildResponderSafetyRemarks(form),
+    `${responderLabel} Details`,
+    [
     ["Victim code", form.victimCode],
     ["Patient identified", form.patientIdentified],
     ["Witness present", form.witnessPresent],
@@ -4625,14 +4654,20 @@ function buildSaResponderTreatmentNotes(form: FormState): string {
   ]);
 }
 
-function buildSaResponderTransportNotes(form: FormState): string {
+function buildSaResponderTransportNotes(
+  form: FormState,
+  responderLabel = AMP_RESPONDER_FULL_LABEL,
+): string {
   const releaseText =
     form.patientFor === "Release" &&
     form.releaseLiabilityAccepted === "Yes"
       ? RELEASE_OF_LIABILITY_TEXT
       : "";
 
-  return appendSectionNote(form.transportNotes, `${AMP_RESPONDER_FULL_LABEL} Transport / Release`, [
+  return appendSectionNote(
+    form.transportNotes,
+    `${responderLabel} Transport / Release`,
+    [
     ["Patient for", form.patientFor],
     ["Condition before release", form.conditionBeforeRelease],
     ["Medical contact if dead", form.releaseMedicalContact],
@@ -5599,9 +5634,13 @@ const [
   const isFieldResponderFlow = isFieldResponderCaptureFlow(
     currentUserRole,
   );
-  const isSaResponderFlow = isSaResponderCaptureFlow(
-    currentUserRole,
-  );
+  const isMinorIncidentDocumenterFlow =
+    isMinorIncidentDocumenterCaptureFlow(currentUserRole);
+  const isShortAmpResponderFlow =
+    isSaResponderCaptureFlow(currentUserRole);
+  const isSaResponderFlow =
+    isShortAmpResponderFlow ||
+    isMinorIncidentDocumenterFlow;
   const isHealthcareDocumenterFlow =
     isHealthcareDocumenterCaptureFlow(currentUserRole);
   const isResponderEditFlow =
@@ -5610,8 +5649,10 @@ const [
     ? isEditing
       ? ["Triage", "Status", "Transport"]
       : [...FIELD_RESPONDER_STEPS]
-    : isSaResponderFlow
+    : isShortAmpResponderFlow
       ? [...SA_RESPONDER_STEPS]
+    : isMinorIncidentDocumenterFlow
+      ? [...MINOR_INCIDENT_DOCUMENTER_STEPS]
       : isHealthcareDocumenterFlow
         ? [...HEALTHCARE_DOCUMENTER_STEPS]
         : [...DEFAULT_STEPS];
@@ -5648,6 +5689,8 @@ const [
     );
   const responderFunctionLabel = isFieldResponderFlow
     ? "Field Responder"
+    : isMinorIncidentDocumenterFlow
+      ? MINOR_INCIDENT_DOCUMENTER_LABEL
     : isSaResponderFlow
       ? AMP_RESPONDER_FULL_LABEL
       : null;
@@ -5887,7 +5930,12 @@ const victimCodeAlreadyExists = useMemo(() => {
       assistanceNeeded: form.assistanceNeeded,
       assistanceProvided: form.assistanceProvided,
       remarks: isSaResponderFlow
-        ? buildSaResponderRemarks(form)
+        ? buildSaResponderRemarks(
+            form,
+            isMinorIncidentDocumenterFlow
+              ? MINOR_INCIDENT_DOCUMENTER_LABEL
+              : AMP_RESPONDER_FULL_LABEL,
+          )
         : isHealthcareDocumenterFlow
           ? buildHealthcareDocumenterRemarks(form)
           : isFieldResponderFlow
@@ -5989,7 +6037,12 @@ const victimCodeAlreadyExists = useMemo(() => {
       arrivedFacilityAt: parseDateTimeInput(form.arrivedFacilityTime),
       receivingFacilityId: form.healthcareFacilityId || undefined,
       notes: isSaResponderFlow
-        ? buildSaResponderTransportNotes(form)
+        ? buildSaResponderTransportNotes(
+            form,
+            isMinorIncidentDocumenterFlow
+              ? MINOR_INCIDENT_DOCUMENTER_LABEL
+              : AMP_RESPONDER_FULL_LABEL,
+          )
         : form.transportNotes,
     };
   }, [form, initialTransportSignature, isEditing, isSaResponderFlow]);
@@ -7752,8 +7805,10 @@ function handleTriageAssessmentDone() {
   function getCasualtyDraftTitle(): string {
     const roleLabel = isFieldResponderFlow
       ? "Field Responder"
-      : isSaResponderFlow
-        ? AMP_RESPONDER_SHORT_LABEL
+        : isMinorIncidentDocumenterFlow
+          ? MINOR_INCIDENT_DOCUMENTER_LABEL
+        : isSaResponderFlow
+          ? AMP_RESPONDER_SHORT_LABEL
         : isHealthcareDocumenterFlow
           ? "HCFD"
           : "Victim";
@@ -8161,7 +8216,7 @@ if (
 ) {
   Alert.alert(
     "Victim code already exists",
-    `Victim code ${form.victimCode.trim()} already exists for this incident under ${AMP_RESPONDER_FULL_LABEL}. Please use a different victim code.`,
+      `Victim code ${form.victimCode.trim()} already exists for this incident under ${isMinorIncidentDocumenterFlow ? MINOR_INCIDENT_DOCUMENTER_LABEL : AMP_RESPONDER_FULL_LABEL}. Please use a different victim code.`,
   );
   return false;
 }
@@ -8934,6 +8989,22 @@ if (
         return true;
 
       case "Triage":
+        if (isShortAmpResponderFlow && !form.victimCode.trim()) {
+          Alert.alert(
+            "Victim code required",
+            "Enter the victim code before continuing.",
+          );
+          return false;
+        }
+
+        if (isShortAmpResponderFlow && !form.idNumber.trim()) {
+          Alert.alert(
+            "ID number required",
+            "The casualty ID number is required before continuing.",
+          );
+          return false;
+        }
+
         if (!form.triageSystem.trim()) {
           Alert.alert(
             "Triage system required",
@@ -8953,7 +9024,7 @@ if (
           return false;
         }
 
-        if (!form.triageStage.trim()) {
+        if (!isShortAmpResponderFlow && !form.triageStage.trim()) {
           Alert.alert(
             "Triage stage required",
             "Select whether this triage was on-site, facility arrival, or reassessment.",
@@ -12679,7 +12750,7 @@ function confirmExitAddCasualty() {
     />
     <Text style={styles.inlineWarningText}>
       Victim code {form.victimCode.trim()} already exists
-      for this incident under {AMP_RESPONDER_FULL_LABEL}.
+      for this incident under {isMinorIncidentDocumenterFlow ? MINOR_INCIDENT_DOCUMENTER_LABEL : AMP_RESPONDER_FULL_LABEL}.
       Please use a different victim code.
     </Text>
   </View>
@@ -13735,6 +13806,44 @@ form.triageAssistanceMode === "assisted" ? (
 
     return (
       <>
+        {isShortAmpResponderFlow ? (
+          <>
+            <FormField
+              label="VICTIM CODE"
+              value={form.victimCode}
+              placeholder="Enter victim code"
+              onChangeText={(value) =>
+                updateField("victimCode", value)
+              }
+            />
+
+            {victimCodeAlreadyExists ? (
+              <View style={styles.inlineWarning}>
+                <Ionicons
+                  name="alert-circle-outline"
+                  size={18}
+                  color={COLORS.text}
+                />
+                <Text style={styles.inlineWarningText}>
+                  Victim code {form.victimCode.trim()} already exists
+                  for this incident under {AMP_RESPONDER_FULL_LABEL}.
+                  Please use a different victim code.
+                </Text>
+              </View>
+            ) : null}
+
+            <FormField
+              label="ID NUMBER"
+              value={form.idNumber}
+              placeholder="CAS-UNIT-001"
+              editable={false}
+              onChangeText={(value) =>
+                updateField("idNumber", value)
+              }
+            />
+          </>
+        ) : null}
+
         {isFieldResponderFlow && victimCodeAlreadyExists ? (
           <View style={styles.inlineWarning}>
             <Ionicons
@@ -13750,7 +13859,7 @@ form.triageAssistanceMode === "assisted" ? (
           </View>
         ) : null}
 
-        {!isFieldResponderFlow ? (
+        {!isFieldResponderFlow && !isShortAmpResponderFlow ? (
           <SelectField
             label="TRIAGE STAGE"
             value={form.triageStage}

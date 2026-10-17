@@ -565,6 +565,7 @@ export type CoordinationAssessmentPayload = {
 export type SitrepResponderFunctionFilter =
   | "field_responder"
   | "sa_responder"
+   | "minor_incident_documenter"
   | "both";
 
 export type IncidentSitrepPayload = {

@@ -85,7 +85,8 @@ function isResponderRole(role: string | null): boolean {
   return (
     role === "responder" ||
     role === "field_responder" ||
-    role === "sa_responder"
+  role === "sa_responder" ||
+  role === "minor_incident_documenter"
   );
 }
 
@@ -105,6 +106,7 @@ function isSaResponderView(
 ): boolean {
   return (
     role === "sa_responder" ||
+  role === "minor_incident_documenter" ||
     (role === "responder" && assignment === "sa_responder")
   );
 }

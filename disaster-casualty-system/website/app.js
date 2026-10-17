@@ -324,6 +324,7 @@ const facilityLevels = [
 const unitAccountRoles = [
   "field_responder",
   "sa_responder",
+  "minor_incident_documenter",
   "documenter",
 ];
 
@@ -804,6 +805,7 @@ function roleLabel(role) {
     responder: "Legacy Responder",
     field_responder: "Field Responder",
     sa_responder: "AMP Responder",
+    minor_incident_documenter: "Minor Incident Documenter",
     documenter: "Healthcare Facility Documenter",
     medical_personnel: "Legacy Medical Personnel",
   };
@@ -3168,6 +3170,7 @@ function renderCasualtyRecordFilters(resultCount, totalCount) {
     ["all", "All account types"],
     ["field_responder", "Field Responder"],
     ["sa_responder", "AMP Responder"],
+    ["minor_incident_documenter", "Minor Incident Documenter"],
     ["documenter", "HCFD"],
     ["responder", "Legacy Responder"],
   ];
@@ -5296,7 +5299,7 @@ function validateBulkImportRow(type, row) {
       reasons.push("password must be at least 6 characters.");
     }
     if (!unitAccountRoles.includes(row.role)) {
-      reasons.push("role must be field_responder, sa_responder, or documenter.");
+      reasons.push("role must be field_responder, sa_responder, minor_incident_documenter, or documenter.");
     }
     if (!row.phoneNumber) reasons.push("phoneNumber is required.");
     if (!row.assignedMunicipality) {
@@ -6874,7 +6877,7 @@ function matchCasingRoleBucket(record) {
   const role = record?.encoder?.role;
 
   if (role === "field_responder") return "field_responder";
-  if (role === "sa_responder") return "sa_responder";
+  if (role === "sa_responder" || role === "minor_incident_documenter") return "sa_responder";
   if (role === "documenter" || role === "medical_personnel") {
     return "documenter";
   }

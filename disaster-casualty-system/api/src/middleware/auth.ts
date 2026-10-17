@@ -16,6 +16,7 @@ export type UserRole =
   | "field_responder"
   | "responder"
   | "sa_responder"
+  | "minor_incident_documenter"
   | "encoder"
   | "documenter"
   | "medical_personnel"
@@ -228,7 +229,8 @@ function getEquivalentRoles(role: UserRole): UserRole[] {
       return ["administrator", "admin"];
     case "field_responder":
     case "sa_responder":
-      return [role, "responder"];
+    case "minor_incident_documenter":
+      return [role, "sa_responder", "responder"];
     case "responder":
       return ["responder", "field_responder", "sa_responder"];
     case "documenter":

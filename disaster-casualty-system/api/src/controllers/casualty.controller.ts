@@ -162,6 +162,7 @@ const casualtyDataEntryRoles = new Set([
   "responder",
   "field_responder",
   "sa_responder",
+  "minor_incident_documenter",
   "documenter",
   "medical_personnel",
   "bystander",
@@ -183,6 +184,7 @@ function getCaseMatchRoleBucket(
     case "field_responder":
       return "field_responder";
     case "sa_responder":
+    case "minor_incident_documenter":
       return "sa_responder";
     case "documenter":
     case "medical_personnel":
@@ -2109,7 +2111,7 @@ export async function getCasualties(
       request.query.fieldResponderLinks === "true";
     const canLoadFieldResponderLinks =
       fieldResponderLinks &&
-      ["responder", "field_responder", "sa_responder"].includes(
+        ["responder", "field_responder", "sa_responder", "minor_incident_documenter"].includes(
         user.role,
       );
     const scopedEncoderIds = await getCasualtyScopeEncoderIds(user);
@@ -3497,7 +3499,7 @@ export async function createCasualtyTriageAssessment(
       request.header("X-DCMS-Responder-Function");
     const isStabilizationResponderUpdate =
       responderFunction === "sa_responder" &&
-      ["responder", "field_responder", "sa_responder"].includes(
+      ["responder", "field_responder", "sa_responder", "minor_incident_documenter"].includes(
         user.role,
       );
 
@@ -3822,7 +3824,7 @@ export async function createCasualtyTransportRecord(
       request.header("X-DCMS-Responder-Function");
     const isStabilizationResponderUpdate =
       responderFunction === "sa_responder" &&
-      ["responder", "field_responder", "sa_responder"].includes(
+      ["responder", "field_responder", "sa_responder", "minor_incident_documenter"].includes(
         user.role,
       );
 
@@ -3928,7 +3930,7 @@ export async function updateCasualty(
       request.header("X-DCMS-Responder-Function");
     const isStabilizationResponderUpdate =
       responderFunction === "sa_responder" &&
-      ["responder", "field_responder", "sa_responder"].includes(
+      ["responder", "field_responder", "sa_responder", "minor_incident_documenter"].includes(
         user.role,
       );
     const isResponderTransportOnlyUpdate =

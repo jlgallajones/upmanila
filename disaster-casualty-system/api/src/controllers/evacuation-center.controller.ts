@@ -80,7 +80,7 @@ async function getVisibleIncidentIdsForReferenceData(user: {
 
   let creatorId: string | null = user.id;
 
-  if (["responder", "field_responder", "sa_responder", "documenter"].includes(user.role)) {
+  if (["responder", "field_responder", "sa_responder", "minor_incident_documenter", "documenter"].includes(user.role)) {
     const { data: profile, error: profileError } = await supabase
       .from("users")
       .select("created_by")
