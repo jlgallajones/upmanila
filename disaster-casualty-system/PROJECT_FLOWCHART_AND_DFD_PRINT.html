@@ -585,7 +585,57 @@ flowchart TD
     </section>
 
     <section>
-      <h2>12. Deployment View</h2>
+      <h2>12. Current Role-Specific Casualty Flow</h2>
+      <p class="section-note">AMP Responder uses the shortened secondary-triage capture flow. Minor Incident Documenter retains the full AMP-style workflow.</p>
+      <pre class="mermaid">
+flowchart TD
+  Start["Mobile/PWA Add Casualty"] --> Role{"Account role"}
+  Role -->|Field Responder| FR["Safety -> Triage -> Status"]
+  Role -->|AMP Responder| AMP["Safety -> Triage -> Treatment -> Transport -> Remarks"]
+  AMP --> AMPFields["Victim Code + generated ID at top of Triage<br/>Secondary Triage automatic"]
+  Role -->|Minor Incident Documenter| MID["Safety -> Intro -> Info -> Address -> Triage -> Treatment -> Transport -> Remarks"]
+  Role -->|HCFD| HCFD["General -> Patient -> Triage -> Management -> Disposition"]
+  FR --> Submit["Submit or queue offline"]
+  AMPFields --> Submit
+  MID --> Submit
+  HCFD --> Submit
+  Submit --> API["Express API"]
+      </pre>
+    </section>
+
+    <section>
+      <h2>13. Analytics Chart Availability Flow</h2>
+      <pre class="mermaid">
+flowchart LR
+  Incident["Selected incident"] --> Data["Triage and operational data"]
+  Data --> Pie["Over/under/correct and transition counts"]
+  Data --> Line["Activation, transport, facility, resource, morbidity, mortality series"]
+  Pie --> PieGate{Any non-zero category?}
+  Line --> LineGate{Any data points?}
+  PieGate -->|Yes| PieChart["Render pie chart"]
+  PieGate -->|No| PieHidden["Hide pie chart"]
+  LineGate -->|Yes| LineChart["Render line graph"]
+  LineGate -->|No| LineHidden["Hide line graph"]
+      </pre>
+      <p class="section-note">Triage percentages use all recorded victims as the denominator. The same data gate is applied to web analytics and SitRep PDF charts.</p>
+    </section>
+
+    <section>
+      <h2>14. Theme Resolution Flow</h2>
+      <pre class="mermaid">
+flowchart TD
+  Device["Device Light/Dark setting"] --> System["System preference"]
+  System --> Client{"Client"}
+  Client --> Web["Web dashboard"]
+  Client --> Mobile["Mobile/PWA"]
+  Override["Explicit Light/Dark override"] --> Client
+  Web --> UI["Theme-aware UI colors"]
+  Mobile --> UI
+      </pre>
+    </section>
+
+    <section>
+      <h2>15. Deployment View</h2>
       <p class="section-note">Free-tier deployment shape used by the project.</p>
       <pre class="mermaid">
 flowchart LR
@@ -602,7 +652,7 @@ flowchart LR
     </section>
 
     <section>
-      <h2>13. Notes For Submission</h2>
+      <h2>16. Notes For Submission</h2>
       <ul>
         <li>The web dashboard and mobile/PWA app do not directly write to the database. They call the Express API.</li>
         <li>Supabase Auth handles authentication, but role and scope decisions are also enforced by the API.</li>
@@ -611,6 +661,8 @@ flowchart LR
         <li>Supabase Realtime helps the web dashboard update when operational records change.</li>
         <li>Mobile/PWA supports offline queueing for casualty submissions and retries when the API becomes reachable again.</li>
         <li>Match Casing does not merge or rewrite records. It creates a link layer through <strong>casualty_case_links</strong>.</li>
+        <li>The database role enum includes <strong>minor_incident_documenter</strong>; apply the role migration before creating that account.</li>
+        <li>SitRep exports use <strong>SITREP-[office name]-[incident name]-[date].[extension]</strong>.</li>
       </ul>
     </section>
   </main>

@@ -198,7 +198,7 @@ Primary client: Web dashboard.
 
 Capabilities:
 
-- Create and manage Field Responder, AMP, and HCFD accounts.
+- Create and manage Field Responder, AMP, Minor Incident Documenter, and HCFD accounts.
 - Create and manage official incidents.
 - Manage healthcare facility references.
 - Review casualty records.
@@ -235,6 +235,19 @@ Capabilities:
 - Retry failed submissions.
 - View own role-scoped records.
 
+### Minor Incident Documenter
+
+Primary client: Mobile/PWA app.
+
+Capabilities:
+
+- Create Minor Incident Documenter casualty records using the full AMP-style workflow.
+- Record introductory, patient, address, triage, treatment, transport, and remarks data.
+- Attach casualty photos.
+- Queue casualty submissions while offline.
+- Retry failed submissions.
+- View own role-scoped records.
+
 ### Healthcare Facility Documenter
 
 Primary client: Mobile/PWA app.
@@ -250,7 +263,7 @@ Capabilities:
 
 ### Legacy Roles
 
-Legacy `responder` and `medical_personnel` roles remain readable for existing records and accounts. They are preserved to avoid breaking old data. New accounts should use `field_responder`, `sa_responder`, or `documenter`.
+Legacy `responder` and `medical_personnel` roles remain readable for existing records and accounts. They are preserved to avoid breaking old data. New accounts should use `field_responder`, `sa_responder`, `minor_incident_documenter`, or `documenter`.
 
 ## 5. Database And Storage
 
@@ -264,6 +277,7 @@ Persistence is handled through Supabase:
 Important tables currently used:
 
 - `users`
+- The `users.role` enum includes `field_responder`, `sa_responder`, and `minor_incident_documenter` in addition to administrative and HCFD roles.
 - `incidents`
 - `casualties`
 - `casualty_incidents`
@@ -288,6 +302,8 @@ Important tables currently used:
 - `notifications`
 - `audit_logs`
 - `form_drafts`
+- `casualty_triage_assessments` stores triage stage, system, final category, assistance mode, and assessment answers.
+- Facility-arrival and hospital-care records store admission, ED, ICU, and admitted-unit details. Admitted-unit values are controlled as ICU, Ward, Other Unit, Not Admitted, or Unknown.
 
 Important migration/support SQL files:
 
@@ -338,6 +354,7 @@ Supported new account roles:
 
 - Field Responder.
 - AMP Responder.
+- Minor Incident Documenter.
 - Healthcare Facility Documenter.
 
 The web dashboard also supports bulk import with preview and row validation. Existing legacy responder accounts remain editable.
@@ -360,6 +377,11 @@ Basic flow:
 6. If online, the record is submitted to the API.
 7. If offline or API is unreachable, the record is saved in the local queue.
 8. The user can retry queued records later.
+
+Role-specific capture paths:
+
+- AMP Responder: Safety -> Triage -> Treatment -> Transport -> Remarks. Victim Code and generated ID Number appear at the top of Triage, and the triage stage is treated as Secondary Triage.
+- Minor Incident Documenter: the full AMP-style sequence remains available, including Intro, Info, Address, Triage, Treatment, Transport, and Remarks.
 
 ### 7.4 Verification Review
 
@@ -412,8 +434,17 @@ Incident Analytics reads incident-linked operational data and shows:
 - Healthcare/facility metrics.
 - Transport and facility-arrival information.
 - Responder safety/resource metrics where available.
+- Primary and secondary over/under-triage comparisons based on unassisted assessments.
+- Over-triage and under-triage transition distributions.
+- Operational line graphs for activation, stabilization, transport, facility, resource, morbidity, and mortality events.
 
-Analytics depend on the presence and completeness of underlying casualty, triage, transport, treatment, outcome, and facility data.
+Analytics depend on the presence and completeness of underlying casualty, triage, transport, treatment, outcome, and facility data. Pie charts and line graphs are omitted when their datasets contain no meaningful values. Triage percentages use all recorded victims as the denominator.
+
+SitRep exports use the filename format `SITREP-[office name]-[incident name]-[date].[extension]`, where the date is generated when the file is generated/downloaded. Final SitRep generation remains gated until the incident is closed.
+
+### 7.10 Theme Resolution
+
+Mobile and web theme state defaults to the device/system color scheme. The clients listen for system theme changes and resolve the interface to Light or Dark automatically. An explicit Light or Dark selection is stored as a user override, while the system mode remains available as the automatic default.
 
 ### 7.7 Audit Logs
 

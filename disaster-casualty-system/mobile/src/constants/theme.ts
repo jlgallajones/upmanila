@@ -9,11 +9,11 @@ import { Platform } from 'react-native';
 
 export const Colors = {
   light: {
-    text: '#6B6B6B',
+    text: '#3A3A3A',
     background: '#FAFAFA',
     backgroundElement: '#F2F2F2',
     backgroundSelected: '#E6E6E6',
-    textSecondary: '#6B6B6B',
+    textSecondary: '#3A3A3A',
     surface: '#FFFFFF',
     surfaceRaised: '#FFFFFF',
     border: '#E6E6E6',
@@ -140,7 +140,7 @@ export function createThemePalette<T extends Record<string, string>>(
     ["orangeBackground", "var(--mobile-orangeBackground, #FFF4E7)"],
     ["primary", "var(--mobile-primary, #00838F)"],
     ["surface", "var(--mobile-surface, #FFFFFF)"],
-    ["text", "var(--mobile-text, #6B6B6B)"],
+    ["text", "var(--mobile-text, #3A3A3A)"],
     ["warningBackground", "var(--mobile-warningBackground, #FFF5F5)"],
     ["warningBorder", "var(--mobile-warningBorder, #FFB7B7)"],
   ]) as T & ThemePaletteAliases;

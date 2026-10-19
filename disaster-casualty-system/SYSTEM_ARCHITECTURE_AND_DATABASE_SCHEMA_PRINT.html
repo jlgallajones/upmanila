@@ -756,7 +756,62 @@ flowchart TD
     </section>
 
     <section>
-      <h2>14. Database Notes</h2>
+      <h2>14. Current Role And Theme Architecture</h2>
+      <p class="section-note">The current implementation separates the full Minor Incident Documenter workflow from the shorter AMP Responder capture workflow and resolves Light/Dark mode from the device by default.</p>
+      <pre class="mermaid">
+flowchart LR
+  Admin["Web Admin"] --> Accounts["Account Management"]
+  Accounts --> FR["Field Responder"]
+  Accounts --> AMP["AMP Responder"]
+  Accounts --> MID["Minor Incident Documenter"]
+  Accounts --> HCFD["Healthcare Facility Documenter"]
+  AMP --> Short["Safety -> Triage -> Treatment -> Transport -> Remarks"]
+  Short --> AMPFields["Victim Code + generated ID at Triage top<br/>Secondary Triage automatic"]
+  MID --> Full["Safety -> Intro -> Info -> Address -> Triage -> Treatment -> Transport -> Remarks"]
+  FR --> API["Express API"]
+  AMPFields --> API
+  Full --> API
+  HCFD --> API
+  API --> DB[("Supabase PostgreSQL")]
+      </pre>
+      <pre class="mermaid">
+flowchart TD
+  Device["Device color scheme"] --> SystemMode["System theme preference"]
+  SystemMode --> Resolve{Light or Dark?}
+  Resolve --> Mobile["Mobile/PWA theme provider"]
+  Resolve --> Web["Web dashboard theme state"]
+  Override["Explicit Light/Dark override"] --> Resolve
+  Mobile --> UI["Theme-aware fields, cards, warnings, navigation"]
+  Web --> UI
+      </pre>
+    </section>
+
+    <section>
+      <h2>15. Analytics And SitRep Data Architecture</h2>
+      <p class="section-note">Analytics and SitRep charts are data-driven. Empty datasets are omitted from the web view and PDF output.</p>
+      <pre class="mermaid">
+flowchart LR
+  Casualties["Casualty records"] --> Triage["Triage assessments"]
+  Triage --> Compare["Unassisted primary/secondary comparison"]
+  Compare --> Accuracy["Over / Under / Correct totals"]
+  Compare --> Transitions["Transition distributions"]
+  Operations["Transport, facility, resource, morbidity, mortality events"] --> Lines["Operational line series"]
+  Accuracy --> Gate{"Has chart data?"}
+  Transitions --> Gate
+  Lines --> Gate
+  Gate -->|Yes| Render["Web chart / SitRep PDF chart"]
+  Gate -->|No| Hide["Omit chart"]
+      </pre>
+      <ul>
+        <li>Triage percentages use all recorded victims as the denominator.</li>
+        <li>SitRep files use <code>SITREP-[office name]-[incident name]-[date].[extension]</code>.</li>
+        <li>Final SitRep generation remains gated until the incident is closed.</li>
+        <li>Hospital-arrival records preserve admitted-unit values: ICU, Ward, Other Unit, Not Admitted, or Unknown.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>16. Database Notes</h2>
       <ul>
         <li><strong>casualties</strong> stores person-level identity data.</li>
         <li><strong>casualty_incidents</strong> stores incident-specific casualty records, including status, severity, encoder, location, and verification state.</li>
@@ -767,6 +822,9 @@ flowchart TD
         <li><strong>form_drafts</strong> stores saved draft payloads.</li>
         <li><strong>call_down_staff</strong> stores reusable staff contacts, including people who do not have login accounts.</li>
         <li><strong>dmmp_staff_call_downs</strong> stores incident-specific call-down responses.</li>
+        <li><strong>users.role</strong> includes <code>field_responder</code>, <code>sa_responder</code>, and <code>minor_incident_documenter</code> in addition to administrative and HCFD roles.</li>
+        <li><strong>casualty_triage_assessments</strong> stores triage stage, system, final category, assistance mode, and assessment answers.</li>
+        <li>Facility-arrival and hospital-care records store admission, ED, ICU, and admitted-unit details.</li>
       </ul>
     </section>
   </main>

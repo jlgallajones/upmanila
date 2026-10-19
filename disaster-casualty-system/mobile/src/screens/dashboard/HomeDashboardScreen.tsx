@@ -1,7 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { createThemePalette } from "@/constants/theme";
 import { router, useFocusEffect } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -48,33 +47,27 @@ import {
   type QueueSyncResult,
 } from "../../offline/casualtyQueue";
 
-const COLORS = createThemePalette({
-  maroon: "#242424",
-  black: "#6B6B6B",
-  charcoal: "#3A3A3A",
-  teal: "#00838F",
+const COLORS = {
+  maroon: "#7B1113",
   white: "#FFFFFF",
-  background: "#FAFAFA",
-  surface: "#F2F2F2",
-  text: "#6B6B6B",
-  secondaryText: "#6B6B6B",
+  background: "#F3F5F9",
+  text: "#15213A",
+  secondaryText: "#78849A",
 
-  green: "#388E3C",
-  orange: "#F2C94C",
-  blue: "#1976D2",
-  red: "#D32F2F",
-  cyan: "#00838F",
-  gray: "#6B6B6B",
+  green: "#3B6E54",
+  orange: "#E47A18",
+  blue: "#267ABD",
+  red: "#BF2529",
+  gray: "#68758A",
 
-  paleRed: "#FFEBEE",
-  paleOrange: "#FFF8D9",
-  paleGreen: "#E8F5E9",
-  paleBlue: "#E3F2FD",
-  paleCyan: "#E0F7FA",
-  paleGray: "#F2F2F2",
+  paleRed: "#FFF0F0",
+  paleOrange: "#FFF4E9",
+  paleGreen: "#EDF7F1",
+  paleBlue: "#EDF5FD",
+  paleGray: "#EEF1F5",
 
-  border: "#E6E6E6",
-});
+  border: "#E4E8EF",
+};
 
 const initialSummary: DashboardSummary = {
   encodedToday: 0,
@@ -95,12 +88,6 @@ const RESPONDER_ROLES = new Set([
   "responder",
   "field_responder",
   "sa_responder",
-  "minor_incident_documenter",
-]);
-
-const DOCUMENTATION_ROLES = new Set([
-  "documenter",
-  "medical_personnel",
 ]);
 
 const DISRUPTION_OPTIONS: Array<{
@@ -139,41 +126,39 @@ function SummaryCard({
 }: SummaryCardProps) {
   const content = (
     <>
-      <View style={styles.summaryTopRow}>
-        {loading ? (
-          <ActivityIndicator
-            size="small"
-            color={valueColor}
-            style={styles.summaryLoader}
-          />
-        ) : (
-          <Text
-            style={[
-              styles.summaryValue,
-              {
-                color: valueColor,
-              },
-            ]}
-          >
-            {value}
-          </Text>
-        )}
+      <View
+        style={[
+          styles.summaryIcon,
+          {
+            backgroundColor: iconBackground,
+          },
+        ]}
+      >
+        <Ionicons
+          name={icon}
+          size={20}
+          color={iconColor}
+        />
+      </View>
 
-        <View
+      {loading ? (
+        <ActivityIndicator
+          size="small"
+          color={valueColor}
+          style={styles.summaryLoader}
+        />
+      ) : (
+        <Text
           style={[
-            styles.summaryIcon,
+            styles.summaryValue,
             {
-              backgroundColor: iconBackground,
+              color: valueColor,
             },
           ]}
         >
-          <Ionicons
-            name={icon}
-            size={28}
-            color={iconColor}
-          />
-        </View>
-      </View>
+          {value}
+        </Text>
+      )}
 
       <Text style={styles.summaryLabel}>{label}</Text>
       <Text style={styles.summaryCaption}>{caption}</Text>
@@ -184,7 +169,7 @@ function SummaryCard({
           <Ionicons
             name="chevron-forward"
             size={14}
-            color={COLORS.text}
+            color={COLORS.maroon}
           />
         </View>
       ) : null}
@@ -402,7 +387,7 @@ function getFullName(activity: RecentActivity): string {
 
   return parts.length > 0
     ? parts.join(" ")
-    : "Unidentified Casualty";
+    : "Unidentified Victim";
 }
 
 function getInitials(name: string): string {
@@ -619,6 +604,7 @@ export default function HomeDashboardScreen() {
   ] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] =
     useState(false);
+  const [formattedDate, setFormattedDate] = useState("");
   const [quickChoice, setQuickChoice] =
     useState<QuickChoiceState | null>(null);
   const [quickTimePrompt, setQuickTimePrompt] =
@@ -657,14 +643,15 @@ export default function HomeDashboardScreen() {
       setIsSuperAdmin(hasSuperAdminRole);
 
       if (!token) {
+        const queuedCount = await getQueuedCasualtyCount();
+        setQueuedCasualtyCount(queuedCount);
         setSummary(initialSummary);
         setActivities([]);
         setUnreadNotificationCount(0);
-        setIsGuestMode(false);
+        setIsGuestMode(true);
         setCurrentUserRole(null);
         setCanOpenIncidentManagement(false);
         setIsSuperAdmin(false);
-        router.replace("/login");
         return null;
       }
 
@@ -698,15 +685,16 @@ export default function HomeDashboardScreen() {
       return syncResult;
     } catch (error) {
       if (isAuthenticationTokenError(error)) {
+        const queuedCount = await getQueuedCasualtyCount();
+        setQueuedCasualtyCount(queuedCount);
         setSummary(initialSummary);
         setActivities([]);
         setUnreadNotificationCount(0);
-        setIsGuestMode(false);
+        setIsGuestMode(true);
         setCurrentUserRole(null);
         setCanOpenIncidentManagement(false);
         setIsSuperAdmin(false);
         setErrorMessage(null);
-        router.replace("/login");
         return null;
       }
 
@@ -736,6 +724,18 @@ export default function HomeDashboardScreen() {
     }, [loadDashboard]),
   );
 
+  useEffect(() => {
+    setFormattedDate(
+      new Intl.DateTimeFormat("en-US", {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      })
+        .format(new Date())
+        .toUpperCase(),
+    );
+  }, []);
+
   const handleRefresh = useCallback(async () => {
     try {
       setIsRefreshing(true);
@@ -753,7 +753,7 @@ export default function HomeDashboardScreen() {
       if (syncResult.synced > 0 && syncResult.remaining === 0) {
         setSyncFeedback({
           title: "Sync complete",
-          message: `${syncResult.synced} queued casualty record${
+          message: `${syncResult.synced} queued victim record${
             syncResult.synced === 1 ? "" : "s"
           } uploaded successfully.`,
           tone: "success",
@@ -780,7 +780,7 @@ export default function HomeDashboardScreen() {
       setSyncFeedback({
         title: "Refresh complete",
         message:
-          "Data is up to date. There are no offline casualty records waiting to sync.",
+          "Data is up to date. There are no offline victim records waiting to sync.",
         tone: "success",
       });
     } finally {
@@ -791,23 +791,14 @@ export default function HomeDashboardScreen() {
   const isResponderAccount = currentUserRole
     ? RESPONDER_ROLES.has(currentUserRole)
     : false;
-  const isDocumenterAccount = currentUserRole
-    ? DOCUMENTATION_ROLES.has(currentUserRole)
-    : false;
   const canOpenActiveIncidents =
-    canOpenIncidentManagement ||
-    isResponderAccount ||
-    isDocumenterAccount;
+    canOpenIncidentManagement || isResponderAccount;
+  const isDocumenterAccount = currentUserRole === "documenter";
   const isAdminAccount =
     currentUserRole === "admin" ||
     currentUserRole === "administrator";
   const hideDataEntryQuickLinks =
     isResponderAccount || isDocumenterAccount;
-  const summaryDate = new Intl.DateTimeFormat("en-US", {
-    month: "2-digit",
-    day: "2-digit",
-    year: "numeric",
-  }).format(new Date());
 
   async function resolveActiveIncident(
     title: string,
@@ -846,7 +837,7 @@ export default function HomeDashboardScreen() {
             .filter(Boolean)
             .join(", "),
           icon: "warning-outline",
-          color: COLORS.text,
+          color: COLORS.maroon,
           onSelect: () => onIncidentSelected(incident),
         })),
       });
@@ -941,7 +932,7 @@ export default function HomeDashboardScreen() {
           label: facility.facility_name,
           caption: formatFacilityLabel(facility),
           icon: "business-outline",
-          color: COLORS.text,
+          color: COLORS.maroon,
           onSelect: () => onFacilitySelected(incident, facility),
         })),
       });
@@ -1292,11 +1283,16 @@ export default function HomeDashboardScreen() {
     }
   }
 
+  const activeIncidentCaption =
+    summary.activeIncidents === 1
+      ? "1 incident currently active"
+      : `${summary.activeIncidents} incidents currently active`;
+
   return (
     <View style={styles.screen}>
       <StatusBar
-        barStyle="dark-content"
-        backgroundColor={COLORS.background}
+        barStyle="light-content"
+        backgroundColor={COLORS.maroon}
       />
 
       <SafeAreaView
@@ -1304,86 +1300,92 @@ export default function HomeDashboardScreen() {
         style={styles.headerSafeArea}
       >
         <View style={styles.header}>
+          <View style={styles.headerCircleOne} />
+          <View style={styles.headerCircleTwo} />
+
           <View style={styles.headerTopRow}>
-            <View style={styles.brandWelcomeRow}>
-              <View style={styles.brandMark}>
-                <View style={styles.brandLens} />
-                <View style={[styles.brandDot, styles.brandDotRed]} />
-                <View style={[styles.brandDot, styles.brandDotOrange]} />
-                <View style={[styles.brandDot, styles.brandDotGreen]} />
-              </View>
+            <View style={styles.greetingWrapper}>
+              <Text style={styles.greeting}>
+                Good day,
+              </Text>
 
-              <View style={styles.greetingWrapper}>
-                <Text style={styles.greeting}>
-                  Welcome,
-                </Text>
+              <Text style={styles.responderName}>
+                {currentUserFirstName}
+              </Text>
 
-                <Text style={styles.responderName}>
-                  {currentUserFirstName}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.headerActions}>
-              <Pressable
-                onPress={() => router.push("/incidents")}
-                disabled={!canOpenActiveIncidents}
-                style={({ pressed }) => [
-                  styles.activeStatusPill,
-                  summary.activeIncidents > 0 && styles.activeStatusPillLive,
-                  pressed &&
-                    canOpenActiveIncidents &&
-                    styles.pressed,
-                ]}
-                accessibilityRole={
-                  canOpenActiveIncidents
-                    ? "button"
-                    : undefined
-                }
-                accessibilityLabel={
-                  canOpenActiveIncidents
-                    ? "Open active incidents"
-                    : undefined
-                }
-              >
+              <View style={styles.activeRow}>
                 <View
                   style={[
                     styles.activeDot,
-                    summary.activeIncidents === 0 &&
-                      styles.activeDotInactive,
+                    isGuestMode && styles.guestDot,
                   ]}
                 />
 
-                <Text style={styles.activeStatusText} numberOfLines={1}>
-                  {summary.activeIncidents > 0
-                    ? `${summary.activeIncidents} ACTIVE INCIDENT${summary.activeIncidents === 1 ? "" : "S"}`
-                    : "NO ACTIVE INCIDENT"}
+                <Text style={styles.activeText}>
+                  {isGuestMode
+                    ? "Guest capture mode"
+                    : "Connected to DCMS"}
                 </Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() =>
-                  router.push("/notifications")
-                }
-                style={({ pressed }) => [
-                  styles.notificationButton,
-                  pressed && styles.pressed,
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel="Open notifications"
-              >
-                <Ionicons
-                  name="notifications-outline"
-                  size={23}
-                  color={COLORS.black}
-                />
-
-                {unreadNotificationCount > 0 ? (
-                  <View style={styles.notificationDot} />
-                ) : null}
-              </Pressable>
+              </View>
             </View>
+
+            <Pressable
+              onPress={() =>
+                router.push("/notifications")
+              }
+              style={({ pressed }) => [
+                styles.notificationButton,
+                pressed && styles.pressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Open notifications"
+            >
+              <Ionicons
+                name="notifications-outline"
+                size={22}
+                color={COLORS.white}
+              />
+
+              {unreadNotificationCount > 0 ? (
+                <View style={styles.notificationDot} />
+              ) : null}
+            </Pressable>
           </View>
+
+          <Pressable
+            onPress={() => router.push("/incidents")}
+            disabled={!canOpenActiveIncidents}
+            style={({ pressed }) => [
+              styles.incidentBanner,
+              pressed &&
+                canOpenActiveIncidents &&
+                styles.pressed,
+            ]}
+            accessibilityRole={
+              canOpenActiveIncidents
+                ? "button"
+                : undefined
+            }
+            accessibilityLabel={
+              canOpenActiveIncidents
+                ? "Open active incidents"
+                : undefined
+            }
+          >
+            <View
+              style={[
+                styles.incidentDot,
+                summary.activeIncidents === 0 &&
+                  styles.incidentDotInactive,
+              ]}
+            />
+
+            <Text style={styles.incidentText}>
+              {summary.activeIncidents > 0
+                ? `ACTIVE RESPONSE — ${activeIncidentCaption}`
+                : "NO ACTIVE DISASTER INCIDENT"}
+            </Text>
+          </Pressable>
         </View>
       </SafeAreaView>
 
@@ -1395,8 +1397,8 @@ export default function HomeDashboardScreen() {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            colors={[COLORS.text]}
-            tintColor={COLORS.text}
+            colors={[COLORS.maroon]}
+            tintColor={COLORS.maroon}
           />
         }
       >
@@ -1437,10 +1439,10 @@ export default function HomeDashboardScreen() {
             <Ionicons
               name="cloud-offline-outline"
               size={19}
-              color={COLORS.black}
+              color={COLORS.orange}
             />
             <Text style={styles.offlineBannerText}>
-              {queuedCasualtyCount} casualty record
+              {queuedCasualtyCount} victim record
               {queuedCasualtyCount === 1 ? "" : "s"} waiting to sync.
             </Text>
           </View>
@@ -1451,16 +1453,16 @@ export default function HomeDashboardScreen() {
             <Ionicons
               name="person-circle-outline"
               size={19}
-              color={COLORS.black}
+              color={COLORS.orange}
             />
             <Text style={styles.offlineBannerText}>
-              Offline capture mode. Log in to sync and view cloud data.
+              Guest capture mode. Add victim records offline, then log in from Profile to sync and view cloud data.
             </Text>
           </View>
         ) : null}
 
         <Text style={styles.sectionTitle}>
-          Summary for Today, {summaryDate}
+          SUMMARY — {formattedDate}
         </Text>
 
         <View style={styles.summaryGrid}>
@@ -1469,9 +1471,9 @@ export default function HomeDashboardScreen() {
             value={String(summary.activeIncidents)}
             label="Active Incidents"
             caption="Current responses"
-            valueColor={COLORS.black}
-            iconBackground="transparent"
-            iconColor={COLORS.cyan}
+            valueColor={COLORS.blue}
+            iconBackground={COLORS.paleBlue}
+            iconColor={COLORS.blue}
             loading={isLoading}
             onPress={
               canOpenActiveIncidents
@@ -1485,9 +1487,9 @@ export default function HomeDashboardScreen() {
             value={String(summary.encodedToday)}
             label="Encoded Today"
             caption="Records created today"
-            valueColor={COLORS.black}
-            iconBackground="transparent"
-            iconColor={COLORS.cyan}
+            valueColor={COLORS.maroon}
+            iconBackground={COLORS.paleRed}
+            iconColor={COLORS.red}
             loading={isLoading}
           />
 
@@ -1496,9 +1498,9 @@ export default function HomeDashboardScreen() {
             value={String(summary.verifiedRecords)}
             label="Verified Records"
             caption="Official records"
-            valueColor={COLORS.black}
-            iconBackground="transparent"
-            iconColor={COLORS.cyan}
+            valueColor={COLORS.green}
+            iconBackground={COLORS.paleGreen}
+            iconColor={COLORS.green}
             loading={isLoading}
           />
 
@@ -1507,9 +1509,9 @@ export default function HomeDashboardScreen() {
             value={String(summary.pendingRecords)}
             label="Pending Review"
             caption="Awaiting verification"
-            valueColor={COLORS.black}
-            iconBackground="transparent"
-            iconColor={COLORS.cyan}
+            valueColor={COLORS.orange}
+            iconBackground={COLORS.paleOrange}
+            iconColor={COLORS.orange}
             loading={isLoading}
           />
         </View>
@@ -1526,9 +1528,9 @@ export default function HomeDashboardScreen() {
           {!isSuperAdmin && !hideDataEntryQuickLinks ? (
             <QuickAction
               icon="add-circle-outline"
-              label="Add Casualty"
+              label="Add Victim"
               caption="New record"
-              iconColor={COLORS.text}
+              iconColor={COLORS.maroon}
               iconBackground="#F5E9EB"
               onPress={() =>
                 router.push("/add-casualty")
@@ -1599,7 +1601,7 @@ export default function HomeDashboardScreen() {
                   ? "Admin accounts"
                   : "Unit users"
               }
-              iconColor={COLORS.text}
+              iconColor={COLORS.maroon}
               iconBackground="#F5E9EB"
               onPress={() =>
                 router.push("/account-management" as never)
@@ -1612,7 +1614,7 @@ export default function HomeDashboardScreen() {
               icon="warning-outline"
               label="Manage Incidents"
               caption="Reports"
-              iconColor={COLORS.text}
+              iconColor={COLORS.maroon}
               iconBackground="#F5E9EB"
               onPress={() => router.push("/incidents" as never)}
             />
@@ -1706,7 +1708,7 @@ export default function HomeDashboardScreen() {
           <View style={styles.activityLoadingCard}>
             <ActivityIndicator
               size="small"
-              color={COLORS.text}
+              color={COLORS.maroon}
             />
 
             <Text style={styles.activityLoadingText}>
@@ -1735,7 +1737,7 @@ export default function HomeDashboardScreen() {
             </Text>
 
             <Text style={styles.emptyActivityDescription}>
-              Newly submitted casualty records will appear
+              Newly submitted victim records will appear
               here.
             </Text>
           </View>
@@ -1867,33 +1869,6 @@ export default function HomeDashboardScreen() {
               style={styles.quickTimeInput}
             />
 
-            <Pressable
-              disabled={isSavingQuickAction}
-              onPress={() =>
-                setQuickTimePrompt((current) =>
-                  current
-                    ? {
-                        ...current,
-                        value: formatDateTimeForInput(new Date()),
-                      }
-                    : current,
-                )
-              }
-              style={({ pressed }) => [
-                styles.quickTimeCurrentButton,
-                pressed && styles.pressed,
-              ]}
-            >
-              <Ionicons
-                name="time-outline"
-                size={16}
-                color={COLORS.text}
-              />
-              <Text style={styles.quickTimeCurrentText}>
-                Use current time
-              </Text>
-            </Pressable>
-
             <View style={styles.quickTimeActions}>
               <Pressable
                 disabled={isSavingQuickAction}
@@ -2004,7 +1979,7 @@ export default function HomeDashboardScreen() {
                     <Ionicons
                       name={option.icon ?? "ellipse-outline"}
                       size={20}
-                      color={option.color ?? COLORS.text}
+                      color={option.color ?? COLORS.maroon}
                     />
                   </View>
 
@@ -2026,7 +2001,7 @@ export default function HomeDashboardScreen() {
               <View style={styles.quickSavingRow}>
                 <ActivityIndicator
                   size="small"
-                  color={COLORS.text}
+                  color={COLORS.maroon}
                 />
                 <Text style={styles.quickSavingText}>
                   Saving quick action...
@@ -2047,160 +2022,132 @@ const styles = StyleSheet.create({
   },
 
   headerSafeArea: {
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.maroon,
   },
 
   header: {
-    backgroundColor: COLORS.background,
+    overflow: "hidden",
+    backgroundColor: COLORS.maroon,
     paddingHorizontal: SCREEN_PADDING,
-    paddingTop: 14,
-    paddingBottom: 16,
+    paddingTop: 7,
+    paddingBottom: 28,
+  },
+
+  headerCircleOne: {
+    position: "absolute",
+    width: 170,
+    height: 170,
+    borderRadius: 85,
+    right: -60,
+    top: -115,
+    backgroundColor: "rgba(255,255,255,0.04)",
+  },
+
+  headerCircleTwo: {
+    position: "absolute",
+    width: 95,
+    height: 95,
+    borderRadius: 48,
+    right: 55,
+    top: -35,
+    backgroundColor: "rgba(255,255,255,0.035)",
   },
 
   headerTopRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
-    gap: 10,
-  },
-
-  brandWelcomeRow: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  brandMark: {
-    width: 38,
-    height: 38,
-    borderRadius: 8,
-    backgroundColor: "#E6E6E6",
-    borderWidth: 1,
-    borderColor: "#DADADA",
-    marginRight: 8,
-    position: "relative",
-    shadowColor: "#6B6B6B",
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    elevation: 2,
-  },
-
-  brandLens: {
-    position: "absolute",
-    right: 2,
-    top: 2,
-    width: 17,
-    height: 17,
-    borderRadius: 5,
-    backgroundColor: "#6B6B6B",
-    borderWidth: 1,
-    borderColor: "#3A3A3A",
-  },
-
-  brandDot: {
-    position: "absolute",
-    width: 8,
-    height: 8,
-    borderRadius: 999,
-  },
-
-  brandDotRed: {
-    left: 4,
-    bottom: 4,
-    backgroundColor: COLORS.red,
-  },
-
-  brandDotOrange: {
-    left: 12,
-    bottom: 4,
-    backgroundColor: COLORS.orange,
-  },
-
-  brandDotGreen: {
-    left: 8,
-    bottom: 12,
-    backgroundColor: COLORS.green,
   },
 
   greetingWrapper: {
     flex: 1,
-    minWidth: 0,
   },
 
   greeting: {
-    color: COLORS.secondaryText,
-    fontSize: 16,
-    lineHeight: 18,
+    color: "rgba(255,255,255,0.82)",
+    fontSize: 12,
   },
 
   responderName: {
-    color: COLORS.black,
-    fontSize: 19,
-    fontWeight: "900",
-    lineHeight: 22,
+    color: COLORS.white,
+    fontSize: 20,
+    fontWeight: "800",
+    marginTop: 7,
   },
 
-  headerActions: {
+  activeRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-  },
-
-  activeStatusPill: {
-    maxWidth: 168,
-    minHeight: 36,
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 8,
-    paddingHorizontal: 11,
-    backgroundColor: COLORS.fieldBackground,
-  },
-
-  activeStatusPillLive: {
-    backgroundColor: COLORS.paleGreen,
+    marginTop: 9,
   },
 
   activeDot: {
-    width: 9,
-    height: 9,
-    borderRadius: 999,
-    backgroundColor: COLORS.red,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: "#31D46D",
     marginRight: 6,
   },
 
-  activeDotInactive: {
-    backgroundColor: COLORS.green,
+  guestDot: {
+    backgroundColor: "#FFBE4D",
   },
 
-  activeStatusText: {
-    flexShrink: 1,
-    color: COLORS.secondaryText,
+  activeText: {
+    color: "rgba(255,255,255,0.86)",
     fontSize: 11,
-    fontWeight: "900",
   },
 
   notificationButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    backgroundColor: COLORS.fieldBackground,
+    width: 45,
+    height: 45,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.28)",
+    backgroundColor: "rgba(255,255,255,0.10)",
     alignItems: "center",
     justifyContent: "center",
   },
 
   notificationDot: {
     position: "absolute",
-    top: 8,
-    right: 8,
+    top: 10,
+    right: 10,
     width: 7,
     height: 7,
     borderRadius: 4,
-    backgroundColor: COLORS.red,
+    backgroundColor: "#FFBE4D",
+  },
+
+  incidentBanner: {
+    minHeight: 42,
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 17,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.20)",
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+
+  incidentDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: "#FF6B6F",
+    marginRight: 10,
+  },
+
+  incidentDotInactive: {
+    backgroundColor: "#8FD6A7",
+  },
+
+  incidentText: {
+    flex: 1,
+    color: COLORS.white,
+    fontSize: 11,
+    fontWeight: "700",
   },
 
   scrollView: {
@@ -2209,17 +2156,16 @@ const styles = StyleSheet.create({
 
   scrollContent: {
     paddingHorizontal: SCREEN_PADDING,
-    paddingTop: 0,
-    paddingBottom: 86,
+    paddingTop: 20,
   },
 
   errorCard: {
     flexDirection: "row",
     alignItems: "flex-start",
     borderWidth: 1,
-    borderColor: COLORS.warningBorder,
+    borderColor: "#F2C4C6",
     borderRadius: 14,
-    backgroundColor: COLORS.warningBackground,
+    backgroundColor: "#FFF2F2",
     padding: 13,
     marginBottom: 17,
   },
@@ -2248,7 +2194,7 @@ const styles = StyleSheet.create({
   },
 
   retryText: {
-    color: COLORS.text,
+    color: COLORS.maroon,
     fontSize: 11,
     fontWeight: "800",
   },
@@ -2265,93 +2211,83 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    rowGap: 22,
     marginBottom: 26,
   },
 
   offlineBanner: {
-    minHeight: 34,
+    minHeight: 45,
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: COLORS.gray,
-    borderRadius: 999,
-    backgroundColor: COLORS.surface,
+    borderColor: "#F4D3AF",
+    borderRadius: 13,
+    backgroundColor: COLORS.paleOrange,
     paddingHorizontal: 12,
-    marginBottom: 20,
+    marginBottom: 17,
     gap: 8,
   },
 
   offlineBannerText: {
     flex: 1,
-    color: COLORS.secondaryText,
-    fontSize: 11,
+    color: COLORS.orange,
+    fontSize: 12,
     lineHeight: 17,
-    fontWeight: "500",
+    fontWeight: "700",
   },
 
   summaryCard: {
     width: "48.5%",
-    minHeight: 140,
-    borderRadius: 12,
-    backgroundColor: COLORS.surface,
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    elevation: 2,
-    shadowColor: "#6B6B6B",
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
+    minHeight: 146,
+    borderRadius: 17,
+    backgroundColor: COLORS.white,
+    padding: 16,
+    marginBottom: 10,
+    elevation: 3,
+    shadowColor: "#758197",
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
     shadowOffset: {
       width: 0,
-      height: 5,
+      height: 4,
     },
   },
 
   summaryCardClickable: {
-    borderWidth: 2,
-    borderColor: COLORS.teal,
-    borderLeftWidth: 18,
-  },
-
-  summaryTopRow: {
-    minHeight: 66,
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 12,
+    borderWidth: 1,
+    borderColor: COLORS.maroon,
+    backgroundColor: "#FFF8F8",
   },
 
   summaryIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
+    width: 37,
+    height: 37,
+    borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "transparent",
+    marginBottom: 11,
   },
 
   summaryLoader: {
-    height: 54,
+    height: 33,
     alignSelf: "flex-start",
   },
 
   summaryValue: {
-    color: COLORS.black,
-    fontSize: 50,
+    fontSize: 29,
     fontWeight: "900",
-    lineHeight: 56,
+    lineHeight: 33,
   },
 
   summaryLabel: {
-    color: COLORS.charcoal,
+    color: COLORS.text,
     fontSize: 12,
-    marginTop: 9,
+    marginTop: 2,
   },
 
   summaryCaption: {
     color: COLORS.secondaryText,
-    fontSize: 11,
-    marginTop: 0,
+    fontSize: 10,
+    marginTop: 6,
   },
 
   summaryActionRow: {
@@ -2367,7 +2303,7 @@ const styles = StyleSheet.create({
   },
 
   summaryActionText: {
-    color: COLORS.text,
+    color: COLORS.maroon,
     fontSize: 10,
     fontWeight: "900",
   },
@@ -2383,7 +2319,7 @@ const styles = StyleSheet.create({
     minHeight: 120,
     flexShrink: 0,
     borderRadius: 14,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.white,
     alignItems: "center",
     paddingHorizontal: 5,
     paddingTop: 14,
@@ -2427,7 +2363,7 @@ const styles = StyleSheet.create({
   },
 
   seeAllText: {
-    color: COLORS.text,
+    color: COLORS.maroon,
     fontSize: 12,
     fontWeight: "700",
     marginBottom: 13,
@@ -2442,7 +2378,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     borderRadius: 15,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.white,
     paddingHorizontal: 16,
     elevation: 2,
     shadowColor: "#758197",
@@ -2513,7 +2449,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 15,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.white,
   },
 
   activityLoadingText: {
@@ -2527,7 +2463,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 15,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.white,
     paddingHorizontal: 25,
   },
 
@@ -2555,7 +2491,7 @@ const styles = StyleSheet.create({
   syncFeedbackCard: {
     margin: 16,
     borderRadius: 18,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.white,
     padding: 20,
     alignItems: "center",
     borderWidth: 1,
@@ -2627,7 +2563,7 @@ const styles = StyleSheet.create({
     maxHeight: "78%",
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.white,
     paddingHorizontal: 16,
     paddingTop: 10,
     paddingBottom: 20,
@@ -2636,7 +2572,7 @@ const styles = StyleSheet.create({
   quickTimeSheet: {
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.white,
     paddingHorizontal: 16,
     paddingTop: 10,
     paddingBottom: 20,
@@ -2647,7 +2583,7 @@ const styles = StyleSheet.create({
     height: 4,
     alignSelf: "center",
     borderRadius: 99,
-    backgroundColor: COLORS.fieldBorder,
+    backgroundColor: "#D8DEE8",
     marginBottom: 16,
   },
 
@@ -2701,7 +2637,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     borderRadius: 14,
     paddingHorizontal: 12,
-    backgroundColor: COLORS.background,
+    backgroundColor: "#FAFBFD",
   },
 
   quickChoiceIcon: {
@@ -2741,7 +2677,7 @@ const styles = StyleSheet.create({
   },
 
   quickSavingText: {
-    color: COLORS.text,
+    color: COLORS.maroon,
     fontSize: 12,
     fontWeight: "800",
   },
@@ -2763,26 +2699,7 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontSize: 14,
     fontWeight: "700",
-    backgroundColor: COLORS.background,
-  },
-
-  quickTimeCurrentButton: {
-    minHeight: 44,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 7,
-    marginTop: 9,
-    borderWidth: 1,
-    borderColor: COLORS.text,
-    borderRadius: 12,
-    backgroundColor: COLORS.warningBackground,
-  },
-
-  quickTimeCurrentText: {
-    color: COLORS.text,
-    fontSize: 12,
-    fontWeight: "900",
+    backgroundColor: "#FAFBFD",
   },
 
   quickTimeActions: {
@@ -2799,7 +2716,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: 13,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.white,
   },
 
   quickTimeCancelText: {

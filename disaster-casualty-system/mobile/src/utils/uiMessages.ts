@@ -18,7 +18,7 @@ export const uiMessages = {
       "The server took too long to respond. Please try again.",
     sessionExpired: "Your session has expired. Please sign in again.",
     duplicateIdNumber:
-      "This casualty ID number is already in use. Please generate or enter a different ID number.",
+      "This victim ID number is already in use. Please generate or enter a different ID number.",
     duplicate:
       "A matching record already exists. Please review the entry and try again.",
   },
@@ -38,16 +38,10 @@ export function getUserFriendlyMessage(
 
   if (
     normalizedMessage.includes("network") ||
+    normalizedMessage.includes("timeout") ||
     normalizedMessage.includes("failed to fetch")
   ) {
     return uiMessages.error.network;
-  }
-
-  if (
-    normalizedMessage.includes("timeout") ||
-    normalizedMessage.includes("took too long")
-  ) {
-    return uiMessages.error.timeout;
   }
 
   if (

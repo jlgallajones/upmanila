@@ -4,8 +4,8 @@
   --maroon-bright: #3a3a3a;
   --up-green: #014421;
   --gold: #f2c94c;
-  --ink: #6B6B6B;
-  --muted: #6b6b6b;
+  --ink: #3A3A3A;
+  --muted: #3A3A3A;
   --line: #e6e6e6;
   --soft: #f2f2f2;
   --panel: #ffffff;
@@ -15,7 +15,7 @@
   --cyan: #00838f;
   --cyan-soft: #e0f7fa;
   --neutral-light: #f2f2f2;
-  --neutral-mid: #6b6b6b;
+  --neutral-mid: #3A3A3A;
   --red: #d32f2f;
   --bg: #fafafa;
   --surface: #ffffff;
@@ -1969,11 +1969,11 @@ button:disabled {
 }
 
 .metric.emphasis span {
-  color: #242424;
+  color: #3A3A3A;
 }
 
 .metric.emphasis small {
-  color: #242424;
+  color: #3A3A3A;
 }
 
 .metric.emphasis::after {
@@ -3365,7 +3365,7 @@ tbody tr:hover td {
 .incident-timeline-table .timeline-elapsed-cell {
   width: 145px;
   white-space: nowrap;
-  color: #44546d;
+  color: #3A3A3A;
   font-weight: 700;
 }
 

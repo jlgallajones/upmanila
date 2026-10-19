@@ -57,6 +57,16 @@ Uses the mobile/PWA app to:
 - Submit records online or queue records offline.
 - View synced and queued records.
 
+### Minor Incident Documenter
+
+Uses the mobile/PWA app to:
+
+- Add Minor Incident Documenter casualty records using the full AMP-style form.
+- Complete Intro, Info, Address, Triage, Treatment, Transport, and Remarks sections.
+- Attach casualty photos.
+- Submit records online or queue records offline.
+- View synced and queued records.
+
 ### Healthcare Facility Documenter
 
 Uses the mobile/PWA app to:
@@ -74,6 +84,12 @@ Uses the mobile/PWA app to:
 3. Select login.
 4. After successful login, the system opens the dashboard for the user's role.
 
+Theme behavior:
+
+- By default, the web dashboard and mobile/PWA app follow the device's Light or Dark setting.
+- The theme changes automatically when the device setting changes.
+- Use the Light/Dark control when an explicit override is needed.
+
 If login fails:
 
 - Check email spelling.
@@ -87,6 +103,8 @@ If login fails:
 ### 4.1 Dashboard Navigation
 
 After login, the sidebar shows available sections based on role.
+
+The theme control uses sun/moon icons and is located beside the logged-in account area. The web dashboard also adapts its field, card, warning, and navigation colors to the active theme.
 
 Common admin sections include:
 
@@ -343,6 +361,13 @@ Possible analytics include:
 - Facility/resource metrics.
 - Transport/facility arrival metrics.
 
+Additional triage and chart behavior:
+
+- Primary and secondary over/under-triage summaries are based on unassisted triage comparisons.
+- Transition charts may show examples such as `Immediate -> Delayed`.
+- Triage percentages use all recorded victims as the denominator.
+- A pie chart or line graph appears only when that chart has meaningful data. Empty chart datasets are hidden.
+
 If a chart shows no data:
 
 - Confirm the selected incident has matching casualty records.
@@ -425,6 +450,14 @@ Exports may include:
 - Incident packages.
 - System backup for super admins.
 
+SitRep filenames use this format:
+
+```text
+SITREP-[office name]-[incident name]-[date].[extension]
+```
+
+The date is generated when the file is generated/downloaded. Final SitRep generation is available after the incident is closed.
+
 ### 4.15 Profile And Password
 
 Steps:
@@ -490,8 +523,11 @@ Steps:
 Role behavior:
 
 - Field Responder sees Field Responder casualty fields.
-- AMP sees AMP/Stabilization casualty fields.
+- AMP Responder sees Safety -> Triage -> Treatment -> Transport -> Remarks. Victim Code and generated ID Number are at the top of Triage, and the triage stage is automatic Secondary Triage.
+- Minor Incident Documenter sees the full AMP-style sequence: Safety -> Intro -> Info -> Address -> Triage -> Treatment -> Transport -> Remarks.
 - HCFD sees Healthcare Facility Documenter fields.
+
+For hospital-arrival and disposition fields, admitted-unit choices are **ICU**, **Ward**, **Other Unit**, **Not Admitted**, and **Unknown**.
 
 ### 5.4 Mobile Drafts
 
@@ -581,6 +617,8 @@ Use Profile to:
 - View account details.
 - Confirm assigned role.
 - Confirm account/session status.
+
+Use the theme control to switch between an explicit Light or Dark override. Returning to the system/default setting lets the app follow the device theme again.
 
 For new Field Responder and AMP accounts, the operational role is assigned by the admin and cannot be switched from the device.
 

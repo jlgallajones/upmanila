@@ -799,3 +799,67 @@ Create a short checklist for the exact demo flow:
 **Solution:** FR victim codes now use the logged-in responder initials plus the synced victim count for that same responder code within the selected incident, so each responder has an independent sequence per incident. The API sequence endpoint supports incident-and-user-code based counts, and duplicate ID checks are scoped to the incident. Offline queue sync now detects when a queued code is behind that same responder-code sequence, asks for confirmation, then updates both the visible victim code and internal ID number before syncing.
 
 **Status:** Implemented.
+
+## 95. SitRep Needed Triage Comparison And Operational Charts
+
+**Problem:** SitRep and Incident Analytics did not fully show the requested primary/secondary over-triage and under-triage comparisons, transition breakdowns, and operational line graphs. Triage percentages also needed a consistent denominator based on all recorded victims.
+
+**Solution:** Added analytics-backed over/under/correct triage summaries, primary and secondary triage breakdowns, transition examples such as `Immediate -> Delayed`, and operational line-graph series. Percentages use all recorded victims as the denominator, while unassisted triage comparisons are kept separate from assisted assessments.
+
+**Status:** Implemented.
+
+## 96. Empty Incident Analytics Charts Were Misleading
+
+**Problem:** Pie charts and line graphs were still displayed when their datasets contained no meaningful values, leaving blank chart areas that looked like missing or broken analytics.
+
+**Solution:** Web Incident Analytics and SitRep PDF generation now render a pie chart only when at least one category has data and render a line graph only when at least one series contains data points. Empty chart datasets are omitted instead of shown as empty visuals.
+
+**Status:** Implemented.
+
+## 97. SitRep File Names And Download Actions Needed Standardization
+
+**Problem:** SitRep downloads did not consistently follow the required naming convention, and the SitRep action labels did not clearly distinguish draft generation from final generation. Empty line-graph series could also leave misleading chart color/legend output.
+
+**Solution:** SitRep files now use `SITREP-[office name]-[incident name]-[date].[extension]`, with the date taken from the generation/download operation. The SitRep and Close Incident actions were renamed to **Generate Final Incident SitRep** and **Download Incident SitRep Draft**, and chart series are filtered before rendering. The final report remains gated until the incident is closed.
+
+**Status:** Implemented.
+
+## 98. Admitted-To-Unit Choices Were Not Consistent Across Casualty Workflows
+
+**Problem:** Hospital admission details did not consistently preserve the selected unit, and users needed clear choices for ICU, Ward, another unit, not admitted, or unknown.
+
+**Solution:** Added the admitted-unit choices **ICU**, **Ward**, **Other Unit**, **Not Admitted**, and **Unknown**. The selected unit, admission time, and related hospital-arrival values are carried through the casualty payload and shown in casualty detail views.
+
+**Status:** Implemented.
+
+## 99. Theme Mode Needed Professional Colors And Device Synchronization
+
+**Problem:** Dark mode used inconsistent gray, white, and accent combinations across mobile and web. Some screens stayed light, and manually selected mode did not automatically follow the device color scheme.
+
+**Solution:** Reworked the light/dark palettes around neutral surfaces, readable primary text, restrained teal accents, and clear warning colors. Mobile and web now default to the device/system color scheme, listen for system theme changes, and still allow an explicit Light or Dark override. Theme controls use clear sun/moon icons and are positioned beside the logged-in account area in the web dashboard.
+
+**Status:** Implemented.
+
+## 100. Dark-Mode Login Fields Had Autofill, Icon, And Corner-Overlap Defects
+
+**Problem:** Login fields could remain pale blue or white in dark mode because of browser autofill. The email and password icons were not centered, their icon panels were square against rounded fields, and placeholder/value contrast was inconsistent in both themes.
+
+**Solution:** Added theme-aware autofill styling, corrected icon alignment, matched the icon panel clipping to the field radius, and standardized placeholder and input colors for light and dark mode. The login field controls now remain visually contained inside their rounded borders.
+
+**Status:** Implemented.
+
+## 101. Dashboard And Analytics Visual Hierarchy Needed Stronger Separation
+
+**Problem:** Web sidebar controls were oversized, analytics overview blocks were difficult to distinguish, and dashboard summary-card titles such as **Active Incidents**, **Encoded Today**, **Verified Records**, and **Pending Review** were too faint compared with their captions.
+
+**Solution:** Reduced sidebar navigation button sizing, strengthened analytics divider lines in both themes, and updated mobile summary-card titles to use the theme-aware primary text color with stronger font weight while keeping descriptions visually secondary.
+
+**Status:** Implemented.
+
+## 102. Minor Incident Documenter Needed A Dedicated Account Flow
+
+**Problem:** The system only had the existing AMP responder account behavior, but the revised workflow needed a separate **Minor Incident Documenter** account while AMP Responder uses a shorter capture flow.
+
+**Solution:** Added the `minor_incident_documenter` role to the database enum migration, API permissions, account-management screens, exports, analytics, and mobile role handling. Minor Incident Documenter retains the full AMP-style flow. AMP Responder now uses **Safety -> Triage -> Treatment -> Transport -> Remarks**, with Victim Code and generated ID Number at the top of Triage and automatic Secondary Triage handling. The existing role privacy and scoped-data rules were extended to the new account type.
+
+**Status:** Implemented.

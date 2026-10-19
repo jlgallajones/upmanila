@@ -1,7 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 
 import { supabase } from "../config/supabase.js";
-import type { AuthenticatedUser } from "../middleware/auth.js";
 import { getAuthenticatedUser } from "../middleware/auth.js";
 import { recordAuditLog } from "../services/audit-log.service.js";
 import {
@@ -15,7 +14,6 @@ const responderIncidentViewerRoles = new Set([
   "responder",
   "field_responder",
   "sa_responder",
-  "minor_incident_documenter",
   "documenter",
 ]);
 
@@ -48,55 +46,9 @@ type UpdateIncidentTimelineRequest = {
   firstTransportFromSceneAt?: string | null;
   lastTransportFromSceneAt?: string | null;
   sceneDemobilizedAt?: string | null;
-  customTimelineEvents?: Array<{
-    id?: string | null;
-    label?: string | null;
-    at?: string | null;
-  }>;
 };
 
 type CountMap = Record<string, number>;
-type SitrepLinePoint = {
-  minutes: number;
-  label: string;
-  cutoffAt: string | null;
-  count: number;
-  total: number;
-  percentage: number;
-};
-type SitrepLineSeries = {
-  key: string;
-  label: string;
-  data: SitrepLinePoint[];
-};
-type CustomTimelineEvent = {
-  id: string;
-  label: string;
-  at: string;
-};
-type AnalyticsTriageAccuracySummary = ReturnType<
-  typeof buildTriageAccuracySummary
-> & {
-  totalRecordedVictims: number;
-  unassistedRecords: number;
-  assessedRecords: number;
-  overTriageTotal: number;
-  overTriagePercentage: number;
-  underTriageTotal: number;
-  underTriagePercentage: number;
-  explicitOverTriageRecords: number;
-  explicitUnderTriageRecords: number;
-  overUnderTriageDistribution: Record<
-    string,
-    { count: number; total: number; percentage: number }
-  >;
-  underTriageTransitions: CountMap;
-  overTriageTransitions: CountMap;
-};
-type AnalyticsTriageAccuracyByStage = {
-  primary: AnalyticsTriageAccuracySummary;
-  secondary: AnalyticsTriageAccuracySummary;
-};
 type ResponderFunctionFilter =
   | "field_responder"
   | "sa_responder"
@@ -171,63 +123,7 @@ type IncidentSitrepPayload = {
     };
     edCareByTriageCategory: Record<string, { count: number; total: number; percentage: number }>;
     stabilizationStrategies: CountMap;
-    triageAccuracy: AnalyticsTriageAccuracySummary;
-    triageAccuracyByStage: AnalyticsTriageAccuracyByStage;
     cumulativeIntervalsMinutes: number[];
-    lineGraphs: {
-      primaryTriageByActivation: SitrepLineSeries[];
-      stabilizationByActivation: SitrepLineSeries[];
-      departedAndArrivedByActivation: SitrepLineSeries[];
-      facilityArrivalByActivation: SitrepLineSeries[];
-      edResourcesUtilization: SitrepLineSeries[];
-      hospitalResourcesUtilization: SitrepLineSeries[];
-      morbidityByActivation: SitrepLineSeries[];
-      mortalityByActivation: SitrepLineSeries[];
-    };
-  };
-  incidentManagementSnapshot?: {
-    dmmpStaff: {
-      totalStaffRecords: number;
-      contacted: number;
-      arrived: number;
-      safe: number;
-      unsafe: number;
-      deceased: number;
-      lastArrivalAt: string | null;
-    };
-    coordinationAssessment: {
-      initialActions: number | null;
-      sceneCoordination: number | null;
-      systemCoordination: number | null;
-      communications: number | null;
-      resourceManagement: number | null;
-      assessedAt: string | null;
-      notes: string | null;
-    } | null;
-    responderSafety: {
-      safeResponders: number;
-      unsafeResponders: number;
-    };
-    onsiteTriage: {
-      firstSiteTriageAt: string | null;
-      lastSiteTriageAt: string | null;
-      totalAssessments: number;
-    };
-    sceneClearance: {
-      firstTransportFromSceneAt: string | null;
-      lastTransportFromSceneAt: string | null;
-      departedScene: number;
-      arrivedFacility: number;
-    };
-    treatment: {
-      treatmentRecordedTotal: number;
-      stabilizedTotal: number;
-      strategyCounts: CountMap;
-    };
-    facilities: {
-      evacuationCenters: CountMap;
-      receivingFacilities: CountMap;
-    };
   };
 };
 
@@ -298,8 +194,6 @@ type TriageAssessmentRow = {
   triaged_at: string | null;
   triaged_by?: string | null;
   assessment_answers?: Record<string, unknown> | null;
-  is_over_triage?: boolean | null;
-  is_under_triage?: boolean | null;
 };
 
 type AnalyticsTriageCategory =
@@ -420,168 +314,6 @@ function getAnalyticsTriageCategory(
   return "unknown";
 }
 
-function getCalculatedTriageCategory(
-  row: TriageAssessmentRow,
-): AnalyticsTriageCategory {
-  const finalTriage =
-    row.assessment_answers &&
-    typeof row.assessment_answers === "object"
-      ? row.assessment_answers.finalTriage
-      : null;
-
-  for (const value of [
-    row.calculated_category,
-    row.triage_category,
-    finalTriage,
-  ]) {
-    const category = normalizeAnalyticsTriageCategory(value);
-
-    if (category !== "unknown") {
-      return category;
-    }
-  }
-
-  return "unknown";
-}
-
-function countDistinctTriageVictims(rows: TriageAssessmentRow[]): number {
-  return new Set(rows.map((row) => row.casualty_incident_id)).size;
-}
-
-function buildAnalyticsTriageAccuracy(
-  rows: TriageAssessmentRow[],
-  totalRecordedVictims = rows.length,
-): AnalyticsTriageAccuracySummary {
-  const accuracyRows = rows
-    .map((row) => ({
-      casualty_incident_id: row.casualty_incident_id,
-      triaged_at: row.triaged_at,
-      responder_category: normalizeAnalyticsTriageCategory(
-        row.responder_category ?? row.triage_category,
-      ),
-      triage_category: normalizeAnalyticsTriageCategory(
-        row.triage_category,
-      ),
-      calculated_category: getCalculatedTriageCategory(row),
-      assessment_answers: row.assessment_answers,
-    }))
-    .filter((row) => row.calculated_category !== "unknown");
-  const summary = buildTriageAccuracySummary(accuracyRows);
-  const unassistedRows = accuracyRows.filter((row) => {
-    const mode = row.assessment_answers?.triageAssistanceMode;
-    return String(mode ?? "").trim().toLowerCase() === "unassisted";
-  });
-  const latestUnassistedRows = new Map<
-    string,
-    (typeof unassistedRows)[number]
-  >();
-
-  for (const row of unassistedRows) {
-    const existing = latestUnassistedRows.get(row.casualty_incident_id);
-    if (!existing) {
-      latestUnassistedRows.set(row.casualty_incident_id, row);
-      continue;
-    }
-
-    const existingAt = existing.triaged_at
-      ? new Date(existing.triaged_at).getTime()
-      : 0;
-    const currentAt = row.triaged_at
-      ? new Date(row.triaged_at).getTime()
-      : 0;
-
-    if (currentAt >= existingAt) {
-      latestUnassistedRows.set(row.casualty_incident_id, row);
-    }
-  }
-
-  const triagePriority: Record<AnalyticsTriageCategory, number> = {
-    expectant: 1,
-    minimal: 2,
-    delayed: 3,
-    immediate: 4,
-    unknown: 0,
-  };
-  const underTriageTransitions: CountMap = {};
-  const overTriageTransitions: CountMap = {};
-  let overTriageTotal = 0;
-  let underTriageTotal = 0;
-
-  for (const row of latestUnassistedRows.values()) {
-    const assignedCategory = row.responder_category;
-    const calculatedCategory = row.calculated_category;
-    const assignedPriority = triagePriority[assignedCategory];
-    const calculatedPriority = triagePriority[calculatedCategory];
-
-    if (
-      !assignedPriority ||
-      !calculatedPriority ||
-      assignedCategory === calculatedCategory
-    ) {
-      continue;
-    }
-
-    const transition = `${formatTriageTransitionCategory(calculatedCategory)} -> ${formatTriageTransitionCategory(assignedCategory)}`;
-
-    if (assignedPriority > calculatedPriority) {
-      overTriageTotal += 1;
-      overTriageTransitions[transition] =
-        (overTriageTransitions[transition] ?? 0) + 1;
-    } else {
-      underTriageTotal += 1;
-      underTriageTransitions[transition] =
-        (underTriageTransitions[transition] ?? 0) + 1;
-    }
-  }
-
-  const triageDenominator = Math.max(0, totalRecordedVictims);
-  const correctTriageTotal = Math.max(
-    0,
-    triageDenominator - overTriageTotal - underTriageTotal,
-  );
-  const buildDistributionMetric = (count: number) => ({
-    count,
-    total: triageDenominator,
-    percentage: calculatePercentage(count, triageDenominator),
-  });
-
-  return {
-    ...summary,
-    totalRecordedVictims: triageDenominator,
-    unassistedRecords: latestUnassistedRows.size,
-    assessedRecords: latestUnassistedRows.size,
-    overTriageTotal,
-    overTriagePercentage: calculatePercentage(
-      overTriageTotal,
-      triageDenominator,
-    ),
-    underTriageTotal,
-    underTriagePercentage: calculatePercentage(
-      underTriageTotal,
-      triageDenominator,
-    ),
-    explicitOverTriageRecords: rows.filter(
-      (row) => row.is_over_triage === true,
-    ).length,
-    explicitUnderTriageRecords: rows.filter(
-      (row) => row.is_under_triage === true,
-    ).length,
-    overUnderTriageDistribution: {
-      "Over Triage": buildDistributionMetric(overTriageTotal),
-      "Under Triage": buildDistributionMetric(underTriageTotal),
-      "Correct Triage": buildDistributionMetric(correctTriageTotal),
-    },
-    underTriageTransitions,
-    overTriageTransitions,
-  };
-}
-
-function formatTriageTransitionCategory(
-  category: AnalyticsTriageCategory,
-): string {
-  return category.charAt(0).toUpperCase() + category.slice(1);
-}
-
 type TransportRecordRow = {
   casualty_incident_id: string;
   transport_required: string | null;
@@ -600,8 +332,6 @@ type TreatmentRecordRow = {
   treatment_area_name: string | null;
   stabilization_started_at: string | null;
   stabilized_at: string | null;
-  treatment_details?: Record<string, unknown> | null;
-  performed_by?: string | null;
   created_at: string | null;
 };
 
@@ -664,38 +394,9 @@ type ResponderSafetyReportRow = {
 };
 
 type ResponderSafetyResponseRow = {
-  responder_role?: string | null;
-  responder_function?: string | null;
   safety_status: string | null;
-  responder_arrived_at?: string | null;
   ppe_used_at: string | null;
 };
-
-function isFieldOrAmpResponderSafetyResponse(
-  row: ResponderSafetyResponseRow,
-): boolean {
-  const normalize = (value: string | null | undefined) =>
-    String(value ?? "")
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "_")
-      .replace(/^_+|_+$/g, "");
-  const candidates = [
-    normalize(row.responder_function),
-    normalize(row.responder_role),
-  ];
-
-  return candidates.some((value) =>
-    [
-      "field_responder",
-      "sa_responder",
-      "minor_incident_documenter",
-      "advanced_medical_responder",
-      "amp_responder",
-      "responder",
-    ].includes(value),
-  );
-}
 
 type HospitalResourceSnapshotRow = {
   id: string;
@@ -808,7 +509,6 @@ const incidentTimelineSelect = `
   first_transport_from_scene_at,
   last_transport_from_scene_at,
   scene_demobilized_at,
-  custom_events,
   updated_by,
   created_at,
   updated_at
@@ -856,89 +556,6 @@ function parseNullableTimestamp(
   }
 
   return parsed.toISOString();
-}
-
-function normalizeStoredCustomTimelineEvents(
-  value: unknown,
-): CustomTimelineEvent[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value
-    .map((item, index) => {
-      if (!isRecord(item)) {
-        return null;
-      }
-
-      const label = String(item.label ?? "").trim();
-      const at = String(item.at ?? "").trim();
-
-      if (!label || !at) {
-        return null;
-      }
-
-      const parsedAt = new Date(at);
-
-      if (Number.isNaN(parsedAt.getTime())) {
-        return null;
-      }
-
-      return {
-        id:
-          typeof item.id === "string" && item.id.trim()
-            ? item.id.trim()
-            : `custom-${index + 1}`,
-        label,
-        at: parsedAt.toISOString(),
-      };
-    })
-    .filter((item): item is CustomTimelineEvent => item !== null);
-}
-
-function parseCustomTimelineEvents(
-  value: UpdateIncidentTimelineRequest["customTimelineEvents"] | undefined,
-): CustomTimelineEvent[] | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  if (!Array.isArray(value)) {
-    throw new Error("Custom timeline events must be a list.");
-  }
-
-  return value
-    .map((item, index) => {
-      const label = String(item?.label ?? "").trim();
-      const rawAt = String(item?.at ?? "").trim();
-
-      if (!label && !rawAt) {
-        return null;
-      }
-
-      if (!label) {
-        throw new Error("Custom timeline event name is required.");
-      }
-
-      const parsedAt = parseNullableTimestamp(
-        rawAt,
-        `Custom timeline event "${label}" time`,
-      );
-
-      if (!parsedAt) {
-        throw new Error(`Custom timeline event "${label}" needs a time.`);
-      }
-
-      return {
-        id:
-          item?.id && String(item.id).trim()
-            ? String(item.id).trim()
-            : `custom-${index + 1}`,
-        label,
-        at: parsedAt,
-      };
-    })
-    .filter((item): item is CustomTimelineEvent => item !== null);
 }
 
 function assertChronologicalPair(
@@ -1025,7 +642,7 @@ function normalizeResponderFunctionFromRole(
     return "field_responder";
   }
 
-  if (role === "sa_responder" || role === "minor_incident_documenter") {
+  if (role === "sa_responder") {
     return "sa_responder";
   }
 
@@ -1329,7 +946,7 @@ function buildSitrepSummary(
   return [
     `${incident.incident_name} (${incident.incident_code})`,
     location ? `in ${location}` : null,
-    `has ${casualtyCount} casualty record${casualtyCount === 1 ? "" : "s"}`,
+    `has ${casualtyCount} victim record${casualtyCount === 1 ? "" : "s"}`,
     `${criticalCount} critical`,
     `${deceasedCount} deceased`,
     `${transportedCount} transported or awaiting transport`,
@@ -1479,63 +1096,16 @@ type PdfChart = {
   counts: CountMap;
 };
 
-type PdfLineChart = {
-  title: string;
-  series: SitrepLineSeries[];
-};
-
 type PdfTableRow = [string, string | number];
 
 function getChartEntries(counts: CountMap): Array<[string, number]> {
   return Object.entries(counts)
     .filter(([, count]) => count > 0)
+    .sort(
+      ([firstLabel, firstCount], [secondLabel, secondCount]) =>
+        secondCount - firstCount || firstLabel.localeCompare(secondLabel),
+    )
     .slice(0, 8);
-}
-
-function sitrepAnalyticsColor(
-  label: string,
-  index: number,
-): [number, number, number] {
-  const key = String(label || "").toLowerCase();
-  const colors: Record<string, [number, number, number]> = {
-    immediate: [0.79, 0.18, 0.2],
-    red: [0.79, 0.18, 0.2],
-    critical: [0.79, 0.18, 0.2],
-    t1: [0.79, 0.18, 0.2],
-    delayed: [0.94, 0.71, 0.16],
-    yellow: [0.94, 0.71, 0.16],
-    urgent: [0.94, 0.71, 0.16],
-    t2: [0.94, 0.71, 0.16],
-    minor: [0.18, 0.49, 0.31],
-    minimal: [0.18, 0.49, 0.31],
-    green: [0.18, 0.49, 0.31],
-    t3: [0.18, 0.49, 0.31],
-    expectant: [0.12, 0.16, 0.22],
-    black: [0.12, 0.16, 0.22],
-    deceased: [0.12, 0.16, 0.22],
-    t4: [0.12, 0.16, 0.22],
-    safe: [0.15, 0.48, 0.74],
-    unsafe: [0.85, 0.43, 0.07],
-    all: [0.15, 0.48, 0.74],
-    "all victims": [0.15, 0.48, 0.74],
-    "scoop and run": [0.83, 0.18, 0.18],
-    scooter: [0.15, 0.48, 0.74],
-    "stay and play": [0.18, 0.49, 0.31],
-    "1+3": [0.94, 0.71, 0.16],
-    "play and run": [0.85, 0.43, 0.07],
-    unknown: [0.41, 0.46, 0.55],
-  };
-
-  return colors[key] ??
-    ([
-      [0.83, 0.18, 0.18],
-      [0.15, 0.48, 0.74],
-      [0.18, 0.49, 0.31],
-      [0.94, 0.71, 0.16],
-      [0.85, 0.43, 0.07],
-      [0.55, 0.36, 0.72],
-      [0.39, 0.45, 0.58],
-    ][index % 7] as [number, number, number]);
 }
 
 function buildSitrepCharts(payload: IncidentSitrepPayload): PdfChart[] {
@@ -1546,45 +1116,6 @@ function buildSitrepCharts(payload: IncidentSitrepPayload): PdfChart[] {
     counts[category] = value.count;
     return counts;
   }, {});
-  const triageAccuracyByStage = analytics?.triageAccuracyByStage;
-  const stageTriageCharts: PdfChart[] = triageAccuracyByStage
-    ? [
-        {
-          title: "Over- and Under-Triage in Primary Triage",
-          counts: Object.entries(
-            triageAccuracyByStage.primary.overUnderTriageDistribution,
-          ).reduce<CountMap>((counts, [category, value]) => {
-            counts[category] = value.count;
-            return counts;
-          }, {}),
-        },
-        {
-          title: "Overtriage Distribution in Primary Triage",
-          counts: triageAccuracyByStage.primary.overTriageTransitions,
-        },
-        {
-          title: "Undertriage Distribution in Primary Triage",
-          counts: triageAccuracyByStage.primary.underTriageTransitions,
-        },
-        {
-          title: "Over- and Under-Triage in Secondary Triage",
-          counts: Object.entries(
-            triageAccuracyByStage.secondary.overUnderTriageDistribution,
-          ).reduce<CountMap>((counts, [category, value]) => {
-            counts[category] = value.count;
-            return counts;
-          }, {}),
-        },
-        {
-          title: "Overtriage Distribution in Secondary Triage",
-          counts: triageAccuracyByStage.secondary.overTriageTransitions,
-        },
-        {
-          title: "Undertriage Distribution in Secondary Triage",
-          counts: triageAccuracyByStage.secondary.underTriageTransitions,
-        },
-      ]
-    : [];
   const charts: PdfChart[] = [
     ...(analytics
       ? [
@@ -1608,12 +1139,12 @@ function buildSitrepCharts(payload: IncidentSitrepPayload): PdfChart[] {
             title: "Stabilization Strategies",
             counts: analytics.stabilizationStrategies,
           },
-          ...stageTriageCharts,
         ]
       : []),
   ];
 
-  charts.push(
+  return [
+    ...charts,
     {
       title: "Role Coverage",
       counts: {
@@ -1653,65 +1184,7 @@ function buildSitrepCharts(payload: IncidentSitrepPayload): PdfChart[] {
       title: "EMS Unit Type",
       counts: payload.transportSummary.emsUnits,
     },
-  );
-
-  return charts.filter((chart) =>
-    Object.values(chart.counts).some((value) => Number(value) > 0),
-  );
-}
-
-function buildSitrepLineCharts(payload: IncidentSitrepPayload): PdfLineChart[] {
-  const lineGraphs = payload.analyticsSnapshot?.lineGraphs;
-
-  if (!lineGraphs) {
-    return [];
-  }
-
-  const charts: PdfLineChart[] = [
-    {
-      title: "Immediate and Delayed Victims Primary Triaged",
-      series: lineGraphs.primaryTriageByActivation,
-    },
-    {
-      title: "Immediate and Delayed Victims Stabilized in the Stabilization Area",
-      series: lineGraphs.stabilizationByActivation,
-    },
-    {
-      title: "Immediate and Delayed Victims Departed Scene and Arrived at a Healthcare Facility",
-      series: lineGraphs.departedAndArrivedByActivation,
-    },
-    {
-      title: "Victims Arriving at a Healthcare Facility",
-      series: lineGraphs.facilityArrivalByActivation,
-    },
-    {
-      title: "ED Resources Utilization",
-      series: lineGraphs.edResourcesUtilization,
-    },
-    {
-      title: "Hospital Resources Utilization",
-      series: lineGraphs.hospitalResourcesUtilization,
-    },
-    {
-      title: "Morbidity Events",
-      series: lineGraphs.morbidityByActivation,
-    },
-    {
-      title: "Mortality Events",
-      series: lineGraphs.mortalityByActivation,
-    },
   ];
-
-  return charts
-    .map((chart) => ({
-      ...chart,
-      series: chart.series.filter((series) =>
-        series.data.some(
-          (point) => point.total > 0 && point.cutoffAt !== null,
-        ),
-      ),
-    }))
-    .filter((chart) => chart.series.length > 0);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1753,8 +1226,6 @@ function formatSitrepDate(value: string | null | undefined): string {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-    timeZone: "Asia/Manila",
-    timeZoneName: "short",
   });
 }
 
@@ -1773,120 +1244,6 @@ function countRows(counts: CountMap): PdfTableRow[] {
   return entries.length > 0
     ? entries.map(([label, value]) => [formatSitrepLabel(label), value])
     : [["No data recorded", 0]];
-}
-
-function buildSitrepTimelineRows(payload: IncidentSitrepPayload): PdfTableRow[] {
-  const incident = payload.incident;
-  const timeline = isRecord(payload.timeline) ? payload.timeline : null;
-  const baseRows: Array<{ label: string; at: string | null; order: number }> = [
-    {
-      label: "Incident onset",
-      at: stringValue(incident, "started_at", "") || null,
-      order: 0,
-    },
-    {
-      label: "Event notification",
-      at: stringValue(timeline, "event_notification_at", "") || null,
-      order: 1,
-    },
-    {
-      label: "Activation of DMMP",
-      at: stringValue(timeline, "dmmp_activated_at", "") || null,
-      order: 2,
-    },
-    {
-      label:
-        "Notification of first appropriate staff person to assume medical management coordination role",
-      at:
-        stringValue(timeline, "medical_coordinator_notified_at", "") ||
-        null,
-      order: 3,
-    },
-    {
-      label: "First EMS vehicle arrived",
-      at: stringValue(timeline, "first_ems_on_scene_at", "") || null,
-      order: 4,
-    },
-    {
-      label: "Triage ordered",
-      at: stringValue(timeline, "triage_ordered_at", "") || null,
-      order: 5,
-    },
-    {
-      label: "Scene demobilized",
-      at: stringValue(timeline, "scene_demobilized_at", "") || null,
-      order: 6,
-    },
-    ...normalizeStoredCustomTimelineEvents(timeline?.custom_events).map(
-      (event, index) => ({
-        label: event.label,
-        at: event.at,
-        order: 7 + index,
-      }),
-    ),
-  ];
-
-  return baseRows
-    .sort((first, second) => {
-      const firstTime = first.at ? new Date(first.at).getTime() : null;
-      const secondTime = second.at ? new Date(second.at).getTime() : null;
-
-      if (firstTime !== null && secondTime !== null) {
-        return firstTime - secondTime || first.order - second.order;
-      }
-
-      if (firstTime !== null) return -1;
-      if (secondTime !== null) return 1;
-      return first.order - second.order;
-    })
-    .map((row) => [row.label, formatSitrepDate(row.at)]);
-}
-
-function buildIncidentManagementRows(
-  snapshot: IncidentSitrepPayload["incidentManagementSnapshot"],
-): PdfTableRow[] {
-  if (!snapshot) {
-    return [["Incident management data", "No data recorded"]];
-  }
-
-  const coordination = snapshot.coordinationAssessment;
-
-  return [
-    ["DMMP staff records", snapshot.dmmpStaff.totalStaffRecords],
-    ["DMMP staff contacted", snapshot.dmmpStaff.contacted],
-    ["DMMP staff arrived", snapshot.dmmpStaff.arrived],
-    ["DMMP staff safe", snapshot.dmmpStaff.safe],
-    ["DMMP staff unsafe", snapshot.dmmpStaff.unsafe],
-    ["DMMP staff deceased", snapshot.dmmpStaff.deceased],
-    [
-      "Last DMMP staff arrival",
-      formatSitrepDate(snapshot.dmmpStaff.lastArrivalAt),
-    ],
-    ["Coordination initial actions", coordination?.initialActions ?? "Not recorded"],
-    ["Coordination scene", coordination?.sceneCoordination ?? "Not recorded"],
-    ["Coordination system", coordination?.systemCoordination ?? "Not recorded"],
-    ["Coordination communications", coordination?.communications ?? "Not recorded"],
-    [
-      "Coordination resource management",
-      coordination?.resourceManagement ?? "Not recorded",
-    ],
-    ["Responder safety safe", snapshot.responderSafety.safeResponders],
-    ["Responder safety unsafe", snapshot.responderSafety.unsafeResponders],
-    [
-      "Onsite triage first/last",
-      `${formatSitrepDate(snapshot.onsiteTriage.firstSiteTriageAt)} / ${formatSitrepDate(snapshot.onsiteTriage.lastSiteTriageAt)}`,
-    ],
-    [
-      "Scene clearance first/last transport",
-      `${formatSitrepDate(snapshot.sceneClearance.firstTransportFromSceneAt)} / ${formatSitrepDate(snapshot.sceneClearance.lastTransportFromSceneAt)}`,
-    ],
-    ["Treatment records", snapshot.treatment.treatmentRecordedTotal],
-    ["Stabilized victims", snapshot.treatment.stabilizedTotal],
-    ...countRows(snapshot.treatment.strategyCounts).map(([label, value]) => [
-      `Treatment strategy - ${label}`,
-      value,
-    ] as PdfTableRow),
-  ];
 }
 
 function buildPdfWithCharts(
@@ -2054,7 +1411,6 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
     .filter(Boolean)
     .join(", ") || "Not recorded";
   const charts = buildSitrepCharts(payload);
-  const lineCharts = buildSitrepLineCharts(payload);
   const pageWidth = 612;
   const pageHeight = 792;
   const marginX = 42;
@@ -2062,17 +1418,17 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
   const contentWidth = pageWidth - marginX * 2;
   const pages: string[][] = [[]];
   let currentPage = pages[0]!;
-  let cursorY = 704;
+  let cursorY = 724;
 
   const drawHeader = () => {
     currentPage.push(
-      "0 0.51 0.56 rg",
+      "0.48 0.07 0.08 rg",
       `0 742 ${pageWidth} 50 re f`,
       "0.99 0.73 0.19 rg",
       `${marginX} 742 112 4 re f`,
       "0 g",
       "1 1 1 rg",
-      `BT /F2 14 Tf ${marginX} 770 Td (${escapePdfText("INCIDENT SITUATION REPORT")}) Tj ET`,
+      `BT /F2 14 Tf ${marginX} 770 Td (${escapePdfText("DCMS INCIDENT SITUATION REPORT")}) Tj ET`,
       `BT /F1 8 Tf ${marginX} 754 Td (${escapePdfText(`${incidentCode} | ${sitrep.report_number}`)}) Tj ET`,
       `BT /F1 8 Tf ${pageWidth - 174} 754 Td (${escapePdfText(formatSitrepDate(sitrep.generated_at))}) Tj ET`,
       "0 g",
@@ -2084,7 +1440,7 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
       "0.72 0.76 0.82 RG",
       `${marginX} 38 ${contentWidth} 0.5 re S`,
       "0 g",
-      `BT /F1 8 Tf ${marginX} 24 Td (${escapePdfText("Incident-wide SitRep - FR, AMP, and HCFD records included")}) Tj ET`,
+      `BT /F1 8 Tf ${marginX} 24 Td (${escapePdfText("Incident-wide SitRep - FR, Advanced Medical Responder, and HCFD records included")}) Tj ET`,
       `BT /F1 8 Tf ${pageWidth - 92} 24 Td (${escapePdfText(`Page ${pageNumber}`)}) Tj ET`,
     );
   };
@@ -2095,7 +1451,7 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
     drawFooter(pages.length);
     currentPage = [];
     pages.push(currentPage);
-    cursorY = 704;
+    cursorY = 724;
     drawHeader();
   };
 
@@ -2120,7 +1476,7 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
   const addSectionTitle = (sectionTitle: string) => {
     ensureSpace(34);
     currentPage.push(
-      "0 0.51 0.56 rg",
+      "0.48 0.07 0.08 rg",
       `${marginX} ${cursorY - 11} 5 16 re f`,
       "0.82 0.86 0.91 RG",
       `${marginX} ${cursorY - 17} ${contentWidth} 0.6 re S`,
@@ -2187,47 +1543,28 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
 
   const addTable = (tableTitle: string, rows: PdfTableRow[]) => {
     addSectionTitle(tableTitle);
-    const headerHeight = 26;
-    const labelWidth = 270;
-    const labelChars = 38;
-    const valueChars = 32;
+    const rowHeight = 20;
+    const labelWidth = 330;
 
-    ensureSpace(headerHeight + 8);
+    ensureSpace(rowHeight + 8);
     currentPage.push(
       "0.92 0.94 0.97 rg",
-      `${marginX} ${cursorY - headerHeight + 5} ${contentWidth} ${headerHeight} re f`,
+      `${marginX} ${cursorY - rowHeight + 5} ${contentWidth} ${rowHeight} re f`,
       "0 g",
     );
-    text("Item", marginX + 8, cursorY - 10, 8, "F2");
-    text("Value", marginX + labelWidth + 12, cursorY - 10, 8, "F2");
-    cursorY -= headerHeight;
+    text("Item", marginX + 8, cursorY - 8, 8, "F2");
+    text("Value", marginX + labelWidth + 12, cursorY - 8, 8, "F2");
+    cursorY -= rowHeight;
 
     for (const [label, value] of rows) {
-      const labelLines = wrapText(String(label), labelChars).slice(0, 4);
-      const valueLines = wrapText(String(value), valueChars).slice(0, 4);
-      const rowHeight = Math.max(
-        24,
-        10 + Math.max(labelLines.length, valueLines.length) * 11,
-      );
-
       ensureSpace(rowHeight + 3);
       currentPage.push(
         "0.86 0.89 0.93 RG",
-        `${marginX} ${cursorY - rowHeight + 5} ${contentWidth} 0.6 re S`,
+        `${marginX} ${cursorY - rowHeight + 5} ${contentWidth} 0.5 re S`,
         "0 g",
       );
-      labelLines.forEach((line, lineIndex) => {
-        text(line, marginX + 8, cursorY - 10 - lineIndex * 11, 8);
-      });
-      valueLines.forEach((line, lineIndex) => {
-        text(
-          line,
-          marginX + labelWidth + 12,
-          cursorY - 10 - lineIndex * 11,
-          8,
-          "F2",
-        );
-      });
+      text(String(label), marginX + 8, cursorY - 8, 8);
+      text(String(value), marginX + labelWidth + 12, cursorY - 8, 8, "F2");
       cursorY -= rowHeight;
     }
 
@@ -2236,233 +1573,36 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
 
   const addChart = (chart: PdfChart) => {
     const entries = getChartEntries(chart.counts);
-
-    if (entries.length === 0) {
-      return;
-    }
-
-    const total = entries.reduce((sum, [, count]) => sum + count, 0);
-    const chartHeight = 208;
+    const chartHeight = entries.length > 0 ? 34 + entries.length * 21 : 52;
 
     ensureSpace(chartHeight);
-    currentPage.push(
-      "0.99 0.995 1 rg",
-      `${marginX} ${cursorY - chartHeight + 8} ${contentWidth} ${chartHeight - 8} re f`,
-      "0.82 0.86 0.91 RG",
-      `${marginX} ${cursorY - chartHeight + 8} ${contentWidth} ${chartHeight - 8} re S`,
-      "0 g",
-    );
-
-    const titleLines = wrapText(chart.title, 52).slice(0, 2);
-    titleLines.forEach((line, index) => {
-      text(line, marginX + 14, cursorY - 22 - index * 14, 10, "F2");
-    });
-
-    const centerX = marginX + 88;
-    const centerY = cursorY - 118;
-    const radius = 62;
-    let startAngle = -Math.PI / 2;
-
-    entries.forEach(([label, count], index) => {
-      const percentage = total > 0 ? count / total : 0;
-      const endAngle = startAngle + percentage * Math.PI * 2;
-      const color = sitrepAnalyticsColor(label, index);
-      const steps = Math.max(2, Math.ceil(Math.abs(endAngle - startAngle) * 12));
-
-      currentPage.push(
-        `${color[0]} ${color[1]} ${color[2]} rg`,
-        `${centerX} ${centerY} m`,
-        `${(centerX + Math.cos(startAngle) * radius).toFixed(2)} ${(centerY + Math.sin(startAngle) * radius).toFixed(2)} l`,
-      );
-
-      for (let step = 1; step <= steps; step += 1) {
-        const angle =
-          startAngle + ((endAngle - startAngle) * step) / steps;
-        currentPage.push(
-          `${(centerX + Math.cos(angle) * radius).toFixed(2)} ${(centerY + Math.sin(angle) * radius).toFixed(2)} l`,
-        );
-      }
-
-      currentPage.push("h f");
-
-      const roundedPercentage = Math.round(percentage * 1000) / 10;
-      const middleAngle = (startAngle + endAngle) / 2;
-      const percentageLabel =
-        roundedPercentage % 1 === 0
-          ? roundedPercentage.toFixed(0)
-          : roundedPercentage.toFixed(1);
-      const sliceLabel = `${count} (${percentageLabel}%)`;
-      const sliceLabelWidth = sliceLabel.length * 3.1;
-
-      if (roundedPercentage >= 5) {
-        const labelRadius = radius * 0.58;
-        const sliceLuminance =
-          color[0] * 0.299 + color[1] * 0.587 + color[2] * 0.114;
-        currentPage.push(sliceLuminance > 0.58 ? "0 g" : "1 1 1 rg");
-        text(
-          sliceLabel,
-          centerX + Math.cos(middleAngle) * labelRadius - sliceLabelWidth / 2,
-          centerY + Math.sin(middleAngle) * labelRadius,
-          6.5,
-          "F2",
-        );
-      } else {
-        const calloutRadius = radius + 14;
-        const anchorX = centerX + Math.cos(middleAngle) * radius;
-        const anchorY = centerY + Math.sin(middleAngle) * radius;
-        const calloutX = centerX + Math.cos(middleAngle) * calloutRadius;
-        const calloutY = centerY + Math.sin(middleAngle) * calloutRadius;
-        const textX =
-          Math.cos(middleAngle) >= 0
-            ? calloutX + 4
-            : calloutX - sliceLabelWidth - 4;
-
-        currentPage.push(
-          "0.35 0.38 0.42 RG",
-          `${anchorX.toFixed(2)} ${anchorY.toFixed(2)} m ${calloutX.toFixed(2)} ${calloutY.toFixed(2)} l S`,
-          "0 g",
-        );
-        text(sliceLabel, textX, calloutY, 6.5, "F2");
-      }
-
-      startAngle = endAngle;
-    });
-
-    entries.forEach(([label], index) => {
-      const legendY = cursorY - 68 - index * 18;
-      const color = sitrepAnalyticsColor(label, index);
-
-      currentPage.push(
-        `${color[0]} ${color[1]} ${color[2]} rg`,
-        `${marginX + 184} ${legendY - 3} 7 7 re f`,
-        "0 g",
-      );
-      text(formatSitrepLabel(label), marginX + 196, legendY, 8);
-    });
-
-    cursorY -= chartHeight;
-  };
-
-  const addLineChart = (chart: PdfLineChart) => {
-    const series = chart.series.filter((item) =>
-      item.data.some((point) => point.total > 0 && point.cutoffAt !== null),
-    );
-
-    if (series.length === 0) {
-      return;
-    }
-
-    const points = series[0]?.data ?? [];
-    const chartHeight = 210;
-
-    ensureSpace(chartHeight);
-    currentPage.push(
-      "0.99 0.995 1 rg",
-      `${marginX} ${cursorY - chartHeight + 8} ${contentWidth} ${chartHeight - 8} re f`,
-      "0.82 0.86 0.91 RG",
-      `${marginX} ${cursorY - chartHeight + 8} ${contentWidth} ${chartHeight - 8} re S`,
-      "0 g",
-    );
-    const chartX = marginX + 28;
-    const chartBottom = cursorY - 142;
-    const plotWidth = contentWidth - 42;
-    const plotHeight = 112;
     text(chart.title, marginX, cursorY, 10, "F2");
     cursorY -= 18;
 
-    currentPage.push("0.88 0.90 0.93 RG", "0.6 w");
-
-    for (const tick of [100, 75, 50, 25, 0]) {
-      const y = chartBottom + (tick / 100) * plotHeight;
-
-      currentPage.push(
-        `${chartX} ${y} m ${chartX + plotWidth} ${y} l S`,
-      );
-      text(`${tick}%`, marginX + 2, y - 3, 7);
+    if (entries.length === 0) {
+      addWrappedParagraph("No chart data recorded.", marginX + 8, 92, 8);
+      cursorY -= 4;
+      return;
     }
 
-    currentPage.push(
-      `${chartX} ${chartBottom} m ${chartX} ${chartBottom + plotHeight} l S`,
-      `${chartX} ${chartBottom} m ${chartX + plotWidth} ${chartBottom} l S`,
-      "0 g",
-    );
+    const maxCount = Math.max(...entries.map(([, count]) => count), 1);
+    const labelWidth = 190;
+    const barX = marginX + labelWidth;
+    const maxBarWidth = contentWidth - labelWidth - 46;
 
-    series.forEach((item, seriesIndex) => {
-      const color = sitrepAnalyticsColor(item.label, seriesIndex);
-      const data = item.data;
-
-      currentPage.push(`${color[0]} ${color[1]} ${color[2]} RG`, "1.4 w");
-
-      data.forEach((point, pointIndex) => {
-        const x =
-          chartX +
-          (pointIndex / Math.max(1, data.length - 1)) * plotWidth;
-        const y =
-          chartBottom +
-          (Math.max(0, Math.min(100, point.percentage)) / 100) * plotHeight;
-        currentPage.push(
-          `${x.toFixed(2)} ${y.toFixed(2)} ${pointIndex === 0 ? "m" : "l"}`,
-        );
-      });
-
-      if (data.length > 0) {
-        currentPage.push("S");
-      }
-
-      data.forEach((point, pointIndex) => {
-        const x =
-          chartX +
-          (pointIndex / Math.max(1, data.length - 1)) * plotWidth;
-        const y =
-          chartBottom +
-          (Math.max(0, Math.min(100, point.percentage)) / 100) * plotHeight;
-        const radius = 4;
-        const control = radius * 0.5522848;
-
-        currentPage.push(
-          `${color[0]} ${color[1]} ${color[2]} RG`,
-          "1 1 1 rg",
-          `${(x + radius).toFixed(2)} ${y.toFixed(2)} m`,
-          `${(x + radius).toFixed(2)} ${(y + control).toFixed(2)} ${(x + control).toFixed(2)} ${(y + radius).toFixed(2)} ${x.toFixed(2)} ${(y + radius).toFixed(2)} c`,
-          `${(x - control).toFixed(2)} ${(y + radius).toFixed(2)} ${(x - radius).toFixed(2)} ${(y + control).toFixed(2)} ${(x - radius).toFixed(2)} ${y.toFixed(2)} c`,
-          `${(x - radius).toFixed(2)} ${(y - control).toFixed(2)} ${(x - control).toFixed(2)} ${(y - radius).toFixed(2)} ${x.toFixed(2)} ${(y - radius).toFixed(2)} c`,
-          `${(x + control).toFixed(2)} ${(y - radius).toFixed(2)} ${(x + radius).toFixed(2)} ${(y - control).toFixed(2)} ${(x + radius).toFixed(2)} ${y.toFixed(2)} c`,
-          "B",
-        );
-      });
-
-      const legendX = marginX + seriesIndex * 145;
+    for (const [label, count] of entries) {
+      ensureSpace(20);
+      text(formatSitrepLabel(label), marginX + 6, cursorY, 8);
       currentPage.push(
-        `${color[0]} ${color[1]} ${color[2]} rg`,
-        `${legendX} ${cursorY - 156} 8 8 re f`,
+        "0.48 0.07 0.08 rg",
+        `${barX} ${cursorY - 4} ${Math.max(3, (count / maxCount) * maxBarWidth).toFixed(2)} 10 re f`,
         "0 g",
       );
-      text(item.label, legendX + 12, cursorY - 155, 7);
-    });
+      text(String(count), pageWidth - marginX - 28, cursorY, 8, "F2");
+      cursorY -= 20;
+    }
 
-    points.forEach((point, pointIndex) => {
-      const x =
-        chartX +
-        (pointIndex / Math.max(1, points.length - 1)) * plotWidth;
-      text(
-        point.minutes >= 60
-          ? `${point.minutes / 60}h`
-          : `${point.minutes}m`,
-        x - 8,
-        chartBottom - 15,
-        7,
-      );
-    });
-
-    text("Cumulative percentage", marginX, chartBottom + plotHeight + 12, 7);
-    text(
-      "Minutes after DMMP activation",
-      chartX + plotWidth / 2 - 48,
-      chartBottom - 28,
-      7,
-    );
-
-    cursorY -= chartHeight;
+    cursorY -= 8;
   };
 
   text("Incident Situation Report", marginX, cursorY, 22, "F2");
@@ -2475,16 +1615,26 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
     ["Incident code", incidentCode],
     ["Incident type", incidentType],
     ["Location", location],
-    ["Incident date", formatSitrepDate(stringValue(incident, "started_at", ""))],
-    ["Incident status", formatSitrepLabel(stringValue(incident, "status", "unknown"))],
-    ["Number of records", payload.casualtySummary.total],
     ["Generated by", `${payload.generatedBy.fullName} (${formatSitrepLabel(payload.generatedBy.role)})`],
-    ["Report scope", "Full incident - FR, AMP, and HCFD"],
+    ["Report scope", "Full incident - FR, Advanced Medical Responder, and HCFD"],
     ["Period start", formatSitrepDate(payload.period.start)],
     ["Period end", formatSitrepDate(payload.period.end)],
   ]);
 
-  addTable("Incident Timeline", buildSitrepTimelineRows(payload));
+  addSectionTitle("Executive Summary");
+  addWrappedParagraph(sitrep.summary || "No narrative summary recorded.", marginX, 96, 9);
+
+  addSectionTitle("Operational Snapshot");
+  addKeyValueGrid([
+    ["Total casualties", payload.casualtySummary.total],
+    ["Verified records", payload.casualtySummary.byVerification.verified ?? 0],
+    ["Pending review", payload.casualtySummary.byVerification.submitted ?? 0],
+    ["Rejected records", payload.casualtySummary.byVerification.rejected ?? 0],
+    ["Triage assessments", payload.triageSummary.totalAssessments],
+    ["Transport records", payload.transportSummary.totalRecords],
+    ["Departed scene", payload.transportSummary.departedScene],
+    ["Arrived facility", payload.transportSummary.arrivedFacility],
+  ]);
 
   if (payload.analyticsSnapshot) {
     const analytics = payload.analyticsSnapshot;
@@ -2509,29 +1659,6 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
       ["Safe responders", analytics.keyPerformanceIndicators.safeResponders],
       ["Unsafe responders", analytics.keyPerformanceIndicators.unsafeResponders],
       [
-        "Triage denominator (all recorded victims)",
-        analytics.triageAccuracy.totalRecordedVictims,
-      ],
-      [
-        "Unassisted triage comparisons",
-        analytics.triageAccuracy.unassistedRecords,
-      ],
-      ["Over-triage total", analytics.triageAccuracy.overTriageTotal],
-      [
-        "Over-triage percentage",
-        `${analytics.triageAccuracy.overTriagePercentage}%`,
-      ],
-      ["Under-triage total", analytics.triageAccuracy.underTriageTotal],
-      [
-        "Under-triage percentage",
-        `${analytics.triageAccuracy.underTriagePercentage}%`,
-      ],
-      [
-        "Correct triage total",
-        analytics.triageAccuracy.overUnderTriageDistribution["Correct Triage"]
-          ?.count ?? 0,
-      ],
-      [
         "Cumulative timeline intervals",
         analytics.cumulativeIntervalsMinutes
           .map((minutes) => (minutes >= 60 ? `${minutes / 60} hr` : `${minutes} min`))
@@ -2551,32 +1678,6 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
     );
   }
 
-  if (charts.length > 0 || lineCharts.length > 0) {
-    addSectionTitle("Charts");
-    charts.forEach(addChart);
-    lineCharts.forEach(addLineChart);
-  }
-
-  addTable(
-    "Incident Management Snapshot",
-    buildIncidentManagementRows(payload.incidentManagementSnapshot),
-  );
-
-  addSectionTitle("Executive Summary");
-  addWrappedParagraph(sitrep.summary || "No narrative summary recorded.", marginX, 96, 9);
-
-  addSectionTitle("Operational Snapshot");
-  addKeyValueGrid([
-    ["Total casualties", payload.casualtySummary.total],
-    ["Verified records", payload.casualtySummary.byVerification.verified ?? 0],
-    ["Pending review", payload.casualtySummary.byVerification.submitted ?? 0],
-    ["Rejected records", payload.casualtySummary.byVerification.rejected ?? 0],
-    ["Triage assessments", payload.triageSummary.totalAssessments],
-    ["Transport records", payload.transportSummary.totalRecords],
-    ["Departed scene", payload.transportSummary.departedScene],
-    ["Arrived facility", payload.transportSummary.arrivedFacility],
-  ]);
-
   addTable("Role Coverage", [
     ["Field Responder records", payload.responderFunctionSummary?.fieldResponderRecords ?? 0],
     [
@@ -2590,7 +1691,7 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
     ["Unspecified role records", payload.responderFunctionSummary?.unspecifiedResponderRecords ?? 0],
   ]);
 
-  addTable("Casualty Identification", [
+  addTable("Victim Identification", [
     ["Identified", payload.casualtySummary.identified],
     ["Partially identified", payload.casualtySummary.partiallyIdentified],
     ["Unidentified", payload.casualtySummary.unidentified],
@@ -2747,7 +1848,7 @@ function buildSitrepLines(sitrep: SitrepResponseRecord): string[] {
     `Status: ${sitrep.status}`,
     `Generated At: ${sitrep.generated_at}`,
     `Generated By: ${payload.generatedBy.fullName} (${payload.generatedBy.role})`,
-    "Report Scope: Full incident - FR, AMP, and HCFD",
+    "Report Scope: Full incident - FR, Advanced Medical Responder, and HCFD",
     `Period: ${payload.period.start ?? "Unavailable"} to ${payload.period.end}`,
     "",
     "Summary",
@@ -3700,9 +2801,6 @@ export async function updateIncidentTimeline(
       ),
       existingTimeline?.scene_demobilized_at ?? null,
     );
-    const customTimelineEvents = parseCustomTimelineEvents(
-      request.body.customTimelineEvents,
-    );
 
     assertChronologicalPair(
       firstSiteTriageAt,
@@ -3760,12 +2858,6 @@ export async function updateIncidentTimeline(
       first_transport_from_scene_at: firstTransportFromSceneAt,
       last_transport_from_scene_at: lastTransportFromSceneAt,
       scene_demobilized_at: sceneDemobilizedAt,
-      custom_events:
-        customTimelineEvents === undefined
-          ? normalizeStoredCustomTimelineEvents(
-              existingTimeline?.custom_events,
-            )
-          : customTimelineEvents,
       updated_by: user.id,
       updated_at: new Date().toISOString(),
     };
@@ -5863,7 +4955,7 @@ export async function getIncidentAnalyticsSummary(
       supabase
         .from("incident_response_timelines")
         .select(
-          "event_notification_at, dmmp_activated_at, medical_coordinator_notified_at, first_ems_on_scene_at, triage_ordered_at, scene_demobilized_at, last_facility_deactivated_at, custom_events",
+          "event_notification_at, dmmp_activated_at, medical_coordinator_notified_at, first_ems_on_scene_at, triage_ordered_at, scene_demobilized_at, last_facility_deactivated_at",
         )
         .eq("incident_id", id)
         .maybeSingle(),
@@ -5881,9 +4973,7 @@ export async function getIncidentAnalyticsSummary(
     .maybeSingle(),
       supabase
         .from("responder_safety_responses")
-        .select(
-          "responder_role, responder_function, safety_status, responder_arrived_at, ppe_used_at",
-        )
+        .select("safety_status, ppe_used_at")
         .eq("incident_id", id),
     ]);
 
@@ -5915,7 +5005,7 @@ export async function getIncidentAnalyticsSummary(
         ? await supabase
             .from("casualty_triage_assessments")
             .select(
-              "casualty_incident_id, triage_system, triage_category, responder_category, calculated_category, triage_stage, triaged_at, assessment_answers, is_over_triage, is_under_triage",
+              "casualty_incident_id, triage_system, triage_category, responder_category, calculated_category, triage_stage, triaged_at, assessment_answers",
             )
             .in("casualty_incident_id", casualtyIncidentIds)
             .order("triaged_at", { ascending: true })
@@ -5935,7 +5025,7 @@ export async function getIncidentAnalyticsSummary(
         ? await supabase
             .from("casualty_treatments")
             .select(
-              "casualty_incident_id, treatment_strategy, treatment_area_name, stabilization_started_at, stabilized_at, treatment_details, performed_by, created_at",
+              "casualty_incident_id, treatment_strategy, treatment_area_name, stabilization_started_at, stabilized_at, created_at",
             )
             .in("casualty_incident_id", casualtyIncidentIds)
             .order("created_at", { ascending: true })
@@ -5945,27 +5035,17 @@ export async function getIncidentAnalyticsSummary(
         ? await supabase
             .from("facility_encounters")
             .select(
-              "casualty_incident_id, facility_id, arrived_at, sought_ed_care, admitted_to_hospital, ed_admitted_at, ed_departed_at, hospital_admitted_at, hospital_discharged_at, ed_resuscitation_started_at, surgical_intervention_started_at, surgical_intervention_ended_at, operating_room_started_at, xray_required, xray_performed_at, ultrasound_required, ultrasound_performed_at, ct_required, ct_performed_at, icu_admitted_at, icu_discharged_at, mechanical_ventilation_required, ventilation_started_at, ventilation_ended_at, created_at",
+              "casualty_incident_id, facility_id, arrived_at, sought_ed_care, admitted_to_hospital, ed_admitted_at, ed_departed_at, hospital_admitted_at, hospital_discharged_at, created_at",
             )
             .in("casualty_incident_id", casualtyIncidentIds)
             .order("created_at", { ascending: true })
-        : { data: [], error: null };
-    const outcomeResult =
-      casualtyIncidentIds.length > 0
-        ? await supabase
-            .from("casualty_outcomes")
-            .select(
-              "casualty_incident_id, reached_hospital, medical_contact_before_death, died, death_stage, death_at, final_disposition",
-            )
-            .in("casualty_incident_id", casualtyIncidentIds)
         : { data: [], error: null };
 
     const detailsError =
       triageResult.error ??
       transportResult.error ??
       treatmentResult.error ??
-      encounterResult.error ??
-      outcomeResult.error;
+      encounterResult.error;
 
     if (detailsError) {
       throw new Error(
@@ -5973,55 +5053,15 @@ export async function getIncidentAnalyticsSummary(
       );
     }
 
-    const timeline =
-      timelineResult.data as (Record<string, unknown> & {
-        custom_events?: unknown;
-      }) | null;
+    const timeline = timelineResult.data as Record<string, string | null> | null;
     const triageRows =
       (triageResult.data ?? []) as TriageAssessmentRow[];
     const transportRows =
       (transportResult.data ?? []) as TransportRecordRow[];
     const treatmentRows =
       (treatmentResult.data ?? []) as TreatmentRecordRow[];
-    const treatmentPerformerIds = [
-      ...new Set(
-        treatmentRows
-          .map((row) => row.performed_by)
-          .filter(
-            (value): value is string =>
-              typeof value === "string" && value.trim().length > 0,
-          ),
-      ),
-    ];
-    const treatmentPerformerRolesById = new Map<string, string | null>();
-
-    if (treatmentPerformerIds.length > 0) {
-      const { data: treatmentPerformers, error: treatmentPerformersError } =
-        await supabase
-          .from("users")
-          .select("id, role")
-          .in("id", treatmentPerformerIds);
-
-      if (treatmentPerformersError) {
-        throw new Error(
-          `Unable to collect treatment responder roles: ${treatmentPerformersError.message}`,
-        );
-      }
-
-      for (const performer of treatmentPerformers ?? []) {
-        treatmentPerformerRolesById.set(performer.id, performer.role);
-      }
-    }
-
-    const ampTreatmentRows = treatmentRows.filter(
-      (row) =>
-        typeof row.performed_by === "string" &&
-        treatmentPerformerRolesById.get(row.performed_by) === "sa_responder",
-    );
     const encounterRows =
       (encounterResult.data ?? []) as FacilityEncounterRow[];
-    const outcomeRows =
-      (outcomeResult.data ?? []) as CasualtyOutcomeRow[];
     const responderSafety =
       (responderSafetyResult.data as ResponderSafetyReportRow | null) ??
       null;
@@ -6040,12 +5080,7 @@ export async function getIncidentAnalyticsSummary(
         item.verification_status ?? "",
       ),
     ).length;
-    const timelineDateValue = (key: string): string | null => {
-      const value = timeline?.[key];
-
-      return typeof value === "string" ? value : null;
-    };
-    const dmmpActivatedAt = timelineDateValue("dmmp_activated_at");
+    const dmmpActivatedAt = timeline?.dmmp_activated_at ?? null;
     const responseInitiatedAt =
       dmmpActivatedAt ?? incident.started_at ?? null;
     const sortedDates = (values: Array<string | null | undefined>) =>
@@ -6063,32 +5098,6 @@ export async function getIncidentAnalyticsSummary(
 
       return dates[dates.length - 1]?.toISOString() ?? null;
     };
-    const firstFacilityDisasterPlanActivationAt = firstDate(
-      treatmentRows.map((row) => {
-        const value =
-          row.treatment_details?.disasterPlanActivationTime;
-
-        return typeof value === "string" ? value : null;
-      }),
-    );
-    const fieldOrAmpResponderSafetyResponses =
-      responderSafetyResponses.filter(isFieldOrAmpResponderSafetyResponse);
-    const firstFieldOrAmpResponderArrivalAt = firstDate(
-      fieldOrAmpResponderSafetyResponses.map(
-        (row) => row.responder_arrived_at,
-      ),
-    );
-    const lastFieldOrAmpResponderArrivalAt = lastDate(
-      fieldOrAmpResponderSafetyResponses.map(
-        (row) => row.responder_arrived_at,
-      ),
-    );
-    const firstVictimStabilizedAtAmpAt = firstDate(
-      treatmentRows.map((row) => row.stabilized_at),
-    );
-    const lastVictimStabilizedAtAmpAt = lastDate(
-      treatmentRows.map((row) => row.stabilized_at),
-    );
     const isPrimaryTriage = (row: TriageAssessmentRow) =>
       row.triage_stage === "on_site" ||
       primaryTriageSystems.has(row.triage_system ?? "");
@@ -6103,20 +5112,6 @@ export async function getIncidentAnalyticsSummary(
     const primaryTriageRows = triageRows.filter(isPrimaryTriage);
     const secondaryTriageRows = triageRows.filter(isSecondaryTriage);
     const facilityTriageRows = triageRows.filter(isFacilityTriage);
-    const triageAccuracy = buildAnalyticsTriageAccuracy(
-      triageRows,
-      casualtyIncidentRows.length,
-    );
-    const triageAccuracyByStage: AnalyticsTriageAccuracyByStage = {
-      primary: buildAnalyticsTriageAccuracy(
-        primaryTriageRows,
-        countDistinctTriageVictims(primaryTriageRows),
-      ),
-      secondary: buildAnalyticsTriageAccuracy(
-        secondaryTriageRows,
-        countDistinctTriageVictims(secondaryTriageRows),
-      ),
-    };
     const latestTriageByCasualty = new Map<string, TriageAssessmentRow>();
     const latestFacilityTriageByCasualty = new Map<
       string,
@@ -6196,34 +5191,6 @@ export async function getIncidentAnalyticsSummary(
         intervalMinutes,
         denominator,
       });
-    const buildHcfdIntervalRows = (
-      rows: Array<{
-        casualty_incident_id: string;
-        occurred_at: string | null;
-      }>,
-      denominator = totalVictims,
-    ) => buildIntervalRows(dedupeEarliestEventRows(rows), denominator);
-    const facilityEncounterEvents = (
-      getTime: (row: FacilityEncounterRow) => string | null | undefined,
-    ) =>
-      encounterRows.map((row) => ({
-        casualty_incident_id: row.casualty_incident_id,
-        occurred_at: getTime(row) ?? null,
-      }));
-    const deathEvents = (
-      filter: (row: CasualtyOutcomeRow) => boolean,
-    ) =>
-      outcomeRows
-        .filter(
-          (row) =>
-            row.death_at &&
-            (row.died === true || row.final_disposition === "deceased") &&
-            filter(row),
-        )
-        .map((row) => ({
-          casualty_incident_id: row.casualty_incident_id,
-          occurred_at: row.death_at,
-        }));
     const primaryEvents = dedupeEarliestEventRows(
       primaryTriageRows.map((row) => ({
         casualty_incident_id: row.casualty_incident_id,
@@ -6364,91 +5331,6 @@ const unsafeResponders = responderSafetyResponses.filter(
       arrivalEvents,
       totalVictims,
     );
-    const edArrivalByActivation = buildHcfdIntervalRows(
-      facilityEncounterEvents((row) => row.arrived_at),
-    );
-    const edAdmissionByActivation = buildHcfdIntervalRows(
-      facilityEncounterEvents((row) => row.ed_admitted_at),
-    );
-    const edResuscitationByActivation = buildHcfdIntervalRows(
-      facilityEncounterEvents((row) => row.ed_resuscitation_started_at),
-    );
-    const edDepartureByActivation = buildHcfdIntervalRows(
-      facilityEncounterEvents((row) => row.ed_departed_at),
-    );
-    const hospitalAdmissionByActivation = buildHcfdIntervalRows(
-      facilityEncounterEvents((row) => row.hospital_admitted_at),
-    );
-    const hospitalDischargeByActivation = buildHcfdIntervalRows(
-      facilityEncounterEvents((row) => row.hospital_discharged_at),
-    );
-    const surgeryStartedByActivation = buildHcfdIntervalRows(
-      facilityEncounterEvents(
-        (row) => row.surgical_intervention_started_at,
-      ),
-    );
-    const operatingRoomStartedByActivation = buildHcfdIntervalRows(
-      facilityEncounterEvents((row) => row.operating_room_started_at),
-    );
-    const xrayPerformedByActivation = buildHcfdIntervalRows(
-      facilityEncounterEvents((row) => row.xray_performed_at),
-    );
-    const ultrasoundPerformedByActivation = buildHcfdIntervalRows(
-      facilityEncounterEvents((row) => row.ultrasound_performed_at),
-    );
-    const ctPerformedByActivation = buildHcfdIntervalRows(
-      facilityEncounterEvents((row) => row.ct_performed_at),
-    );
-    const icuAdmissionByActivation = buildHcfdIntervalRows(
-      facilityEncounterEvents((row) => row.icu_admitted_at),
-    );
-    const icuDischargeByActivation = buildHcfdIntervalRows(
-      facilityEncounterEvents((row) => row.icu_discharged_at),
-    );
-    const ventilationStartedByActivation = buildHcfdIntervalRows(
-      facilityEncounterEvents((row) => row.ventilation_started_at),
-    );
-    const ventilationEndedByActivation = buildHcfdIntervalRows(
-      facilityEncounterEvents((row) => row.ventilation_ended_at),
-    );
-    const mortalityByActivation = buildHcfdIntervalRows(
-      deathEvents(() => true),
-    );
-    const impactMortalityByActivation = buildHcfdIntervalRows(
-      deathEvents(
-        (row) =>
-          row.death_stage === "impact" ||
-          row.medical_contact_before_death === false,
-      ),
-    );
-    const prehospitalMortalityByActivation = buildHcfdIntervalRows(
-      deathEvents(
-        (row) =>
-          row.death_stage === "prehospital" ||
-          (
-            row.medical_contact_before_death === true &&
-            row.reached_hospital === false
-          ),
-      ),
-    );
-    const inHospitalMortalityByActivation = buildHcfdIntervalRows(
-      deathEvents(
-        (row) =>
-          row.death_stage === "in_hospital" ||
-          row.reached_hospital === true,
-      ),
-    );
-    const immediateMortalityByActivation = buildHcfdIntervalRows(
-      deathEvents(
-        (row) =>
-          facilityCategoryForCasualty(row.casualty_incident_id) ===
-          "immediate",
-      ),
-      casualtyIncidentIds.filter(
-        (casualtyIncidentId) =>
-          facilityCategoryForCasualty(casualtyIncidentId) === "immediate",
-      ).length,
-    );
     const rawTimelineVisuals = [
       {
         key: "incidentOnset",
@@ -6458,28 +5340,18 @@ const unsafeResponders = responderSafetyResponses.filter(
       {
         key: "dmmpActivation",
         label: "Activation of DMMP",
-        at: timelineDateValue("dmmp_activated_at"),
+        at: timeline?.dmmp_activated_at ?? null,
       },
       {
         key: "medicalCoordinatorNotification",
         label:
           "Notification of first appropriate staff person to assume medical management coordination role",
-        at: timelineDateValue("medical_coordinator_notified_at"),
-      },
-      {
-        key: "firstMedicalStaffArrivalOnScene",
-        label: "Time of arrival of medical staff on the scene",
-        at: firstFieldOrAmpResponderArrivalAt,
-      },
-      {
-        key: "lastResponderArrivalOnScene",
-        label: "Last responder to arrive on the scene",
-        at: lastFieldOrAmpResponderArrivalAt,
+        at: timeline?.medical_coordinator_notified_at ?? null,
       },
       {
         key: "triageInitiated",
         label: "Triage initiated",
-        at: timelineDateValue("triage_ordered_at"),
+        at: timeline?.triage_ordered_at ?? null,
       },
       {
         key: "firstPrimaryTriage",
@@ -6502,22 +5374,10 @@ const unsafeResponders = responderSafetyResponses.filter(
         at: lastDate(secondaryTriageRows.map((row) => row.triaged_at)),
       },
       {
-        key: "firstVictimStabilizedAtAmp",
-        label:
-          "Time of first victim stabilized at the advanced medical post",
-        at: firstVictimStabilizedAtAmpAt,
-      },
-      {
-        key: "lastVictimStabilizedAtAmp",
-        label:
-          "Time of last victim stabilized at the advanced medical post",
-        at: lastVictimStabilizedAtAmpAt,
-      },
-      {
         key: "firstEmsVehicle",
         label: "First EMS vehicle arrived",
         at:
-          timelineDateValue("first_ems_on_scene_at") ??
+          timeline?.first_ems_on_scene_at ??
           firstDate(transportRows.map((row) => row.arrived_scene_at)),
       },
       {
@@ -6536,12 +5396,6 @@ const unsafeResponders = responderSafetyResponses.filter(
         at: firstDate(facilityTriageRows.map((row) => row.triaged_at)),
       },
       {
-        key: "firstFacilityDisasterResponseActivation",
-        label:
-          "First healthcare facility to activate its disaster response",
-        at: firstFacilityDisasterPlanActivationAt,
-      },
-      {
         key: "lastFacilityTriage",
         label: "Last victim triaged at a healthcare facility",
         at: lastDate(facilityTriageRows.map((row) => row.triaged_at)),
@@ -6557,20 +5411,13 @@ const unsafeResponders = responderSafetyResponses.filter(
       {
         key: "respondersDemobilized",
         label: "Responders demobilized",
-        at: timelineDateValue("scene_demobilized_at"),
+        at: timeline?.scene_demobilized_at ?? null,
       },
       {
         key: "lastFacilityDeactivation",
         label: "Last healthcare facility deactivated its disaster response",
-        at: timelineDateValue("last_facility_deactivated_at"),
+        at: timeline?.last_facility_deactivated_at ?? null,
       },
-      ...normalizeStoredCustomTimelineEvents(timeline?.custom_events).map(
-        (event, index) => ({
-          key: `customTimelineEvent${index + 1}`,
-          label: event.label,
-          at: event.at,
-        }),
-      ),
     ];
     const timelineVisuals = addTimelineElapsedMetrics(
       rawTimelineVisuals,
@@ -6594,33 +5441,7 @@ const unsafeResponders = responderSafetyResponses.filter(
           healthcareFacilityLengthOfStayMinutes:
             healthcareStayByCategory,
         },
-        triageAccuracy,
-        triageAccuracyByStage,
         barGraphs: {
-          triageAccuracy: {
-            over_triage: triageAccuracy.overTriageTotal,
-            under_triage: triageAccuracy.underTriageTotal,
-            explicitly_flagged_over_triage:
-              triageAccuracy.explicitOverTriageRecords,
-            explicitly_flagged_under_triage:
-              triageAccuracy.explicitUnderTriageRecords,
-          },
-          overUnderTriageDistribution:
-            triageAccuracy.overUnderTriageDistribution,
-          underTriageTransitions: triageAccuracy.underTriageTransitions,
-          overTriageTransitions: triageAccuracy.overTriageTransitions,
-          primaryOverUnderTriageDistribution:
-            triageAccuracyByStage.primary.overUnderTriageDistribution,
-          primaryUnderTriageTransitions:
-            triageAccuracyByStage.primary.underTriageTransitions,
-          primaryOverTriageTransitions:
-            triageAccuracyByStage.primary.overTriageTransitions,
-          secondaryOverUnderTriageDistribution:
-            triageAccuracyByStage.secondary.overUnderTriageDistribution,
-          secondaryUnderTriageTransitions:
-            triageAccuracyByStage.secondary.underTriageTransitions,
-          secondaryOverTriageTransitions:
-            triageAccuracyByStage.secondary.overTriageTransitions,
           primaryTriageByCategory: countBy(
             primaryTriageRows,
             (row) => getAnalyticsTriageCategory(row),
@@ -6634,7 +5455,7 @@ const unsafeResponders = responderSafetyResponses.filter(
             facilityTriageRows,
           ),
           stabilizationStrategies: countBy(
-            ampTreatmentRows,
+            treatmentRows,
             (row) => row.treatment_strategy,
           ),
           responderSafety: {
@@ -6648,26 +5469,6 @@ const unsafeResponders = responderSafetyResponses.filter(
           immediateDepartedAndArrivedByActivation,
           delayedDepartedAndArrivedByActivation,
           facilityArrivalByActivation,
-          edArrivalByActivation,
-          edAdmissionByActivation,
-          edResuscitationByActivation,
-          edDepartureByActivation,
-          hospitalAdmissionByActivation,
-          hospitalDischargeByActivation,
-          surgeryStartedByActivation,
-          operatingRoomStartedByActivation,
-          xrayPerformedByActivation,
-          ultrasoundPerformedByActivation,
-          ctPerformedByActivation,
-          icuAdmissionByActivation,
-          icuDischargeByActivation,
-          ventilationStartedByActivation,
-          ventilationEndedByActivation,
-          mortalityByActivation,
-          impactMortalityByActivation,
-          prehospitalMortalityByActivation,
-          inHospitalMortalityByActivation,
-          immediateMortalityByActivation,
           edCareByTriageCategory: edCareByCategory,
         },
         lineGraphs: {
@@ -6712,114 +5513,6 @@ const unsafeResponders = responderSafetyResponses.filter(
               key: "all",
               label: "All victims",
               data: facilityArrivalByActivation,
-            },
-          ],
-          edResourcesUtilization: [
-            {
-              key: "arrived",
-              label: "Arrived at ED / facility",
-              data: edArrivalByActivation,
-            },
-            {
-              key: "ed_admitted",
-              label: "Admitted to ED",
-              data: edAdmissionByActivation,
-            },
-            {
-              key: "resuscitation",
-              label: "Resuscitation started",
-              data: edResuscitationByActivation,
-            },
-            {
-              key: "ed_departed",
-              label: "Discharged from ED",
-              data: edDepartureByActivation,
-            },
-          ],
-          hospitalResourcesUtilization: [
-            {
-              key: "hospital_admitted",
-              label: "Admitted to hospital",
-              data: hospitalAdmissionByActivation,
-            },
-            {
-              key: "surgery_started",
-              label: "Surgery started",
-              data: surgeryStartedByActivation,
-            },
-            {
-              key: "operating_room_started",
-              label: "Operating room used",
-              data: operatingRoomStartedByActivation,
-            },
-            {
-              key: "xray_performed",
-              label: "X-ray performed",
-              data: xrayPerformedByActivation,
-            },
-            {
-              key: "ultrasound_performed",
-              label: "Ultrasound performed",
-              data: ultrasoundPerformedByActivation,
-            },
-            {
-              key: "ct_performed",
-              label: "CT scan performed",
-              data: ctPerformedByActivation,
-            },
-          ],
-          morbidityByActivation: [
-            {
-              key: "icu_admitted",
-              label: "Admitted to ICU",
-              data: icuAdmissionByActivation,
-            },
-            {
-              key: "ventilation_started",
-              label: "Mechanical ventilation started",
-              data: ventilationStartedByActivation,
-            },
-            {
-              key: "hospital_discharged",
-              label: "Discharged from hospital",
-              data: hospitalDischargeByActivation,
-            },
-            {
-              key: "icu_discharged",
-              label: "Discharged from ICU",
-              data: icuDischargeByActivation,
-            },
-            {
-              key: "ventilation_ended",
-              label: "Mechanical ventilation ended",
-              data: ventilationEndedByActivation,
-            },
-          ],
-          mortalityByActivation: [
-            {
-              key: "all_deaths",
-              label: "All deaths",
-              data: mortalityByActivation,
-            },
-            {
-              key: "impact_deaths",
-              label: "Impact deaths",
-              data: impactMortalityByActivation,
-            },
-            {
-              key: "prehospital_deaths",
-              label: "Prehospital deaths",
-              data: prehospitalMortalityByActivation,
-            },
-            {
-              key: "in_hospital_deaths",
-              label: "In-hospital deaths",
-              data: inHospitalMortalityByActivation,
-            },
-            {
-              key: "immediate_deaths",
-              label: "Immediate deaths",
-              data: immediateMortalityByActivation,
             },
           ],
         },
@@ -6880,8 +5573,6 @@ export async function generateIncidentSitrep(
       timelineResult,
       casualtiesResult,
       evacuationCentersResult,
-      dmmpStaffResult,
-      coordinationResult,
     ] = await Promise.all([
       supabase
         .from("incident_response_timelines")
@@ -6927,27 +5618,12 @@ export async function generateIncidentSitrep(
         .select("id, center_name, barangay, municipality")
         .eq("incident_id", id)
         .eq("is_active", true),
-      supabase
-        .from("dmmp_staff_call_downs")
-        .select(
-          "was_contacted, has_arrived, arrived_at, status",
-        )
-        .eq("incident_id", id),
-      supabase
-        .from("medical_coordination_assessments")
-        .select(
-          "initial_actions_rating, scene_coordination_rating, system_coordination_rating, communications_rating, resource_management_rating, notes, assessed_at",
-        )
-        .eq("incident_id", id)
-        .maybeSingle(),
     ]);
 
     const firstError =
       timelineResult.error ??
       casualtiesResult.error ??
-      evacuationCentersResult.error ??
-      dmmpStaffResult.error ??
-      coordinationResult.error;
+      evacuationCentersResult.error;
 
     if (firstError) {
       throw new Error(
@@ -6964,7 +5640,7 @@ export async function generateIncidentSitrep(
         ? await supabase
             .from("casualty_triage_assessments")
             .select(
-              "casualty_incident_id, triage_system, triage_category, responder_category, calculated_category, triage_stage, triaged_at, triaged_by, assessment_answers, is_over_triage, is_under_triage",
+              "casualty_incident_id, triage_system, triage_category, responder_category, calculated_category, triage_stage, triaged_at, triaged_by, assessment_answers",
             )
             .in("casualty_incident_id", casualtyIncidentIds)
             .order("triaged_at", { ascending: false })
@@ -7015,7 +5691,7 @@ export async function generateIncidentSitrep(
         ? await supabase
             .from("facility_encounters")
             .select(
-              "casualty_incident_id, facility_id, arrived_at, sought_ed_care, admitted_to_hospital, ed_admitted_at, ed_departed_at, hospital_admitted_at, hospital_discharged_at, ed_resuscitation_started_at, surgical_intervention_started_at, operating_room_started_at, xray_performed_at, ultrasound_performed_at, ct_performed_at, icu_admitted_at, icu_discharged_at, ventilation_started_at, ventilation_ended_at, referred_or_transferred, created_at",
+              "casualty_incident_id, facility_id, arrived_at, sought_ed_care, admitted_to_hospital, ed_admitted_at, ed_departed_at, hospital_admitted_at, hospital_discharged_at, created_at",
             )
             .in("casualty_incident_id", casualtyIncidentIds)
             .order("created_at", { ascending: true })
@@ -7024,22 +5700,6 @@ export async function generateIncidentSitrep(
     if (encounterResult.error) {
       throw new Error(
         `Unable to collect facility analytics data: ${encounterResult.error.message}`,
-      );
-    }
-
-    const outcomeResult =
-      casualtyIncidentIds.length > 0
-        ? await supabase
-            .from("casualty_outcomes")
-            .select(
-              "casualty_incident_id, reached_hospital, medical_contact_before_death, died, death_stage, death_at, final_disposition",
-            )
-            .in("casualty_incident_id", casualtyIncidentIds)
-        : { data: [], error: null };
-
-    if (outcomeResult.error) {
-      throw new Error(
-        `Unable to collect outcome analytics data: ${outcomeResult.error.message}`,
       );
     }
 
@@ -7066,8 +5726,6 @@ export async function generateIncidentSitrep(
       (treatmentResult.data ?? []) as TreatmentRecordRow[];
     const encounterRows =
       (encounterResult.data ?? []) as FacilityEncounterRow[];
-    const outcomeRows =
-      (outcomeResult.data ?? []) as CasualtyOutcomeRow[];
     const responderSafetyResponses =
       responderSafetyResponsesResult.error
         ? []
@@ -7079,7 +5737,6 @@ export async function generateIncidentSitrep(
           ...casualties.map((item) => item.encoded_by),
           ...triageRows.map((item) => item.triaged_by),
           ...transportRows.map((item) => item.recorded_by),
-          ...treatmentRows.map((item) => item.performed_by),
         ].filter(
           (value): value is string =>
             typeof value === "string" && value.trim().length > 0,
@@ -7119,12 +5776,6 @@ export async function generateIncidentSitrep(
         );
       }
     }
-
-    const ampTreatmentRows = treatmentRows.filter(
-      (row) =>
-        typeof row.performed_by === "string" &&
-        userFunctionsById.get(row.performed_by) === "sa_responder",
-    );
 
     const triageRowsByCasualty = groupRowsByCasualtyId(triageRows);
     const transportRowsByCasualty =
@@ -7219,16 +5870,6 @@ export async function generateIncidentSitrep(
     const primaryTriageRows = incidentTriageRows.filter(isPrimaryTriage);
     const secondaryTriageRows = incidentTriageRows.filter(isSecondaryTriage);
     const facilityTriageRows = incidentTriageRows.filter(isFacilityTriage);
-    const triageAccuracyByStage: AnalyticsTriageAccuracyByStage = {
-      primary: buildAnalyticsTriageAccuracy(
-        primaryTriageRows,
-        countDistinctTriageVictims(primaryTriageRows),
-      ),
-      secondary: buildAnalyticsTriageAccuracy(
-        secondaryTriageRows,
-        countDistinctTriageVictims(secondaryTriageRows),
-      ),
-    };
     const latestFacilityTriageByCasualty = new Map<
       string,
       TriageAssessmentRow
@@ -7250,103 +5891,6 @@ export async function generateIncidentSitrep(
       );
     const countTriageRowsByCategory = (rows: TriageAssessmentRow[]) =>
       countBy(rows, (row) => getAnalyticsTriageCategory(row));
-    const categoryForCasualty = (casualtyIncidentId: string) =>
-      getAnalyticsTriageCategory(
-        latestTriageByCasualty.get(casualtyIncidentId),
-      );
-    const timelineData = (timelineResult.data ?? {}) as Record<
-      string,
-      unknown
-    >;
-    const dmmpActivatedAt =
-      typeof timelineData.dmmp_activated_at === "string"
-        ? timelineData.dmmp_activated_at
-        : null;
-    const intervalMinutes = [15, 30, 60, 120, 180];
-    const categoryRows = (
-      rows: Array<{
-        casualty_incident_id: string;
-        occurred_at: string | null;
-      }>,
-      category: string,
-    ) =>
-      rows.filter(
-        (row) =>
-          categoryForCasualty(row.casualty_incident_id) === category &&
-          Boolean(row.occurred_at),
-      );
-    const buildIntervalRows = (
-      rows: Array<{
-        casualty_incident_id: string;
-        occurred_at: string | null;
-      }>,
-      denominator = casualtyIncidentIds.length,
-    ) =>
-      buildCumulativeIntervalRows({
-        rows,
-        activationAt: dmmpActivatedAt,
-        intervalMinutes,
-        denominator,
-      });
-    const primaryEvents = dedupeEarliestEventRows(
-      primaryTriageRows.map((row) => ({
-        casualty_incident_id: row.casualty_incident_id,
-        occurred_at: row.triaged_at,
-      })),
-    );
-    const stabilizedEvents = dedupeEarliestEventRows(
-      treatmentRows.map((row) => ({
-        casualty_incident_id: row.casualty_incident_id,
-        occurred_at: row.stabilized_at,
-      })),
-    );
-    const departedAndArrivedEvents = dedupeEarliestEventRows(
-      transportRows.map((row) => ({
-        casualty_incident_id: row.casualty_incident_id,
-        occurred_at:
-          row.departed_scene_at && row.arrived_facility_at
-            ? row.arrived_facility_at
-            : null,
-      })),
-    );
-    const arrivalEvents = dedupeEarliestEventRows([
-      ...transportRows.map((row) => ({
-        casualty_incident_id: row.casualty_incident_id,
-        occurred_at: row.arrived_facility_at,
-      })),
-      ...encounterRows.map((row) => ({
-        casualty_incident_id: row.casualty_incident_id,
-        occurred_at: row.arrived_at,
-      })),
-    ]);
-    const buildHcfdIntervalRows = (
-      rows: Array<{
-        casualty_incident_id: string;
-        occurred_at: string | null;
-      }>,
-      denominator = casualtyIncidentIds.length,
-    ) => buildIntervalRows(dedupeEarliestEventRows(rows), denominator);
-    const facilityEncounterEvents = (
-      getTime: (row: FacilityEncounterRow) => string | null | undefined,
-    ) =>
-      encounterRows.map((row) => ({
-        casualty_incident_id: row.casualty_incident_id,
-        occurred_at: getTime(row) ?? null,
-      }));
-    const deathEvents = (
-      filter: (row: CasualtyOutcomeRow) => boolean,
-    ) =>
-      outcomeRows
-        .filter(
-          (row) =>
-            row.death_at &&
-            (row.died === true || row.final_disposition === "deceased") &&
-            filter(row),
-        )
-        .map((row) => ({
-          casualty_incident_id: row.casualty_incident_id,
-          occurred_at: row.death_at,
-        }));
     const tertiaryTriageBySystem = Object.entries(
       tertiaryTriageSystemLabels,
     ).reduce<
@@ -7402,42 +5946,6 @@ export async function generateIncidentSitrep(
       (row) => row.safety_status === "no",
     ).length;
     const edCareVictims = encounterRows.filter(soughtEdCare).length;
-    const triageAccuracy = buildAnalyticsTriageAccuracy(
-      incidentTriageRows,
-      incidentCasualties.length,
-    );
-    const sortedDateValues = (
-      values: Array<string | null | undefined>,
-    ) =>
-      values
-        .map((value) => (value ? new Date(value) : null))
-        .filter(
-          (value): value is Date =>
-            value !== null && !Number.isNaN(value.getTime()),
-        )
-        .sort((first, second) => first.getTime() - second.getTime());
-    const firstDateValue = (values: Array<string | null | undefined>) =>
-      sortedDateValues(values)[0]?.toISOString() ?? null;
-    const lastDateValue = (values: Array<string | null | undefined>) => {
-      const valuesSorted = sortedDateValues(values);
-
-      return valuesSorted[valuesSorted.length - 1]?.toISOString() ?? null;
-    };
-    const dmmpStaffRows = (dmmpStaffResult.data ?? []) as Array<{
-      was_contacted: boolean | null;
-      has_arrived?: boolean | null;
-      arrived_at: string | null;
-      status: string | null;
-    }>;
-    const coordination = coordinationResult.data as {
-      initial_actions_rating: number | null;
-      scene_coordination_rating: number | null;
-      system_coordination_rating: number | null;
-      communications_rating: number | null;
-      resource_management_rating: number | null;
-      notes: string | null;
-      assessed_at: string | null;
-    } | null;
 
     const casualtySummary = {
       total: incidentCasualties.length,
@@ -7519,259 +6027,6 @@ export async function generateIncidentSitrep(
       activeEvacuationCenterCount:
         evacuationCentersResult.data?.length ?? 0,
     };
-    const lineGraphs = {
-      primaryTriageByActivation: [
-        {
-          key: "immediate",
-          label: "Immediate",
-          data: buildIntervalRows(
-            categoryRows(primaryEvents, "immediate"),
-            casualtyIncidentIds.filter(
-              (casualtyIncidentId) =>
-                categoryForCasualty(casualtyIncidentId) === "immediate",
-            ).length,
-          ),
-        },
-        {
-          key: "delayed",
-          label: "Delayed",
-          data: buildIntervalRows(
-            categoryRows(primaryEvents, "delayed"),
-            casualtyIncidentIds.filter(
-              (casualtyIncidentId) =>
-                categoryForCasualty(casualtyIncidentId) === "delayed",
-            ).length,
-          ),
-        },
-      ],
-      stabilizationByActivation: [
-        {
-          key: "immediate",
-          label: "Immediate",
-          data: buildIntervalRows(
-            categoryRows(stabilizedEvents, "immediate"),
-            casualtyIncidentIds.filter(
-              (casualtyIncidentId) =>
-                categoryForCasualty(casualtyIncidentId) === "immediate",
-            ).length,
-          ),
-        },
-        {
-          key: "delayed",
-          label: "Delayed",
-          data: buildIntervalRows(
-            categoryRows(stabilizedEvents, "delayed"),
-            casualtyIncidentIds.filter(
-              (casualtyIncidentId) =>
-                categoryForCasualty(casualtyIncidentId) === "delayed",
-            ).length,
-          ),
-        },
-      ],
-      departedAndArrivedByActivation: [
-        {
-          key: "immediate",
-          label: "Immediate",
-          data: buildIntervalRows(
-            categoryRows(departedAndArrivedEvents, "immediate"),
-            casualtyIncidentIds.filter(
-              (casualtyIncidentId) =>
-                categoryForCasualty(casualtyIncidentId) === "immediate",
-            ).length,
-          ),
-        },
-        {
-          key: "delayed",
-          label: "Delayed",
-          data: buildIntervalRows(
-            categoryRows(departedAndArrivedEvents, "delayed"),
-            casualtyIncidentIds.filter(
-              (casualtyIncidentId) =>
-                categoryForCasualty(casualtyIncidentId) === "delayed",
-            ).length,
-          ),
-        },
-      ],
-      facilityArrivalByActivation: [
-        {
-          key: "all",
-          label: "All victims",
-          data: buildIntervalRows(arrivalEvents),
-        },
-      ],
-      edResourcesUtilization: [
-        {
-          key: "arrived",
-          label: "Arrived at ED / facility",
-          data: buildHcfdIntervalRows(
-            facilityEncounterEvents((row) => row.arrived_at),
-          ),
-        },
-        {
-          key: "ed_admitted",
-          label: "Admitted to ED",
-          data: buildHcfdIntervalRows(
-            facilityEncounterEvents((row) => row.ed_admitted_at),
-          ),
-        },
-        {
-          key: "resuscitation",
-          label: "Resuscitation started",
-          data: buildHcfdIntervalRows(
-            facilityEncounterEvents((row) => row.ed_resuscitation_started_at),
-          ),
-        },
-        {
-          key: "ed_departed",
-          label: "Discharged from ED",
-          data: buildHcfdIntervalRows(
-            facilityEncounterEvents((row) => row.ed_departed_at),
-          ),
-        },
-      ],
-      hospitalResourcesUtilization: [
-        {
-          key: "hospital_admitted",
-          label: "Admitted to hospital",
-          data: buildHcfdIntervalRows(
-            facilityEncounterEvents((row) => row.hospital_admitted_at),
-          ),
-        },
-        {
-          key: "surgery_started",
-          label: "Surgery started",
-          data: buildHcfdIntervalRows(
-            facilityEncounterEvents(
-              (row) => row.surgical_intervention_started_at,
-            ),
-          ),
-        },
-        {
-          key: "operating_room_started",
-          label: "Operating room used",
-          data: buildHcfdIntervalRows(
-            facilityEncounterEvents((row) => row.operating_room_started_at),
-          ),
-        },
-        {
-          key: "xray_performed",
-          label: "X-ray performed",
-          data: buildHcfdIntervalRows(
-            facilityEncounterEvents((row) => row.xray_performed_at),
-          ),
-        },
-        {
-          key: "ultrasound_performed",
-          label: "Ultrasound performed",
-          data: buildHcfdIntervalRows(
-            facilityEncounterEvents((row) => row.ultrasound_performed_at),
-          ),
-        },
-        {
-          key: "ct_performed",
-          label: "CT scan performed",
-          data: buildHcfdIntervalRows(
-            facilityEncounterEvents((row) => row.ct_performed_at),
-          ),
-        },
-      ],
-      morbidityByActivation: [
-        {
-          key: "icu_admitted",
-          label: "Admitted to ICU",
-          data: buildHcfdIntervalRows(
-            facilityEncounterEvents((row) => row.icu_admitted_at),
-          ),
-        },
-        {
-          key: "ventilation_started",
-          label: "Mechanical ventilation started",
-          data: buildHcfdIntervalRows(
-            facilityEncounterEvents((row) => row.ventilation_started_at),
-          ),
-        },
-        {
-          key: "hospital_discharged",
-          label: "Discharged from hospital",
-          data: buildHcfdIntervalRows(
-            facilityEncounterEvents((row) => row.hospital_discharged_at),
-          ),
-        },
-        {
-          key: "icu_discharged",
-          label: "Discharged from ICU",
-          data: buildHcfdIntervalRows(
-            facilityEncounterEvents((row) => row.icu_discharged_at),
-          ),
-        },
-        {
-          key: "ventilation_ended",
-          label: "Mechanical ventilation ended",
-          data: buildHcfdIntervalRows(
-            facilityEncounterEvents((row) => row.ventilation_ended_at),
-          ),
-        },
-      ],
-      mortalityByActivation: [
-        {
-          key: "all_deaths",
-          label: "All deaths",
-          data: buildHcfdIntervalRows(deathEvents(() => true)),
-        },
-        {
-          key: "impact_deaths",
-          label: "Impact deaths",
-          data: buildHcfdIntervalRows(
-            deathEvents(
-              (row) =>
-                row.death_stage === "impact" ||
-                row.medical_contact_before_death === false,
-            ),
-          ),
-        },
-        {
-          key: "prehospital_deaths",
-          label: "Prehospital deaths",
-          data: buildHcfdIntervalRows(
-            deathEvents(
-              (row) =>
-                row.death_stage === "prehospital" ||
-                (row.medical_contact_before_death === true &&
-                  row.reached_hospital === false),
-            ),
-          ),
-        },
-        {
-          key: "in_hospital_deaths",
-          label: "In-hospital deaths",
-          data: buildHcfdIntervalRows(
-            deathEvents(
-              (row) =>
-                row.death_stage === "in_hospital" ||
-                row.reached_hospital === true,
-            ),
-          ),
-        },
-        {
-          key: "immediate_deaths",
-          label: "Immediate deaths",
-          data: buildHcfdIntervalRows(
-            deathEvents(
-              (row) =>
-                facilityCategoryForCasualty(row.casualty_incident_id) ===
-                "immediate",
-            ),
-            casualtyIncidentIds.filter(
-              (casualtyIncidentId) =>
-                facilityCategoryForCasualty(casualtyIncidentId) ===
-                "immediate",
-            ).length,
-          ),
-        },
-      ],
-    } satisfies NonNullable<
-      IncidentSitrepPayload["analyticsSnapshot"]
-    >["lineGraphs"];
     const analyticsSnapshot: IncidentSitrepPayload["analyticsSnapshot"] = {
       keyPerformanceIndicators: {
         totalVictims: casualtySummary.total,
@@ -7795,73 +6050,10 @@ export async function generateIncidentSitrep(
       },
       edCareByTriageCategory,
       stabilizationStrategies: countBy(
-        ampTreatmentRows,
+        treatmentRows,
         (row) => row.treatment_strategy,
       ),
-      triageAccuracy,
-      triageAccuracyByStage,
       cumulativeIntervalsMinutes: [15, 30, 60, 120, 180],
-      lineGraphs,
-    };
-    const incidentManagementSnapshot: IncidentSitrepPayload["incidentManagementSnapshot"] = {
-      dmmpStaff: {
-        totalStaffRecords: dmmpStaffRows.length,
-        contacted: dmmpStaffRows.filter((row) => row.was_contacted).length,
-        arrived: dmmpStaffRows.filter(
-          (row) => row.has_arrived || row.arrived_at,
-        ).length,
-        safe: dmmpStaffRows.filter((row) => row.status === "safe").length,
-        unsafe: dmmpStaffRows.filter((row) => row.status === "unsafe").length,
-        deceased: dmmpStaffRows.filter((row) => row.status === "deceased")
-          .length,
-        lastArrivalAt: lastDateValue(
-          dmmpStaffRows.map((row) => row.arrived_at),
-        ),
-      },
-      coordinationAssessment: coordination
-        ? {
-            initialActions: coordination.initial_actions_rating,
-            sceneCoordination: coordination.scene_coordination_rating,
-            systemCoordination: coordination.system_coordination_rating,
-            communications: coordination.communications_rating,
-            resourceManagement: coordination.resource_management_rating,
-            assessedAt: coordination.assessed_at,
-            notes: coordination.notes,
-          }
-        : null,
-      responderSafety: {
-        safeResponders,
-        unsafeResponders,
-      },
-      onsiteTriage: {
-        firstSiteTriageAt: firstDateValue(
-          primaryTriageRows.map((row) => row.triaged_at),
-        ),
-        lastSiteTriageAt: lastDateValue(
-          primaryTriageRows.map((row) => row.triaged_at),
-        ),
-        totalAssessments: primaryTriageRows.length,
-      },
-      sceneClearance: {
-        firstTransportFromSceneAt: firstDateValue(
-          incidentTransportRows.map((row) => row.departed_scene_at),
-        ),
-        lastTransportFromSceneAt: lastDateValue(
-          incidentTransportRows.map((row) => row.departed_scene_at),
-        ),
-        departedScene: transportSummary.departedScene,
-        arrivedFacility: transportSummary.arrivedFacility,
-      },
-      treatment: {
-        treatmentRecordedTotal: treatmentRows.length,
-        stabilizedTotal: treatmentRows.filter((row) => row.stabilized_at)
-          .length,
-        strategyCounts: countBy(
-          treatmentRows,
-          (row) => row.treatment_strategy,
-        ),
-      },
-      facilities: facilitySummary,
     };
 
     const summary = buildSitrepSummary(
@@ -7893,7 +6085,6 @@ export async function generateIncidentSitrep(
       transportSummary,
       facilitySummary,
       analyticsSnapshot,
-      incidentManagementSnapshot,
     };
 
     const { data: sitrepData, error: sitrepError } = await supabase
@@ -8098,68 +6289,13 @@ async function getLatestSitrep(
   );
 }
 
-async function verifyIncidentClosedForFinalSitrepExport(
-  incidentId: string,
-  user: AuthenticatedUser,
-  response: Response,
-): Promise<boolean> {
-  const { data: incident, error } = await supabase
-    .from("incidents")
-    .select("id, status, created_by")
-    .eq("id", incidentId)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(`Unable to verify incident status: ${error.message}`);
-  }
-
-  if (!incident) {
-    response.status(404).json({
-      success: false,
-      message: "Incident not found.",
-    });
-    return false;
-  }
-
-  if (user.role !== "super_admin" && incident.created_by !== user.id) {
-    response.status(403).json({
-      success: false,
-      message: "You can only export incidents created by your account.",
-    });
-    return false;
-  }
-
-  if (incident.status !== "closed") {
-    response.status(409).json({
-      success: false,
-      message:
-        "Final SitRep export is available only after the incident is closed.",
-    });
-    return false;
-  }
-
-  return true;
-}
-
 export async function exportLatestSitrepCsv(
   request: Request<{ id: string }>,
   response: Response,
   next: NextFunction,
 ): Promise<void> {
   try {
-    const user = getAuthenticatedUser(request);
-    const incidentId = request.params.id;
-    const canExport = await verifyIncidentClosedForFinalSitrepExport(
-      incidentId,
-      user,
-      response,
-    );
-
-    if (!canExport) {
-      return;
-    }
-
-    const sitrep = await getLatestSitrep(incidentId);
+    const sitrep = await getLatestSitrep(request.params.id);
 
     if (!sitrep) {
       response.status(404).json({
@@ -8179,7 +6315,7 @@ export async function exportLatestSitrepCsv(
         [
           "report",
           "report_scope",
-          "Full incident - FR, AMP, and HCFD",
+          "Full incident - FR, Advanced Medical Responder, and HCFD",
         ],
         ["report", "summary", sitrep.summary],
         [
@@ -8289,19 +6425,7 @@ export async function exportLatestSitrepPdf(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const user = getAuthenticatedUser(request);
-    const incidentId = request.params.id;
-    const canExport = await verifyIncidentClosedForFinalSitrepExport(
-      incidentId,
-      user,
-      response,
-    );
-
-    if (!canExport) {
-      return;
-    }
-
-    const sitrep = await getLatestSitrep(incidentId);
+    const sitrep = await getLatestSitrep(request.params.id);
 
     if (!sitrep) {
       response.status(404).json({
