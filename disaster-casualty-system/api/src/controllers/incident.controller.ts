@@ -25,6 +25,7 @@ type CreateIncidentRequest = {
   municipality?: string;
   barangay?: string;
   startedAt?: string;
+  triageMode?: "assisted" | "unassisted";
 };
 
 type UpdateIncidentRequest = Partial<CreateIncidentRequest> & {
@@ -152,6 +153,7 @@ type IncidentRow = {
   started_at: string;
   ended_at: string | null;
   status: string;
+  triage_mode: "assisted" | "unassisted";
 };
 
 type CasualtyIncidentRow = {
@@ -453,6 +455,8 @@ const incidentStatuses = new Set([
   "closed",
   "archived",
 ]);
+
+const incidentTriageModes = new Set(["assisted", "unassisted"]);
 
 const responderFunctionFilters = new Set<ResponderFunctionFilter>([
   "field_responder",
@@ -1965,6 +1969,7 @@ export async function getIncidents(
         started_at,
         ended_at,
         status,
+        triage_mode,
         reopen_request_status,
         reopen_request_reason,
         reopen_requested_by,
@@ -2019,6 +2024,7 @@ export async function createIncident(
       municipality,
       barangay,
       startedAt,
+      triageMode,
     } = request.body;
     const user = getAuthenticatedUser(request);
 
@@ -2030,6 +2036,18 @@ export async function createIncident(
         success: false,
         message:
           "incidentName and disasterType are required.",
+      });
+      return;
+    }
+
+    const normalizedTriageMode =
+      triageMode ?? "assisted";
+
+    if (!incidentTriageModes.has(normalizedTriageMode)) {
+      response.status(400).json({
+        success: false,
+        message:
+          "triageMode must be either assisted or unassisted.",
       });
       return;
     }
@@ -2131,6 +2149,7 @@ export async function createIncident(
         barangay: barangay?.trim() || null,
         started_at: startedAt ?? new Date().toISOString(),
         status: "active",
+        triage_mode: normalizedTriageMode,
         created_by: user.id,
       })
       .select(`
@@ -2145,6 +2164,7 @@ export async function createIncident(
         started_at,
         ended_at,
         status,
+        triage_mode,
         reopen_request_status,
         reopen_request_reason,
         reopen_requested_by,
@@ -2331,6 +2351,7 @@ export async function updateIncident(
         started_at,
         ended_at,
         status,
+        triage_mode,
         reopen_request_status,
         reopen_request_reason,
         reopen_requested_by,
@@ -2407,6 +2428,7 @@ export async function closeIncident(
         started_at,
         ended_at,
         status,
+        triage_mode,
         reopen_request_status,
         reopen_request_reason,
         reopen_requested_by,

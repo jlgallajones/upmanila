@@ -621,25 +621,36 @@ Deployment order:
 
 ## 13. Verification Commands
 
-API typecheck:
+The repository includes a repeatable verification runner at `tools/run-verification.ps1`. It executes the API typecheck and production build, analytics tests, triage tests, mobile typecheck, mobile/PWA export, web and PWA syntax checks, and the repository whitespace check. It prints a terminal summary and writes timestamped evidence to `output/verification/`.
+
+Run the complete automated verification from the project root:
 
 ```powershell
-cd api
-npm.cmd run typecheck
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\run-verification.ps1
 ```
 
-Web dashboard JavaScript syntax:
+The runner creates:
 
-```powershell
-node --check website\app.js
-```
+- `output/verification/verification-latest.log`
+- `output/verification/verification-latest.json`
+- Timestamped copies of both files for evidence retention.
 
-API build:
+The verification run completed on 20 October 2026 with 10 of 10 automated checks passing:
 
-```powershell
-cd api
-npm.cmd run build
-```
+| Test | Result | Evidence |
+| --- | --- | --- |
+| API TypeScript typecheck | PASS | Verification log |
+| API production build | PASS | Verification log |
+| Incident analytics tests | PASS | Calculation tests passed |
+| Triage calculation and accuracy tests | PASS | 31 calculation tests and accuracy tests passed |
+| Mobile TypeScript typecheck | PASS | Verification log |
+| Mobile/PWA web export | PASS | Expo export and static route output |
+| Web dashboard syntax check | PASS | `node --check app.js` |
+| Web configuration syntax check | PASS | `node --check config.js` |
+| PWA service worker syntax check | PASS | `node --check public/sw.js` |
+| Repository whitespace check | PASS | `git diff --check` |
+
+The automated runner does not replace authenticated end-to-end checks that require a live database or controlled device state. Before production acceptance, capture separate evidence for role and administrative-scope enforcement, offline queue resynchronization, incident closure restrictions, and SitRep draft/final generation.
 
 ## 14. Current Strengths
 

@@ -1,4 +1,4 @@
-const CACHE_NAME = "dcms-pwa-v1";
+const CACHE_NAME = "dcms-pwa-v2";
 
 const APP_SHELL = [
   "/",
@@ -41,6 +41,29 @@ self.addEventListener("fetch", (event) => {
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request).catch(() => caches.match("/index.html")),
+    );
+    return;
+  }
+
+  const networkFirst =
+    request.destination === "script" ||
+    request.destination === "style" ||
+    request.destination === "document";
+
+  if (networkFirst) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response && response.status === 200 && response.type === "basic") {
+            const responseToCache = response.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(request, responseToCache);
+            });
+          }
+
+          return response;
+        })
+        .catch(() => caches.match(request)),
     );
     return;
   }

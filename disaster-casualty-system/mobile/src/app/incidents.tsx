@@ -1293,6 +1293,9 @@ export default function IncidentsPage() {
     useState(false);
   const [newIncidentName, setNewIncidentName] = useState("");
   const [newDisasterType, setNewDisasterType] = useState("");
+  const [newTriageMode, setNewTriageMode] = useState<
+    "assisted" | "unassisted"
+  >("assisted");
   const [newIncidentStartedAt, setNewIncidentStartedAt] =
     useState("");
   const [newDmmpActivatedAt, setNewDmmpActivatedAt] =
@@ -1747,6 +1750,7 @@ export default function IncidentsPage() {
       const created = await createIncident({
         incidentName,
         disasterType,
+        triageMode: newTriageMode,
         startedAt:
           parseDateTimeInput(newIncidentStartedAt) ?? undefined,
         description:
@@ -1775,6 +1779,7 @@ export default function IncidentsPage() {
       setIncidents((current) => [created, ...current]);
       setNewIncidentName("");
       setNewDisasterType("");
+      setNewTriageMode("assisted");
       setNewLocation("");
       setNewIncidentStartedAt("");
       setNewDmmpActivatedAt("");
@@ -4457,6 +4462,34 @@ export default function IncidentsPage() {
                   color={COLORS.secondaryText}
                 />
               </Pressable>
+
+              <Text style={styles.fieldLabel}>TRIAGE MODE FOR THIS INCIDENT</Text>
+              <View style={styles.triageModePicker}>
+                {(["assisted", "unassisted"] as const).map((mode) => (
+                  <Pressable
+                    key={mode}
+                    onPress={() => setNewTriageMode(mode)}
+                    style={({ pressed }) => [
+                      styles.triageModeChoice,
+                      newTriageMode === mode &&
+                        styles.triageModeChoiceSelected,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.triageModeChoiceText,
+                        newTriageMode === mode &&
+                          styles.triageModeChoiceTextSelected,
+                      ]}
+                    >
+                      {mode === "assisted"
+                        ? "Assisted"
+                        : "Unassisted"}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
 
               {renderCurrentTimeField({
                 label: "EMS ALERTED (TIME)",
@@ -7879,6 +7912,33 @@ const styles = StyleSheet.create({
     flex: 1,
     color: COLORS.text,
     fontSize: 14,
+  },
+  triageModePicker: {
+    flexDirection: "row",
+    padding: 4,
+    borderWidth: 1,
+    borderColor: COLORS.fieldBorder,
+    borderRadius: 13,
+    backgroundColor: COLORS.fieldBackground,
+    gap: 4,
+  },
+  triageModeChoice: {
+    flex: 1,
+    minHeight: 42,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 10,
+  },
+  triageModeChoiceSelected: {
+    backgroundColor: COLORS.maroon,
+  },
+  triageModeChoiceText: {
+    color: COLORS.secondaryText,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  triageModeChoiceTextSelected: {
+    color: COLORS.white,
   },
   placeholderText: {
     color: COLORS.mutedText,

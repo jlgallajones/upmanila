@@ -124,6 +124,7 @@ export type CasualtyRecord = {
     incident_name: string;
     disaster_type: string;
     status: string;
+    triage_mode: "assisted" | "unassisted";
   };
 
   evacuation_center: {

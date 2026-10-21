@@ -863,3 +863,11 @@ Create a short checklist for the exact demo flow:
 **Solution:** Added the `minor_incident_documenter` role to the database enum migration, API permissions, account-management screens, exports, analytics, and mobile role handling. Minor Incident Documenter retains the full AMP-style flow. AMP Responder now uses **Safety -> Triage -> Treatment -> Transport -> Remarks**, with Victim Code and generated ID Number at the top of Triage and automatic Secondary Triage handling. The existing role privacy and scoped-data rules were extended to the new account type.
 
 **Status:** Implemented.
+
+## 103. Triage Mode Needed To Be Configured Per Official Incident
+
+**Problem:** Responders could switch between Assisted and Unassisted triage while encoding a casualty, even though the triage workflow should be consistent for everyone working under the same official incident.
+
+**Solution:** Official incident creation now requires an incident-level triage mode selection. Mobile casualty workflows read that setting, display the configured mode as locked, and clear incompatible assessment answers when the incident changes. The API validates the submitted triage mode during casualty creation, triage assessment creation, and casualty updates. Manual-only systems such as SWIFT, SMART, and Other retain their manual Final Triage choices even when the incident mode is Assisted because no automatic calculator exists for those systems. Existing incidents remain compatible through the default Assisted setting.
+
+**Status:** Implemented. The database migration `api/sql/add-incident-triage-mode.sql` must be applied before using the new incident field.

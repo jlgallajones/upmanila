@@ -147,6 +147,72 @@ function isObject(
   );
 }
 
+type IncidentTriageMode = "assisted" | "unassisted";
+
+function normalizeIncidentTriageMode(
+  value: unknown,
+): IncidentTriageMode {
+  return value === "unassisted"
+    ? "unassisted"
+    : "assisted";
+}
+
+function getSubmittedTriageMode(
+  triageAssessment: CasualtyTriageAssessmentRequest | undefined,
+): IncidentTriageMode | null {
+  const value = triageAssessment?.assessmentAnswers?.[
+    "triageAssistanceMode"
+  ];
+
+  return value === "assisted" || value === "unassisted"
+    ? value
+    : null;
+}
+
+function validateIncidentTriageMode(
+  triageAssessment: CasualtyTriageAssessmentRequest | undefined,
+  incidentTriageMode: IncidentTriageMode,
+  response: Response,
+): boolean {
+  if (!triageAssessment) {
+    return true;
+  }
+
+  const submittedMode = getSubmittedTriageMode(triageAssessment);
+
+  if (submittedMode !== incidentTriageMode) {
+    response.status(400).json({
+      success: false,
+      message:
+        "This incident is configured for " +
+        incidentTriageMode +
+        " triage. The submitted triage mode does not match the incident setting.",
+    });
+    return false;
+  }
+
+  return true;
+}
+
+async function getIncidentTriageMode(
+  incidentId: string,
+): Promise<IncidentTriageMode> {
+  const { data, error } = await supabase
+    .from("incidents")
+    .select("triage_mode")
+    .eq("id", incidentId)
+    .single();
+
+  if (error || !data) {
+    throw new Error(
+      "Unable to retrieve incident triage mode: " +
+        (error?.message ?? "Incident not found"),
+    );
+  }
+
+  return normalizeIncidentTriageMode(data.triage_mode);
+}
+
 type VerificationStatus = (typeof verificationStatuses)[number];
 
 const caseMatchRoleBuckets = [
@@ -552,7 +618,8 @@ const casualtyRecordSelect = `
     incident_code,
     incident_name,
     disaster_type,
-    status
+    status,
+    triage_mode
   ),
   evacuation_center:evacuation_centers (
     id,
@@ -1815,7 +1882,7 @@ export async function createCasualty(
     const { data: incident, error: incidentError } =
       await supabase
         .from("incidents")
-        .select("id, incident_code, incident_name, status")
+        .select("id, incident_code, incident_name, status, triage_mode")
         .eq("id", incidentId)
         .single();
 
@@ -1833,6 +1900,16 @@ export async function createCasualty(
         message:
           "Casualties can only be submitted to an active incident.",
       });
+      return;
+    }
+
+    if (
+      !validateIncidentTriageMode(
+        triageAssessment,
+        normalizeIncidentTriageMode(incident.triage_mode),
+        response,
+      )
+    ) {
       return;
     }
 
@@ -3518,7 +3595,7 @@ export async function createCasualtyTriageAssessment(
     const { data: existingRecord, error: existingError } =
       await supabase
         .from("casualty_incidents")
-        .select("id, encoded_by, verification_status")
+        .select("id, incident_id, encoded_by, verification_status")
         .eq("id", id)
         .is("deleted_at", null)
         .maybeSingle();
@@ -3534,6 +3611,16 @@ export async function createCasualtyTriageAssessment(
         success: false,
         message: "Victim record not found.",
       });
+      return;
+    }
+
+    if (
+      !validateIncidentTriageMode(
+        request.body,
+        await getIncidentTriageMode(existingRecord.incident_id),
+        response,
+      )
+    ) {
       return;
     }
 
@@ -4003,6 +4090,21 @@ export async function updateCasualty(
         message: "Casualty record not found.",
       });
       return;
+    }
+
+    if (triageAssessment) {
+      const triageIncidentId =
+        incidentId ?? existingRecord.incident_id;
+
+      if (
+        !validateIncidentTriageMode(
+          triageAssessment,
+          await getIncidentTriageMode(triageIncidentId),
+          response,
+        )
+      ) {
+        return;
+      }
     }
 
     const canEditOwnTransport =

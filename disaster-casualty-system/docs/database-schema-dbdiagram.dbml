@@ -92,6 +92,7 @@ Table incidents {
   started_at timestamptz
   ended_at timestamptz
   status varchar
+  triage_mode varchar [not null, default: 'assisted']
   created_by uuid
   created_at timestamptz
   updated_at timestamptz

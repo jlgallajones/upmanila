@@ -11201,6 +11201,7 @@ function renderIncidentEditView(incident) {
     ["Incident code", incident.incident_code],
     ["Incident name", incident.incident_name],
     ["Type of hazard", incident.disaster_type],
+    ["Triage mode", incident.triage_mode === "unassisted" ? "Unassisted" : "Assisted"],
     ["Incident exact location", incident.description || "Not recorded"],
     ["Barangay", incident.barangay || "Not recorded"],
     ["Municipality / City", incident.municipality || "Not recorded"],
@@ -13106,6 +13107,7 @@ function getIncidentDraftPayload(form) {
   return {
     incidentName: formValue(form, "incidentName"),
     disasterType: formValue(form, "disasterType"),
+    triageMode: formValue(form, "triageMode"),
     description: formValue(form, "description"),
     barangay: formValue(form, "barangay"),
     municipality: formValue(form, "municipality"),
@@ -13428,6 +13430,14 @@ function renderIncidentCreator(compact = false) {
           <label class="field"><span>Incident name</span><input name="incidentName" required placeholder="e.g. Flood in Barangay San Isidro" /></label>
           <label class="field"><span>Type of hazard</span><select name="disasterType" required>${hazardTypes.map((item) => `<option>${item}</option>`).join("")}</select></label>
         </div>
+        <label class="field">
+          <span>Triage mode for this incident</span>
+          <select name="triageMode" required>
+            <option value="assisted">Assisted</option>
+            <option value="unassisted">Unassisted</option>
+          </select>
+          <small class="field-hint">This setting is applied to all mobile casualty records under this incident.</small>
+        </label>
         <label class="field"><span>Incident exact location</span><input name="description" placeholder="Street, landmark, building, purok, or coordinates" /></label>
         <div class="form-grid three">
           <label class="field"><span>Barangay</span><input name="barangay" /></label>
@@ -13490,6 +13500,7 @@ function bindCreateIncidentForm() {
         body: JSON.stringify({
           incidentName: formValue(form, "incidentName"),
           disasterType: formValue(form, "disasterType"),
+          triageMode: formValue(form, "triageMode"),
           description: formValue(form, "description"),
           barangay: formValue(form, "barangay"),
           municipality: formValue(form, "municipality"),

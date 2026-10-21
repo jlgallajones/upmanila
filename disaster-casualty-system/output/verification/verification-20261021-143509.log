@@ -1,0 +1,22 @@
+DCMS VERIFICATION RUN
+Started: 2026-10-21T14:35:09.2312564+08:00
+Root: C:\Users\jlgallajones\upmanila\disaster-casualty-system
+[RUN ] API TypeScript typecheck
+       Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\api
+       Command: npm.cmd run typecheck
+
+> disaster-casualty-api@1.0.0 typecheck
+> tsc --noEmit
+
+[PASS] API TypeScript typecheck (exit code 0)
+[RUN ] API production build
+       Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\api
+       Command: npm.cmd run build
+
+> disaster-casualty-api@1.0.0 build
+> tsc
+
+[PASS] API production build (exit code 0)
+[RUN ] Incident analytics tests
+       Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\api
+       Command: npm.cmd run test:analytics
