@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 
 import { supabase } from "../config/supabase.js";
 import { getAuthenticatedUser } from "../middleware/auth.js";
+import { getIncidentManagementAccess } from "./incident-acting-ic.controller.js";
 import { recordAuditLog } from "../services/audit-log.service.js";
 import {
   addTimelineElapsedMetrics,
@@ -2232,7 +2233,7 @@ export async function updateIncident(
 
     const { data: incident, error: incidentError } = await supabase
       .from("incidents")
-      .select("id, created_by")
+      .select("id")
       .eq("id", id)
       .maybeSingle();
 
@@ -2250,19 +2251,22 @@ export async function updateIncident(
       return;
     }
 
-    if (user.role !== "super_admin" && incident.created_by !== user.id) {
+    const managementAccess = await getIncidentManagementAccess(id, user);
+    if (
+      user.role !== "super_admin" &&
+      !managementAccess?.canManageIncident
+    ) {
       response.status(403).json({
         success: false,
-        message: "You can only edit incidents created by your account.",
+        message: "Incident management is temporarily assigned to the Acting IC.",
       });
       return;
     }
 
-    if (!incidentManagerRoles.has(user.role)) {
+    if (!incidentManagerRoles.has(user.role) && !managementAccess?.isActingIc) {
       response.status(403).json({
         success: false,
-        message:
-          "Your account is not allowed to edit disaster incidents.",
+        message: "Your account is not allowed to edit disaster incidents.",
       });
       return;
     }
@@ -2408,6 +2412,19 @@ export async function closeIncident(
     const { id } = request.params;
     const user = getAuthenticatedUser(request);
 
+    const managementAccess = await getIncidentManagementAccess(id, user);
+    if (!managementAccess) {
+      response.status(404).json({ success: false, message: "Incident not found." });
+      return;
+    }
+    if (user.role !== "super_admin" && !managementAccess.canManageIncident) {
+      response.status(403).json({
+        success: false,
+        message: "Incident management is temporarily assigned to the Acting IC.",
+      });
+      return;
+    }
+
     let query = supabase
       .from("incidents")
       .update({
@@ -2440,7 +2457,7 @@ export async function closeIncident(
         updated_at
       `);
 
-    if (user.role !== "super_admin") {
+    if (user.role !== "super_admin" && !managementAccess.isActingIc) {
       query = query.eq("created_by", user.id);
     }
 
@@ -2732,6 +2749,18 @@ export async function updateIncidentTimeline(
       response.status(404).json({
         success: false,
         message: "Incident not found.",
+      });
+      return;
+    }
+
+    const managementAccess = await getIncidentManagementAccess(id, user);
+    if (
+      ["admin", "administrator", "encoder"].includes(user.role) &&
+      !managementAccess?.canManageIncident
+    ) {
+      response.status(403).json({
+        success: false,
+        message: "Incident management is temporarily assigned to the Acting IC.",
       });
       return;
     }

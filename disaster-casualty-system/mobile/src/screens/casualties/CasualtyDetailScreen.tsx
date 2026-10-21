@@ -618,7 +618,7 @@ function getTriagePalette(category: string | null | undefined) {
 function formatTreatmentStrategy(value: string | null | undefined): string {
   switch (value) {
     case "scoop_and_run":
-      return "Scoop and Run";
+      return "Scoop and Run/Load and Go";
     case "scooter":
       return "Scooter";
     case "stay_and_play":

@@ -879,3 +879,49 @@ Create a short checklist for the exact demo flow:
 **Solution:** New mobile treatment selections, automatic treatment mapping, mobile detail views, incident summaries, and web analytics now use **Scooter** only. Legacy `play_and_run` values are normalized to `scooter` when received or displayed. The migration `api/sql/merge-play-and-run-into-scooter.sql` converts existing database rows and removes the legacy value from the treatment constraint.
 
 **Status:** Implemented.
+
+## 105. Field Responder Treatment Label Needed Load-And-Go Wording
+
+**Problem:** The Field Responder treatment workflow displayed the shorter **Scoop and Run** label, while the required operational term is **Scoop and Run/Load and Go**.
+
+**Solution:** Updated mobile treatment choices, automatic treatment labels, casualty details, incident summaries, and web analytics labels. The internal `scoop_and_run` value remains unchanged for database compatibility.
+
+**Status:** Implemented.
+
+## 106. Incident Ownership Needed A Temporary Acting IC Workflow
+
+**Problem:** The system has one permanent admin per unit, but an incident can continue for multiple shifts. A permanent ownership transfer or a second admin account would create unclear unit scope, make return-to-duty handling difficult, and risk leaving the original owner with inappropriate management access during an active handover.
+
+**Solution:** Added incident-specific Acting Incident Commander delegation. The original `incidents.created_by` value remains the permanent owner and unit-scope anchor. The primary admin can designate one or more active unit users as backup ICs, delegate control to a selected backup with a required reason, and later resume primary ownership. While delegation is active, the primary owner's incident-management writes are blocked and the Acting IC receives incident-level management access. Responders remain in their existing unit scope and can continue encoding victims. Delegation and resume actions are recorded in the audit log, and delegation history remains available for accountability.
+
+The database migration is `api/sql/add-incident-acting-ic-delegation.sql`. Apply it in Supabase before using the Acting IC controls.
+
+**Status:** Implemented.
+
+## Verification Instructions
+
+Run these commands from the repository root in PowerShell:
+
+```powershell
+cd disaster-casualty-system
+npm.cmd --prefix api run typecheck
+node --check website/app.js
+```
+
+For the full repository verification run:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\run-verification.ps1
+```
+
+Manual Acting IC acceptance test:
+
+1. Apply `api/sql/add-incident-acting-ic-delegation.sql` in the project Supabase database.
+2. Sign in as a unit admin, create an active incident, and confirm that at least one active unit user is available.
+3. Open **Incident Management**, expand the incident, designate a backup IC, and confirm that the designation is shown.
+4. Select **Delegate Incident Control**, enter a reason, and confirm that the incident shows the delegated user as Acting IC.
+5. Confirm that the primary admin's incident edit, timeline, and close operations are rejected while delegation is active.
+6. Sign in as the designated Acting IC and confirm that the delegated incident can be managed, while account administration and other unit-level powers are unchanged.
+7. Confirm that a responder can still add a victim to the same incident.
+8. Select **Resume Primary Ownership**, enter a reason, and confirm that the primary admin regains control and the Acting IC session is closed.
+9. Review **Action Logs** and confirm entries for backup designation, delegation, and resumed ownership.

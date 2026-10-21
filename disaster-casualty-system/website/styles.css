@@ -2597,6 +2597,103 @@ tbody tr:hover td {
   background: #f8fafc;
 }
 
+.incident-acting-ic-panel {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line-strong, var(--line));
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.incident-acting-ic-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.incident-acting-ic-header h3 {
+  margin: 4px 0 5px;
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.incident-acting-ic-header p,
+.incident-acting-ic-empty,
+.incident-acting-ic-active span {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.incident-acting-ic-active,
+.incident-acting-ic-backups {
+  display: grid;
+  gap: 7px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-raised, #fff);
+}
+
+.incident-acting-ic-active strong,
+.incident-acting-ic-backups > strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.incident-acting-ic-active .secondary-button {
+  justify-self: start;
+  margin-top: 4px;
+}
+
+.incident-acting-ic-backup-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.incident-acting-ic-backup-row small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.incident-acting-ic-form {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.incident-acting-ic-form label {
+  display: grid;
+  gap: 5px;
+  min-width: min(100%, 320px);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.incident-acting-ic-form select {
+  min-height: 38px;
+}
+
+:root[data-theme="dark"] .incident-acting-ic-panel,
+:root[data-theme="dark"] .incident-acting-ic-active,
+:root[data-theme="dark"] .incident-acting-ic-backups {
+  background: var(--surface-raised);
+  border-color: var(--line);
+}
+
 .incident-final-sitrep-ready {
   display: grid;
   gap: 4px;

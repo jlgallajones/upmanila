@@ -3950,6 +3950,7 @@ function analyticsColorValue(label, colorKey, index = 0) {
   const key = String(colorKey || label || "").toLowerCase();
   const strategyColors = {
     "scoop and run": "#d32f2f",
+    "scoop and run/load and go": "#d32f2f",
     scooter: "#267abd",
     "stay and play": "#2e7d4f",
     "1+3": "#f0b429",
@@ -8560,7 +8561,7 @@ function formatTreatmentStrategy(value) {
     .toLowerCase();
 
   const labels = {
-    scoop_and_run: "Scoop and Run",
+    scoop_and_run: "Scoop and Run/Load and Go",
     stay_and_play: "Stay and Play",
     play_and_run: "Scooter",
     scooter: "Scooter",
@@ -10888,6 +10889,7 @@ async function loadIncidentManagementDetails(incidentId, options = {}) {
   }
 
   const endpoints = {
+    actingIc: `/incidents/${encodeURIComponent(incidentId)}/acting-ic`,
     analytics: `/incidents/${encodeURIComponent(incidentId)}/analytics`,
     timeline: `/incidents/${encodeURIComponent(incidentId)}/timeline`,
     dmmpStaff: `/incidents/${encodeURIComponent(incidentId)}/dmmp-staff`,
@@ -10924,6 +10926,87 @@ async function loadIncidentManagementDetails(incidentId, options = {}) {
   if (state.loadingIncidentManagementId === incidentId) {
     state.loadingIncidentManagementId = null;
   }
+}
+
+function getIncidentManagementPermission(incident, details = {}) {
+  const assignment = details.actingIc?.data;
+  if (assignment) {
+    return Boolean(assignment.canManageIncident);
+  }
+
+  return isAdminRole();
+}
+
+function getActingIcUserLabel(user) {
+  return user?.full_name || user?.email || "Unnamed user";
+}
+
+function renderIncidentActingIcPanel(incident, details) {
+  const assignment = details.actingIc?.data;
+  if (!assignment) return "";
+
+  const activeDelegation = assignment.activeDelegation;
+  const backups = assignment.backups || [];
+  const activeName = getActingIcUserLabel(activeDelegation?.actingUser);
+  const isClosed = isIncidentManagementLocked(incident);
+  const canDesignate = Boolean(assignment.canDelegate) && !isClosed;
+  const canResume = Boolean(assignment.canResume) && Boolean(activeDelegation);
+  const availableUsers = state.unitUsers.filter(
+    (user) =>
+      user.is_active !== false &&
+      user.id !== incident.created_by &&
+      !backups.some((backup) => backup.user_id === user.id),
+  );
+
+  return `
+    <section class="incident-acting-ic-panel" aria-labelledby="actingIcTitle-${escapeHtml(incident.id)}">
+      <div class="incident-acting-ic-header">
+        <div>
+          <span class="eyebrow">Incident control</span>
+          <h3 id="actingIcTitle-${escapeHtml(incident.id)}">Acting Incident Commander</h3>
+          <p>Permanent ownership stays with the primary admin. Delegation only changes who may manage this incident until ownership is resumed.</p>
+        </div>
+        <span class="pill ${activeDelegation ? "orange" : "blue"}">${activeDelegation ? "Delegated" : "Primary owner"}</span>
+      </div>
+      ${activeDelegation
+        ? `<div class="incident-acting-ic-active" role="status">
+            <strong>${escapeHtml(activeName)} is the Acting IC.</strong>
+            <span>Delegated ${escapeHtml(formatDate(activeDelegation.delegated_at))}${activeDelegation.reason ? ` · ${escapeHtml(activeDelegation.reason)}` : ""}</span>
+            ${canResume ? `<button class="secondary-button" type="button" data-resume-primary-ownership="${escapeHtml(incident.id)}">Resume Primary Ownership</button>` : ""}
+          </div>`
+        : `<div class="incident-acting-ic-active"><strong>No Acting IC is active.</strong><span>The primary admin can manage this incident.</span></div>`}
+      ${backups.length
+        ? `<div class="incident-acting-ic-backups"><strong>Designated backup ICs</strong>${backups
+            .map(
+              (backup) => `
+                <div class="incident-acting-ic-backup-row">
+                  <span>${escapeHtml(getActingIcUserLabel(backup.user))} <small>${escapeHtml(roleLabel(backup.user?.role))}</small></span>
+                  ${canDesignate && !activeDelegation ? `<button class="ghost-button mini" type="button" data-remove-acting-ic-backup="${escapeHtml(incident.id)}" data-acting-ic-user-id="${escapeHtml(backup.user_id)}">Remove</button>` : ""}
+                </div>
+              `,
+            )
+            .join("")}</div>`
+        : `<p class="incident-acting-ic-empty">No backup IC has been designated for this incident.</p>`}
+      ${canDesignate && !activeDelegation
+        ? `<form class="incident-acting-ic-form" data-designate-acting-ic-form="${escapeHtml(incident.id)}">
+            <label>
+              <span>Designate backup IC</span>
+              <select name="userId" required>
+                <option value="">Select an active unit user</option>
+                ${availableUsers
+                  .map((user) => `<option value="${escapeHtml(user.id)}">${escapeHtml(getActingIcUserLabel(user))} · ${escapeHtml(roleLabel(user.role))}</option>`)
+                  .join("")}
+              </select>
+            </label>
+            <button class="secondary-button" type="submit" ${availableUsers.length ? "" : "disabled"}>Save Backup IC</button>
+          </form>`
+        : ""}
+      ${canDesignate && backups.length && !activeDelegation
+        ? `<button class="primary-button" type="button" data-delegate-acting-ic="${escapeHtml(incident.id)}">Delegate Incident Control</button>`
+        : ""}
+      <div id="actingIcMessage-${escapeHtml(incident.id)}" class="status-message" hidden></div>
+    </section>
+  `;
 }
 
 function renderIncidentManagement() {
@@ -11037,13 +11120,14 @@ function renderIncidentManagementSections(incident, details) {
       ${isIncidentManagementLocked(incident)
         ? `<div class="status-message warning incident-management-lock-notice">This incident is ${escapeHtml(roleLabel(incident.status))}. Incident management sections are view-only.</div>`
         : ""}
+      ${renderIncidentActingIcPanel(incident, details)}
       <div class="section-launcher-grid">
         ${incidentManagementSections
           .map(
             ([id, title, canEdit, tone]) => `
               <button class="section-launcher ${tone === "accent" ? "section-launcher-accent" : ""}" type="button" data-open-incident-section="${id}" data-incident-id="${escapeHtml(incident.id)}">
                 <span>${escapeHtml(title)}</span>
-                <small>${escapeHtml(getIncidentSectionLauncherSubtitle(id, canEdit, sectionDetails))}</small>
+                <small>${escapeHtml(getIncidentSectionLauncherSubtitle(id, canEdit && getIncidentManagementPermission(incident, details), sectionDetails))}</small>
               </button>
             `,
           )
@@ -11083,7 +11167,8 @@ function renderIncidentSectionModal() {
 
   const details = state.incidentManagementDetails[incident.id] || {};
   const isLocked = isIncidentManagementLocked(incident);
-  const isEditMode = Boolean(modal.editMode) && !isLocked;
+  const canManageIncident = getIncidentManagementPermission(incident, details);
+  const isEditMode = Boolean(modal.editMode) && !isLocked && canManageIncident;
   const modalBody = isEditMode
     ? renderIncidentSectionEditContent(incident, details, meta.id)
     : renderIncidentSectionViewContent(incident, details, meta.id);
@@ -11100,7 +11185,7 @@ function renderIncidentSectionModal() {
           <button class="icon-button" type="button" data-close-incident-section-modal aria-label="Close section">&times;</button>
         </div>
         <div class="modal-body">
-          ${isLocked && meta.canEdit
+          ${(!canManageIncident || isLocked) && meta.canEdit
             ? `<div class="status-message warning modal-lock-notice">This incident is ${escapeHtml(roleLabel(incident.status))}. This section is view-only and cannot be edited unless the incident is reopened.</div>`
             : ""}
           ${modalBody}
@@ -11110,7 +11195,7 @@ function renderIncidentSectionModal() {
           <div class="modal-footer-spacer"></div>
           <button class="ghost-button" type="button" data-close-incident-section-modal>Close</button>
           ${
-            meta.canEdit && !isLocked && meta.id !== "sitrep-close"
+            meta.canEdit && canManageIncident && !isLocked && meta.id !== "sitrep-close"
               ? isEditMode
                 ? `<button class="primary-button" type="submit" form="incidentSectionEditForm">Save</button>`
                 : `<button class="primary-button" type="button" data-edit-incident-section>Edit</button>`
@@ -11188,7 +11273,10 @@ function renderIncidentSectionViewContent(incident, details, sectionId) {
     case "morbidity-mortality":
       return renderSummaryFacts(details.morbidityMortality?.data);
     case "sitrep-close":
-      return renderSitrepAndCloseSection(incident);
+      return renderSitrepAndCloseSection(
+        incident,
+        getIncidentManagementPermission(incident, details),
+      );
     case "edit-incident":
       return renderIncidentEditView(incident);
     default:
@@ -12296,7 +12384,7 @@ function flattenSummaryFacts(data, prefix = "") {
   });
 }
 
-function renderSitrepAndCloseSection(incident) {
+function renderSitrepAndCloseSection(incident, canManageIncident = true) {
   const isClosed = String(incident?.status || "").toLowerCase() === "closed";
   const sitrepOfficeName =
     state.user?.office_organization ||
@@ -12326,21 +12414,23 @@ function renderSitrepAndCloseSection(incident) {
             <span>Final SitRep is now available for export.</span>
           </div>`
         : `<div class="status-message warning">Close this incident before exporting the Final SitRep.</div>`}
-      <div class="button-row">
-         <button class="secondary-button" type="button" data-generate-sitrep="${escapeHtml(incident.id)}" data-incident-status="${escapeHtml(incident.status || "")}" data-office-name="${escapeHtml(sitrepOfficeName)}" data-incident-name="${escapeHtml(sitrepIncidentName)}">Generate Final Incident SitRep</button>
-         <button class="ghost-button" type="button" data-download-sitrep="pdf" data-incident-id="${escapeHtml(incident.id)}" data-office-name="${escapeHtml(sitrepOfficeName)}" data-incident-name="${escapeHtml(sitrepIncidentName)}" ${finalSitrepExportDisabled}>Download Incident SitRep Draft</button>
-        ${
-          incident.status === "closed"
-            ? isSuperAdmin()
-              ? incident.reopen_request_status === "pending"
-                ? `<button class="primary-button" type="button" data-approve-reopen-incident="${escapeHtml(incident.id)}">Approve Reopen</button>`
-                : `<span class="pill blue">Closed</span>`
-              : incident.reopen_request_status === "pending"
-                  ? `<span class="pill orange">Reopen requested</span>`
-                  : `<button class="secondary-button" type="button" data-request-reopen-incident="${escapeHtml(incident.id)}">Request Reopen</button>`
-            : `<button class="danger-button" type="button" data-close-incident="${escapeHtml(incident.id)}">Close Incident</button>`
-        }
-      </div>
+      ${canManageIncident
+        ? `<div class="button-row">
+             <button class="secondary-button" type="button" data-generate-sitrep="${escapeHtml(incident.id)}" data-incident-status="${escapeHtml(incident.status || "")}" data-office-name="${escapeHtml(sitrepOfficeName)}" data-incident-name="${escapeHtml(sitrepIncidentName)}">Generate Final Incident SitRep</button>
+             <button class="ghost-button" type="button" data-download-sitrep="pdf" data-incident-id="${escapeHtml(incident.id)}" data-office-name="${escapeHtml(sitrepOfficeName)}" data-incident-name="${escapeHtml(sitrepIncidentName)}" ${finalSitrepExportDisabled}>Download Incident SitRep Draft</button>
+            ${
+              incident.status === "closed"
+                ? isSuperAdmin()
+                  ? incident.reopen_request_status === "pending"
+                    ? `<button class="primary-button" type="button" data-approve-reopen-incident="${escapeHtml(incident.id)}">Approve Reopen</button>`
+                    : `<span class="pill blue">Closed</span>`
+                  : incident.reopen_request_status === "pending"
+                      ? `<span class="pill orange">Reopen requested</span>`
+                      : `<button class="secondary-button" type="button" data-request-reopen-incident="${escapeHtml(incident.id)}">Request Reopen</button>`
+                : `<button class="danger-button" type="button" data-close-incident="${escapeHtml(incident.id)}">Close Incident</button>`
+            }
+           </div>`
+        : `<div class="status-message warning">This section is view-only while another user is the Acting IC.</div>`}
       <div id="incidentActionMessage" class="status-message" hidden></div>
     </section>
   `;
@@ -12378,6 +12468,116 @@ function getIncidentCloseWarnings(incidentId) {
 }
 
 function bindIncidentManagementActions() {
+  document.querySelectorAll("[data-designate-acting-ic-form]").forEach((form) => {
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const incidentId = form.dataset.designateActingIcForm;
+      const userId = new FormData(form).get("userId");
+      if (!incidentId || typeof userId !== "string" || !userId) return;
+
+      const messageId = `actingIcMessage-${incidentId}`;
+      setMessage(messageId, "Saving backup IC designation...", "loading");
+      try {
+        await apiRequest(`/incidents/${encodeURIComponent(incidentId)}/acting-ic/backups`, {
+          method: "POST",
+          body: JSON.stringify({ userId, priority: 1 }),
+        });
+        delete state.incidentManagementDetails[incidentId];
+        await loadIncidentManagementDetails(incidentId, { renderLoading: false });
+        renderCurrentView();
+        bindView();
+        setMessage(`actingIcMessage-${incidentId}`, "Backup IC designated.", "success");
+      } catch (error) {
+        setMessage(messageId, error.message, "error");
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-remove-acting-ic-backup]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const incidentId = button.dataset.removeActingIcBackup;
+      const userId = button.dataset.actingIcUserId;
+      if (!incidentId || !userId) return;
+
+      try {
+        await apiRequest(
+          `/incidents/${encodeURIComponent(incidentId)}/acting-ic/backups/${encodeURIComponent(userId)}`,
+          { method: "DELETE" },
+        );
+        delete state.incidentManagementDetails[incidentId];
+        await loadIncidentManagementDetails(incidentId, { renderLoading: false });
+        renderCurrentView();
+        bindView();
+      } catch (error) {
+        setMessage(`actingIcMessage-${incidentId}`, error.message, "error");
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-delegate-acting-ic]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const incidentId = button.dataset.delegateActingIc;
+      const assignment = state.incidentManagementDetails[incidentId]?.actingIc?.data;
+      const backup = assignment?.backups?.[0];
+      if (!incidentId || !backup?.user_id) return;
+
+      const reason = await showDashboardTextPrompt({
+        title: "Delegate incident control",
+        message: `This pauses the primary admin's management access until primary ownership is resumed. ${getActingIcUserLabel(backup.user)} will become the Acting IC for this incident.`,
+        label: "Reason",
+        placeholder: "For example: primary IC unavailable for the next shift",
+        confirmLabel: "Delegate control",
+        required: true,
+        requiredMessage: "Enter a reason before delegating control.",
+      });
+      if (!reason) return;
+
+      try {
+        await apiRequest(`/incidents/${encodeURIComponent(incidentId)}/acting-ic/delegate`, {
+          method: "POST",
+          body: JSON.stringify({ userId: backup.user_id, reason }),
+        });
+        delete state.incidentManagementDetails[incidentId];
+        await loadIncidentManagementDetails(incidentId, { renderLoading: false });
+        renderCurrentView();
+        bindView();
+      } catch (error) {
+        setMessage(`actingIcMessage-${incidentId}`, error.message, "error");
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-resume-primary-ownership]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const incidentId = button.dataset.resumePrimaryOwnership;
+      if (!incidentId) return;
+
+      const reason = await showDashboardTextPrompt({
+        title: "Resume primary ownership",
+        message: "The permanent incident owner will regain management access and the Acting IC session will be closed.",
+        label: "Reason",
+        placeholder: "For example: primary IC returned for the next shift",
+        confirmLabel: "Resume ownership",
+        required: true,
+        requiredMessage: "Enter a reason before resuming ownership.",
+      });
+      if (!reason) return;
+
+      try {
+        await apiRequest(`/incidents/${encodeURIComponent(incidentId)}/acting-ic/resume`, {
+          method: "POST",
+          body: JSON.stringify({ reason }),
+        });
+        delete state.incidentManagementDetails[incidentId];
+        await loadIncidentManagementDetails(incidentId, { renderLoading: false });
+        renderCurrentView();
+        bindView();
+      } catch (error) {
+        setMessage(`actingIcMessage-${incidentId}`, error.message, "error");
+      }
+    });
+  });
+
   document.querySelectorAll("[data-focus-incident-management]").forEach((button) => {
     button.addEventListener("click", async () => {
       const incidentId = button.dataset.focusIncidentManagement;
@@ -12432,10 +12632,13 @@ function bindIncidentManagementActions() {
         await loadIncidentManagementDetails(incidentId);
       }
 
+      const details = state.incidentManagementDetails[incidentId] || {};
+      const incident = getIncidentById(incidentId);
+      const canManageIncident = getIncidentManagementPermission(incident, details);
       state.activeIncidentSectionModal = {
         incidentId,
         section,
-        editMode: section === "timeline",
+        editMode: section === "timeline" && canManageIncident,
       };
       resetResponseTimelineFormSnapshot();
       renderCurrentView();
@@ -12484,10 +12687,11 @@ function bindIncidentManagementActions() {
       if (!state.activeIncidentSectionModal) return;
 
       const incident = getIncidentById(state.activeIncidentSectionModal.incidentId);
-      if (isIncidentManagementLocked(incident)) {
+      const details = state.incidentManagementDetails[incident.id] || {};
+      if (isIncidentManagementLocked(incident) || !getIncidentManagementPermission(incident, details)) {
         setMessage(
           "incidentSectionModalMessage",
-          "This incident is closed. Reopen it before editing incident management sections.",
+          "This incident is currently view-only because management control is delegated or the incident is closed.",
           "warning",
         );
         return;

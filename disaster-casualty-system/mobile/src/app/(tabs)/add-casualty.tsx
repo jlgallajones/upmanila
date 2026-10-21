@@ -1351,7 +1351,7 @@ const EMS_UNIT_TYPE_OPTIONS = [
 ] as const;
 
 const TREATMENT_STRATEGY_OPTIONS = [
-  "No (Scoop and Run)",
+  "No (Scoop and Run/Load and Go)",
   "Scooter",
   "Yes (Stay and Play)",
   "Unknown",
@@ -3519,7 +3519,10 @@ function normalizeTreatmentStrategy(
 ): TreatmentStrategy {
   switch (value.trim().toLowerCase()) {
     case "no (scoop and run)":
+    case "no (scoop and run/load and go)":
     case "scoop and run":
+    case "scoop and run/load and go":
+    case "load and go":
       return "scoop_and_run";
     case "no (scooter)":
     case "scooter":
@@ -3557,7 +3560,7 @@ function getAutomaticTreatmentStrategyForTriageSystem(
   }
 
   if (["careflight", "homebush"].includes(normalized)) {
-    return "Scoop and Run";
+    return "Scoop and Run/Load and Go";
   }
 
   return "";
@@ -3667,7 +3670,7 @@ function formatTreatmentStrategy(
 ): string {
   switch (value) {
     case "scoop_and_run":
-      return "No (Scoop and Run)";
+      return "No (Scoop and Run/Load and Go)";
     case "scooter":
       return "Scooter";
     case "stay_and_play":

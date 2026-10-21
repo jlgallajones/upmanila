@@ -23,11 +23,23 @@ import {
   updateIncident,
   updateIncidentTimeline,
 } from "../controllers/incident.controller.js";
+import {
+  delegateIncidentActingIc,
+  designateIncidentBackupIc,
+  getIncidentActingIc,
+  removeIncidentBackupIc,
+  resumeIncidentPrimaryOwnership,
+} from "../controllers/incident-acting-ic.controller.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 
 export const incidentRouter = Router();
 
 incidentRouter.get("/", requireAuth, getIncidents);
+incidentRouter.get("/:id/acting-ic", requireAuth, getIncidentActingIc);
+incidentRouter.post("/:id/acting-ic/backups", requireAuth, designateIncidentBackupIc);
+incidentRouter.delete("/:id/acting-ic/backups/:userId", requireAuth, removeIncidentBackupIc);
+incidentRouter.post("/:id/acting-ic/delegate", requireAuth, delegateIncidentActingIc);
+incidentRouter.post("/:id/acting-ic/resume", requireAuth, resumeIncidentPrimaryOwnership);
 incidentRouter.get(
   "/:id/export/casualties.csv",
   requireAuth,
@@ -127,13 +139,35 @@ incidentRouter.post(
 incidentRouter.put(
   "/:id",
   requireAuth,
-  requireRole(["super_admin", "admin", "administrator", "encoder"]),
+  requireRole([
+    "super_admin",
+    "admin",
+    "administrator",
+    "encoder",
+    "responder",
+    "field_responder",
+    "sa_responder",
+    "minor_incident_documenter",
+    "documenter",
+    "medical_personnel",
+  ]),
   updateIncident,
 );
 incidentRouter.patch(
   "/:id/close",
   requireAuth,
-  requireRole(["super_admin", "admin", "administrator", "encoder"]),
+  requireRole([
+    "super_admin",
+    "admin",
+    "administrator",
+    "encoder",
+    "responder",
+    "field_responder",
+    "sa_responder",
+    "minor_incident_documenter",
+    "documenter",
+    "medical_personnel",
+  ]),
   closeIncident,
 );
 incidentRouter.post(

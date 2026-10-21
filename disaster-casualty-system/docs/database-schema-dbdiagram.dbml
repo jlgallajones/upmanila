@@ -98,6 +98,30 @@ Table incidents {
   updated_at timestamptz
 }
 
+Table incident_ic_backups {
+  id uuid [pk]
+  incident_id uuid [not null]
+  user_id uuid [not null]
+  priority integer [not null, default: 1]
+  designated_by uuid [not null]
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table incident_ic_delegations {
+  id uuid [pk]
+  incident_id uuid [not null]
+  primary_ic_user_id uuid [not null]
+  acting_ic_user_id uuid [not null]
+  delegated_by uuid [not null]
+  reason text
+  delegated_at timestamptz [not null]
+  resumed_at timestamptz
+  resumed_by uuid
+  resume_reason text
+  created_at timestamptz
+}
+
 Table casualties {
   id uuid [pk]
   id_number varchar
@@ -431,6 +455,14 @@ Table attachments {
 
 Ref: users.created_by > users.id
 Ref: incidents.created_by > users.id
+Ref: incident_ic_backups.incident_id > incidents.id
+Ref: incident_ic_backups.user_id > users.id
+Ref: incident_ic_backups.designated_by > users.id
+Ref: incident_ic_delegations.incident_id > incidents.id
+Ref: incident_ic_delegations.primary_ic_user_id > users.id
+Ref: incident_ic_delegations.acting_ic_user_id > users.id
+Ref: incident_ic_delegations.delegated_by > users.id
+Ref: incident_ic_delegations.resumed_by > users.id
 
 Ref: casualty_incidents.casualty_id > casualties.id
 Ref: casualty_incidents.incident_id > incidents.id
