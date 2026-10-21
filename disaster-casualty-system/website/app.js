@@ -196,6 +196,7 @@ const state = {
   themeMode: getInitialThemeMode(),
   theme: "light",
   hasPassedLoginLanding: false,
+  actingIcAssignments: [],
   sidebarCollapsed: localStorage.getItem("dcms.admin.sidebarCollapsed") === "true",
   activeView: localStorage.getItem("dcms.admin.activeView") || "home",
   incidentSearchQuery: "",
@@ -373,6 +374,17 @@ const adminViews = [
   ["logs", "Action Logs"],
 ];
 
+const actingIcViews = [["acting-ic", "Acting IC Workspace"]];
+
+const unitUserRolesForWeb = [
+  "responder",
+  "field_responder",
+  "sa_responder",
+  "minor_incident_documenter",
+  "documenter",
+  "medical_personnel",
+];
+
 const superAdminNavGroups = [
   {
     id: "overview",
@@ -490,10 +502,21 @@ const matchCasingRoleSlots = [
 ];
 
 function getViewsForRole(role) {
+  if (unitUserRolesForWeb.includes(role)) return actingIcViews;
   return role === "super_admin" ? superAdminViews : adminViews;
 }
 
 function getNavGroupsForRole(role) {
+  if (unitUserRolesForWeb.includes(role)) {
+    return [
+      {
+        id: "acting-ic",
+        label: "Incident Command",
+        icon: "IC",
+        views: actingIcViews,
+      },
+    ];
+  }
   return role === "super_admin" ? superAdminNavGroups : adminNavGroups;
 }
 
@@ -2014,6 +2037,7 @@ async function loadSharedData() {
     auditLogs,
     formDrafts,
     recent,
+    actingIcAssignments,
   ] =
     await Promise.allSettled([
       apiRequest("/dashboard/summary"),
@@ -2030,6 +2054,9 @@ async function loadSharedData() {
       apiRequest("/audit-logs?limit=100"),
       apiRequest("/drafts"),
       apiRequest("/dashboard/recent-activity?limit=12"),
+      unitUserRolesForWeb.includes(state.user?.role)
+        ? apiRequest("/incidents/acting-ic/current")
+        : Promise.resolve({ data: state.actingIcAssignments }),
     ]);
 
   if (dashboard.status === "fulfilled") {
@@ -2047,6 +2074,7 @@ async function loadSharedData() {
   let loadedAuditLogs = state.auditLogs;
   let loadedFormDrafts = state.formDrafts;
   let loadedRecentActivity = state.recentActivity;
+  let loadedActingIcAssignments = state.actingIcAssignments;
 
   if (incidents.status === "fulfilled") {
     loadedIncidents = incidents.value.data || [];
@@ -2094,6 +2122,10 @@ async function loadSharedData() {
     loadedRecentActivity = recent.value.data || [];
   }
 
+  if (actingIcAssignments.status === "fulfilled") {
+    loadedActingIcAssignments = actingIcAssignments.value.data || [];
+  }
+
   loadedUnitUsers = filterUnitUsersForCurrentAdmin(loadedUnitUsers);
 
   const adminEncoderIds = getCurrentAdminEncoderIds(loadedUnitUsers);
@@ -2126,6 +2158,15 @@ async function loadSharedData() {
   state.auditLogs = loadedAuditLogs;
   state.formDrafts = loadedFormDrafts;
   state.recentActivity = loadedRecentActivity;
+  state.actingIcAssignments = loadedActingIcAssignments;
+
+  if (
+    unitUserRolesForWeb.includes(state.user?.role) &&
+    state.actingIcAssignments.length > 0
+  ) {
+    state.activeView = "acting-ic";
+    localStorage.setItem("dcms.admin.activeView", "acting-ic");
+  }
 
   recomputeAdminDashboardSummary();
 }
@@ -2574,12 +2615,26 @@ function bindLogin() {
         }),
       });
 
-      if (!["super_admin", "admin", "administrator", "encoder"].includes(response.data.user.role)) {
-        throw new Error("This desktop dashboard is only available to admin accounts.");
+      saveSession(response.data);
+      state.actingIcAssignments = [];
+
+      if (unitUserRolesForWeb.includes(response.data.user.role)) {
+        const actingIcResponse = await apiRequest("/incidents/acting-ic/current");
+        state.actingIcAssignments = actingIcResponse.data || [];
+
+        if (state.actingIcAssignments.length === 0) {
+          clearSession();
+          throw new Error("This account can access the web only while it has an active Acting IC assignment.");
+        }
+      } else if (!["super_admin", "admin", "administrator", "encoder"].includes(response.data.user.role)) {
+        clearSession();
+        throw new Error("This desktop dashboard is only available to admin accounts or designated Acting ICs.");
       }
 
-      saveSession(response.data);
-      if (!prepareResponseTimelineDraftRestoreAfterLogin()) {
+      if (unitUserRolesForWeb.includes(response.data.user.role)) {
+        state.activeView = "acting-ic";
+        localStorage.setItem("dcms.admin.activeView", "acting-ic");
+      } else if (!prepareResponseTimelineDraftRestoreAfterLogin()) {
         setActiveView("home");
       }
       render();
@@ -2597,7 +2652,7 @@ function renderDashboardShell() {
           <img class="sidebar-mark" src="./assets/medsort.png" alt="MedSort" />
           <div class="sidebar-brand-text">
             <strong>medSort Portal</strong>
-            <span>${isSuperAdmin() ? "Super Admin Portal" : "Admin Portal"}</span>
+            <span>${isSuperAdmin() ? "Super Admin Portal" : unitUserRolesForWeb.includes(state.user?.role) ? "Acting IC Workspace" : "Admin Portal"}</span>
           </div>
           <button
             id="sidebarToggle"
@@ -3577,6 +3632,8 @@ function renderSuperAdminView() {
 
 function renderAdminView() {
   switch (state.activeView) {
+    case "acting-ic":
+      return renderActingIcWorkspace();
     case "call-down-list":
       return renderCallDownList();
     case "incident-management":
@@ -11029,6 +11086,36 @@ function renderIncidentManagement() {
             .map((incident) => renderIncidentManagementItem(incident))
             .join("") || `<div class="empty-state">No incidents found.</div>`
         }
+      </div>
+      <div id="incidentManagementMessage" class="status-message" hidden></div>
+    </section>
+    ${renderIncidentSectionModal()}
+  `;
+}
+
+function renderActingIcWorkspace() {
+  const assignedIncidentIds = new Set(
+    state.actingIcAssignments.map((assignment) => assignment.incident_id),
+  );
+  const sourceIncidents = [...state.allIncidents, ...state.incidents].filter(
+    (incident, index, all) =>
+      assignedIncidentIds.has(incident.id) &&
+      all.findIndex((candidate) => candidate.id === incident.id) === index,
+  );
+
+  return `
+    <section class="panel acting-ic-workspace">
+      <div class="panel-header">
+        <div>
+          <span class="eyebrow">Incident command</span>
+          <h2>Acting IC Workspace</h2>
+          <p class="panel-subtitle">You have temporary management access only for the incident assigned to you. Your responder account and unit scope remain unchanged.</p>
+        </div>
+        <span class="pill orange">${sourceIncidents.length} assigned</span>
+      </div>
+      <div class="status-message warning">Primary ownership remains with the original admin. Your access ends when primary ownership is resumed.</div>
+      <div class="incident-management-list">
+        ${sourceIncidents.map((incident) => renderIncidentManagementItem(incident)).join("") || `<div class="empty-state">The assigned incident is not currently available. Refresh or contact the primary IC.</div>`}
       </div>
       <div id="incidentManagementMessage" class="status-message" hidden></div>
     </section>

@@ -26,6 +26,7 @@ import {
 import {
   delegateIncidentActingIc,
   designateIncidentBackupIc,
+  getCurrentActingIcAssignments,
   getIncidentActingIc,
   removeIncidentBackupIc,
   resumeIncidentPrimaryOwnership,
@@ -35,6 +36,7 @@ import { requireAuth, requireRole } from "../middleware/auth.js";
 export const incidentRouter = Router();
 
 incidentRouter.get("/", requireAuth, getIncidents);
+incidentRouter.get("/acting-ic/current", requireAuth, getCurrentActingIcAssignments);
 incidentRouter.get("/:id/acting-ic", requireAuth, getIncidentActingIc);
 incidentRouter.post("/:id/acting-ic/backups", requireAuth, designateIncidentBackupIc);
 incidentRouter.delete("/:id/acting-ic/backups/:userId", requireAuth, removeIncidentBackupIc);

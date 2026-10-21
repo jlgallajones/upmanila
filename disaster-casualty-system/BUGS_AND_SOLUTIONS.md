@@ -898,6 +898,14 @@ The database migration is `api/sql/add-incident-acting-ic-delegation.sql`. Apply
 
 **Status:** Implemented.
 
+## 107. Acting IC Needed A Restricted Web Workspace And Mobile Notification
+
+**Problem:** A primary IC could designate a unit user as Acting IC, but responder accounts normally use the mobile app and were not given a safe web entry point. The designated user also needed a clear notification that incident control had been assigned to them.
+
+**Solution:** Added a current Acting IC assignment endpoint and a restricted desktop login path. A unit user can sign in to the web only while an active Acting IC assignment exists, and is routed to the **Acting IC Workspace**. That workspace shows only assigned incidents and incident-level management controls; it does not grant admin navigation, account administration, facility management, or unit-wide ownership powers. Ordinary unit users without an active assignment remain on the mobile workflow. Delegation now also creates a user-specific `incident` notification addressed to the selected Acting IC, using the existing mobile Notifications screen and unread-count behavior.
+
+**Status:** Implemented.
+
 ## Verification Instructions
 
 Run these commands from the repository root in PowerShell:
@@ -920,8 +928,10 @@ Manual Acting IC acceptance test:
 2. Sign in as a unit admin, create an active incident, and confirm that at least one active unit user is available.
 3. Open **Incident Management**, expand the incident, designate a backup IC, and confirm that the designation is shown.
 4. Select **Delegate Incident Control**, enter a reason, and confirm that the incident shows the delegated user as Acting IC.
-5. Confirm that the primary admin's incident edit, timeline, and close operations are rejected while delegation is active.
-6. Sign in as the designated Acting IC and confirm that the delegated incident can be managed, while account administration and other unit-level powers are unchanged.
-7. Confirm that a responder can still add a victim to the same incident.
-8. Select **Resume Primary Ownership**, enter a reason, and confirm that the primary admin regains control and the Acting IC session is closed.
-9. Review **Action Logs** and confirm entries for backup designation, delegation, and resumed ownership.
+5. Sign in to the mobile app as the designated Acting IC and confirm the unread notification **You are the Acting IC** appears in Notifications and links to the incident workflow.
+6. Sign in to the web as the designated Acting IC and confirm that only the **Acting IC Workspace** is available.
+7. Confirm that the primary admin's incident edit, timeline, and close operations are rejected while delegation is active.
+8. Confirm that the Acting IC can manage the assigned incident but cannot access accounts, facilities, or other admin controls.
+9. Confirm that a responder can still add a victim to the same incident.
+10. Select **Resume Primary Ownership**, enter a reason, and confirm that the primary admin regains control and the Acting IC session is closed.
+11. Review **Action Logs** and confirm entries for backup designation, delegation, and resumed ownership.

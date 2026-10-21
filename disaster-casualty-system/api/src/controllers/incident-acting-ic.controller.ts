@@ -267,6 +267,52 @@ export async function getIncidentActingIc(
   }
 }
 
+export async function getCurrentActingIcAssignments(
+  request: Request,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const user = getAuthenticatedUser(request);
+    const { data: delegations, error: delegationError } = await supabase
+      .from("incident_ic_delegations")
+      .select(
+        "id, incident_id, primary_ic_user_id, acting_ic_user_id, delegated_by, reason, delegated_at, resumed_at, resumed_by, resume_reason",
+      )
+      .eq("acting_ic_user_id", user.id)
+      .is("resumed_at", null)
+      .order("delegated_at", { ascending: false });
+
+    if (delegationError) {
+      throw new Error(`Unable to retrieve current Acting IC assignments: ${delegationError.message}`);
+    }
+
+    const incidentIds = (delegations ?? []).map((delegation) => delegation.incident_id);
+    const { data: incidents, error: incidentError } = incidentIds.length
+      ? await supabase
+          .from("incidents")
+          .select("id, incident_code, incident_name, disaster_type, status, started_at, ended_at, province, municipality, barangay, created_by")
+          .in("id", incidentIds)
+      : { data: [], error: null };
+
+    if (incidentError) {
+      throw new Error(`Unable to retrieve Acting IC incidents: ${incidentError.message}`);
+    }
+
+    const incidentById = new Map((incidents ?? []).map((incident) => [incident.id, incident]));
+    response.status(200).json({
+      success: true,
+      count: delegations?.length ?? 0,
+      data: (delegations ?? []).map((delegation) => ({
+        ...delegation,
+        incident: incidentById.get(delegation.incident_id) ?? null,
+      })),
+    });
+  } catch (error) {
+    sendControllerError(error, response, next);
+  }
+}
+
 export async function designateIncidentBackupIc(
   request: Request<{ id: string }, unknown, { userId?: string; priority?: number }>,
   response: Response,
@@ -443,6 +489,25 @@ export async function delegateIncidentActingIc(
       metadata: { actingUserId, reason: delegation.reason, delegationId: delegation.id },
       scopeAdminId: access.incident.created_by,
     });
+
+    const { error: notificationError } = await supabase
+      .from("notifications")
+      .insert({
+        user_id: actingUserId,
+        title: "You are the Acting IC",
+        message: `You have been designated as Acting Incident Commander for ${access.incident.incident_name ?? "an incident"}. Open the Acting IC Workspace to manage this incident until primary ownership is resumed.`,
+        notification_type: "incident",
+        related_entity_type: "incident",
+        related_entity_id: incidentId,
+      });
+
+    if (notificationError) {
+      console.warn("Unable to create Acting IC notification", {
+        incidentId,
+        actingUserId,
+        reason: notificationError.message,
+      });
+    }
 
     response.status(201).json({ success: true, message: "Acting IC control delegated.", data: { ...delegation, actingUser } });
   } catch (error) {
