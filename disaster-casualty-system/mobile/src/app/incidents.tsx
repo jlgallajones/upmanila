@@ -878,11 +878,11 @@ function formatTreatmentStrategyLabel(
     case "scoop_and_run":
       return "No (Scoop and Run)";
     case "scooter":
-      return "No (SCOOTER)";
+      return "Scooter";
     case "stay_and_play":
       return "Yes (Stay and Play)";
     case "play_and_run":
-      return "Partly (Play and Run)";
+      return "Scooter";
     case "unknown":
       return "Unknown";
     default:

@@ -110,6 +110,18 @@ const treatmentStrategies = [
   "unknown",
 ];
 
+function normalizeTreatmentStrategy(
+  value: string,
+): "scoop_and_run" | "scooter" | "stay_and_play" | "unknown" {
+  return value === "play_and_run"
+    ? "scooter"
+    : (value as
+        | "scoop_and_run"
+        | "scooter"
+        | "stay_and_play"
+        | "unknown");
+}
+
 const facilityDispositions = [
   "active_care",
   "hospital_admission",
@@ -1584,7 +1596,9 @@ async function insertTreatmentRecord(
     .from("casualty_treatments")
     .insert({
       casualty_incident_id: casualtyIncidentId,
-      treatment_strategy: treatmentRecord.treatmentStrategy,
+      treatment_strategy: normalizeTreatmentStrategy(
+        treatmentRecord.treatmentStrategy,
+      ),
       treatment_area_name:
         treatmentRecord.treatmentAreaName?.trim() || null,
       stabilization_started_at:
@@ -3739,6 +3753,9 @@ export async function getCasualtyTreatmentHistory(
 
     const history = (data ?? []).map((item) => ({
       ...item,
+      treatment_strategy: normalizeTreatmentStrategy(
+        item.treatment_strategy,
+      ),
 
       performed_by_user: item.performed_by
         ? usersById.get(item.performed_by) ?? null

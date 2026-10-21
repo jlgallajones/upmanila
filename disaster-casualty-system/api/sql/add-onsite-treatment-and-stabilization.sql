@@ -22,7 +22,6 @@ CREATE TABLE IF NOT EXISTS public.casualty_treatments (
       'scoop_and_run',
       'scooter',
       'stay_and_play',
-      'play_and_run',
       'unknown'
     )
   )
@@ -42,13 +41,16 @@ ALTER TABLE public.casualty_treatments
 ALTER TABLE public.casualty_treatments
   DROP CONSTRAINT IF EXISTS treatment_strategy_check;
 
+UPDATE public.casualty_treatments
+SET treatment_strategy = 'scooter'
+WHERE treatment_strategy = 'play_and_run';
+
 ALTER TABLE public.casualty_treatments
   ADD CONSTRAINT treatment_strategy_check CHECK (
     treatment_strategy IN (
       'scoop_and_run',
       'scooter',
       'stay_and_play',
-      'play_and_run',
       'unknown'
     )
   );

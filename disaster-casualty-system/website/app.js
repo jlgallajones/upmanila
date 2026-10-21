@@ -3953,7 +3953,7 @@ function analyticsColorValue(label, colorKey, index = 0) {
     scooter: "#267abd",
     "stay and play": "#2e7d4f",
     "1+3": "#f0b429",
-    "play and run": "#d96d12",
+    "play and run": "#267abd",
     unknown: "#69758c",
   };
   const fallbackColors = [
@@ -8562,7 +8562,7 @@ function formatTreatmentStrategy(value) {
   const labels = {
     scoop_and_run: "Scoop and Run",
     stay_and_play: "Stay and Play",
-    play_and_run: "Play and Run",
+    play_and_run: "Scooter",
     scooter: "Scooter",
     unknown: "Unknown",
   };

@@ -620,11 +620,11 @@ function formatTreatmentStrategy(value: string | null | undefined): string {
     case "scoop_and_run":
       return "Scoop and Run";
     case "scooter":
-      return "SCOOTER";
+      return "Scooter";
     case "stay_and_play":
       return "Stay and Play";
     case "play_and_run":
-      return "Play and Run";
+      return "Scooter";
     case "unknown":
       return "Unknown";
     default:

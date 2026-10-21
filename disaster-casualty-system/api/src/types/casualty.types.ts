@@ -98,11 +98,14 @@ export type TreatmentStrategy =
   | "scoop_and_run"
   | "scooter"
   | "stay_and_play"
-  | "play_and_run"
   | "unknown";
 
+export type SubmittedTreatmentStrategy =
+  | TreatmentStrategy
+  | "play_and_run";
+
 export interface CasualtyTreatmentRecordRequest {
-  treatmentStrategy: TreatmentStrategy;
+  treatmentStrategy: SubmittedTreatmentStrategy;
   treatmentAreaName?: string;
   stabilizationStartedAt?: string;
   stabilizedAt?: string;

@@ -871,3 +871,11 @@ Create a short checklist for the exact demo flow:
 **Solution:** Official incident creation now requires an incident-level triage mode selection. Mobile casualty workflows read that setting, display the configured mode as locked, and clear incompatible assessment answers when the incident changes. The API validates the submitted triage mode during casualty creation, triage assessment creation, and casualty updates. Manual-only systems such as SWIFT, SMART, and Other retain their manual Final Triage choices even when the incident mode is Assisted because no automatic calculator exists for those systems. Existing incidents remain compatible through the default Assisted setting.
 
 **Status:** Implemented. The database migration `api/sql/add-incident-triage-mode.sql` must be applied before using the new incident field.
+
+## 104. Scooter And Play And Run Were Duplicate Treatment Choices
+
+**Problem:** On-site treatment workflows exposed both **Scooter** and **Play and Run**, even though they were requested to be represented as one treatment strategy.
+
+**Solution:** New mobile treatment selections, automatic treatment mapping, mobile detail views, incident summaries, and web analytics now use **Scooter** only. Legacy `play_and_run` values are normalized to `scooter` when received or displayed. The migration `api/sql/merge-play-and-run-into-scooter.sql` converts existing database rows and removes the legacy value from the treatment constraint.
+
+**Status:** Implemented.

@@ -411,7 +411,6 @@ export type CasualtyTreatmentRecordPayload = {
     | "scoop_and_run"
     | "scooter"
     | "stay_and_play"
-    | "play_and_run"
     | "unknown";
   treatmentAreaName?: string;
   stabilizationStartedAt?: string;
