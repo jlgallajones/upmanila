@@ -906,6 +906,14 @@ The database migration is `api/sql/add-incident-acting-ic-delegation.sql`. Apply
 
 **Status:** Implemented.
 
+## 108. Acting IC Workspace Needed Incident Analytics
+
+**Problem:** Acting IC users could manage their delegated incident from the web but had no Incident Analytics view for monitoring operational progress.
+
+**Solution:** Added Incident Analytics to the Acting IC workspace. The view is read-only, hides the cross-incident selector, and displays only the incident with an active Acting IC delegation for the signed-in user. The analytics endpoint also rejects direct requests for incidents outside that active assignment.
+
+**Status:** Implemented.
+
 ## Verification Instructions
 
 Run these commands from the repository root in PowerShell:
@@ -929,9 +937,11 @@ Manual Acting IC acceptance test:
 3. Open **Incident Management**, expand the incident, designate a backup IC, and confirm that the designation is shown.
 4. Select **Delegate Incident Control**, enter a reason, and confirm that the incident shows the delegated user as Acting IC.
 5. Sign in to the mobile app as the designated Acting IC and confirm the unread notification **You are the Acting IC** appears in Notifications and links to the incident workflow.
-6. Sign in to the web as the designated Acting IC and confirm that only the **Acting IC Workspace** is available.
+6. Sign in to the web as the designated Acting IC and confirm that only **Incident Management** and **Incident Analytics** are available in the Acting IC workspace.
 7. Confirm that the primary admin's incident edit, timeline, and close operations are rejected while delegation is active.
 8. Confirm that the Acting IC can manage the assigned incident but cannot access accounts, facilities, or other admin controls.
 9. Confirm that a responder can still add a victim to the same incident.
 10. Select **Resume Primary Ownership**, enter a reason, and confirm that the primary admin regains control and the Acting IC session is closed.
 11. Review **Action Logs** and confirm entries for backup designation, delegation, and resumed ownership.
+12. While the delegation is active, open **Incident Analytics** in the Acting IC workspace and confirm that only the delegated incident is shown and its analytics load.
+13. Confirm that a direct analytics request for an unrelated incident returns HTTP 403 for the Acting IC user.

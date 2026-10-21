@@ -18,6 +18,15 @@ const responderIncidentViewerRoles = new Set([
   "documenter",
 ]);
 
+const actingIcWebRoles = new Set([
+  "responder",
+  "field_responder",
+  "sa_responder",
+  "minor_incident_documenter",
+  "documenter",
+  "medical_personnel",
+]);
+
 type CreateIncidentRequest = {
   incidentName: string;
   disasterType: string;
@@ -4976,6 +4985,19 @@ export async function getIncidentAnalyticsSummary(
 ): Promise<void> {
   try {
     const { id } = request.params;
+    const user = getAuthenticatedUser(request);
+
+    if (actingIcWebRoles.has(user.role)) {
+      const access = await getIncidentManagementAccess(id, user);
+      if (!access?.isActingIc) {
+        response.status(403).json({
+          success: false,
+          message:
+            "Incident analytics is available only for your active Acting IC assignment.",
+        });
+        return;
+      }
+    }
 
     const { data: incident, error: incidentError } = await supabase
       .from("incidents")

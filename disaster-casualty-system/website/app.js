@@ -374,7 +374,10 @@ const adminViews = [
   ["logs", "Action Logs"],
 ];
 
-const actingIcViews = [["acting-ic", "Acting IC Workspace"]];
+const actingIcViews = [
+  ["acting-ic", "Incident Management"],
+  ["acting-ic-analytics", "Incident Analytics"],
+];
 
 const unitUserRolesForWeb = [
   "responder",
@@ -504,6 +507,16 @@ const matchCasingRoleSlots = [
 function getViewsForRole(role) {
   if (unitUserRolesForWeb.includes(role)) return actingIcViews;
   return role === "super_admin" ? superAdminViews : adminViews;
+}
+
+function isIncidentAnalyticsView() {
+  return ["incident-analytics", "acting-ic-analytics"].includes(
+    state.activeView,
+  );
+}
+
+function isActingIcAnalyticsView() {
+  return state.activeView === "acting-ic-analytics";
 }
 
 function getNavGroupsForRole(role) {
@@ -2205,10 +2218,9 @@ async function getRealtimeClient() {
 }
 
 function getRealtimeDetailIncidentIds() {
-  const selectedAnalyticsIncidentId =
-    state.activeView === "incident-analytics"
-      ? getSelectedAnalyticsIncidentId()
-      : null;
+  const selectedAnalyticsIncidentId = isIncidentAnalyticsView()
+    ? getSelectedAnalyticsIncidentId()
+    : null;
 
   return Array.from(
     new Set(
@@ -3032,6 +3044,7 @@ function renderCurrentView(errorMessage = "") {
         drafts: "Drafts",
         "incident-management": "Incident Management",
         "incident-analytics": "Incident Analytics",
+        "acting-ic-analytics": "Incident Analytics",
         history: "Reported Incident History",
         logs: "Action Logs",
       }[state.activeView]
@@ -3040,6 +3053,7 @@ function renderCurrentView(errorMessage = "") {
         "call-down-list": "Call Down List",
         "incident-management": "Incident Management",
         "incident-analytics": "Incident Analytics",
+        "acting-ic-analytics": "Incident Analytics",
         incidents: "Official Incidents",
         facilities: "Healthcare Facilities",
         users: "Accounts",
@@ -3367,6 +3381,21 @@ function bindVerificationReviewFilters() {
 function getAnalyticsIncidents() {
   const incidents = state.allIncidents.length ? state.allIncidents : state.incidents;
 
+  if (isActingIcAnalyticsView()) {
+    const assignedIncidentIds = new Set(
+      state.actingIcAssignments.map((assignment) => assignment.incident_id),
+    );
+    const assignedIncidentRecords = state.actingIcAssignments
+      .map((assignment) => assignment.incident)
+      .filter(Boolean);
+
+    return [...incidents, ...assignedIncidentRecords].filter(
+      (incident, index, all) =>
+        assignedIncidentIds.has(incident.id) &&
+        all.findIndex((candidate) => candidate.id === incident.id) === index,
+    );
+  }
+
   if (!isSuperAdmin() || state.analyticsAdminScopeFilter === "all") {
     return incidents;
   }
@@ -3441,7 +3470,7 @@ function stopAnalyticsLiveRefresh() {
 
 function syncAnalyticsLiveRefresh() {
   if (
-    state.activeView !== "incident-analytics" ||
+    !isIncidentAnalyticsView() ||
     !state.accessToken
   ) {
     stopAnalyticsLiveRefresh();
@@ -3457,7 +3486,7 @@ function syncAnalyticsLiveRefresh() {
 
 async function refreshActiveAnalytics() {
   if (
-    state.activeView !== "incident-analytics" ||
+    !isIncidentAnalyticsView() ||
     analyticsLiveRefreshInFlight ||
     isEditingIncidentSection()
   ) {
@@ -3474,7 +3503,7 @@ async function refreshActiveAnalytics() {
     delete state.incidentManagementDetails[incidentId];
     await loadIncidentManagementDetails(incidentId, { renderLoading: false });
 
-    if (state.activeView === "incident-analytics") {
+    if (isIncidentAnalyticsView()) {
       renderCurrentView();
       bindView();
     }
@@ -3489,7 +3518,7 @@ async function refreshActiveAnalytics() {
 }
 
 function bindIncidentAnalyticsActions() {
-  if (state.activeView !== "incident-analytics") return;
+  if (!isIncidentAnalyticsView()) return;
 
   const selectedIncident = getSelectedAnalyticsIncident();
   const selectedIncidentId = selectedIncident?.id ?? "";
@@ -3500,7 +3529,7 @@ function bindIncidentAnalyticsActions() {
     state.analyticsIncidentId = selectedIncidentId;
   }
 
-  if (select) {
+  if (select && !isActingIcAnalyticsView()) {
     select.addEventListener("change", async () => {
       state.analyticsIncidentId = select.value;
 
@@ -3579,7 +3608,11 @@ function bindIncidentHistoryActions() {
       if (!incidentId) return;
 
       state.analyticsIncidentId = incidentId;
-      setActiveView("incident-analytics");
+      setActiveView(
+        unitUserRolesForWeb.includes(state.user?.role)
+          ? "acting-ic-analytics"
+          : "incident-analytics",
+      );
       renderCurrentView();
       bindView();
     });
@@ -3634,6 +3667,8 @@ function renderAdminView() {
   switch (state.activeView) {
     case "acting-ic":
       return renderActingIcWorkspace();
+    case "acting-ic-analytics":
+      return renderIncidentAnalytics();
     case "call-down-list":
       return renderCallDownList();
     case "incident-management":
@@ -4712,6 +4747,7 @@ function bindResponderSafetyViewActions() {
 }
 
 function renderIncidentAnalytics() {
+  const actingIcAnalytics = isActingIcAnalyticsView();
   const analyticsSourceIncidents =
     state.allIncidents.length ? state.allIncidents : state.incidents;
   const incidents = getAnalyticsIncidents();
@@ -4769,25 +4805,32 @@ const incidentLocation = selectedIncident
     )
   : "Not recorded";
 
+  const analyticsSubtitle = actingIcAnalytics
+    ? "Read-only analytics for the incident currently delegated to you as Acting IC."
+    : "Read-only timeline, duration, and graph summaries for one incident.";
+  const analyticsScopeMarkup = actingIcAnalytics
+    ? `<div class="field analytics-scope-note"><span>Incident scope</span><strong>Current Acting IC assignment only</strong></div>`
+    : `${renderAnalyticsAdminScopeFilter(analyticsSourceIncidents)}
+        <label class="field">
+          <span>Select incident</span>
+          <select id="analyticsIncidentSelect">
+            ${analyticsIncidentOptions(incidents, selectedIncidentId)}
+          </select>
+        </label>`;
+
   return `
     <section class="panel">
       <div class="panel-header">
         <div>
           <h2>Incident Analytics</h2>
-          <p class="panel-subtitle">Read-only timeline, duration, and graph summaries for one incident.</p>
+          <p class="panel-subtitle">${analyticsSubtitle}</p>
         </div>
         <button class="ghost-button" type="button" data-load-analytics="${escapeHtml(selectedIncidentId)}" ${!selectedIncidentId || isLoading ? "disabled" : ""}>
           ${isLoading ? "Loading..." : "Refresh Analytics"}
         </button>
       </div>
       <div class="form-grid two">
-        ${renderAnalyticsAdminScopeFilter(analyticsSourceIncidents)}
-        <label class="field">
-          <span>Select incident</span>
-          <select id="analyticsIncidentSelect">
-            ${analyticsIncidentOptions(incidents, selectedIncidentId)}
-          </select>
-        </label>
+        ${analyticsScopeMarkup}
       </div>
     </section>
     <section class="panel analytics-incident-summary">
