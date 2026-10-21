@@ -10,7 +10,13 @@ import {
 import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -5532,6 +5538,7 @@ export default function AddCasualtyScreen() {
     setInitialFacilityEncounterSignature,
   ] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submissionInFlightRef = useRef(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [loadedDraftId, setLoadedDraftId] = useState<string | null>(
     null,
@@ -11646,6 +11653,20 @@ async function ensureResponderSafetyResponseSaved() {
 }
 
   async function handleSubmit() {
+    if (submissionInFlightRef.current) {
+      return;
+    }
+
+    submissionInFlightRef.current = true;
+
+    try {
+      await submitVictimRecord();
+    } finally {
+      submissionInFlightRef.current = false;
+    }
+  }
+
+  async function submitVictimRecord() {
     const shouldResetPendingDepartureForm =
       !isEditing &&
       isSaResponderFlow &&
@@ -11684,6 +11705,7 @@ async function ensureResponderSafetyResponseSaved() {
 
         await queueCasualtySubmission(queuedPayload, {
           attachments,
+          ownerUserId: currentUserId,
         });
       };
 
@@ -11785,27 +11807,36 @@ async function ensureResponderSafetyResponseSaved() {
 
         const createdRecordId =
           response.data.casualtyIncident.id;
+        const hasSelectedPhotos =
+          Boolean(selectedPhoto) || selectedPcrPhotos.length > 0;
 
-          if (
-  (isFieldResponderFlow || isSaResponderFlow) &&
-  form.incidentId
-) {
-  try {
-    const refreshedOwnRecords = await getCasualties({
-      incidentId: form.incidentId,
-    });
+        const photoUploadPromise =
+          uploadSelectedPhotos(createdRecordId);
 
-    setOwnResponderRecords(refreshedOwnRecords);
-  } catch (error) {
-    console.warn(
-      "Unable to refresh own victim-code records:",
-      error,
-    );
-  }
-}
+        void photoUploadPromise.then((photoUploadError) => {
+          if (photoUploadError) {
+            setValidationWarning(
+              `Victim saved, but photo upload needs attention: ${photoUploadError}`,
+            );
+          }
+        });
 
-        const photoUploadError =
-          await uploadSelectedPhotos(createdRecordId);
+        if (
+          (isFieldResponderFlow || isSaResponderFlow) &&
+          form.incidentId
+        ) {
+          void getCasualties({ incidentId: form.incidentId })
+            .then((refreshedOwnRecords) => {
+              setOwnResponderRecords(refreshedOwnRecords);
+            })
+            .catch((error) => {
+              console.warn(
+                "Unable to refresh own victim-code records:",
+                error,
+              );
+            });
+        }
+
         await clearLoadedDraftAfterSave();
 
         if (shouldResetPendingDepartureForm) {
@@ -11814,8 +11845,8 @@ async function ensureResponderSafetyResponseSaved() {
 
         setSubmissionFeedback({
           title: "Victim submitted",
-          message: photoUploadError
-            ? `The victim record was saved, but the photo upload failed: ${photoUploadError}`
+          message: hasSelectedPhotos
+            ? "The victim record has been saved successfully. Photos are uploading in the background."
             : "The victim record has been saved successfully.",
           resetOnClose: shouldResetPendingDepartureForm ? false : undefined,
         });

@@ -3520,6 +3520,50 @@ tbody tr:hover td {
   align-items: stretch;
 }
 
+.analytics-triage-stage-grid {
+  display: grid;
+  gap: 18px;
+}
+
+.analytics-triage-stage {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 18px;
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-raised);
+}
+
+.analytics-triage-stage-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid var(--line);
+}
+
+.analytics-triage-stage-header h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.analytics-triage-stage-header p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.analytics-stage-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 14px;
+  align-items: stretch;
+}
+
 .analytics-graph-card {
   min-height: 260px;
   height: 100%;
@@ -3963,6 +4007,7 @@ tbody tr:hover td {
   .grid.four,
   .match-casing-slots,
   .analytics-graph-grid,
+  .analytics-stage-chart-grid,
   .analytics-timeline,
   .form-grid.two,
   .timeline-fields,

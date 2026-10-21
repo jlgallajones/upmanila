@@ -926,7 +926,23 @@ The database migration is `api/sql/add-incident-acting-ic-delegation.sql`. Apply
 
 **Problem:** In some mobile/PWA submission failures, the loading state stopped without a reliable visible explanation. Native alert behavior was not dependable in every runtime, and a failure inside the offline queue fallback could escape the user-facing error path.
 
-**Solution:** Victim submission failures now use the in-app feedback dialog and keep the form data intact so the responder can retry. Network and expired-session fallback queue operations are wrapped so queue failures are reported as well. Successful offline queueing continues to show the queued status and directs the responder to sign in and synchronize when required. Error feedback uses a distinct warning icon and danger color instead of the success styling.
+**Solution:** Victim submission now has a synchronous in-flight guard so rapid taps cannot start overlapping requests. Create requests retry transient network and timeout failures with the same client record ID, and the API treats an already-created client record as an idempotent success so a lost response cannot create a false failure. Submission failures use the in-app feedback dialog and keep the form data intact so the responder can retry. Network and expired-session fallback queue operations are wrapped so queue failures are reported as well. Successful offline queueing continues to show the queued status and directs the responder to sign in and synchronize when required. Error feedback uses a distinct warning icon and danger color instead of the success styling.
+
+**Status:** Implemented.
+
+## 111. Offline Records Were Not Account-Scoped And Could Block Records Scrolling
+
+**Problem:** Offline casualty submissions were stored in one device-wide queue. As a result, a Field Responder, AMP Responder, and HCFD account using the same device could see one another's unsynchronized victim records. The Records screen also rendered every queued card in an unrestricted block above the submitted records list, which could make the page appear frozen and prevent users from reaching normally submitted records.
+
+**Solution:** Each new queued casualty now stores the authenticated creator's user ID. Queue reads, retry, incident assignment, victim-code correction, count, and synchronization are restricted to the current account, while entries from older queue data without an owner remain stored but are hidden from authenticated accounts rather than being exposed to another user. The offline queue display now has a bounded internal scroll area and a collapse/expand control, leaving the main submitted-records list independently scrollable.
+
+**Status:** Implemented.
+
+## 112. Victim Submission And Offline Synchronization Were Too Slow
+
+**Problem:** Submitting a victim waited for a responder-record refresh and all selected photo uploads before showing that the core victim record had been saved. Offline synchronization processed every queued victim one at a time, so a large queue made the mobile app appear frozen or unresponsive.
+
+**Solution:** The mobile app now confirms the core victim save immediately after the API returns. Photo uploads and the responder-code refresh continue in the background, with a visible warning if a photo upload needs attention. Offline synchronization now processes up to three independent queued victims concurrently while preserving per-record retry, duplicate protection, account scoping, and queue integrity. The API also performs independent post-create writes concurrently before returning the final response.
 
 **Status:** Implemented.
 
@@ -964,3 +980,8 @@ Manual Acting IC acceptance test:
 14. Open an existing casualty record for editing, confirm **View attached photos** is available, and verify that previously uploaded photos are visible before adding more.
 15. Disable the API or switch the device to offline mode, submit a completed victim form, and confirm the spinner stops with a visible queued result; the record should be available for synchronization.
 16. Simulate an offline queue failure, submit a completed victim form, and confirm an error dialog appears, the submission does not silently stop, and the form remains available for retry.
+17. On one device, submit an offline victim as a Field Responder, sign in as an AMP Responder, and confirm the Field Responder's queued record is not visible or included in the AMP queue count.
+18. Repeat the account-isolation check with HCFD and confirm retry, incident assignment, victim-code correction, and **Sync all queued** operate only on the signed-in account's queue.
+19. Create enough offline queued records to exceed the queue panel height, scroll inside the queue, collapse it, and confirm the normal submitted Records list remains reachable and scrollable.
+20. Submit a victim with and without photos and confirm the saved-record feedback appears before photo processing finishes; verify any photo failure is shown as a warning.
+21. Queue at least six victims for one account, run **Sync all queued**, and confirm multiple records enter syncing together and the queue completes without duplicate server records.

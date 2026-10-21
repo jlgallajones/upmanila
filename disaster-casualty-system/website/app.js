@@ -4514,6 +4514,26 @@ function renderTertiaryTriageSystemCharts(graphs) {
     .join("");
 }
 
+function renderAnalyticsTriageStage(title, subtitle, content) {
+  if (!String(content).includes("analytics-graph-card")) {
+    return "";
+  }
+
+  return `
+    <section class="analytics-triage-stage">
+      <div class="analytics-triage-stage-header">
+        <div>
+          <h3>${escapeHtml(title)}</h3>
+          <p>${escapeHtml(subtitle)}</p>
+        </div>
+      </div>
+      <div class="analytics-stage-chart-grid">
+        ${content}
+      </div>
+    </section>
+  `;
+}
+
 function renderAnalyticsSectionIfVisible(title, subtitle, content) {
   return String(content).includes("analytics-graph-card")
     ? renderAnalyticsSection(title, subtitle, content)
@@ -4529,17 +4549,35 @@ function renderAnalyticsGraphGrid(analytics, incidentId) {
     ${renderAnalyticsSectionIfVisible(
       "Triage & Patient Distribution",
       "Primary triage, secondary triage, and ED-care distribution with count and percentage labels.",
-      `<div class="analytics-graph-grid">
-        ${renderAnalyticsGraphSection("Immediate, Delayed, Minor, and Expectant Victims Using Primary Triage", graphs.primaryTriageByCategory, { chart: "pie" })}
-        ${renderAnalyticsGraphSection("Immediate, Delayed, Minor, and Expectant Victims Using Secondary Triage", graphs.secondaryTriageByCategory, { chart: "pie" })}
-        ${renderAnalyticsGraphSection("Victims Seeking ED Care According to Triage Category", graphs.edCareByTriageCategory, { chart: "pie" })}
-        ${renderAnalyticsGraphSection("Over- and Under-Triage in Primary Triage", graphs.primaryOverUnderTriageDistribution, { chart: "pie", note: "Primary triage from Field Responder records." })}
-        ${renderAnalyticsGraphSection("Overtriage Distribution in Primary Triage", graphs.primaryOverTriageTransitions, { chart: "pie", note: "Primary triage from Field Responder records." })}
-        ${renderAnalyticsGraphSection("Undertriage Distribution in Primary Triage", graphs.primaryUnderTriageTransitions, { chart: "pie", note: "Primary triage from Field Responder records." })}
-        ${renderAnalyticsGraphSection("Over- and Under-Triage in Secondary Triage", graphs.secondaryOverUnderTriageDistribution, { chart: "pie", note: "Secondary triage from AMP Responder records." })}
-        ${renderAnalyticsGraphSection("Overtriage Distribution in Secondary Triage", graphs.secondaryOverTriageTransitions, { chart: "pie", note: "Secondary triage from AMP Responder records." })}
-        ${renderAnalyticsGraphSection("Undertriage Distribution in Secondary Triage", graphs.secondaryUnderTriageTransitions, { chart: "pie", note: "Secondary triage from AMP Responder records." })}
-        ${renderTertiaryTriageSystemCharts(graphs)}
+      `<div class="analytics-triage-stage-grid">
+        ${renderAnalyticsTriageStage(
+          "Primary Triage",
+          "All primary-triage distribution and triage-transition charts.",
+          [
+            renderAnalyticsGraphSection("Immediate, Delayed, Minor, and Expectant Victims Using Primary Triage", graphs.primaryTriageByCategory, { chart: "pie" }),
+            renderAnalyticsGraphSection("Over- and Under-Triage in Primary Triage", graphs.primaryOverUnderTriageDistribution, { chart: "pie", note: "Primary triage from Field Responder records." }),
+            renderAnalyticsGraphSection("Overtriage Distribution in Primary Triage", graphs.primaryOverTriageTransitions, { chart: "pie", note: "Primary triage from Field Responder records." }),
+            renderAnalyticsGraphSection("Undertriage Distribution in Primary Triage", graphs.primaryUnderTriageTransitions, { chart: "pie", note: "Primary triage from Field Responder records." }),
+          ].join(""),
+        )}
+        ${renderAnalyticsTriageStage(
+          "Secondary Triage",
+          "All secondary-triage distribution and triage-transition charts.",
+          [
+            renderAnalyticsGraphSection("Immediate, Delayed, Minor, and Expectant Victims Using Secondary Triage", graphs.secondaryTriageByCategory, { chart: "pie" }),
+            renderAnalyticsGraphSection("Over- and Under-Triage in Secondary Triage", graphs.secondaryOverUnderTriageDistribution, { chart: "pie", note: "Secondary triage from AMP Responder records." }),
+            renderAnalyticsGraphSection("Overtriage Distribution in Secondary Triage", graphs.secondaryOverTriageTransitions, { chart: "pie", note: "Secondary triage from AMP Responder records." }),
+            renderAnalyticsGraphSection("Undertriage Distribution in Secondary Triage", graphs.secondaryUnderTriageTransitions, { chart: "pie", note: "Secondary triage from AMP Responder records." }),
+          ].join(""),
+        )}
+        ${renderAnalyticsTriageStage(
+          "Tertiary Triage",
+          "All tertiary-triage system and emergency-department care charts.",
+          [
+            renderAnalyticsGraphSection("Victims Seeking ED Care According to Triage Category", graphs.edCareByTriageCategory, { chart: "pie" }),
+            renderTertiaryTriageSystemCharts(graphs),
+          ].join(""),
+        )}
       </div>`,
     )}
     ${renderAnalyticsSectionIfVisible(

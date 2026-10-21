@@ -9,6 +9,7 @@ import {
   Modal,
   Pressable,
   RefreshControl,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -1511,6 +1512,8 @@ export default function RecordsScreen() {
     useState<string | null>(null);
   const [isRetryingAllQueued, setIsRetryingAllQueued] =
     useState(false);
+  const [isOfflineQueueExpanded, setIsOfflineQueueExpanded] =
+    useState(true);
   const [queueMessage, setQueueMessage] =
     useState<string | null>(null);
   const [
@@ -3048,7 +3051,17 @@ function toggleHealthcareLocationFilter(
       {!isAdminRecordsView && queuedSubmissions.length > 0 ? (
         <View style={styles.offlineQueuePanel}>
           <View style={styles.offlineQueueHeader}>
-            <View style={styles.offlineQueueTitleGroup}>
+            <Pressable
+              onPress={() =>
+                setIsOfflineQueueExpanded((current) => !current)
+              }
+              style={({ pressed }) => [
+                styles.offlineQueueTitleGroup,
+                pressed && styles.pressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Toggle submitted offline queue"
+            >
               <Text style={styles.offlineQueueTitle}>
                 Submitted Offline Queue
               </Text>
@@ -3056,70 +3069,108 @@ function toggleHealthcareLocationFilter(
                 {pendingQueuedCount} pending {"\u00B7"}{" "}
                 {failedQueuedCount} failed
               </Text>
-            </View>
-
-            <Pressable
-              disabled={isRetryingAllQueued}
-              onPress={() => {
-                void handleRetryAllQueuedSubmissions();
-              }}
-              style={({ pressed }) => [
-                styles.offlineQueueRetryAll,
-                isRetryingAllQueued &&
-                  styles.offlineQueueRetryAllDisabled,
-                pressed && styles.pressed,
-              ]}
-            >
-              <Text style={styles.offlineQueueRetryAllText}>
-                {isRetryingAllQueued ? "Syncing..." : "Sync all queued"}
-              </Text>
             </Pressable>
+
+            <View style={styles.offlineQueueHeaderActions}>
+              <Pressable
+                disabled={isRetryingAllQueued}
+                onPress={() => {
+                  void handleRetryAllQueuedSubmissions();
+                }}
+                style={({ pressed }) => [
+                  styles.offlineQueueRetryAll,
+                  isRetryingAllQueued &&
+                    styles.offlineQueueRetryAllDisabled,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.offlineQueueRetryAllText}>
+                  {isRetryingAllQueued ? "Syncing..." : "Sync all queued"}
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() =>
+                  setIsOfflineQueueExpanded((current) => !current)
+                }
+                style={({ pressed }) => [
+                  styles.offlineQueueToggle,
+                  pressed && styles.pressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  isOfflineQueueExpanded
+                    ? "Collapse submitted offline queue"
+                    : "Expand submitted offline queue"
+                }
+              >
+                <Ionicons
+                  name={
+                    isOfflineQueueExpanded
+                      ? "chevron-up-outline"
+                      : "chevron-down-outline"
+                  }
+                  size={18}
+                  color={COLORS.text}
+                />
+              </Pressable>
+            </View>
           </View>
 
-          <Text style={styles.offlineQueueMessage}>
-            These are submitted offline records waiting to sync to the
-            server. They are not editable drafts and will appear in the
-            dashboard after successful sync.
-          </Text>
+          {isOfflineQueueExpanded ? (
+            <>
+              <Text style={styles.offlineQueueMessage}>
+                These are submitted offline records waiting to sync to the
+                server. They are not editable drafts and will appear in the
+                dashboard after successful sync.
+              </Text>
 
-          {queueMessage ? (
-            <Text
-              style={[
-                styles.offlineQueueMessage,
-                styles.offlineQueueStatusMessage,
-              ]}
-            >
-              {queueMessage}
-            </Text>
+              {queueMessage ? (
+                <Text
+                  style={[
+                    styles.offlineQueueMessage,
+                    styles.offlineQueueStatusMessage,
+                  ]}
+                >
+                  {queueMessage}
+                </Text>
+              ) : null}
+
+              {filteredQueuedSubmissions.length > 0 ? (
+                <ScrollView
+                  style={styles.offlineQueueList}
+                  contentContainerStyle={styles.offlineQueueListContent}
+                  nestedScrollEnabled
+                  showsVerticalScrollIndicator
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {filteredQueuedSubmissions.map((item) => (
+                    <QueuedCasualtyCard
+                      key={item.id}
+                      item={item}
+                      isRetrying={
+                        syncingQueueId === item.id ||
+                        isRetryingAllQueued
+                      }
+                      canAssignIncident={
+                        activeIncidentAssignmentOptions.length > 0
+                      }
+                      onOpenIncidentAssignment={() =>
+                        setAssigningIncidentQueueId(item.id)
+                      }
+                      onRetry={() => {
+                        void handleRetryQueuedSubmission(item.id);
+                      }}
+                    />
+                  ))}
+                </ScrollView>
+              ) : (
+                <Text style={styles.offlineQueueMessage}>
+                  No queued records match the current search.
+                </Text>
+              )}
+            </>
           ) : null}
-
-          {filteredQueuedSubmissions.length > 0 ? (
-            <View style={styles.offlineQueueList}>
-              {filteredQueuedSubmissions.map((item) => (
-                <QueuedCasualtyCard
-                  key={item.id}
-                  item={item}
-                  isRetrying={
-                    syncingQueueId === item.id ||
-                    isRetryingAllQueued
-                  }
-                  canAssignIncident={
-                    activeIncidentAssignmentOptions.length > 0
-                  }
-                  onOpenIncidentAssignment={() =>
-                    setAssigningIncidentQueueId(item.id)
-                  }
-                  onRetry={() => {
-                    void handleRetryQueuedSubmission(item.id);
-                  }}
-                />
-              ))}
-            </View>
-          ) : (
-            <Text style={styles.offlineQueueMessage}>
-              No queued records match the current search.
-            </Text>
-          )}
         </View>
       ) : null}
 
@@ -3825,6 +3876,12 @@ const styles = StyleSheet.create({
     gap: 10,
   },
 
+  offlineQueueHeaderActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+
   offlineQueueTitleGroup: {
     flex: 1,
     minWidth: 0,
@@ -3862,6 +3919,15 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 
+  offlineQueueToggle: {
+    width: 34,
+    height: 34,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 11,
+    backgroundColor: COLORS.surface,
+  },
+
   offlineQueueMessage: {
     color: COLORS.secondaryText,
     fontSize: 11,
@@ -3875,8 +3941,13 @@ const styles = StyleSheet.create({
   },
 
   offlineQueueList: {
-    gap: 9,
+    maxHeight: 310,
     marginTop: 11,
+  },
+
+  offlineQueueListContent: {
+    gap: 9,
+    paddingBottom: 2,
   },
 
   incidentAssignSheet: {

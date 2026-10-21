@@ -1,5 +1,5 @@
 DCMS VERIFICATION RUN
-Started: 2026-10-21T18:34:54.8267193+08:00
+Started: 2026-10-21T22:10:26.7039662+08:00
 Root: C:\Users\jlgallajones\upmanila\disaster-casualty-system
 [RUN ] API TypeScript typecheck
        Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\api
@@ -54,14 +54,12 @@ React Compiler enabled
 Starting Metro Bundler
 
 Static rendering is enabled. Learn more: https://docs.expo.dev/router/web/static-rendering/
-| (node:9100) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
-| (Use `node --trace-warnings ...` to show where the warning was created)
-Web Bundled 30463ms node_modules\expo-router\entry.js (1394 modules)
-? Bundled 40460ms node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js (1513 modules)
+? Bundled 983ms node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js (1287 modules)
+Web Bundled 1217ms node_modules\expo-router\entry.js (1385 modules)
 
 › web bundles (2):
 _expo/static/css/global-30c341199d6e65a2dfb94ff1ee1395d4.css (551B)
-_expo/static/js/web/entry-de0ff7e0a1029ecbf694fd48c9b95e14.js (3.4MB)
+_expo/static/js/web/entry-7f6a6227e4afa0d20daae7537d6ce255.js (3.4MB)
 
 › Static routes (25):
 /home (38KB)
@@ -107,5 +105,9 @@ Exported: dist
 [RUN ] Repository whitespace check
        Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system
        Command: git.exe diff --check
+warning: in the working copy of 'disaster-casualty-system/mobile/src/api/casualties.ts', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'disaster-casualty-system/mobile/src/app/(tabs)/add-casualty.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/mobile/src/app/(tabs)/records.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/mobile/src/offline/casualtyQueue.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/website/styles.css', LF will be replaced by CRLF the next time Git touches it
 [PASS] Repository whitespace check (exit code 0)

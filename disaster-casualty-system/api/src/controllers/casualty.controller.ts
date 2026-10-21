@@ -1862,10 +1862,21 @@ export async function createCasualty(
     }
 
     if (existingSubmission) {
-      response.status(409).json({
-        success: false,
-        message: "This mobile record has already been synchronized.",
-        data: existingSubmission,
+      response.status(200).json({
+        success: true,
+        message: "Victim record was already submitted.",
+        data: {
+          casualty: {
+            id: existingSubmission.casualty_id,
+          },
+          casualtyIncident: {
+            id: existingSubmission.id,
+          },
+          incident: {
+            id: existingSubmission.incident_id,
+          },
+          encoder: null,
+        },
       });
       return;
     }
@@ -2021,82 +2032,6 @@ export async function createCasualty(
       );
     }
 
-    if (triageAssessment) {
-  const assessmentAnswers =
-    triageAssessment.assessmentAnswers;
-
-  const hasAssessmentAnswers =
-    assessmentAnswers !== undefined &&
-    Object.keys(assessmentAnswers).length > 0;
-
-  const responderCategory =
-    triageAssessment.triageCategory as TriageCategory;
-
-  let calculatedCategory: TriageCategory | null =
-    null;
-
-  let algorithmVersion: string | null = null;
-  let isOverTriage = false;
-  let isUnderTriage = false;
-
-  if (hasAssessmentAnswers) {
-    calculatedCategory =
-      calculateTriageCategory(
-        triageAssessment.triageSystem as TriageSystem,
-        assessmentAnswers,
-      );
-
-    algorithmVersion =
-      `${triageAssessment.triageSystem}-v1`;
-
-    const comparison =
-      compareTriageCategories(
-        responderCategory,
-        calculatedCategory,
-      );
-
-    isOverTriage = comparison.isOverTriage;
-    isUnderTriage = comparison.isUnderTriage;
-  }
-
-  const { error: triageSyncError } =
-    await supabase
-      .from("casualty_triage_assessments")
-      .update({
-        responder_category: responderCategory,
-        calculated_category: calculatedCategory,
-        assessment_answers:
-          assessmentAnswers ?? null,
-        algorithm_version: algorithmVersion,
-        is_over_triage: isOverTriage,
-        is_under_triage: isUnderTriage,
-      })
-      .eq(
-        "casualty_incident_id",
-        transactionResult.casualtyIncident.id,
-      )
-      .eq("triaged_by", user.id)
-      .eq(
-        "triage_stage",
-        triageAssessment.triageStage ??
-          "on_site",
-      );
-
-  if (triageSyncError) {
-    throw new Error(
-      `Unable to synchronize triage assessment details: ${triageSyncError.message}`,
-    );
-  }
-}
-
-    if (treatmentRecord) {
-      await insertTreatmentRecord(
-        transactionResult.casualtyIncident.id,
-        user.id,
-        treatmentRecord,
-      );
-    }
-
     const encounterPayload = facilityEncounter ?? {
       facilityId:
         transportRecord?.receivingFacilityId ??
@@ -2111,22 +2046,99 @@ export async function createCasualty(
       disposition: "unknown",
     };
 
+    const followUpWrites: Promise<unknown>[] = [];
+
+    if (triageAssessment) {
+      followUpWrites.push(
+        (async () => {
+          const assessmentAnswers =
+            triageAssessment.assessmentAnswers;
+          const hasAssessmentAnswers =
+            assessmentAnswers !== undefined &&
+            Object.keys(assessmentAnswers).length > 0;
+          const responderCategory =
+            triageAssessment.triageCategory as TriageCategory;
+          let calculatedCategory: TriageCategory | null = null;
+          let algorithmVersion: string | null = null;
+          let isOverTriage = false;
+          let isUnderTriage = false;
+
+          if (hasAssessmentAnswers) {
+            calculatedCategory = calculateTriageCategory(
+              triageAssessment.triageSystem as TriageSystem,
+              assessmentAnswers,
+            );
+            algorithmVersion =
+              `${triageAssessment.triageSystem}-v1`;
+            const comparison = compareTriageCategories(
+              responderCategory,
+              calculatedCategory,
+            );
+            isOverTriage = comparison.isOverTriage;
+            isUnderTriage = comparison.isUnderTriage;
+          }
+
+          const { error: triageSyncError } = await supabase
+            .from("casualty_triage_assessments")
+            .update({
+              responder_category: responderCategory,
+              calculated_category: calculatedCategory,
+              assessment_answers: assessmentAnswers ?? null,
+              algorithm_version: algorithmVersion,
+              is_over_triage: isOverTriage,
+              is_under_triage: isUnderTriage,
+            })
+            .eq(
+              "casualty_incident_id",
+              transactionResult.casualtyIncident.id,
+            )
+            .eq("triaged_by", user.id)
+            .eq(
+              "triage_stage",
+              triageAssessment.triageStage ?? "on_site",
+            );
+
+          if (triageSyncError) {
+            throw new Error(
+              `Unable to synchronize triage assessment details: ${triageSyncError.message}`,
+            );
+          }
+        })(),
+      );
+    }
+
+    if (treatmentRecord) {
+      followUpWrites.push(
+        insertTreatmentRecord(
+          transactionResult.casualtyIncident.id,
+          user.id,
+          treatmentRecord,
+        ),
+      );
+    }
+
     if (encounterPayload.facilityId) {
-      await insertFacilityEncounter(
-        transactionResult.casualtyIncident.id,
-        user.id,
-        encounterPayload,
+      followUpWrites.push(
+        insertFacilityEncounter(
+          transactionResult.casualtyIncident.id,
+          user.id,
+          encounterPayload,
+        ),
       );
     }
 
     if (casualtyOutcome) {
-  await upsertCasualtyOutcome(
-    transactionResult.casualtyIncident.id,
-    user.id,
-    casualtyOutcome,
-    incidentDetails.currentStatus,
-  );
-}
+      followUpWrites.push(
+        upsertCasualtyOutcome(
+          transactionResult.casualtyIncident.id,
+          user.id,
+          casualtyOutcome,
+          incidentDetails.currentStatus,
+        ),
+      );
+    }
+
+    await Promise.all(followUpWrites);
 
 const casualtyNotificationLabel =
   person.idNumber?.trim() ||
@@ -2143,34 +2155,33 @@ const casualtyNotificationLabel =
     .join(" ") ||
   "the victim record";
 
-await createCasualtySubmissionNotification({
-  casualtyIncidentId:
-    transactionResult.casualtyIncident.id,
-
-  recipientUserId: user.id,
-
-  casualtyLabel:
-    casualtyNotificationLabel,
-
-  incidentName:
-    transactionResult.incident?.incidentName ??
-    null,
-});
-
-await recordAuditLog({
-  actor: user,
-  action: "casualty.created",
-  entityType: "casualty_incident",
-  entityId: transactionResult.casualtyIncident.id,
-  entityLabel: casualtyNotificationLabel,
-  metadata: {
-    incidentId: transactionResult.incident?.id ?? incidentId,
-    incidentCode: transactionResult.incident?.incidentCode ?? null,
-    incidentName: transactionResult.incident?.incidentName ?? null,
-    currentStatus: incidentDetails.currentStatus,
-    severity,
-  },
-});
+    await Promise.all([
+      createCasualtySubmissionNotification({
+        casualtyIncidentId:
+          transactionResult.casualtyIncident.id,
+        recipientUserId: user.id,
+        casualtyLabel: casualtyNotificationLabel,
+        incidentName:
+          transactionResult.incident?.incidentName ?? null,
+      }),
+      recordAuditLog({
+        actor: user,
+        action: "casualty.created",
+        entityType: "casualty_incident",
+        entityId: transactionResult.casualtyIncident.id,
+        entityLabel: casualtyNotificationLabel,
+        metadata: {
+          incidentId:
+            transactionResult.incident?.id ?? incidentId,
+          incidentCode:
+            transactionResult.incident?.incidentCode ?? null,
+          incidentName:
+            transactionResult.incident?.incidentName ?? null,
+          currentStatus: incidentDetails.currentStatus,
+          severity,
+        },
+      }),
+    ]);
 
 response.status(201).json({
   success: true,

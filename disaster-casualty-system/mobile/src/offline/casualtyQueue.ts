@@ -5,9 +5,13 @@ import {
   type CreateCasualtyPayload,
 } from "../api/casualties";
 import { uploadAttachment } from "../api/attachments";
-import { getAccessToken } from "../auth/session";
+import {
+  getAccessToken,
+  getCurrentUserId,
+} from "../auth/session";
 
 const queueKey = "dcms.offlineCasualtyQueue";
+const queueSyncConcurrency = 3;
 let syncAllQueuePromise: Promise<QueueSyncResult> | null = null;
 
 export type QueuedCasualtyPayload = Omit<
@@ -34,6 +38,7 @@ export type QueuedCasualtySyncStatus =
 
 export type QueuedCasualtySubmission = {
   id: string;
+  ownerUserId: string | null;
   payload: QueuedCasualtyPayload;
   createdAt: string;
   updatedAt: string;
@@ -76,6 +81,10 @@ function normalizeQueueItem(
 
   return {
     id: item.id,
+    ownerUserId:
+      typeof item.ownerUserId === "string"
+        ? item.ownerUserId
+        : null,
     payload: item.payload,
     createdAt,
     updatedAt: item.updatedAt ?? createdAt,
@@ -116,6 +125,46 @@ async function writeQueue(
   queue: QueuedCasualtySubmission[],
 ): Promise<void> {
   await AsyncStorage.setItem(queueKey, JSON.stringify(queue));
+}
+
+async function getQueueScope(): Promise<{
+  all: QueuedCasualtySubmission[];
+  owned: QueuedCasualtySubmission[];
+  ownerUserId: string | null;
+}> {
+  const [all, ownerUserId] = await Promise.all([
+    readQueue(),
+    getCurrentUserId(),
+  ]);
+
+  return {
+    all,
+    owned: ownerUserId
+      ? all.filter((item) => item.ownerUserId === ownerUserId)
+      : [],
+    ownerUserId,
+  };
+}
+
+async function replaceOwnedQueue(
+  all: QueuedCasualtySubmission[],
+  ownerUserId: string,
+  owned: QueuedCasualtySubmission[],
+): Promise<void> {
+  const ownedById = new Map(
+    owned.map((item) => [item.id, item]),
+  );
+
+  await writeQueue(
+    all.flatMap((item) => {
+      if (item.ownerUserId !== ownerUserId) {
+        return [item];
+      }
+
+      const replacement = ownedById.get(item.id);
+      return replacement ? [replacement] : [];
+    }),
+  );
 }
 
 export function isNetworkSubmissionError(error: unknown): boolean {
@@ -203,15 +252,23 @@ function replaceOrAppendFieldResponderCodeNotes(
 
 export async function queueCasualtySubmission(
   payload: QueuedCasualtyPayload,
-  options: { attachments?: QueuedCasualtyAttachment[] } = {},
+  options: {
+    attachments?: QueuedCasualtyAttachment[];
+    ownerUserId?: string | null;
+  } = {},
 ): Promise<void> {
   const queue = await readQueue();
+  const ownerUserId =
+    options.ownerUserId !== undefined
+      ? options.ownerUserId
+      : await getCurrentUserId();
   const now = new Date().toISOString();
 
   await writeQueue([
     ...queue,
     {
       id: createQueueId(),
+      ownerUserId,
       payload,
       createdAt: now,
       updatedAt: now,
@@ -223,25 +280,33 @@ export async function queueCasualtySubmission(
 }
 
 export async function getQueuedCasualtyCount(): Promise<number> {
-  const queue = await readQueue();
-  return queue.length;
+  const { owned } = await getQueueScope();
+  return owned.length;
 }
 
 export async function getQueuedCasualtySubmissions(): Promise<
   QueuedCasualtySubmission[]
 > {
-  return readQueue();
+  const { owned } = await getQueueScope();
+  return owned;
 }
 
 export async function assignQueuedCasualtyIncident(
   queueId: string,
   incident: { id: string; name: string },
 ): Promise<void> {
-  const queue = await readQueue();
+  const { all, owned, ownerUserId } = await getQueueScope();
+
+  if (!ownerUserId) {
+    return;
+  }
+
   const now = new Date().toISOString();
 
-  await writeQueue(
-    queue.map((item) =>
+  await replaceOwnedQueue(
+    all,
+    ownerUserId,
+    owned.map((item) =>
       item.id === queueId
         ? {
             ...item,
@@ -264,11 +329,18 @@ export async function updateQueuedCasualtyVictimCode(
   victimCode: string,
   userCode: string,
 ): Promise<void> {
-  const queue = await readQueue();
+  const { all, owned, ownerUserId } = await getQueueScope();
+
+  if (!ownerUserId) {
+    return;
+  }
+
   const now = new Date().toISOString();
 
-  await writeQueue(
-    queue.map((item) =>
+  await replaceOwnedQueue(
+    all,
+    ownerUserId,
+    owned.map((item) =>
       item.id === queueId
         ? {
             ...item,
@@ -300,13 +372,14 @@ export async function updateQueuedCasualtyVictimCode(
 
 async function markQueueItemSyncing(
   queueId: string,
+  ownerUserId: string,
 ): Promise<void> {
   const queue = await readQueue();
   const now = new Date().toISOString();
 
   await writeQueue(
     queue.map((item) =>
-      item.id === queueId
+      item.id === queueId && item.ownerUserId === ownerUserId
         ? {
             ...item,
             status: "syncing",
@@ -419,19 +492,66 @@ async function syncQueueItem(
   }
 }
 
+type QueueItemSyncResult = Awaited<
+  ReturnType<typeof syncQueueItem>
+>;
+
+async function syncQueueItemsConcurrently(
+  items: QueuedCasualtySubmission[],
+): Promise<QueueItemSyncResult[]> {
+  const results: QueueItemSyncResult[] = [];
+  let nextIndex = 0;
+
+  async function worker(): Promise<void> {
+    while (nextIndex < items.length) {
+      const itemIndex = nextIndex;
+      nextIndex += 1;
+      results[itemIndex] = await syncQueueItem(items[itemIndex]);
+    }
+  }
+
+  const workerCount = Math.min(
+    queueSyncConcurrency,
+    items.length,
+  );
+
+  await Promise.all(
+    Array.from({ length: workerCount }, () => worker()),
+  );
+
+  return results;
+}
+
 export async function retryQueuedCasualtySubmission(
   queueId: string,
 ): Promise<QueueSyncResult> {
-  await markQueueItemSyncing(queueId);
+  const scope = await getQueueScope();
+  const { all, owned, ownerUserId } = scope;
+
+  if (!ownerUserId) {
+    return {
+      synced: 0,
+      remaining: 0,
+      skipped: 0,
+      failed: 0,
+      issues: [],
+    };
+  }
+
+  await markQueueItemSyncing(queueId, ownerUserId);
 
   const queue = await readQueue();
   const token = await getAccessToken();
-  const item = queue.find((candidate) => candidate.id === queueId);
+  const item = queue.find(
+    (candidate) =>
+      candidate.id === queueId &&
+      candidate.ownerUserId === ownerUserId,
+  );
 
   if (!item) {
     return {
       synced: 0,
-      remaining: queue.length,
+      remaining: owned.length,
       skipped: 0,
       failed: 0,
       issues: [],
@@ -444,8 +564,13 @@ export async function retryQueuedCasualtySubmission(
       reason: "Login is required before queued records can sync.",
     };
 
-    await writeQueue(
-      queue.map((candidate) =>
+    const latestOwned = queue.filter(
+      (candidate) => candidate.ownerUserId === ownerUserId,
+    );
+    await replaceOwnedQueue(
+      queue,
+      ownerUserId,
+      latestOwned.map((candidate) =>
         candidate.id === queueId
           ? {
               ...candidate,
@@ -460,7 +585,7 @@ export async function retryQueuedCasualtySubmission(
 
     return {
       synced: 0,
-      remaining: queue.length,
+      remaining: latestOwned.length,
       skipped: 0,
       failed: 1,
       issues: [issue],
@@ -469,15 +594,22 @@ export async function retryQueuedCasualtySubmission(
 
   const result = await syncQueueItem(item);
   const latestQueue = await readQueue();
+  const latestOwned = latestQueue.filter(
+    (candidate) => candidate.ownerUserId === ownerUserId,
+  );
   const remaining = result.synced
-    ? latestQueue.filter((candidate) => candidate.id !== queueId)
-    : latestQueue.map((candidate) =>
+    ? latestOwned.filter((candidate) => candidate.id !== queueId)
+    : latestOwned.map((candidate) =>
         candidate.id === queueId && result.item
           ? result.item
           : candidate,
       );
 
-  await writeQueue(remaining);
+  await replaceOwnedQueue(
+    latestQueue,
+    ownerUserId,
+    remaining,
+  );
 
   return {
     synced: result.synced ? 1 : 0,
@@ -489,17 +621,20 @@ export async function retryQueuedCasualtySubmission(
 }
 
 async function runQueuedCasualtySync(): Promise<QueueSyncResult> {
-  const queue = await readQueue();
+  const { all: queue, owned, ownerUserId } =
+    await getQueueScope();
   const token = await getAccessToken();
 
-  if (!token || queue.length === 0) {
-    if (!token && queue.length > 0) {
+  if (!token || !ownerUserId || owned.length === 0) {
+    if (!token && ownerUserId && owned.length > 0) {
       const now = new Date().toISOString();
       const reason =
         "Login is required before queued records can sync.";
 
-      await writeQueue(
-        queue.map((item) => ({
+      await replaceOwnedQueue(
+        queue,
+        ownerUserId,
+        owned.map((item) => ({
           ...item,
           status: "failed",
           attempts: item.attempts + 1,
@@ -511,11 +646,11 @@ async function runQueuedCasualtySync(): Promise<QueueSyncResult> {
 
     return {
       synced: 0,
-      remaining: queue.length,
-      skipped: queue.length,
-      failed: !token ? queue.length : 0,
-      issues: !token && queue.length > 0
-        ? queue.map((item) => ({
+      remaining: owned.length,
+      skipped: owned.length,
+      failed: !token && ownerUserId ? owned.length : 0,
+      issues: !token && ownerUserId && owned.length > 0
+        ? owned.map((item) => ({
             queueId: item.id,
             reason: "Login is required before queued records can sync.",
           }))
@@ -523,34 +658,26 @@ async function runQueuedCasualtySync(): Promise<QueueSyncResult> {
     };
   }
 
+  const now = new Date().toISOString();
+  await replaceOwnedQueue(
+    queue,
+    ownerUserId,
+    owned.map((item) => ({
+      ...item,
+      status: "syncing",
+      updatedAt: now,
+      lastError: undefined,
+    })),
+  );
+
+  const results = await syncQueueItemsConcurrently(owned);
   const remaining: QueuedCasualtySubmission[] = [];
   const issues: QueueSyncIssue[] = [];
   let synced = 0;
   let skipped = 0;
   let failed = 0;
 
-  for (const item of queue) {
-    if (!item.payload.incidentId) {
-      skipped += 1;
-      failed += 1;
-      const reason = "Queued casualty has no selected incident.";
-      issues.push({
-        queueId: item.id,
-        reason,
-      });
-      remaining.push({
-        ...item,
-        status: "failed",
-        attempts: item.attempts + 1,
-        updatedAt: new Date().toISOString(),
-        lastError: reason,
-      });
-      continue;
-    }
-
-    await markQueueItemSyncing(item.id);
-    const result = await syncQueueItem(item);
-
+  for (const result of results) {
     if (result.synced) {
       synced += 1;
       continue;
@@ -560,6 +687,12 @@ async function runQueuedCasualtySync(): Promise<QueueSyncResult> {
 
     if (result.issue) {
       issues.push(result.issue);
+      if (
+        result.issue.reason ===
+        "Queued casualty has no selected incident."
+      ) {
+        skipped += 1;
+      }
     }
 
     if (result.item) {
@@ -567,7 +700,7 @@ async function runQueuedCasualtySync(): Promise<QueueSyncResult> {
     }
   }
 
-  await writeQueue(remaining);
+  await replaceOwnedQueue(queue, ownerUserId, remaining);
 
   return {
     synced,

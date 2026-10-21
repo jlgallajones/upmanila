@@ -681,16 +681,56 @@ type CreateCasualtyResponse = {
   };
 };
 
+const casualtySubmissionRetryDelaysMs = [750, 1500];
+
+function isRetryableCasualtySubmissionError(error: unknown): boolean {
+  const message =
+    error instanceof Error ? error.message.toLowerCase() : "";
+
+  return (
+    message.includes("network") ||
+    message.includes("timeout") ||
+    message.includes("connection") ||
+    message.includes("internet") ||
+    message.includes("failed to fetch")
+  );
+}
+
+function waitForCasualtySubmissionRetry(delayMs: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
 export async function createCasualty(
   payload: CreateCasualtyPayload,
 ): Promise<CreateCasualtyResponse> {
-  const response =
-    await api.post<CreateCasualtyResponse>(
-      "/casualties",
-      payload,
-    );
+  for (
+    let attempt = 0;
+    attempt <= casualtySubmissionRetryDelaysMs.length;
+    attempt += 1
+  ) {
+    try {
+      const response =
+        await api.post<CreateCasualtyResponse>(
+          "/casualties",
+          payload,
+        );
 
-  return response.data;
+      return response.data;
+    } catch (error) {
+      const retryDelay = casualtySubmissionRetryDelaysMs[attempt];
+
+      if (
+        retryDelay === undefined ||
+        !isRetryableCasualtySubmissionError(error)
+      ) {
+        throw error;
+      }
+
+      await waitForCasualtySubmissionRetry(retryDelay);
+    }
+  }
+
+  throw new Error("Unable to submit victim record.");
 }
 
 export type UpdateCasualtyPayload = {
