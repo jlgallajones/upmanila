@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -44,7 +45,11 @@ import {
   type CreateCasualtyPayload,
   type UpdateCasualtyPayload,
 } from "../../api/casualties";
-import { uploadAttachment } from "../../api/attachments";
+import {
+  getAttachments,
+  uploadAttachment,
+  type Attachment,
+} from "../../api/attachments";
 import { isAuthenticationTokenError } from "../../api/client";
 import {
   createIncident,
@@ -96,6 +101,7 @@ const COLORS = createThemePalette({
   secondaryText: "#7D889E",
   muted: "#A5ADBB",
   green: "#2E7D4F",
+  primaryDark: "#005B63",
 });
 
 const AMP_RESPONDER_FULL_LABEL =
@@ -1803,6 +1809,7 @@ type FinalDisposition =
 type SubmissionFeedback = {
   title: string;
   message: string;
+  tone?: "success" | "error";
   onCloseRoute?: string;
   resetOnClose?: boolean;
 };
@@ -4922,6 +4929,27 @@ function getTriageColorButtonStyle(value: string) {
   }
 }
 
+function getTriageColorInactiveStyle(value: string) {
+  switch (value) {
+    case "green":
+      return styles.finalTriageGreenInactive;
+    case "yellow":
+      return styles.finalTriageYellowInactive;
+    case "orange":
+      return styles.finalTriageOrangeInactive;
+    case "red":
+      return styles.finalTriageRedInactive;
+    case "black":
+      return styles.finalTriageBlackInactive;
+    case "blue":
+      return styles.finalTriageBlueInactive;
+    case "white":
+      return styles.finalTriageWhiteInactive;
+    default:
+      return null;
+  }
+}
+
 function getTriageColorTextStyle(value: string) {
   return value === "yellow" || value === "orange" || value === "white"
     ? styles.finalTriageYellowText
@@ -5637,6 +5665,13 @@ const [
   const [selectedPcrPhotos, setSelectedPcrPhotos] = useState<
     SelectedPhoto[]
   >([]);
+  const [existingAttachments, setExistingAttachments] = useState<
+    Attachment[]
+  >([]);
+  const [
+    isExistingAttachmentsVisible,
+    setIsExistingAttachmentsVisible,
+  ] = useState(false);
 
   const [photoTarget, setPhotoTarget] =
   useState<PhotoTarget>("casualty");
@@ -7144,6 +7179,8 @@ const victimCodeAlreadyExists = useMemo(() => {
 
     async function loadEditableRecord() {
       if (!casualtyId) {
+        setExistingAttachments([]);
+        setIsExistingAttachmentsVisible(false);
         setIsLoadingRecord(false);
         return;
       }
@@ -7152,11 +7189,17 @@ const victimCodeAlreadyExists = useMemo(() => {
         setIsLoadingRecord(true);
         setLoadError(null);
 
-        const [record, triageHistory, transportHistory] =
+        const [
+          record,
+          triageHistory,
+          transportHistory,
+          attachmentData,
+        ] =
           await Promise.all([
             getCasualty(casualtyId),
             getCasualtyTriageHistory(casualtyId),
             getCasualtyTransportHistory(casualtyId),
+            getAttachments(casualtyId),
           ]);
 
         if (isMounted) {
@@ -7178,6 +7221,7 @@ const victimCodeAlreadyExists = useMemo(() => {
            setInitialFacilityEncounterSignature(
              getFacilityEncounterFormSignature(mappedForm),
            );
+          setExistingAttachments(attachmentData);
         }
       } catch (error) {
         console.error("Failed to load victim for editing:", error);
@@ -7873,6 +7917,25 @@ function handleTriageAssessmentDone() {
     if (feedback?.resetOnClose !== false) {
       resetForNextCasualty();
     }
+  }
+
+  function showSubmissionError(
+    title: string,
+    error: unknown,
+    fallbackMessage: string,
+  ) {
+    const message =
+      error instanceof Error && error.message.trim()
+        ? error.message
+        : fallbackMessage;
+
+    setValidationWarning(message);
+    setSubmissionFeedback({
+      title,
+      message,
+      tone: "error",
+      resetOnClose: false,
+    });
   }
 
   function getCasualtyDraftTitle(): string {
@@ -11642,11 +11705,10 @@ async function ensureResponderSafetyResponseSaved() {
             resetOnClose: shouldResetPendingDepartureForm ? false : undefined,
           });
         } catch (error) {
-          Alert.alert(
+          showSubmissionError(
             "Unable to save offline",
-            error instanceof Error
-              ? error.message
-              : "Please try saving the record again.",
+            error,
+            "Please try saving the record again.",
           );
         } finally {
           setIsSubmitting(false);
@@ -11676,11 +11738,10 @@ async function ensureResponderSafetyResponseSaved() {
                 : undefined,
             });
           } catch (error) {
-            Alert.alert(
+            showSubmissionError(
               "Unable to save offline",
-              error instanceof Error
-                ? error.message
-                : "Please try saving the record again.",
+              error,
+              "Please try saving the record again.",
             );
           } finally {
             setIsSubmitting(false);
@@ -11762,8 +11823,21 @@ async function ensureResponderSafetyResponseSaved() {
         console.error("Failed to submit victim:", error);
 
         if (isNetworkSubmissionError(error)) {
-          await queueCurrentCasualtySubmission();
-          await clearLoadedDraftAfterSave();
+          try {
+            await queueCurrentCasualtySubmission();
+            await clearLoadedDraftAfterSave();
+          } catch (queueError) {
+            console.error(
+              "Failed to queue victim after network failure:",
+              queueError,
+            );
+            showSubmissionError(
+              "Unable to submit victim",
+              queueError,
+              "The connection failed and the victim could not be saved offline. Please keep this form open and try again.",
+            );
+            return;
+          }
 
           if (shouldResetPendingDepartureForm) {
             resetForNextCasualty();
@@ -11779,31 +11853,41 @@ async function ensureResponderSafetyResponseSaved() {
         }
 
         if (isAuthenticationTokenError(error)) {
-          await queueCurrentCasualtySubmission();
-          await clearLoadedDraftAfterSave();
+          try {
+            await queueCurrentCasualtySubmission();
+            await clearLoadedDraftAfterSave();
+          } catch (queueError) {
+            console.error(
+              "Failed to queue victim after authentication failure:",
+              queueError,
+            );
+            showSubmissionError(
+              "Unable to save victim",
+              queueError,
+              "Your session expired and the victim could not be queued offline. Please keep this form open and try again after signing in.",
+            );
+            return;
+          }
 
           if (shouldResetPendingDepartureForm) {
             resetForNextCasualty();
           }
 
-          Alert.alert(
-            "Session expired",
-            "The victim record was submitted offline and queued on this device. Please log in again, then sync queued records.",
-            [
-              {
-                text: "OK",
-                onPress: () => router.replace("/login"),
-              },
-            ],
-          );
+          setSubmissionFeedback({
+            title: "Session expired",
+            message:
+              "The victim record was submitted offline and queued on this device. Please sign in again, then sync queued records.",
+            tone: "error",
+            onCloseRoute: "/login",
+            resetOnClose: false,
+          });
           return;
         }
 
-        Alert.alert(
+        showSubmissionError(
           "Unable to submit victim",
-          error instanceof Error
-            ? error.message
-            : "Please review the record and try again.",
+          error,
+          "Please review the record and try again.",
         );
       } finally {
         setIsSubmitting(false);
@@ -11839,24 +11923,21 @@ async function ensureResponderSafetyResponseSaved() {
       console.error("Failed to update victim:", error);
 
       if (isAuthenticationTokenError(error)) {
-        Alert.alert(
-          "Session expired",
-          "Please log in again, then try saving the victim update again.",
-          [
-            {
-              text: "OK",
-              onPress: () => router.replace("/login"),
-            },
-          ],
-        );
+        setSubmissionFeedback({
+          title: "Session expired",
+          message:
+            "Please sign in again, then try saving the victim update again.",
+          tone: "error",
+          onCloseRoute: "/login",
+          resetOnClose: false,
+        });
         return;
       }
 
-      Alert.alert(
+      showSubmissionError(
         "Unable to save changes",
-        error instanceof Error
-          ? error.message
-          : "Please review the record and try again.",
+        error,
+        "Please review the record and try again.",
       );
     } finally {
       setIsSubmitting(false);
@@ -13539,6 +13620,13 @@ function renderAppendixQuestion(question: AppendixQuestion) {
                 )
               : null;
 
+          const finalTriageColorInactiveStyle =
+            isFinalTriageQuestion &&
+            !isAssistedMode &&
+            !selected
+              ? getTriageColorInactiveStyle(option.value)
+              : null;
+
           const finalTriageDisabled =
             isFinalTriageQuestion &&
             isAssistedMode;
@@ -13564,6 +13652,8 @@ function renderAppendixQuestion(question: AppendixQuestion) {
 
                 finalTriageColorStyle,
 
+                finalTriageColorInactiveStyle,
+
                 finalTriageDisabled &&
                   !selected &&
                   finalTriageColorStyle &&
@@ -13585,6 +13675,7 @@ function renderAppendixQuestion(question: AppendixQuestion) {
                   styles.appendixOptionText,
 
                   isFinalTriageQuestion &&
+                    selected &&
                     finalTriageColorStyle &&
                     getTriageColorTextStyle(
                       option.value,
@@ -14974,44 +15065,79 @@ if (
     );
   }
 
-  function renderCasualtyPhotoAttachmentCard() {
+  function renderExistingAttachmentsAction() {
+    if (!isEditing) {
+      return null;
+    }
+
     return (
       <Pressable
-        onPress={() => {
-          void handlePickPhoto();
-        }}
+        onPress={() => setIsExistingAttachmentsVisible(true)}
         style={({ pressed }) => [
-          styles.uploadCard,
+          styles.viewAttachmentsButton,
           pressed && styles.pressed,
         ]}
+        accessibilityRole="button"
+        accessibilityLabel="View attached photos"
       >
-        <View style={styles.uploadIcon}>
-          <Ionicons
-            name="camera-outline"
-            size={25}
-            color={COLORS.text}
-          />
-        </View>
-
-        <View style={styles.uploadTextWrapper}>
-          <Text style={styles.uploadTitle}>
-            {selectedPhoto
-              ? "Victim photo selected"
-              : "Add victim photo (optional)"}
-          </Text>
-          <Text style={styles.uploadDescription}>
-            {selectedPhoto
-              ? `${selectedPhoto.fileName} - uploads when saved.`
-              : "Select or capture a photo to upload with this record."}
-          </Text>
-        </View>
-
+        <Ionicons
+          name="images-outline"
+          size={18}
+          color={COLORS.primary}
+        />
+        <Text style={styles.viewAttachmentsButtonText}>
+          View attached photos ({existingAttachments.length})
+        </Text>
         <Ionicons
           name="chevron-forward-outline"
-          size={20}
+          size={18}
           color={COLORS.secondaryText}
         />
       </Pressable>
+    );
+  }
+
+  function renderCasualtyPhotoAttachmentCard() {
+    return (
+      <View style={styles.uploadCard}>
+        <Pressable
+          onPress={() => {
+            void handlePickPhoto();
+          }}
+          style={({ pressed }) => [
+            styles.uploadCardMain,
+            pressed && styles.pressed,
+          ]}
+        >
+          <View style={styles.uploadIcon}>
+            <Ionicons
+              name="camera-outline"
+              size={25}
+              color={COLORS.text}
+            />
+          </View>
+
+          <View style={styles.uploadTextWrapper}>
+            <Text style={styles.uploadTitle}>
+              {selectedPhoto
+                ? "Victim photo selected"
+                : "Add victim photo (optional)"}
+            </Text>
+            <Text style={styles.uploadDescription}>
+              {selectedPhoto
+                ? `${selectedPhoto.fileName} - uploads when saved.`
+                : "Select or capture a photo to upload with this record."}
+            </Text>
+          </View>
+
+          <Ionicons
+            name="chevron-forward-outline"
+            size={20}
+            color={COLORS.secondaryText}
+          />
+        </Pressable>
+        {renderExistingAttachmentsAction()}
+      </View>
     );
   }
 
@@ -15022,47 +15148,163 @@ if (
       .join(", ");
 
     return (
-      <Pressable
-        onPress={() => {
-          handlePickPhoto("pcr");
-        }}
-        style={({ pressed }) => [
-          styles.uploadCard,
-          pressed && styles.pressed,
-        ]}
-      >
-        <View style={styles.uploadIcon}>
+      <View style={styles.uploadCard}>
+        <Pressable
+          onPress={() => {
+            handlePickPhoto("pcr");
+          }}
+          style={({ pressed }) => [
+            styles.uploadCardMain,
+            pressed && styles.pressed,
+          ]}
+        >
+          <View style={styles.uploadIcon}>
+            <Ionicons
+              name="document-attach-outline"
+              size={25}
+              color={COLORS.text}
+            />
+          </View>
+
+          <View style={styles.uploadTextWrapper}>
+            <Text style={styles.uploadTitle}>
+              {photoCount > 0
+                ? `${photoCount} Patient Care Report photo${photoCount === 1 ? "" : "s"} selected`
+                : "Attach Patient Care Report photo(s)"}
+            </Text>
+
+            <Text style={styles.uploadDescription}>
+              {photoCount > 0
+                ? `${fileNames} - uploads when saved. Tap to add more.`
+                : "Capture or import one or more photos of the currently used Patient Care Report."}
+            </Text>
+          </View>
+
           <Ionicons
-            name="document-attach-outline"
-            size={25}
-            color={COLORS.text}
+            name="chevron-forward-outline"
+            size={20}
+            color={COLORS.secondaryText}
           />
-        </View>
-
-        <View style={styles.uploadTextWrapper}>
-          <Text style={styles.uploadTitle}>
-            {photoCount > 0
-              ? `${photoCount} Patient Care Report photo${photoCount === 1 ? "" : "s"} selected`
-              : "Attach Patient Care Report photo(s)"}
-          </Text>
-
-          <Text style={styles.uploadDescription}>
-            {photoCount > 0
-              ? `${fileNames} - uploads when saved. Tap to add more.`
-              : "Capture or import one or more photos of the currently used Patient Care Report."}
-          </Text>
-        </View>
-
-        <Ionicons
-          name="chevron-forward-outline"
-          size={20}
-          color={COLORS.secondaryText}
-        />
-      </Pressable>
+        </Pressable>
+        {renderExistingAttachmentsAction()}
+      </View>
     );
   }
 
+  function renderExistingAttachmentsModal() {
+    return (
+      <Modal
+        visible={isExistingAttachmentsVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsExistingAttachmentsVisible(false)}
+      >
+        <View style={styles.attachmentsBackdrop}>
+          <View style={styles.attachmentsCard}>
+            <View style={styles.attachmentsHeader}>
+              <View style={styles.attachmentsHeaderText}>
+                <Text style={styles.attachmentsTitle}>
+                  Attached photos
+                </Text>
+                <Text style={styles.attachmentsSubtitle}>
+                  Photos already uploaded for this victim record.
+                </Text>
+              </View>
 
+              <Pressable
+                onPress={() => setIsExistingAttachmentsVisible(false)}
+                style={({ pressed }) => [
+                  styles.sheetCloseButton,
+                  pressed && styles.pressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Close attached photos"
+              >
+                <Ionicons
+                  name="close"
+                  size={20}
+                  color={COLORS.secondaryText}
+                />
+              </Pressable>
+            </View>
+
+            <ScrollView
+              contentContainerStyle={styles.attachmentsList}
+              showsVerticalScrollIndicator={false}
+            >
+              {existingAttachments.length === 0 ? (
+                <View style={styles.attachmentsEmptyState}>
+                  <Ionicons
+                    name="images-outline"
+                    size={34}
+                    color={COLORS.secondaryText}
+                  />
+                  <Text style={styles.attachmentsEmptyTitle}>
+                    No attached photos
+                  </Text>
+                  <Text style={styles.attachmentsEmptyText}>
+                    Add a photo from the attachment section to upload it with this record.
+                  </Text>
+                </View>
+              ) : (
+                existingAttachments.map((attachment) => {
+                  const isImage =
+                    attachment.mime_type?.startsWith("image/") ?? false;
+
+                  return (
+                    <View
+                      key={attachment.id}
+                      style={styles.existingAttachmentRow}
+                    >
+                      {isImage && attachment.signed_url ? (
+                        <Image
+                          source={{ uri: attachment.signed_url }}
+                          style={styles.existingAttachmentImage}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={styles.existingAttachmentIcon}>
+                          <Ionicons
+                            name="document-attach-outline"
+                            size={24}
+                            color={COLORS.primary}
+                          />
+                        </View>
+                      )}
+
+                      <View style={styles.existingAttachmentInfo}>
+                        <Text
+                          style={styles.existingAttachmentName}
+                          numberOfLines={2}
+                        >
+                          {attachment.file_name}
+                        </Text>
+                        <Text style={styles.existingAttachmentMeta}>
+                          {isImage ? "Photo" : "Attachment"}
+                        </Text>
+                      </View>
+                    </View>
+                  );
+                })
+              )}
+            </ScrollView>
+
+            <Pressable
+              onPress={() => setIsExistingAttachmentsVisible(false)}
+              style={({ pressed }) => [
+                styles.attachmentsCloseButton,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={styles.attachmentsCloseButtonText}>
+                Done
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+    );
+  }
 
   function renderCurrentStep() {
     switch (stepName) {
@@ -15530,6 +15772,8 @@ if (
   </View>
 </Modal>
 
+      {renderExistingAttachmentsModal()}
+
       <ChoiceSheet
         visible={activeChoiceSheet !== null}
         title={getChoiceSheetTitle()}
@@ -15589,9 +15833,19 @@ if (
       >
         <View style={styles.feedbackBackdrop}>
           <View style={styles.feedbackCard}>
-            <View style={styles.feedbackIcon}>
+            <View
+              style={[
+                styles.feedbackIcon,
+                submissionFeedback?.tone === "error" &&
+                  styles.feedbackErrorIcon,
+              ]}
+            >
               <Ionicons
-                name="checkmark-circle-outline"
+                name={
+                  submissionFeedback?.tone === "error"
+                    ? "alert-circle-outline"
+                    : "checkmark-circle-outline"
+                }
                 size={30}
                 color={COLORS.white}
               />
@@ -15745,6 +15999,9 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     backgroundColor: COLORS.green,
     marginBottom: 14,
+  },
+  feedbackErrorIcon: {
+    backgroundColor: "#C62828",
   },
   feedbackTitle: {
     color: COLORS.text,
@@ -16547,7 +16804,7 @@ triageModeOptionTextSelected: {
     flexBasis: "48%",
     flexGrow: 0,
     minWidth: "48%",
-    borderColor: "rgba(255,255,255,0.72)",
+    borderColor: COLORS.fieldBorder,
   },
   finalTriageOptionInactive: {
     opacity: 0.4,
@@ -16557,8 +16814,41 @@ triageModeOptionTextSelected: {
     backgroundColor: COLORS.warningBackground,
   },
   finalTriageOptionSelected: {
-    borderWidth: 2,
-    borderColor: COLORS.text,
+    borderWidth: 3,
+    borderColor: COLORS.primaryDark,
+    shadowColor: COLORS.primaryDark,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.24,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  finalTriageGreenInactive: {
+    backgroundColor: "rgba(46, 125, 79, 0.12)",
+    borderColor: "rgba(46, 125, 79, 0.48)",
+  },
+  finalTriageYellowInactive: {
+    backgroundColor: "rgba(244, 197, 66, 0.16)",
+    borderColor: "rgba(174, 132, 0, 0.48)",
+  },
+  finalTriageOrangeInactive: {
+    backgroundColor: "rgba(243, 156, 18, 0.14)",
+    borderColor: "rgba(190, 106, 0, 0.48)",
+  },
+  finalTriageRedInactive: {
+    backgroundColor: "rgba(198, 40, 40, 0.12)",
+    borderColor: "rgba(198, 40, 40, 0.48)",
+  },
+  finalTriageBlackInactive: {
+    backgroundColor: "rgba(31, 41, 51, 0.14)",
+    borderColor: "rgba(31, 41, 51, 0.52)",
+  },
+  finalTriageBlueInactive: {
+    backgroundColor: "rgba(29, 78, 216, 0.12)",
+    borderColor: "rgba(29, 78, 216, 0.48)",
+  },
+  finalTriageWhiteInactive: {
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.fieldBorder,
   },
   finalTriageGreen: {
     backgroundColor: "#2E7D4F",
@@ -16791,13 +17081,17 @@ triageModeOptionTextSelected: {
 
   uploadCard: {
     minHeight: 82,
-    flexDirection: "row",
-    alignItems: "center",
     borderWidth: 1,
     borderColor: COLORS.fieldBorder,
     borderRadius: 14,
     paddingHorizontal: 14,
+    paddingVertical: 12,
     backgroundColor: COLORS.fieldBackground,
+  },
+  uploadCardMain: {
+    minHeight: 56,
+    flexDirection: "row",
+    alignItems: "center",
   },
   uploadIcon: {
     width: 45,
@@ -16821,6 +17115,135 @@ triageModeOptionTextSelected: {
     fontSize: 11,
     lineHeight: 16,
     marginTop: 5,
+  },
+  viewAttachmentsButton: {
+    minHeight: 40,
+    flexDirection: "row",
+    alignItems: "center",
+    borderTopWidth: 1,
+    borderTopColor: COLORS.fieldBorder,
+    marginTop: 10,
+    paddingTop: 10,
+    gap: 8,
+  },
+  viewAttachmentsButtonText: {
+    flex: 1,
+    color: COLORS.primary,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  attachmentsBackdrop: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+    backgroundColor: "rgba(23,33,58,0.52)",
+  },
+  attachmentsCard: {
+    width: "100%",
+    maxWidth: 460,
+    maxHeight: "82%",
+    borderRadius: 18,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 14,
+    backgroundColor: COLORS.surface,
+  },
+  attachmentsHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+  attachmentsHeaderText: {
+    flex: 1,
+  },
+  attachmentsTitle: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: "900",
+  },
+  attachmentsSubtitle: {
+    color: COLORS.secondaryText,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 4,
+  },
+  attachmentsList: {
+    paddingVertical: 16,
+    gap: 10,
+  },
+  existingAttachmentRow: {
+    minHeight: 76,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderWidth: 1,
+    borderColor: COLORS.fieldBorder,
+    borderRadius: 12,
+    padding: 8,
+    backgroundColor: COLORS.fieldBackground,
+  },
+  existingAttachmentImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 9,
+    backgroundColor: COLORS.surface,
+  },
+  existingAttachmentIcon: {
+    width: 60,
+    height: 60,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 9,
+    backgroundColor: COLORS.surface,
+  },
+  existingAttachmentInfo: {
+    flex: 1,
+  },
+  existingAttachmentName: {
+    color: COLORS.text,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  existingAttachmentMeta: {
+    color: COLORS.secondaryText,
+    fontSize: 11,
+    marginTop: 5,
+  },
+  attachmentsEmptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 28,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: COLORS.fieldBorder,
+    borderRadius: 13,
+    backgroundColor: COLORS.fieldBackground,
+  },
+  attachmentsEmptyTitle: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: "900",
+    marginTop: 9,
+  },
+  attachmentsEmptyText: {
+    color: COLORS.secondaryText,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 5,
+    textAlign: "center",
+  },
+  attachmentsCloseButton: {
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+    backgroundColor: COLORS.primary,
+  },
+  attachmentsCloseButtonText: {
+    color: COLORS.white,
+    fontSize: 13,
+    fontWeight: "900",
   },
 
   reviewCard: {

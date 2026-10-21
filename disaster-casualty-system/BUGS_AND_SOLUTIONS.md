@@ -914,6 +914,22 @@ The database migration is `api/sql/add-incident-acting-ic-delegation.sql`. Apply
 
 **Status:** Implemented.
 
+## 109. Existing Casualty Attachments Needed To Be Viewable During Editing
+
+**Problem:** When adding more photos to an existing casualty record, the edit workflow showed only newly selected photos. Previously uploaded attachments were not visible, so users could not confirm which photos were already attached.
+
+**Solution:** The mobile add/edit casualty screen now loads the existing attachment list for the record and provides a **View attached photos** action in both the victim-photo and Patient Care Report photo sections. The viewer displays image thumbnails, filenames, attachment type, and an empty state when no attachments exist. New photo selection and upload behavior remains unchanged.
+
+**Status:** Implemented.
+
+## 110. Victim Submission Could Stop Without Visible Failure Feedback
+
+**Problem:** In some mobile/PWA submission failures, the loading state stopped without a reliable visible explanation. Native alert behavior was not dependable in every runtime, and a failure inside the offline queue fallback could escape the user-facing error path.
+
+**Solution:** Victim submission failures now use the in-app feedback dialog and keep the form data intact so the responder can retry. Network and expired-session fallback queue operations are wrapped so queue failures are reported as well. Successful offline queueing continues to show the queued status and directs the responder to sign in and synchronize when required. Error feedback uses a distinct warning icon and danger color instead of the success styling.
+
+**Status:** Implemented.
+
 ## Verification Instructions
 
 Run these commands from the repository root in PowerShell:
@@ -945,3 +961,6 @@ Manual Acting IC acceptance test:
 11. Review **Action Logs** and confirm entries for backup designation, delegation, and resumed ownership.
 12. While the delegation is active, open **Incident Analytics** in the Acting IC workspace and confirm that only the delegated incident is shown and its analytics load.
 13. Confirm that a direct analytics request for an unrelated incident returns HTTP 403 for the Acting IC user.
+14. Open an existing casualty record for editing, confirm **View attached photos** is available, and verify that previously uploaded photos are visible before adding more.
+15. Disable the API or switch the device to offline mode, submit a completed victim form, and confirm the spinner stops with a visible queued result; the record should be available for synchronization.
+16. Simulate an offline queue failure, submit a completed victim form, and confirm an error dialog appears, the submission does not silently stop, and the form remains available for retry.
