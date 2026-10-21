@@ -146,7 +146,7 @@ export default function ResetPasswordScreen() {
         <Text style={styles.eyebrow}>Account Recovery</Text>
         <Text style={styles.title}>Create a new password</Text>
         <Text style={styles.subtitle}>
-          Enter a new password for your MedSORT account.
+          Enter a new password for your SCRIBER account.
         </Text>
 
         {successMessage ? (

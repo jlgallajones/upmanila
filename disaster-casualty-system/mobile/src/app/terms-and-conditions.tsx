@@ -5,7 +5,7 @@ export default function TermsAndConditionsScreen() {
     <LegalDocumentScreen
       title="Terms and Conditions"
       updatedAt="October 11, 2026"
-      intro="By using MedSORT, you agree to use the system only for authorized disaster response, casualty documentation, incident management, reporting, and related official duties."
+      intro="By using SCRIBER, you agree to use the system only for authorized disaster responses, casualty documentation, incident management, reporting, and in compliance with the following terms and conditions."
       sections={[
         {
           title: "Authorized Use",
@@ -13,12 +13,12 @@ export default function TermsAndConditionsScreen() {
             "Use only your assigned account and keep credentials confidential.",
             "Access only records necessary for your official role and assigned scope.",
             "Enter accurate, timely, and complete information to the best of your knowledge.",
-            "Do not use MedSORT for personal, unauthorized, or non-operational purposes.",
+            "Do not use SCRIBER for personal, unauthorized, or non-operational purposes.",
           ],
         },
         {
-          title: "Sensitive Information",
-          body: "MedSORT may contain sensitive incident, casualty, healthcare, responder, and operational information. Users must handle all data with care and avoid unauthorized copying, screenshots, exports, or disclosure.",
+          title: "Sensitive",
+          body: "SCRIBER may contain sensitive incident, casualty, healthcare, responder, and operational information. Users must handle all data with care and avoid unauthorized copying, screenshots, exports, or disclosure.",
         },
         {
           title: "Offline and Draft Records",
@@ -39,11 +39,11 @@ export default function TermsAndConditionsScreen() {
         },
         {
           title: "Availability and Changes",
-          body: "MedSORT may be updated, temporarily unavailable, or modified as needed for maintenance, security, operational requirements, or deployment changes.",
+          body: "SCRIBER may be updated, temporarily unavailable, or modified as needed for maintenance, security, operational requirements, or deployment changes. Accounts may be suspended or terminated access to SCRIBER if the terms and conditions are violated or if the user poses risk to the system or to others.",
         },
         {
           title: "Questions",
-          body: "For questions about these terms, contact the system administrator or responsible emergency management office.",
+          body: "For questions about these terms and conditions, you may contact the UP Manila Disaster Risk Reduction and Management in Health Program via upm-drrmh-list@up.edu.ph",
         },
       ]}
     />

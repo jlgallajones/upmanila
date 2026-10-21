@@ -116,6 +116,12 @@ export interface CasualtyTreatmentRecordRequest {
 export interface FacilityEncounterRequest {
   facilityId?: string;
   arrivedAt?: string;
+  preTransportTriageCategory?:
+    | "immediate"
+    | "delayed"
+    | "minimal"
+    | "expectant"
+    | null;
   referredOrTransferred?: boolean | null;
   soughtEdCare?: boolean | null;
   admittedToHospital?: boolean | null;

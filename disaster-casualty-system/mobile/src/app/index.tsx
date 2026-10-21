@@ -220,7 +220,7 @@ export default function LandingScreen() {
           </View>
 
           <Text style={styles.kicker}>Emergency Response</Text>
-          <Text style={styles.title}>MedSORT</Text>
+          <Text style={styles.title}>SCRIBER</Text>
           <Text style={styles.subtitle}>
             Disaster casualty management and triage support for
             authorized responders.
@@ -268,6 +268,14 @@ export default function LandingScreen() {
               <Text style={styles.legalLinkText}>
                 Terms & Conditions
               </Text>
+            </Pressable>
+            <Text style={styles.legalSeparator}>|</Text>
+            <Pressable
+              accessibilityRole="link"
+              onPress={() => router.push("/about-us" as never)}
+              hitSlop={10}
+            >
+              <Text style={styles.legalLinkText}>About Us</Text>
             </Pressable>
           </View>
         </View>

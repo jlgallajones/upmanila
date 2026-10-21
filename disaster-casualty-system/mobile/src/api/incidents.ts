@@ -155,6 +155,7 @@ export type ResponderSafetyResponsePayload = {
   responderArrivalAt: string;
   ppeUsedAt: string;
   responderFunction?: string | null;
+  recordedAt?: string;
 };
 
 export type DisruptionLevel =

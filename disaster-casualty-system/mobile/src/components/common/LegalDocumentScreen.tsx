@@ -73,7 +73,7 @@ export default function LegalDocumentScreen({
 
           <Text style={styles.headerTitle}>{title}</Text>
           <Text style={styles.headerSubtitle}>
-            Draft operational notice. Last updated: {updatedAt}.
+            
           </Text>
         </View>
       </SafeAreaView>

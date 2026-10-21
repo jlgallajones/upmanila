@@ -264,19 +264,18 @@ async function syncResponderSafetyFromDmmpStatus(
 
   const { error } = await supabase
     .from("responder_safety_responses")
-    .upsert(
-      {
-        incident_id: incidentId,
-        responder_id: linkedUserId,
-        safety_status: safetyStatus,
-        responder_arrived_at: responderArrivedAt,
-        ppe_used_at: now,
-        updated_at: now,
-      },
-      {
-        onConflict: "incident_id,responder_id",
-      },
-    );
+    .insert({
+      incident_id: incidentId,
+      responder_id: linkedUserId,
+      safety_status: safetyStatus,
+      responder_arrived_at: responderArrivedAt,
+      ppe_used_at: now,
+      updated_at: now,
+    });
+
+  if (error?.code === "23505") {
+    return;
+  }
 
   if (error) {
     throw new Error(
@@ -2533,6 +2532,7 @@ export async function saveResponderSafetyResponse(
     let safetyStatus: string | null | undefined;
     let responderArrivalAt: string | null | undefined;
     let ppeUsedAt: string | null | undefined;
+    let recordedAt: string | null | undefined;
 
     try {
       safetyStatus = parseSafetyActionStatus(
@@ -2548,6 +2548,11 @@ export async function saveResponderSafetyResponse(
       ppeUsedAt = parseNullableDate(
         request.body.ppeUsedAt,
         "ppeUsedAt",
+      );
+
+      recordedAt = parseNullableDate(
+        request.body.recordedAt,
+        "recordedAt",
       );
     } catch (validationError) {
       response.status(400).json({
@@ -2599,22 +2604,72 @@ export async function saveResponderSafetyResponse(
       responder_arrived_at: responderArrivalAt,
       ppe_used_at: ppeUsedAt,
 
-      recorded_at: now,
+      recorded_at: recordedAt ?? now,
       updated_at: now,
     };
 
-    const { data, error } = await supabase
+    const { data: insertedData, error: insertError } = await supabase
       .from("responder_safety_responses")
-      .upsert(values, {
-        onConflict: "incident_id,responder_id",
-      })
+      .insert(values)
       .select("*")
       .single();
 
-    if (error || !data) {
+    let data = insertedData;
+
+    if (insertError?.code === "23505") {
+      const { data: existing, error: existingError } = await supabase
+        .from("responder_safety_responses")
+        .select("*")
+        .eq("incident_id", incidentId)
+        .eq("responder_id", authenticatedUser.id)
+        .single();
+
+      if (existingError || !existing) {
+        throw new Error(
+          `Unable to retrieve the original responder safety response: ${
+            existingError?.message ?? "Unknown database error"
+          }`,
+        );
+      }
+
+      const existingRecordedAt = new Date(
+        String(existing.recorded_at ?? ""),
+      ).getTime();
+      const incomingRecordedAt = new Date(values.recorded_at).getTime();
+
+      if (
+        Number.isFinite(existingRecordedAt) &&
+        Number.isFinite(incomingRecordedAt) &&
+        incomingRecordedAt < existingRecordedAt
+      ) {
+        const { data: earlierData, error: earlierError } = await supabase
+          .from("responder_safety_responses")
+          .update({
+            ...values,
+            updated_at: now,
+          })
+          .eq("incident_id", incidentId)
+          .eq("responder_id", authenticatedUser.id)
+          .gt("recorded_at", values.recorded_at)
+          .select("*")
+          .maybeSingle();
+
+        if (earlierError) {
+          throw new Error(
+            `Unable to retain the earliest responder safety response: ${earlierError.message}`,
+          );
+        }
+
+        data = earlierData;
+      }
+
+      data ??= existing;
+    }
+
+    if ((insertError && insertError.code !== "23505") || !data) {
       throw new Error(
         `Unable to save responder safety response: ${
-          error?.message ?? "Unknown database error"
+          insertError?.message ?? "Unknown database error"
         }`,
       );
     }

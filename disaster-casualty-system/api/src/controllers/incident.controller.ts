@@ -359,6 +359,7 @@ type FacilityEncounterRow = {
   casualty_incident_id: string;
   facility_id: string | null;
   arrived_at: string | null;
+  pre_transport_triage_category?: string | null;
   ed_admitted_at?: string | null;
   ed_departed_at?: string | null;
   referred_or_transferred: boolean | null;
@@ -5108,7 +5109,7 @@ export async function getIncidentAnalyticsSummary(
         ? await supabase
             .from("facility_encounters")
             .select(
-              "casualty_incident_id, facility_id, arrived_at, sought_ed_care, admitted_to_hospital, ed_admitted_at, ed_departed_at, hospital_admitted_at, hospital_discharged_at, created_at",
+              "casualty_incident_id, facility_id, arrived_at, pre_transport_triage_category, sought_ed_care, admitted_to_hospital, ed_admitted_at, ed_departed_at, hospital_admitted_at, hospital_discharged_at, created_at",
             )
             .in("casualty_incident_id", casualtyIncidentIds)
             .order("created_at", { ascending: true })
@@ -5135,6 +5136,18 @@ export async function getIncidentAnalyticsSummary(
       (treatmentResult.data ?? []) as TreatmentRecordRow[];
     const encounterRows =
       (encounterResult.data ?? []) as FacilityEncounterRow[];
+    const preTransportTriageByCasualty = new Map<string, string>();
+
+    for (const row of encounterRows) {
+      const category = row.pre_transport_triage_category?.trim();
+
+      if (category) {
+        preTransportTriageByCasualty.set(
+          row.casualty_incident_id,
+          category,
+        );
+      }
+    }
     const responderSafety =
       (responderSafetyResult.data as ResponderSafetyReportRow | null) ??
       null;
@@ -5211,9 +5224,12 @@ export async function getIncidentAnalyticsSummary(
         latestTriageByCasualty.get(casualtyIncidentId),
       );
     const facilityCategoryForCasualty = (casualtyIncidentId: string) =>
-      getAnalyticsTriageCategory(
-        latestFacilityTriageByCasualty.get(casualtyIncidentId) ??
-          latestTriageByCasualty.get(casualtyIncidentId),
+      normalizeAnalyticsTriageCategory(
+        preTransportTriageByCasualty.get(casualtyIncidentId) ??
+          getAnalyticsTriageCategory(
+            latestFacilityTriageByCasualty.get(casualtyIncidentId) ??
+              latestTriageByCasualty.get(casualtyIncidentId),
+          ),
       );
     const countTriageRowsByCategory = (rows: TriageAssessmentRow[]) =>
       countBy(rows, (row) => getAnalyticsTriageCategory(row));

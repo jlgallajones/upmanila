@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "MedSORT",
+    "name": "SCRIBER",
     "slug": "mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -24,8 +24,8 @@
     "web": {
       "output": "static",
       "favicon": "./assets/images/medsort.png",
-      "name": "MedSORT",
-      "shortName": "MedSORT",
+      "name": "SCRIBER",
+      "shortName": "SCRIBER",
       "themeColor": "#242424",
       "backgroundColor": "#FAFAFA"
     },

@@ -1,4 +1,4 @@
-# DCMS Desktop Admin Dashboard
+# SCRIBER Desktop Admin Dashboard
 
 This folder contains a standalone desktop web dashboard for admin users.
 

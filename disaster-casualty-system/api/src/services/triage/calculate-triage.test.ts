@@ -30,6 +30,15 @@ const cases = [
     expected: "immediate",
   },
   {
+    name: "STIEVE special population overrides walking status",
+    system: "stieve",
+    answers: {
+      specialPopulation: true,
+      canWalkOrNoVisibleInjuries: true,
+    },
+    expected: "immediate",
+  },
+  {
     name: "STIEVE walking wounded or no visible injuries is minimal",
     system: "stieve",
     answers: {
@@ -128,6 +137,64 @@ const cases = [
       canWalk: true,
     },
     expected: "delayed",
+  },
+  {
+    name: "SIEVE walking injured patient is delayed",
+    system: "sieve",
+    answers: {
+      canWalk: true,
+      injury: "present",
+    },
+    expected: "delayed",
+  },
+  {
+    name: "SIEVE walking patient without injury is minimal",
+    system: "sieve",
+    answers: {
+      canWalk: true,
+      injury: "absent",
+    },
+    expected: "minimal",
+  },
+  {
+    name: "SIEVE non-breathing patient without airway breathing is expectant",
+    system: "sieve",
+    answers: {
+      canWalk: false,
+      respirations: "absent",
+      breathingAfterAirwayManagement: false,
+    },
+    expected: "expectant",
+  },
+  {
+    name: "SIEVE respiratory rate 30 or above is immediate",
+    system: "sieve",
+    answers: {
+      canWalk: false,
+      respirations: "more_than_or_equal_to_30",
+    },
+    expected: "immediate",
+  },
+  {
+    name: "SIEVE pulse over 120 is immediate",
+    system: "sieve",
+    answers: {
+      canWalk: false,
+      respirations: "eleven_to_twenty_nine",
+      heartRate: "more_than_120",
+    },
+    expected: "immediate",
+  },
+  {
+    name: "SIEVE capillary refill over two seconds is immediate",
+    system: "sieve",
+    answers: {
+      canWalk: false,
+      respirations: "eleven_to_twenty_nine",
+      heartRate: "less_than_120",
+      capillaryRefill: "more_than_2_seconds",
+    },
+    expected: "immediate",
   },
   {
     name: "JumpSTART absent breathing and no pulse is expectant",

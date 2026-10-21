@@ -232,7 +232,7 @@ export default function LoginScreen() {
 
             <View style={styles.headerTextWrapper}>
               <Text style={styles.portalText}>
-                MEDSORT RESPONDER PORTAL
+                SCRIBER RESPONDER PORTAL
               </Text>
 
               <Text style={styles.headerTitle}>
@@ -263,8 +263,9 @@ export default function LoginScreen() {
               },
             ]}
           >
-            Sign in with your official responder credentials to
-            access MedSORT casualty and incident tools.
+            Sign in with your official responder credentials to use SCRIBER,
+            the Standardized Casualty Reporting for Incidents and Basic
+            Emergency Response platform.
           </Text>
 
           <View style={styles.formGroup}>
@@ -492,7 +493,7 @@ export default function LoginScreen() {
             ]}
           >
             <Text style={styles.loginButtonText}>
-              {isSubmitting ? "Signing in..." : "Sign in to MedSORT"}
+              {isSubmitting ? "Signing in..." : "Sign in to SCRIBER"}
             </Text>
           </Pressable>
 
@@ -513,6 +514,14 @@ export default function LoginScreen() {
               <Text style={[styles.legalLinkText, { color: colors.primary }]}>
                 Terms & Conditions
               </Text>
+            </Pressable>
+            <Text style={[styles.legalSeparator, { color: colors.textSecondary }]}>|</Text>
+            <Pressable
+              accessibilityRole="link"
+              onPress={() => router.push("/about-us" as never)}
+              hitSlop={10}
+            >
+              <Text style={[styles.legalLinkText, { color: colors.primary }]}>About Us</Text>
             </Pressable>
           </View>
 

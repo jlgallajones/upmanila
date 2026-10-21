@@ -18,6 +18,7 @@ function AppStack() {
         <Stack.Screen name="reset-password" />
         <Stack.Screen name="privacy-policy" />
         <Stack.Screen name="terms-and-conditions" />
+        <Stack.Screen name="about-us" />
 
         <Stack.Screen
           name="(tabs)"

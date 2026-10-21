@@ -946,6 +946,30 @@ The database migration is `api/sql/add-incident-acting-ic-delegation.sql`. Apply
 
 **Status:** Implemented.
 
+## 113. STIEVE Special-Population Walking Result Was Green
+
+**Problem:** In assisted STIEVE triage, selecting both **Special population** and **Walking / no visible injuries** allowed the walking rule to run first. The result was saved and displayed as **Minimal/green**, even though special-population cases must remain **Immediate/red**.
+
+**Solution:** STIEVE now evaluates **Special population** before the walking rule in both the API calculator and the mobile assisted-assessment calculator. A regression test confirms that special population overrides walking and returns `immediate`, which maps to the red triage result.
+
+**Status:** Implemented.
+
+## 114. Offline Responder Safety Entries Could Be Repeated Or Overwritten
+
+**Problem:** Offline responders could press the safety, arrival-time, and PPE-use controls repeatedly because the fields did not lock locally. The offline queue also did not retain the responder-safety response separately from the victim record, and the backend used an upsert that could replace the first entry with a later synchronized entry.
+
+**Solution:** Offline casualty queue items now retain the responder's safety status, responder arrival time, PPE-use time, and responder function. Synchronization sends that response before creating the casualty record. The API now uses first-entry-wins behavior for each incident and responder: the first valid response is inserted, while duplicate submissions return the original response without changing its safety status or timestamps. Existing online locking behavior remains unchanged.
+
+**Status:** Implemented.
+
+## 115. SIEVE Was Missing From Field Responder Triage Systems
+
+**Problem:** The SIEVE algorithm and calculator were present in the project, but SIEVE was not available in the Field Responder's primary-triage system selector. Field Responders therefore could not choose the SIEVE assisted assessment shown in the requested flow.
+
+**Solution:** Added SIEVE to the primary and Field Responder triage-system options. The existing assisted SIEVE assessment now covers walking/injury status, airway response, respiratory-rate thresholds, pulse rate, and capillary refill, with results mapped to the platform's triage categories: minimal/green, delayed/yellow, immediate/red, and expectant/black. Regression tests now cover the main SIEVE decision paths.
+
+**Status:** Implemented.
+
 ## Verification Instructions
 
 Run these commands from the repository root in PowerShell:

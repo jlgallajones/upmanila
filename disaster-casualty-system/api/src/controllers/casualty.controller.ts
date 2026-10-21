@@ -134,6 +134,13 @@ const facilityDispositions = [
 
 const deathStages = ["impact", "prehospital", "in_hospital"];
 
+const facilityPreTransportTriageCategories = [
+  "immediate",
+  "delayed",
+  "minimal",
+  "expectant",
+];
+
 const finalDispositions = [
   "alive",
   "deceased",
@@ -581,6 +588,12 @@ type LatestFacilityEncounterSummary = {
   alternative_icu_used: boolean | null;
 
   disposition: string;
+  pre_transport_triage_category:
+    | "immediate"
+    | "delayed"
+    | "minimal"
+    | "expectant"
+    | null;
   created_at: string;
 };
 
@@ -712,7 +725,7 @@ async function attachLatestSummaries<
     supabase
       .from("facility_encounters")
       .select(
-        "casualty_incident_id, facility_id, arrived_at, ed_admitted_at, ed_departed_at, referred_or_transferred, sought_ed_care, admitted_to_hospital, discharged_home, ed_resuscitation_started_at, surgical_intervention_started_at, surgical_intervention_ended_at, operating_room_started_at, xray_required, xray_performed_at, ultrasound_required, ultrasound_performed_at, ct_required, ct_performed_at, hospital_admitted_at, hospital_discharged_at, icu_admitted_at, icu_discharged_at, mechanical_ventilation_required, ventilation_started_at, ventilation_ended_at, alternative_icu_used, disposition, created_at",
+        "casualty_incident_id, facility_id, arrived_at, pre_transport_triage_category, ed_admitted_at, ed_departed_at, referred_or_transferred, sought_ed_care, admitted_to_hospital, discharged_home, ed_resuscitation_started_at, surgical_intervention_started_at, surgical_intervention_ended_at, operating_room_started_at, xray_required, xray_performed_at, ultrasound_required, ultrasound_performed_at, ct_required, ct_performed_at, hospital_admitted_at, hospital_discharged_at, icu_admitted_at, icu_discharged_at, mechanical_ventilation_required, ventilation_started_at, ventilation_ended_at, alternative_icu_used, disposition, created_at",
       )
       
       .in("casualty_incident_id", recordIds)
@@ -1243,6 +1256,20 @@ function validateFacilityEncounter(
     return false;
   }
 
+  if (
+    facilityEncounter.preTransportTriageCategory !== undefined &&
+    facilityEncounter.preTransportTriageCategory !== null &&
+    !facilityPreTransportTriageCategories.includes(
+      facilityEncounter.preTransportTriageCategory,
+    )
+  ) {
+    response.status(400).json({
+      success: false,
+      message: "Invalid pre-transport triage category.",
+    });
+    return false;
+  }
+
   const arrivedAt = facilityEncounter.arrivedAt
     ? new Date(facilityEncounter.arrivedAt)
     : null;
@@ -1631,6 +1658,8 @@ async function insertFacilityEncounter(
       casualty_incident_id: casualtyIncidentId,
       facility_id: facilityEncounter.facilityId,
       arrived_at: facilityEncounter.arrivedAt ?? null,
+      pre_transport_triage_category:
+        facilityEncounter.preTransportTriageCategory ?? null,
       ed_admitted_at: facilityEncounter.edAdmittedAt ?? null,
       ed_departed_at: facilityEncounter.edDepartedAt ?? null,
       referred_or_transferred:

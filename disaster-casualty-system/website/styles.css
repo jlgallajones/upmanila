@@ -79,6 +79,37 @@
   background: rgba(255, 123, 123, 0.18);
 }
 
+:root[data-theme="dark"] .profile-reset-panel {
+  color: var(--ink);
+  border-color: rgba(255, 184, 108, 0.42);
+  background: linear-gradient(180deg, rgba(255, 184, 108, 0.12), var(--surface-raised));
+}
+
+:root[data-theme="dark"] .profile-reset-panel.system-reset {
+  border-color: rgba(255, 123, 123, 0.42);
+  background: linear-gradient(180deg, rgba(255, 123, 123, 0.12), var(--surface-raised));
+}
+
+:root[data-theme="dark"] .profile-reset-panel.admin-reset {
+  border-color: rgba(255, 184, 108, 0.42);
+  background: linear-gradient(180deg, rgba(255, 184, 108, 0.12), var(--surface-raised));
+}
+
+:root[data-theme="dark"] .profile-reset-panel h3 {
+  color: var(--orange);
+}
+
+:root[data-theme="dark"] .profile-reset-panel .panel-subtitle,
+:root[data-theme="dark"] .profile-reset-panel .reset-safety-list {
+  color: var(--muted);
+}
+
+:root[data-theme="dark"] .profile-reset-panel .reset-scope-badge {
+  color: var(--orange);
+  background: rgba(255, 184, 108, 0.12);
+  border-color: rgba(255, 184, 108, 0.34);
+}
+
 :root[data-theme="dark"] .status-message.error,
 :root[data-theme="dark"] .pill.red {
   color: var(--red);
@@ -3639,18 +3670,20 @@ tbody tr:hover td {
   align-content: center;
   gap: 9px;
   min-width: 0;
-  width: 100%;
+  width: fit-content;
+  max-width: 100%;
 }
 
 .analytics-pie-legend-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: 12px minmax(110px, max-content) max-content;
+  align-items: start;
+  justify-content: start;
+  column-gap: 8px;
   color: var(--muted);
   font-size: 12px;
   font-weight: 850;
   line-height: 1.35;
-  white-space: normal;
 }
 
 .analytics-pie-legend-row i {
@@ -3663,9 +3696,9 @@ tbody tr:hover td {
 
 .analytics-pie-legend-row strong {
   color: var(--ink);
-  margin-left: auto;
-  text-align: right;
-  white-space: normal;
+  margin-left: 8px;
+  text-align: left;
+  white-space: nowrap;
 }
 
 .analytics-axis-chart {

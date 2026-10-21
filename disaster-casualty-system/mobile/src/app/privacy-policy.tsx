@@ -5,7 +5,7 @@ export default function PrivacyPolicyScreen() {
     <LegalDocumentScreen
       title="Privacy Policy"
       updatedAt="October 11, 2026"
-      intro="MedSORT supports disaster casualty management, responder coordination, incident analytics, and official situation reporting. This policy explains the information handled by the system and the expected safeguards for authorized users."
+      intro="SCRIBER supports disaster casualty management, responder coordination, incident analytics, and official situation reporting. This policy explains the information handled by the system and the expected safeguards for authorized users."
       sections={[
         {
           title: "Information We Collect",

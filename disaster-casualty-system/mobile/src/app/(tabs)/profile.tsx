@@ -381,7 +381,7 @@ export default function ProfileScreen() {
 
     Alert.alert(
       "Log out",
-      "Are you sure you want to log out from MedSORT?",
+      "Are you sure you want to log out from SCRIBER?",
       [
         {
           text: "Cancel",
@@ -407,7 +407,7 @@ export default function ProfileScreen() {
   };
 
   const fullName =
-    user?.full_name ?? "MedSORT User";
+    user?.full_name ?? "SCRIBER User";
 
   const role = user
     ? formatRole(user.role)
@@ -473,7 +473,7 @@ export default function ProfileScreen() {
             </Text>
 
             <Text style={styles.confirmMessage}>
-              Are you sure you want to log out from MedSORT?
+              Are you sure you want to log out from SCRIBER?
             </Text>
 
             <View style={styles.confirmActions}>
@@ -838,7 +838,7 @@ export default function ProfileScreen() {
           <InformationRow
             icon="phone-portrait-outline"
             label="App Version"
-            value={`MedSORT v${appVersion}`}
+            value={`SCRIBER v${appVersion}`}
           />
 
           <InformationRow
@@ -894,13 +894,13 @@ export default function ProfileScreen() {
             {user
               ? isLoggingOut
                 ? "Logging out..."
-                : "Logout from MedSORT"
-              : "Login to MedSORT"}
+                : "Logout from SCRIBER"
+              : "Login to SCRIBER"}
           </Text>
         </Pressable>
 
         <Text style={styles.footerText}>
-          MedSORT
+          SCRIBER
         </Text>
 
         <Text style={styles.footerVersion}>

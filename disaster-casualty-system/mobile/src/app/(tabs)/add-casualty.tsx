@@ -235,6 +235,21 @@ const HOSPITAL_ARRIVAL_DISPOSITION_OPTIONS = [
   "Unknown",
 ] as const;
 
+const HCFD_PRE_TRANSPORT_TRIAGE_OPTIONS = [
+  { label: "Red (Immediate)", value: "immediate" },
+  { label: "Yellow (Delayed)", value: "delayed" },
+  { label: "Green (Minor)", value: "minimal" },
+  { label: "Black (Expectant)", value: "expectant" },
+] as const;
+
+function getHcfdPreTransportTriageLabel(value: string): string {
+  return (
+    HCFD_PRE_TRANSPORT_TRIAGE_OPTIONS.find(
+      (option) => option.value === value,
+    )?.label ?? value
+  );
+}
+
 const ADMITTED_UNIT_OPTIONS = [
   "ICU",
   "Ward",
@@ -312,6 +327,7 @@ const PRIMARY_TRIAGE_SYSTEM_OPTIONS = [
   "START",
   "mSTART",
   "JumpSTART",
+  "SIEVE",
   "Care Flight",
   "SALT",
   "PTT",
@@ -326,6 +342,7 @@ const FIELD_RESPONDER_TRIAGE_SYSTEM_OPTIONS = [
   "START",
   "mSTART",
   "JumpSTART",
+  "SIEVE",
   "Care Flight",
   "SALT",
   "PTT",
@@ -1445,6 +1462,7 @@ type ChoiceSheetName =
   | "emsVehicleType"
   | "transferPrecaution"
   | "releaseLiabilityAccepted"
+  | "preTransportTriageCategory"
   | "dispositionUponHospitalArrival"
   | "resuscitationRoomUsed"
   | "surgicalInterventionRequired"
@@ -1567,6 +1585,7 @@ type FormState = {
   arrivedSceneTime: string;
   departedSceneTime: string;
   arrivedFacilityTime: string;
+  preTransportTriageCategory: string;
   transportNotes: string;
 
   treatmentStrategy: string;
@@ -1722,6 +1741,7 @@ const initialForm: FormState = {
   arrivedSceneTime: "",
   departedSceneTime: "",
   arrivedFacilityTime: "",
+  preTransportTriageCategory: "",
   transportNotes: "",
 
   treatmentStrategy: "",
@@ -2262,16 +2282,16 @@ function calculateStieveTriage(
   answers: Record<string, unknown>,
 ): TriageCategory {
   if (
+    readAssessmentBoolean(answers, "specialPopulation") === true
+  ) {
+    return "immediate";
+  }
+
+  if (
     readAssessmentBoolean(answers, "canWalkOrNoVisibleInjuries") ===
       true
   ) {
     return "minimal";
-  }
-
-  if (
-    readAssessmentBoolean(answers, "specialPopulation") === true
-  ) {
-    return "immediate";
   }
 
   if (
@@ -4167,6 +4187,7 @@ function getFacilityEncounterFormSignature(form: FormState): string {
   return JSON.stringify({
     facilityId: form.healthcareFacilityId.trim(),
     arrivedAt: parseDateTimeInput(form.arrivedFacilityTime) ?? "",
+    preTransportTriageCategory: form.preTransportTriageCategory.trim(),
     transferredOut: normalizeTransferredOut(form.transferredOutOfHospital),
     soughtEdCare: normalizeYesNoUnknown(form.soughtEdCare),
     admittedAfterEd: normalizeYesNoUnknown(form.admittedAfterEd),
@@ -4509,6 +4530,9 @@ triageAssessmentAnswers: Object.fromEntries(
           new Date(latestTransport.arrived_facility_at),
         )
       : "",
+    preTransportTriageCategory: valueOrEmpty(
+      record.latest_facility_encounter?.pre_transport_triage_category,
+    ),
     transportNotes: valueOrEmpty(latestTransport?.notes),
 
     treatmentStrategy: "",
@@ -6213,6 +6237,12 @@ const victimCodeAlreadyExists = useMemo(() => {
     return {
       facilityId: form.healthcareFacilityId,
       arrivedAt: parseDateTimeInput(form.arrivedFacilityTime),
+      preTransportTriageCategory:
+        (form.preTransportTriageCategory.trim() as
+          | "immediate"
+          | "delayed"
+          | "minimal"
+          | "expectant") || undefined,
       referredOrTransferred,
       soughtEdCare: soughtEdCare ?? (hasFacilityCare ? true : null),
       admittedToHospital: isHospitalUnitAdmission
@@ -8986,6 +9016,14 @@ if (
           return false;
         }
 
+        if (!form.preTransportTriageCategory.trim()) {
+          Alert.alert(
+            "Pre-transport triage required",
+            "Select the triage category before transport to the healthcare facility.",
+          );
+          return false;
+        }
+
         if (
           form.disasterPlanActivationTime.trim() &&
           !getValidDateTimeInput(form.disasterPlanActivationTime)
@@ -10900,6 +10938,8 @@ if (
         return "Transfer Precaution";
       case "releaseLiabilityAccepted":
         return "Release of Liability";
+      case "preTransportTriageCategory":
+        return "Triage Before Transport to Healthcare Facility";
       case "dispositionUponHospitalArrival":
         return "Disposition Upon Hospital Arrival";
       case "resuscitationRoomUsed":
@@ -11130,6 +11170,14 @@ if (
           selected: form.releaseLiabilityAccepted === option,
           onSelect: () =>
             updateField("releaseLiabilityAccepted", option),
+        }));
+
+      case "preTransportTriageCategory":
+        return HCFD_PRE_TRANSPORT_TRIAGE_OPTIONS.map((option) => ({
+          label: option.label,
+          selected: form.preTransportTriageCategory === option.value,
+          onSelect: () =>
+            updateField("preTransportTriageCategory", option.value),
         }));
 
       case "dispositionUponHospitalArrival":
@@ -11700,12 +11748,28 @@ async function ensureResponderSafetyResponseSaved() {
         facilityEncounter: facilityEncounterPayload,
         casualtyOutcome: casualtyOutcomePayload,
       };
+      const queuedResponderSafetyResponse =
+        (isFieldResponderFlow || isSaResponderFlow) && form.incidentId
+          ? {
+              safetyStatus:
+                normalizeResponderSafetyStatusForApi(
+                  form.responderSafetyStatus,
+                ),
+              responderArrivalAt:
+                parseDateTimeInput(form.responderArrivalTime) ?? "",
+              ppeUsedAt: parseDateTimeInput(form.ppeUseTime) ?? "",
+              responderFunction: isFieldResponderFlow
+                ? "field_responder"
+                : "sa_responder",
+            }
+          : undefined;
       const queueCurrentCasualtySubmission = async () => {
         const attachments = await getQueuedPhotoAttachments();
 
         await queueCasualtySubmission(queuedPayload, {
           attachments,
           ownerUserId: currentUserId,
+          responderSafetyResponse: queuedResponderSafetyResponse,
         });
       };
 
@@ -11723,7 +11787,7 @@ async function ensureResponderSafetyResponseSaved() {
           setSubmissionFeedback({
             title: "Submitted offline",
             message:
-              "The victim record was submitted offline and queued on this device. Log in from Profile later to sync queued records to MedSORT.",
+              "The victim record was submitted offline and queued on this device. Log in from Profile later to sync queued records to SCRIBER.",
             resetOnClose: shouldResetPendingDepartureForm ? false : undefined,
           });
         } catch (error) {
@@ -12402,6 +12466,17 @@ function confirmExitAddCasualty() {
               "arrivedFacilityTime",
               formatDateTimeForInput(new Date()),
             )
+          }
+        />
+
+        <SelectField
+          label="TRIAGE BEFORE TRANSPORT TO HEALTHCARE FACILITY"
+          value={getHcfdPreTransportTriageLabel(
+            form.preTransportTriageCategory,
+          )}
+          placeholder="Select triage category"
+          onPress={() =>
+            openChoiceSheet("preTransportTriageCategory")
           }
         />
 

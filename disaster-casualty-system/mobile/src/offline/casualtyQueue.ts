@@ -6,6 +6,10 @@ import {
 } from "../api/casualties";
 import { uploadAttachment } from "../api/attachments";
 import {
+  saveResponderSafetyResponse,
+  type ResponderSafetyResponsePayload,
+} from "../api/incidents";
+import {
   getAccessToken,
   getCurrentUserId,
 } from "../auth/session";
@@ -31,6 +35,8 @@ export type QueuedCasualtyAttachment = {
   fileSizeBytes?: number;
 };
 
+export type QueuedResponderSafetyResponse = ResponderSafetyResponsePayload;
+
 export type QueuedCasualtySyncStatus =
   | "pending"
   | "syncing"
@@ -46,6 +52,7 @@ export type QueuedCasualtySubmission = {
   attempts: number;
   lastError?: string;
   attachments?: QueuedCasualtyAttachment[];
+  responderSafetyResponse?: QueuedResponderSafetyResponse;
   syncedCasualtyIncidentId?: string;
 };
 
@@ -94,6 +101,7 @@ function normalizeQueueItem(
     attachments: Array.isArray(item.attachments)
       ? item.attachments
       : [],
+    responderSafetyResponse: item.responderSafetyResponse,
     syncedCasualtyIncidentId: item.syncedCasualtyIncidentId,
   };
 }
@@ -255,6 +263,7 @@ export async function queueCasualtySubmission(
   options: {
     attachments?: QueuedCasualtyAttachment[];
     ownerUserId?: string | null;
+    responderSafetyResponse?: QueuedResponderSafetyResponse;
   } = {},
 ): Promise<void> {
   const queue = await readQueue();
@@ -275,6 +284,7 @@ export async function queueCasualtySubmission(
       status: "pending",
       attempts: 0,
       attachments: options.attachments ?? [],
+      responderSafetyResponse: options.responderSafetyResponse,
     },
   ]);
 }
@@ -419,6 +429,20 @@ async function syncQueueItem(
   let casualtyIncidentId = item.syncedCasualtyIncidentId;
 
   try {
+    if (
+      !casualtyIncidentId &&
+      item.responderSafetyResponse &&
+      item.payload.incidentId
+    ) {
+      await saveResponderSafetyResponse(
+        item.payload.incidentId,
+        {
+          ...item.responderSafetyResponse,
+          recordedAt: item.createdAt,
+        },
+      );
+    }
+
     if (!casualtyIncidentId) {
       const response = await createCasualty({
         ...item.payload,

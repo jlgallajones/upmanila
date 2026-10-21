@@ -79,12 +79,12 @@ function scoreSortValue(
 function calculateStieveTriage(
   answers: Record<string, unknown>,
 ): TriageCategory {
-  if (readBoolean(answers, "canWalkOrNoVisibleInjuries") === true) {
-    return "minimal";
-  }
-
   if (readBoolean(answers, "specialPopulation") === true) {
     return "immediate";
+  }
+
+  if (readBoolean(answers, "canWalkOrNoVisibleInjuries") === true) {
+    return "minimal";
   }
 
   if (

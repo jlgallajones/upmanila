@@ -5,7 +5,7 @@ export default function Root({ children }: PropsWithChildren) {
   return (
     <html lang="en">
       <head>
-        <title>MedSORT</title>
+        <title>SCRIBER</title>
         <meta charSet="utf-8" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
         <meta
@@ -15,7 +15,7 @@ export default function Root({ children }: PropsWithChildren) {
         <meta name="theme-color" content="#242424" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-title" content="MedSORT" />
+        <meta name="apple-mobile-web-app-title" content="SCRIBER" />
         <meta
           name="apple-mobile-web-app-status-bar-style"
           content="black-translucent"

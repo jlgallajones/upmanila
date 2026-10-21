@@ -217,7 +217,8 @@ const state = {
   incidents: [],
   allIncidents: [],
   expandedIncidentId: null,
-  analyticsIncidentId: null,
+  analyticsIncidentId:
+    localStorage.getItem("dcms.admin.analyticsIncidentId") || null,
   activeIncidentSectionModal: null,
   incidentManagementDetails: {},
   loadingIncidentManagementId: null,
@@ -1544,7 +1545,7 @@ function buildSitrepFileName({
   generatedAt,
   extension,
 }) {
-  return `SITREP-${officeName || "DCMS"}-${incidentName || "Incident"}-${formatSitrepFileDate(generatedAt)}.${extension}`;
+  return `SITREP-${officeName || "SCRIBER"}-${incidentName || "Incident"}-${formatSitrepFileDate(generatedAt)}.${extension}`;
 }
 
 function getUserFriendlyMessage(
@@ -2474,7 +2475,7 @@ function render() {
 
 function renderAnimatedMedSortLogo() {
   return `
-    <div class="medsort-logo-motion" aria-label="MedSort animated logo">
+    <div class="medsort-logo-motion" aria-label="SCRIBER animated logo">
       <img class="login-medsort-logo" src="./assets/medsort-login-base.png" alt="" />
       <span class="medsort-logo-ball medsort-logo-ball-yellow"></span>
       <span class="medsort-logo-ball medsort-logo-ball-green"></span>
@@ -2496,8 +2497,8 @@ function renderLoginLanding() {
         </div>
         ${renderAnimatedMedSortLogo()}
         <span class="prelogin-kicker">Administrator Portal</span>
-        <h1 id="preloginLandingTitle">medSORT</h1>
-        <p>Emergency response information platform for incident oversight, SitReps, and casualty operations.</p>
+        <h1 id="preloginLandingTitle">SCRIBER</h1>
+        <p>Standardized Casualty Reporting for Incidents and Basic Emergency Response.</p>
         <button id="continueToLoginButton" class="prelogin-continue-button" type="button">
           Continue
         </button>
@@ -2520,6 +2521,8 @@ function renderLegalLinks() {
       <a href="./privacy-policy.html">Privacy Policy</a>
       <span aria-hidden="true">|</span>
       <a href="./terms-and-conditions.html">Terms &amp; Conditions</a>
+      <span aria-hidden="true">|</span>
+      <a href="./about-us.html">About Us</a>
     </nav>
   `;
 }
@@ -2574,8 +2577,8 @@ function renderLogin() {
           </div>
 
           <div class="landing-title">
-            <h1>medSORT</h1>
-            <p>Emergency Response Information Platform</p>
+            <h1>SCRIBER</h1>
+            <p>Standardized Casualty Reporting for Incidents and Basic Emergency Response</p>
           </div>
         </div>
       </section>
@@ -2583,7 +2586,7 @@ function renderLogin() {
       <section class="login-pane">
         <form id="loginForm" class="login-card">
           <span class="eyebrow">Administrator Portal</span>
-          <h2>Sign in to medSORT</h2>
+          <h2>Sign in to SCRIBER</h2>
           <p>Use an active super admin or admin account to manage official incidents, facilities, SitReps, and system oversight.</p>
 
           <div class="form-grid">
@@ -2661,9 +2664,9 @@ function renderDashboardShell() {
     <div class="app-shell ${state.sidebarCollapsed ? "sidebar-collapsed" : ""}">
       <aside class="sidebar">
         <div class="sidebar-title">
-          <img class="sidebar-mark" src="./assets/medsort.png" alt="MedSort" />
+          <img class="sidebar-mark" src="./assets/medsort.png" alt="SCRIBER" />
           <div class="sidebar-brand-text">
-            <strong>medSort Portal</strong>
+            <strong>SCRIBER Portal</strong>
             <span>${isSuperAdmin() ? "Super Admin Portal" : unitUserRolesForWeb.includes(state.user?.role) ? "Acting IC Workspace" : "Admin Portal"}</span>
           </div>
           <button
@@ -3118,7 +3121,7 @@ function bindExportDownloadActions() {
 
     button.addEventListener("click", async () => {
       const path = button.dataset.exportDownload;
-      const fileName = button.dataset.exportFile || "dcms-export.csv";
+      const fileName = button.dataset.exportFile || "scriber-export.csv";
 
       if (!path) return;
 
@@ -3417,6 +3420,19 @@ function getSelectedAnalyticsIncident() {
   );
 }
 
+function setAnalyticsIncidentId(incidentId) {
+  state.analyticsIncidentId = incidentId || null;
+
+  if (state.analyticsIncidentId) {
+    localStorage.setItem(
+      "dcms.admin.analyticsIncidentId",
+      state.analyticsIncidentId,
+    );
+  } else {
+    localStorage.removeItem("dcms.admin.analyticsIncidentId");
+  }
+}
+
 function getSelectedAnalyticsIncidentId() {
   return getSelectedAnalyticsIncident()?.id ?? "";
 }
@@ -3526,12 +3542,12 @@ function bindIncidentAnalyticsActions() {
   const adminScopeSelect = qs("#analyticsAdminScopeFilter");
 
   if (selectedIncidentId && state.analyticsIncidentId !== selectedIncidentId) {
-    state.analyticsIncidentId = selectedIncidentId;
+    setAnalyticsIncidentId(selectedIncidentId);
   }
 
   if (select && !isActingIcAnalyticsView()) {
     select.addEventListener("change", async () => {
-      state.analyticsIncidentId = select.value;
+      setAnalyticsIncidentId(select.value);
 
       if (!state.incidentManagementDetails[select.value]) {
         await loadIncidentManagementDetails(select.value);
@@ -3546,7 +3562,7 @@ function bindIncidentAnalyticsActions() {
     adminScopeSelect.addEventListener("change", async () => {
       state.analyticsAdminScopeFilter = adminScopeSelect.value || "all";
       const nextIncident = getSelectedAnalyticsIncident();
-      state.analyticsIncidentId = nextIncident?.id ?? null;
+      setAnalyticsIncidentId(nextIncident?.id ?? null);
 
       if (nextIncident?.id && !state.incidentManagementDetails[nextIncident.id]) {
         await loadIncidentManagementDetails(nextIncident.id);
@@ -3607,7 +3623,7 @@ function bindIncidentHistoryActions() {
       const incidentId = button.dataset.viewIncidentAnalytics;
       if (!incidentId) return;
 
-      state.analyticsIncidentId = incidentId;
+      setAnalyticsIncidentId(incidentId);
       setActiveView(
         unitUserRolesForWeb.includes(state.user?.role)
           ? "acting-ic-analytics"
@@ -3741,17 +3757,17 @@ function renderSuperAdminHome() {
           {
             label: "Export responders/documenters CSV",
             path: "/exports/responders-documenters.csv",
-            fileName: "dcms-responders-documenters.csv",
+            fileName: "scriber-responders-documenters.csv",
           },
           {
             label: "Export healthcare facilities CSV",
             path: "/exports/healthcare-facilities.csv",
-            fileName: "dcms-healthcare-facilities.csv",
+            fileName: "scriber-healthcare-facilities.csv",
           },
           {
             label: "Download system backup JSON",
             path: "/exports/system-backup.json",
-            fileName: "dcms-system-backup.json",
+            fileName: "scriber-system-backup.json",
             className: "secondary-button",
           },
         ],
@@ -6133,7 +6149,7 @@ function renderRegistrationShell() {
   return `
     <section class="panel">
       <h2>Account registration</h2>
-      <p class="panel-subtitle">Create command accounts with Supabase Auth login and a matching MedSORT user profile.</p>
+      <p class="panel-subtitle">Create command accounts with Supabase Auth login and a matching SCRIBER user profile.</p>
       <form id="registerAdminForm" class="form-grid" style="margin-top:14px">
         <div class="form-grid two">
           <label class="field"><span>Full name</span><input name="fullName" required placeholder="Account holder full name" /></label>
@@ -6284,7 +6300,7 @@ function renderAdminUnitRegistration() {
           class="ghost-button mini"
           type="button"
           data-export-download="/exports/responders-documenters.csv"
-          data-export-file="dcms-responders-documenters.csv"
+          data-export-file="scriber-responders-documenters.csv"
         >
           Export FR/AMP/HCFD CSV
         </button>
@@ -6360,7 +6376,7 @@ function renderSuperAdminAccountRecords() {
           class="ghost-button mini"
           type="button"
           data-export-download="/exports/responders-documenters.csv"
-          data-export-file="dcms-responders-documenters.csv"
+          data-export-file="scriber-responders-documenters.csv"
         >
           Export FR/AMP/HCFD CSV
         </button>
@@ -13948,7 +13964,7 @@ function renderFacilityCreator() {
           class="ghost-button mini"
           type="button"
           data-export-download="/exports/healthcare-facilities.csv"
-          data-export-file="dcms-healthcare-facilities.csv"
+          data-export-file="scriber-healthcare-facilities.csv"
         >
           Export CSV
         </button>

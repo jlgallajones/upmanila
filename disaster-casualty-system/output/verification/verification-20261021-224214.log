@@ -1,0 +1,140 @@
+DCMS VERIFICATION RUN
+Started: 2026-10-21T22:42:14.0476638+08:00
+Root: C:\Users\jlgallajones\upmanila\disaster-casualty-system
+[RUN ] API TypeScript typecheck
+       Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\api
+       Command: npm.cmd run typecheck
+
+> disaster-casualty-api@1.0.0 typecheck
+> tsc --noEmit
+
+[PASS] API TypeScript typecheck (exit code 0)
+[RUN ] API production build
+       Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\api
+       Command: npm.cmd run build
+
+> disaster-casualty-api@1.0.0 build
+> tsc
+
+[PASS] API production build (exit code 0)
+[RUN ] Incident analytics tests
+       Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\api
+       Command: npm.cmd run test:analytics
+
+> disaster-casualty-api@1.0.0 test:analytics
+> tsc && node dist/services/analytics/incident-analytics.test.js
+
+Incident analytics calculation tests passed.
+[PASS] Incident analytics tests (exit code 0)
+[RUN ] Triage calculation and accuracy tests
+       Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\api
+       Command: npm.cmd run test:triage
+
+> disaster-casualty-api@1.0.0 test:triage
+> tsc && node dist/services/triage/calculate-triage.test.js && node dist/services/triage/triage-accuracy.test.js
+
+Triage calculation tests passed (38).
+Triage accuracy tests passed.
+[PASS] Triage calculation and accuracy tests (exit code 0)
+[RUN ] Mobile TypeScript typecheck
+       Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\mobile
+       Command: npm.cmd exec tsc -- --noEmit
+src/app/index.tsx(275,42): error TS2345: Argument of type '"/about-us"' is not assignable to parameter of type '"/incidents" | "/notifications" | RelativePathString | ExternalPathString | "/account-management" | `/account-management?${string}` | `/account-management#${string}` | "/action-logs" | ... 85 more ... | { ...; }'.
+src/screens/auth/LoginScreen.tsx(521,42): error TS2345: Argument of type '"/about-us"' is not assignable to parameter of type '"/incidents" | "/notifications" | RelativePathString | ExternalPathString | "/account-management" | `/account-management?${string}` | `/account-management#${string}` | "/action-logs" | ... 85 more ... | { ...; }'.
+[FAIL] Mobile TypeScript typecheck (exit code 2)
+[RUN ] Mobile/PWA web export
+       Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\mobile
+       Command: npm.cmd run build:web
+
+> mobile@1.0.0 build:web
+> expo export --platform web
+
+env: load .env
+env: export EXPO_PUBLIC_API_URL
+Using src/app as the root directory for Expo Router.
+React Compiler enabled
+Starting Metro Bundler
+
+Static rendering is enabled. Learn more: https://docs.expo.dev/router/web/static-rendering/
+| (node:14412) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:14412) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:14412) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:14412) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:14412) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+? Bundled 1853ms node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js (1514 modules)
+Web Bundled 2443ms node_modules\expo-router\entry.js (1395 modules)
+
+› web bundles (2):
+_expo/static/css/global-30c341199d6e65a2dfb94ff1ee1395d4.css (551B)
+_expo/static/js/web/entry-0cb89154eecbf4fb0a2bcc69bff5b066.js (3.4MB)
+
+› Static routes (26):
+/home (38KB)
+/ (index) (34KB)
+/login (45KB)
+/drafts (38KB)
+/explore (34KB)
+/profile (38KB)
+/records (38KB)
+/about-us (31KB)
+/_sitemap (37KB)
+/incidents (33KB)
+/+not-found (37KB)
+/action-logs (30KB)
+/(tabs)/home (38KB)
+/add-casualty (38KB)
+/(tabs)/drafts (38KB)
+/notifications (38KB)
+/casualty/[id] (39KB)
+/privacy-policy (46KB)
+/reset-password (40KB)
+/(tabs)/profile (38KB)
+/(tabs)/records (38KB)
+/account-management (34KB)
+/verification-review (39KB)
+/(tabs)/add-casualty (38KB)
+/terms-and-conditions (47KB)
+/(tabs)/notifications (38KB)
+
+Exported: dist
+[PASS] Mobile/PWA web export (exit code 0)
+[RUN ] Web dashboard syntax check
+       Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\website
+       Command: node.exe --check app.js
+[PASS] Web dashboard syntax check (exit code 0)
+[RUN ] Web configuration syntax check
+       Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\website
+       Command: node.exe --check config.js
+[PASS] Web configuration syntax check (exit code 0)
+[RUN ] PWA service worker syntax check
+       Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\mobile
+       Command: node.exe --check public/sw.js
+[PASS] PWA service worker syntax check (exit code 0)
+[RUN ] Repository whitespace check
+       Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system
+       Command: git.exe diff --check
+warning: in the working copy of 'disaster-casualty-system/api/src/controllers/incident-operations.controller.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/api/src/services/triage/calculate-triage.test.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/api/src/services/triage/calculate-triage.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/api/src/types/casualty.types.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/mobile/app.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/mobile/public/manifest.webmanifest', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/mobile/src/api/casualties.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/mobile/src/app/(tabs)/add-casualty.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/mobile/src/app/(tabs)/profile.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/mobile/src/app/_layout.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/mobile/src/app/privacy-policy.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/mobile/src/app/reset-password.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/mobile/src/app/terms-and-conditions.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/mobile/src/offline/casualtyQueue.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/mobile/src/screens/auth/LoginScreen.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/website/index.html', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/website/privacy-policy.html', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/website/styles.css', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/website/terms-and-conditions.html', LF will be replaced by CRLF the next time Git touches it
+[PASS] Repository whitespace check (exit code 0)

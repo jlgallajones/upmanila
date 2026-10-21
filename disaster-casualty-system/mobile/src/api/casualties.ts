@@ -63,6 +63,12 @@ export type CasualtyRecord = {
   facility_id: string;
 
   arrived_at: string | null;
+  pre_transport_triage_category?:
+    | "immediate"
+    | "delayed"
+    | "minimal"
+    | "expectant"
+    | null;
 
   ed_admitted_at: string | null;
   ed_departed_at: string | null;
@@ -422,6 +428,12 @@ export type CasualtyTreatmentRecordPayload = {
 export type FacilityEncounterPayload = {
   facilityId?: string;
   arrivedAt?: string;
+  preTransportTriageCategory?:
+    | "immediate"
+    | "delayed"
+    | "minimal"
+    | "expectant"
+    | null;
   referredOrTransferred?: boolean | null;
   soughtEdCare?: boolean | null;
   admittedToHospital?: boolean | null;

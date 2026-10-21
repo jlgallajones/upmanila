@@ -640,7 +640,7 @@ export default function NotificationsScreen() {
                 ? `ACTIVE NOTICE - ${activeBanner}`
                 : isGuestMode
                   ? "GUEST MODE - login to receive cloud alerts"
-                  : "MedSORT notifications are up to date"}
+                  : "SCRIBER notifications are up to date"}
             </Text>
           </View>
         </View>

@@ -1,4 +1,4 @@
-# DCMS Mobile App Current Status
+# SCRIBER Mobile App Current Status
 
 Last updated: July 31, 2026
 

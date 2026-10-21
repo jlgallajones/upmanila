@@ -1,6 +1,6 @@
 {
-  "name": "MedSORT",
-  "short_name": "MedSORT",
+  "name": "SCRIBER",
+  "short_name": "SCRIBER",
   "description": "Emergency response casualty records and incident management.",
   "start_url": "/",
   "scope": "/",
