@@ -1,0 +1,1112 @@
+[
+  {
+    "name": "attachments",
+    "columns": [
+      "id",
+      "casualty_incident_id",
+      "file_name",
+      "storage_path",
+      "file_type",
+      "mime_type",
+      "file_size_bytes",
+      "uploaded_by",
+      "uploaded_at"
+    ],
+    "sources": [
+      "UP-Manila-DB.sql"
+    ],
+    "definitions": [
+      {
+        "source": "UP-Manila-DB.sql",
+        "sql": "CREATE TABLE public.attachments (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n\n  casualty_incident_id uuid NOT NULL,\n\n  file_name varchar(255) NOT NULL,\n  storage_path text NOT NULL,\n\n  file_type varchar(50) NOT NULL,\n  mime_type varchar(100),\n  file_size_bytes bigint,\n\n  uploaded_by uuid NOT NULL,\n  uploaded_at timestamptz NOT NULL DEFAULT now(),\n\n  CONSTRAINT attachments_casualty_incident_id_fkey\n    FOREIGN KEY (casualty_incident_id)\n    REFERENCES public.casualty_incidents(id)\n    ON DELETE CASCADE,\n\n  CONSTRAINT attachments_uploaded_by_fkey\n    FOREIGN KEY (uploaded_by)\n    REFERENCES public.users(id)\n    ON DELETE RESTRICT,\n\n  CONSTRAINT attachments_file_size_check\n    CHECK (\n      file_size_bytes IS NULL\n      OR file_size_bytes >= 0\n    )\n);"
+      }
+    ]
+  },
+  {
+    "name": "audit_logs",
+    "columns": [
+      "id",
+      "user_id",
+      "action",
+      "entity_type",
+      "entity_id",
+      "previous_data",
+      "new_data",
+      "created_at",
+      "entity_label",
+      "actor_id",
+      "actor_full_name",
+      "actor_role",
+      "scope_admin_id",
+      "metadata"
+    ],
+    "sources": [
+      "UP-Manila-DB.sql",
+      "disaster-casualty-system/api/sql/add-audit-logs.sql"
+    ],
+    "definitions": [
+      {
+        "source": "UP-Manila-DB.sql",
+        "sql": "CREATE TABLE public.audit_logs (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n\n  user_id uuid,\n\n  action varchar(100) NOT NULL,\n  entity_type varchar(100) NOT NULL,\n  entity_id uuid NOT NULL,\n\n  previous_data jsonb,\n  new_data jsonb,\n\n  created_at timestamptz NOT NULL DEFAULT now(),\n\n  CONSTRAINT audit_logs_user_id_fkey\n    FOREIGN KEY (user_id)\n    REFERENCES public.users(id)\n    ON DELETE SET NULL\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/add-audit-logs.sql",
+        "sql": "CREATE TABLE IF NOT EXISTS public.audit_logs (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  action text NOT NULL,\n  entity_type text NOT NULL,\n  entity_id uuid,\n  entity_label text,\n  actor_id uuid REFERENCES public.users(id) ON DELETE SET NULL,\n  actor_full_name text,\n  actor_role text,\n  scope_admin_id uuid REFERENCES public.users(id) ON DELETE SET NULL,\n  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,\n  created_at timestamptz NOT NULL DEFAULT now()\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/add-audit-logs.sql",
+        "sql": "ALTER TABLE public.audit_logs\n  ADD COLUMN IF NOT EXISTS action text,\n  ADD COLUMN IF NOT EXISTS entity_type text,\n  ADD COLUMN IF NOT EXISTS entity_id uuid,\n  ADD COLUMN IF NOT EXISTS entity_label text,\n  ADD COLUMN IF NOT EXISTS actor_id uuid REFERENCES public.users(id) ON DELETE SET NULL,\n  ADD COLUMN IF NOT EXISTS actor_full_name text,\n  ADD COLUMN IF NOT EXISTS actor_role text,\n  ADD COLUMN IF NOT EXISTS scope_admin_id uuid REFERENCES public.users(id) ON DELETE SET NULL,\n  ADD COLUMN IF NOT EXISTS metadata jsonb NOT NULL DEFAULT '{}'::jsonb,\n  ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();"
+      }
+    ]
+  },
+  {
+    "name": "call_down_staff",
+    "columns": [
+      "id",
+      "full_name",
+      "role_position",
+      "contact_number",
+      "assigned_team_unit",
+      "notes",
+      "linked_user_id",
+      "created_by",
+      "is_active",
+      "created_at",
+      "updated_at"
+    ],
+    "sources": [
+      "disaster-casualty-system/api/sql/add-call-down-staff-and-reopen.sql"
+    ],
+    "definitions": [
+      {
+        "source": "disaster-casualty-system/api/sql/add-call-down-staff-and-reopen.sql",
+        "sql": "CREATE TABLE IF NOT EXISTS public.call_down_staff (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  full_name text NOT NULL,\n  role_position text,\n  contact_number text,\n  assigned_team_unit text,\n  notes text,\n  linked_user_id uuid REFERENCES public.users(id) ON DELETE SET NULL,\n  created_by uuid REFERENCES public.users(id) ON DELETE SET NULL,\n  is_active boolean NOT NULL DEFAULT true,\n  created_at timestamptz NOT NULL DEFAULT now(),\n  updated_at timestamptz NOT NULL DEFAULT now()\n);"
+      }
+    ]
+  },
+  {
+    "name": "casualties",
+    "columns": [
+      "id",
+      "id_number",
+      "id_type",
+      "identification_status",
+      "first_name",
+      "middle_name",
+      "last_name",
+      "suffix",
+      "date_of_birth",
+      "estimated_age",
+      "sex",
+      "civil_status",
+      "nationality",
+      "contact_number",
+      "house_street",
+      "barangay",
+      "municipality",
+      "province",
+      "region",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "sources": [
+      "UP-Manila-DB.sql"
+    ],
+    "definitions": [
+      {
+        "source": "UP-Manila-DB.sql",
+        "sql": "CREATE TABLE public.casualties (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n\n  id_number varchar(100),\n  id_type varchar(50),\n\n  identification_status public.identification_status\n    NOT NULL\n    DEFAULT 'identified',\n\n  first_name varchar(100),\n  middle_name varchar(100),\n  last_name varchar(100),\n  suffix varchar(20),\n\n  date_of_birth date,\n  estimated_age integer,\n\n  sex varchar(30),\n  civil_status varchar(50),\n  nationality varchar(100),\n\n  contact_number varchar(30),\n\n  house_street text,\n  barangay varchar(150),\n  municipality varchar(150),\n  province varchar(150),\n  region varchar(150),\n\n  created_at timestamptz NOT NULL DEFAULT now(),\n  updated_at timestamptz NOT NULL DEFAULT now(),\n\n  deleted_at timestamptz,\n\n  CONSTRAINT casualties_estimated_age_check\n    CHECK (\n      estimated_age IS NULL\n      OR estimated_age BETWEEN 0 AND 130\n    ),\n\n  CONSTRAINT casualties_identified_name_check\n    CHECK (\n      identification_status <> 'identified'\n      OR first_name IS NOT NULL\n      OR last_name IS NOT NULL\n    ),\n\n  CONSTRAINT casualties_birth_date_check\n    CHECK (\n      date_of_birth IS NULL\n      OR date_of_birth <= CURRENT_DATE\n    )\n);"
+      }
+    ]
+  },
+  {
+    "name": "casualty_case_links",
+    "columns": [
+      "id",
+      "case_id",
+      "casualty_incident_id",
+      "incident_id",
+      "role",
+      "linked_by",
+      "notes",
+      "linked_at",
+      "created_at"
+    ],
+    "sources": [
+      "disaster-casualty-system/api/sql/add-casualty-case-links.sql"
+    ],
+    "definitions": [
+      {
+        "source": "disaster-casualty-system/api/sql/add-casualty-case-links.sql",
+        "sql": "CREATE TABLE IF NOT EXISTS public.casualty_case_links (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  case_id uuid NOT NULL,\n  casualty_incident_id uuid NOT NULL\n    REFERENCES public.casualty_incidents(id) ON DELETE CASCADE,\n  incident_id uuid NOT NULL\n    REFERENCES public.incidents(id) ON DELETE CASCADE,\n  role text NOT NULL,\n  linked_by uuid REFERENCES public.users(id) ON DELETE SET NULL,\n  notes text,\n  linked_at timestamptz NOT NULL DEFAULT now(),\n  created_at timestamptz NOT NULL DEFAULT now(),\n  UNIQUE (casualty_incident_id),\n  UNIQUE (case_id, role)\n);"
+      }
+    ]
+  },
+  {
+    "name": "casualty_incidents",
+    "columns": [
+      "id",
+      "client_record_id",
+      "casualty_id",
+      "incident_id",
+      "evacuation_center_id",
+      "healthcare_facility_id",
+      "current_status",
+      "severity",
+      "verification_status",
+      "current_location",
+      "hospital_name",
+      "visible_injury",
+      "medical_condition",
+      "assistance_needed",
+      "assistance_provided",
+      "remarks",
+      "encoded_by",
+      "verified_by",
+      "verified_at",
+      "reported_at",
+      "latitude",
+      "longitude",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "sources": [
+      "UP-Manila-DB.sql",
+      "disaster-casualty-system/api/sql/add-casualty-verification-history.sql",
+      "disaster-casualty-system/api/sql/add-healthcare-facilities.sql"
+    ],
+    "definitions": [
+      {
+        "source": "UP-Manila-DB.sql",
+        "sql": "CREATE TABLE public.casualty_incidents (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n\n  client_record_id uuid UNIQUE NOT NULL,\n\n  casualty_id uuid NOT NULL,\n  incident_id uuid NOT NULL,\n  evacuation_center_id uuid,\n  healthcare_facility_id uuid,\n\n  current_status public.casualty_status NOT NULL,\n\n  severity public.casualty_severity\n    NOT NULL\n    DEFAULT 'none',\n\n  verification_status public.verification_status\n    NOT NULL\n    DEFAULT 'submitted',\n\n  current_location text,\n  hospital_name varchar(200),\n\n  visible_injury text,\n  medical_condition text,\n\n  assistance_needed text,\n  assistance_provided text,\n\n  remarks text,\n\n  encoded_by uuid NOT NULL,\n  verified_by uuid,\n  verified_at timestamptz,\n\n  reported_at timestamptz NOT NULL DEFAULT now(),\n\n  latitude decimal(10,7),\n  longitude decimal(10,7),\n\n  created_at timestamptz NOT NULL DEFAULT now(),\n  updated_at timestamptz NOT NULL DEFAULT now(),\n\n  deleted_at timestamptz,\n\n  CONSTRAINT casualty_incidents_casualty_id_fkey\n    FOREIGN KEY (casualty_id)\n    REFERENCES public.casualties(id)\n    ON DELETE RESTRICT,\n\n  CONSTRAINT casualty_incidents_incident_id_fkey\n    FOREIGN KEY (incident_id)\n    REFERENCES public.incidents(id)\n    ON DELETE RESTRICT,\n\n  CONSTRAINT casualty_incidents_evacuation_center_id_fkey\n    FOREIGN KEY (evacuation_center_id)\n    REFERENCES public.evacuation_centers(id)\n    ON DELETE SET NULL,\n\n  CONSTRAINT casualty_incidents_healthcare_facility_id_fkey\n    FOREIGN KEY (healthcare_facility_id)\n    REFERENCES public.healthcare_facilities(id)\n    ON DELETE SET NULL,\n\n  CONSTRAINT casualty_incidents_encoded_by_fkey\n    FOREIGN KEY (encoded_by)\n    REFERENCES public.users(id)\n    ON DELETE RESTRICT,\n\n  CONSTRAINT casualty_incidents_verified_by_fkey\n    FOREIGN KEY (verified_by)\n    REFERENCES public.users(id)\n    ON DELETE SET NULL,\n\n  CONSTRAINT casualty_incidents_person_incident_unique\n    UNIQUE (casualty_id, incident_id),\n\n  CONSTRAINT casualty_incidents_latitude_check\n    CHECK (\n      latitude IS NULL\n      OR latitude BETWEEN -90 AND 90\n    ),\n\n  CONSTRAINT casualty_incidents_longitude_check\n    CHECK (\n      longitude IS NULL\n      OR longitude BETWEEN -180 AND 180\n    ),\n\n  CONSTRAINT casualty_incidents_verification_check\n    CHECK (\n      verification_status <> 'verified'\n      OR verified_by IS NOT NULL\n    )\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/add-casualty-verification-history.sql",
+        "sql": "ALTER TABLE public.casualty_incidents\n  ADD COLUMN IF NOT EXISTS verified_by uuid\n    REFERENCES public.users(id)\n    ON DELETE SET NULL,\n  ADD COLUMN IF NOT EXISTS verified_at timestamptz;"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/add-healthcare-facilities.sql",
+        "sql": "ALTER TABLE public.casualty_incidents\n  ADD COLUMN IF NOT EXISTS healthcare_facility_id uuid\n    REFERENCES public.healthcare_facilities(id)\n    ON DELETE SET NULL;"
+      }
+    ]
+  },
+  {
+    "name": "casualty_outcomes",
+    "columns": [
+      "id",
+      "casualty_incident_id",
+      "reached_hospital",
+      "medical_contact_before_death",
+      "died",
+      "death_stage",
+      "death_at",
+      "final_disposition",
+      "recorded_by",
+      "created_at",
+      "updated_at",
+      "hospital_discharged_at"
+    ],
+    "sources": [
+      "disaster-casualty-system/api/sql/Add morbidity and mortality outcomes.sql",
+      "disaster-casualty-system/api/sql/add-mortality-classification.sql"
+    ],
+    "definitions": [
+      {
+        "source": "disaster-casualty-system/api/sql/Add morbidity and mortality outcomes.sql",
+        "sql": "CREATE TABLE IF NOT EXISTS public.casualty_outcomes (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  casualty_incident_id uuid NOT NULL UNIQUE\n    REFERENCES public.casualty_incidents(id) ON DELETE CASCADE,\n  reached_hospital boolean,\n  medical_contact_before_death boolean,\n  died boolean NOT NULL DEFAULT false,\n  death_stage varchar(30),\n  death_at timestamptz,\n  final_disposition varchar(30),\n  recorded_by uuid\n    REFERENCES public.users(id) ON DELETE SET NULL,\n  created_at timestamptz NOT NULL DEFAULT now(),\n  updated_at timestamptz NOT NULL DEFAULT now()\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/Add morbidity and mortality outcomes.sql",
+        "sql": "ALTER TABLE public.casualty_outcomes\n  ADD COLUMN IF NOT EXISTS casualty_incident_id uuid,\n  ADD COLUMN IF NOT EXISTS reached_hospital boolean,\n  ADD COLUMN IF NOT EXISTS medical_contact_before_death boolean,\n  ADD COLUMN IF NOT EXISTS died boolean DEFAULT false,\n  ADD COLUMN IF NOT EXISTS death_stage varchar(30),\n  ADD COLUMN IF NOT EXISTS death_at timestamptz,\n  ADD COLUMN IF NOT EXISTS final_disposition varchar(30),\n  ADD COLUMN IF NOT EXISTS recorded_by uuid,\n  ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now(),\n  ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/add-mortality-classification.sql",
+        "sql": "CREATE TABLE public.casualty_outcomes (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  casualty_incident_id uuid NOT NULL UNIQUE\n    REFERENCES public.casualty_incidents(id) ON DELETE CASCADE,\n\n  reached_hospital boolean,\n  medical_contact_before_death boolean,\n  died boolean NOT NULL DEFAULT false,\n  death_stage varchar(30),\n  death_at timestamptz,\n  hospital_discharged_at timestamptz,\n  final_disposition varchar(30),\n\n  CONSTRAINT death_stage_check CHECK (\n    death_stage IS NULL OR death_stage IN (\n      'impact',\n      'prehospital',\n      'in_hospital'\n    )\n  )\n);"
+      }
+    ]
+  },
+  {
+    "name": "casualty_status_history",
+    "columns": [
+      "id",
+      "casualty_incident_id",
+      "old_status",
+      "new_status",
+      "severity",
+      "location",
+      "notes",
+      "recorded_by",
+      "recorded_at",
+      "latitude",
+      "longitude",
+      "changed_by",
+      "change_reason",
+      "created_at"
+    ],
+    "sources": [
+      "UP-Manila-DB.sql",
+      "disaster-casualty-system/api/sql/create-casualty-transaction-and-status-history.sql"
+    ],
+    "definitions": [
+      {
+        "source": "UP-Manila-DB.sql",
+        "sql": "CREATE TABLE public.casualty_status_history (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n\n  casualty_incident_id uuid NOT NULL,\n\n  old_status public.casualty_status,\n  new_status public.casualty_status NOT NULL,\n\n  severity public.casualty_severity\n    NOT NULL\n    DEFAULT 'none',\n\n  location text,\n  notes text,\n\n  recorded_by uuid NOT NULL,\n  recorded_at timestamptz NOT NULL DEFAULT now(),\n\n  latitude decimal(10,7),\n  longitude decimal(10,7),\n\n  CONSTRAINT casualty_status_history_incident_id_fkey\n    FOREIGN KEY (casualty_incident_id)\n    REFERENCES public.casualty_incidents(id)\n    ON DELETE CASCADE,\n\n  CONSTRAINT casualty_status_history_recorded_by_fkey\n    FOREIGN KEY (recorded_by)\n    REFERENCES public.users(id)\n    ON DELETE RESTRICT,\n\n  CONSTRAINT casualty_status_history_latitude_check\n    CHECK (\n      latitude IS NULL\n      OR latitude BETWEEN -90 AND 90\n    ),\n\n  CONSTRAINT casualty_status_history_longitude_check\n    CHECK (\n      longitude IS NULL\n      OR longitude BETWEEN -180 AND 180\n    )\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/create-casualty-transaction-and-status-history.sql",
+        "sql": "CREATE TABLE IF NOT EXISTS public.casualty_status_history (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  casualty_incident_id uuid NOT NULL\n    REFERENCES public.casualty_incidents(id)\n    ON DELETE CASCADE,\n  old_status text,\n  new_status text NOT NULL,\n  changed_by uuid\n    REFERENCES public.users(id)\n    ON DELETE SET NULL,\n  change_reason text,\n  created_at timestamptz NOT NULL DEFAULT now()\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/create-casualty-transaction-and-status-history.sql",
+        "sql": "ALTER TABLE public.casualty_status_history\n  ADD COLUMN IF NOT EXISTS old_status text,\n  ADD COLUMN IF NOT EXISTS new_status text,\n  ADD COLUMN IF NOT EXISTS changed_by uuid,\n  ADD COLUMN IF NOT EXISTS change_reason text,\n  ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();"
+      }
+    ]
+  },
+  {
+    "name": "casualty_transport_records",
+    "columns": [
+      "id",
+      "casualty_incident_id",
+      "transport_required",
+      "transport_mode",
+      "ems_unit_type",
+      "departed_scene_at",
+      "arrived_facility_at",
+      "receiving_facility_id",
+      "recorded_by",
+      "notes",
+      "created_at",
+      "arrived_scene_at",
+      "origin_facility_id",
+      "destination_type",
+      "vehicle_identifier",
+      "is_interhospital_transfer"
+    ],
+    "sources": [
+      "UP-Manila-DB.sql",
+      "disaster-casualty-system/api/sql/add-casualty-transport-records.sql",
+      "disaster-casualty-system/api/sql/expanding-transport-records.sql"
+    ],
+    "definitions": [
+      {
+        "source": "UP-Manila-DB.sql",
+        "sql": "CREATE TABLE public.casualty_transport_records (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n\n  casualty_incident_id uuid NOT NULL,\n\n  transport_required varchar(20) NOT NULL DEFAULT 'unknown',\n  transport_mode varchar(50) NOT NULL DEFAULT 'unknown',\n  ems_unit_type varchar(50) NOT NULL DEFAULT 'unknown',\n\n  departed_scene_at timestamptz,\n  arrived_facility_at timestamptz,\n  receiving_facility_id uuid,\n\n  recorded_by uuid,\n  notes text,\n\n  created_at timestamptz NOT NULL DEFAULT now(),\n\n  CONSTRAINT casualty_transport_records_incident_id_fkey\n    FOREIGN KEY (casualty_incident_id)\n    REFERENCES public.casualty_incidents(id)\n    ON DELETE CASCADE,\n\n  CONSTRAINT casualty_transport_records_receiving_facility_id_fkey\n    FOREIGN KEY (receiving_facility_id)\n    REFERENCES public.healthcare_facilities(id)\n    ON DELETE SET NULL,\n\n  CONSTRAINT casualty_transport_records_recorded_by_fkey\n    FOREIGN KEY (recorded_by)\n    REFERENCES public.users(id)\n    ON DELETE SET NULL,\n\n  CONSTRAINT casualty_transport_records_required_check\n    CHECK (transport_required IN ('yes', 'no', 'unknown')),\n\n  CONSTRAINT casualty_transport_records_mode_check\n    CHECK (\n      transport_mode IN (\n        'ems',\n        'private_vehicle',\n        'independent',\n        'walk_in',\n        'other',\n        'unknown'\n      )\n    ),\n\n  CONSTRAINT casualty_transport_records_ems_unit_check\n    CHECK (ems_unit_type IN ('bls', 'als', 'other', 'unknown')),\n\n  CONSTRAINT casualty_transport_records_valid_times_check\n    CHECK (\n      arrived_facility_at IS NULL\n      OR departed_scene_at IS NULL\n      OR arrived_facility_at >= departed_scene_at\n    )\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/add-casualty-transport-records.sql",
+        "sql": "CREATE TABLE IF NOT EXISTS public.casualty_transport_records (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  casualty_incident_id uuid NOT NULL\n    REFERENCES public.casualty_incidents(id)\n    ON DELETE CASCADE,\n  transport_required varchar(20) NOT NULL DEFAULT 'unknown',\n  transport_mode varchar(50) NOT NULL DEFAULT 'unknown',\n  ems_unit_type varchar(50) NOT NULL DEFAULT 'unknown',\n  arrived_scene_at timestamptz,\n  departed_scene_at timestamptz,\n  arrived_facility_at timestamptz,\n  receiving_facility_id uuid\n    REFERENCES public.healthcare_facilities(id)\n    ON DELETE SET NULL,\n  recorded_by uuid\n    REFERENCES public.users(id)\n    ON DELETE SET NULL,\n  notes text,\n  created_at timestamptz NOT NULL DEFAULT now(),\n  CONSTRAINT casualty_transport_records_required_check\n    CHECK (transport_required IN ('yes', 'no', 'unknown')),\n  CONSTRAINT casualty_transport_records_mode_check\n    CHECK (\n      transport_mode IN (\n        'ems',\n        'private_vehicle',\n        'independent',\n        'walk_in',\n        'other',\n        'unknown'\n      )\n    ),\n  CONSTRAINT casualty_transport_records_ems_unit_check\n    CHECK (ems_unit_type IN ('bls', 'als', 'other', 'unknown')),\n  CONSTRAINT casualty_transport_records_valid_times_check\n    CHECK (\n      (\n        departed_scene_at IS NULL\n        OR arrived_scene_at IS NULL\n        OR departed_scene_at >= arrived_scene_at\n      )\n      AND (\n        arrived_facility_at IS NULL\n        OR departed_scene_at IS NULL\n        OR arrived_facility_at >= departed_scene_at\n      )\n    )\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/add-casualty-transport-records.sql",
+        "sql": "ALTER TABLE public.casualty_transport_records\n  ADD COLUMN IF NOT EXISTS transport_required varchar(20) DEFAULT 'unknown',\n  ADD COLUMN IF NOT EXISTS transport_mode varchar(50) DEFAULT 'unknown',\n  ADD COLUMN IF NOT EXISTS ems_unit_type varchar(50) DEFAULT 'unknown',\n  ADD COLUMN IF NOT EXISTS arrived_scene_at timestamptz,\n  ADD COLUMN IF NOT EXISTS departed_scene_at timestamptz,\n  ADD COLUMN IF NOT EXISTS arrived_facility_at timestamptz,\n  ADD COLUMN IF NOT EXISTS receiving_facility_id uuid,\n  ADD COLUMN IF NOT EXISTS recorded_by uuid,\n  ADD COLUMN IF NOT EXISTS notes text,\n  ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/expanding-transport-records.sql",
+        "sql": "ALTER TABLE public.casualty_transport_records\nADD COLUMN origin_facility_id uuid\n  REFERENCES public.healthcare_facilities(id) ON DELETE SET NULL,\nADD COLUMN destination_type varchar(30),\nADD COLUMN vehicle_identifier varchar(100),\nADD COLUMN is_interhospital_transfer boolean NOT NULL DEFAULT false;"
+      }
+    ]
+  },
+  {
+    "name": "casualty_treatments",
+    "columns": [
+      "id",
+      "casualty_incident_id",
+      "treatment_strategy",
+      "treatment_area_name",
+      "stabilization_started_at",
+      "stabilized_at",
+      "treatment_details",
+      "notes",
+      "performed_by",
+      "created_at"
+    ],
+    "sources": [
+      "disaster-casualty-system/api/sql/add-onsite-treatment-and-stabilization.sql"
+    ],
+    "definitions": [
+      {
+        "source": "disaster-casualty-system/api/sql/add-onsite-treatment-and-stabilization.sql",
+        "sql": "CREATE TABLE IF NOT EXISTS public.casualty_treatments (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  casualty_incident_id uuid NOT NULL\n    REFERENCES public.casualty_incidents(id) ON DELETE CASCADE,\n\n  treatment_strategy varchar(30) NOT NULL,\n  treatment_area_name varchar(150),\n  stabilization_started_at timestamptz,\n  stabilized_at timestamptz,\n  treatment_details jsonb NOT NULL DEFAULT '{}'::jsonb,\n  notes text,\n\n  performed_by uuid\n    REFERENCES public.users(id) ON DELETE SET NULL,\n\n  created_at timestamptz NOT NULL DEFAULT now(),\n\n  CONSTRAINT treatment_strategy_check CHECK (\n    treatment_strategy IN (\n      'scoop_and_run',\n      'scooter',\n      'stay_and_play',\n      'unknown'\n    )\n  )\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/add-onsite-treatment-and-stabilization.sql",
+        "sql": "ALTER TABLE public.casualty_treatments\n  ADD COLUMN IF NOT EXISTS casualty_incident_id uuid,\n  ADD COLUMN IF NOT EXISTS treatment_strategy varchar(30),\n  ADD COLUMN IF NOT EXISTS treatment_area_name varchar(150),\n  ADD COLUMN IF NOT EXISTS stabilization_started_at timestamptz,\n  ADD COLUMN IF NOT EXISTS stabilized_at timestamptz,\n  ADD COLUMN IF NOT EXISTS treatment_details jsonb DEFAULT '{}'::jsonb,\n  ADD COLUMN IF NOT EXISTS notes text,\n  ADD COLUMN IF NOT EXISTS performed_by uuid,\n  ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();"
+      }
+    ]
+  },
+  {
+    "name": "casualty_triage_assessments",
+    "columns": [
+      "id",
+      "casualty_incident_id",
+      "triage_system",
+      "triage_category",
+      "triage_stage",
+      "triaged_at",
+      "triaged_by",
+      "location",
+      "notes",
+      "created_at",
+      "responder_category",
+      "calculated_category",
+      "assessment_answers",
+      "algorithm_version",
+      "is_over_triage",
+      "is_under_triage"
+    ],
+    "sources": [
+      "UP-Manila-DB.sql",
+      "disaster-casualty-system/api/sql/add-casualty-triage-assessments.sql",
+      "disaster-casualty-system/api/sql/apply-onsite-triage-supabase.sql",
+      "disaster-casualty-system/api/sql/improving-triage-records.sql"
+    ],
+    "definitions": [
+      {
+        "source": "UP-Manila-DB.sql",
+        "sql": "CREATE TABLE public.casualty_triage_assessments (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n\n  casualty_incident_id uuid NOT NULL,\n\n  triage_system varchar(50) NOT NULL,\n  triage_category varchar(50) NOT NULL,\n  triage_stage varchar(50) NOT NULL DEFAULT 'on_site',\n\n  triaged_at timestamptz NOT NULL DEFAULT now(),\n  triaged_by uuid,\n\n  location text,\n  notes text,\n\n  created_at timestamptz NOT NULL DEFAULT now(),\n\n  CONSTRAINT casualty_triage_assessments_incident_id_fkey\n    FOREIGN KEY (casualty_incident_id)\n    REFERENCES public.casualty_incidents(id)\n    ON DELETE CASCADE,\n\n  CONSTRAINT casualty_triage_assessments_triaged_by_fkey\n    FOREIGN KEY (triaged_by)\n    REFERENCES public.users(id)\n    ON DELETE SET NULL,\n\n  CONSTRAINT casualty_triage_assessments_system_check\n    CHECK (\n      triage_system IN (\n        'urgent_non_urgent',\n        'nato',\n        'start',\n        'sieve_sort',\n        'smart',\n        'care_flight',\n        'mass',\n        'salt',\n        'ed_triage',\n        'other'\n      )\n    ),\n\n  CONSTRAINT casualty_triage_assessments_category_check\n    CHECK (\n      triage_category IN (\n        'immediate',\n        'delayed',\n        'minimal',\n        'expectant',\n        'unknown'\n      )\n    ),\n\n  CONSTRAINT casualty_triage_assessments_stage_check\n    CHECK (\n      triage_stage IN (\n        'on_site',\n        'facility_arrival',\n        'reassessment'\n      )\n    )\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/add-casualty-triage-assessments.sql",
+        "sql": "CREATE TABLE IF NOT EXISTS public.casualty_triage_assessments (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  casualty_incident_id uuid NOT NULL\n    REFERENCES public.casualty_incidents(id)\n    ON DELETE CASCADE,\n  triage_system varchar(50) NOT NULL,\n  triage_category varchar(50) NOT NULL,\n  triage_stage varchar(50) NOT NULL DEFAULT 'on_site',\n  triaged_at timestamptz NOT NULL DEFAULT now(),\n  triaged_by uuid\n    REFERENCES public.users(id)\n    ON DELETE SET NULL,\n  location text,\n  notes text,\n  created_at timestamptz NOT NULL DEFAULT now(),\n  CONSTRAINT casualty_triage_assessments_system_check\n    CHECK (\n      triage_system IN (\n        'urgent_non_urgent',\n        'nato',\n        'start',\n        'sieve',\n        'sort',\n        'sieve_sort',\n        'smart',\n        'rts',\n        'care_flight',\n        'mass',\n        'salt',\n        'ed_triage',\n        'other'\n      )\n    ),\n  CONSTRAINT casualty_triage_assessments_category_check\n    CHECK (\n      triage_category IN (\n        'immediate',\n        'delayed',\n        'minimal',\n        'expectant',\n        'unknown'\n      )\n    ),\n  CONSTRAINT casualty_triage_assessments_stage_check\n    CHECK (\n      triage_stage IN (\n        'on_site',\n        'facility_arrival',\n        'reassessment'\n      )\n    )\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/add-casualty-triage-assessments.sql",
+        "sql": "ALTER TABLE public.casualty_triage_assessments\n  ADD COLUMN IF NOT EXISTS triage_system varchar(50),\n  ADD COLUMN IF NOT EXISTS triage_category varchar(50),\n  ADD COLUMN IF NOT EXISTS triage_stage varchar(50) DEFAULT 'on_site',\n  ADD COLUMN IF NOT EXISTS triaged_at timestamptz DEFAULT now(),\n  ADD COLUMN IF NOT EXISTS triaged_by uuid,\n  ADD COLUMN IF NOT EXISTS location text,\n  ADD COLUMN IF NOT EXISTS notes text,\n  ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/apply-onsite-triage-supabase.sql",
+        "sql": "CREATE TABLE IF NOT EXISTS public.casualty_triage_assessments (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  casualty_incident_id uuid NOT NULL\n    REFERENCES public.casualty_incidents(id) ON DELETE CASCADE,\n  triage_system varchar(50) NOT NULL,\n  triage_category varchar(50) NOT NULL,\n  triage_stage varchar(50) NOT NULL DEFAULT 'on_site',\n  triaged_at timestamptz NOT NULL DEFAULT now(),\n  triaged_by uuid REFERENCES public.users(id) ON DELETE SET NULL,\n  location text,\n  notes text,\n  created_at timestamptz NOT NULL DEFAULT now()\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/apply-onsite-triage-supabase.sql",
+        "sql": "ALTER TABLE public.casualty_triage_assessments\n  ADD COLUMN IF NOT EXISTS triage_system varchar(50),\n  ADD COLUMN IF NOT EXISTS triage_category varchar(50),\n  ADD COLUMN IF NOT EXISTS triage_stage varchar(50) DEFAULT 'on_site',\n  ADD COLUMN IF NOT EXISTS triaged_at timestamptz DEFAULT now(),\n  ADD COLUMN IF NOT EXISTS triaged_by uuid,\n  ADD COLUMN IF NOT EXISTS location text,\n  ADD COLUMN IF NOT EXISTS notes text,\n  ADD COLUMN IF NOT EXISTS responder_category varchar(50),\n  ADD COLUMN IF NOT EXISTS calculated_category varchar(50),\n  ADD COLUMN IF NOT EXISTS assessment_answers jsonb,\n  ADD COLUMN IF NOT EXISTS algorithm_version varchar(50),\n  ADD COLUMN IF NOT EXISTS is_over_triage boolean,\n  ADD COLUMN IF NOT EXISTS is_under_triage boolean,\n  ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/improving-triage-records.sql",
+        "sql": "ALTER TABLE public.casualty_triage_assessments\nADD COLUMN responder_category varchar(30),\nADD COLUMN calculated_category varchar(30),\nADD COLUMN assessment_answers jsonb NOT NULL DEFAULT '{}'::jsonb,\nADD COLUMN algorithm_version varchar(30),\nADD COLUMN is_over_triage boolean,\nADD COLUMN is_under_triage boolean;"
+      }
+    ]
+  },
+  {
+    "name": "casualty_verification_history",
+    "columns": [
+      "id",
+      "casualty_incident_id",
+      "old_status",
+      "new_status",
+      "reviewed_by",
+      "review_notes",
+      "created_at"
+    ],
+    "sources": [
+      "UP-Manila-DB.sql",
+      "disaster-casualty-system/api/sql/add-casualty-verification-history.sql"
+    ],
+    "definitions": [
+      {
+        "source": "UP-Manila-DB.sql",
+        "sql": "CREATE TABLE public.casualty_verification_history (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n\n  casualty_incident_id uuid NOT NULL,\n\n  old_status public.verification_status,\n  new_status public.verification_status NOT NULL,\n\n  reviewed_by uuid,\n  review_notes text,\n\n  created_at timestamptz NOT NULL DEFAULT now(),\n\n  CONSTRAINT casualty_verification_history_incident_id_fkey\n    FOREIGN KEY (casualty_incident_id)\n    REFERENCES public.casualty_incidents(id)\n    ON DELETE CASCADE,\n\n  CONSTRAINT casualty_verification_history_reviewed_by_fkey\n    FOREIGN KEY (reviewed_by)\n    REFERENCES public.users(id)\n    ON DELETE SET NULL\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/add-casualty-verification-history.sql",
+        "sql": "CREATE TABLE IF NOT EXISTS public.casualty_verification_history (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  casualty_incident_id uuid NOT NULL\n    REFERENCES public.casualty_incidents(id)\n    ON DELETE CASCADE,\n  old_status public.verification_status,\n  new_status public.verification_status NOT NULL,\n  reviewed_by uuid\n    REFERENCES public.users(id)\n    ON DELETE SET NULL,\n  review_notes text,\n  created_at timestamptz NOT NULL DEFAULT now()\n);"
+      }
+    ]
+  },
+  {
+    "name": "clinical_procedures",
+    "columns": [
+      "id",
+      "casualty_incident_id",
+      "facility_id",
+      "procedure_type",
+      "started_at",
+      "ended_at",
+      "room_identifier",
+      "notes"
+    ],
+    "sources": [
+      "disaster-casualty-system/api/sql/add public.clinical_procedures.sql"
+    ],
+    "definitions": [
+      {
+        "source": "disaster-casualty-system/api/sql/add public.clinical_procedures.sql",
+        "sql": "CREATE TABLE public.clinical_procedures (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  casualty_incident_id uuid NOT NULL\n    REFERENCES public.casualty_incidents(id) ON DELETE CASCADE,\n\n  facility_id uuid\n    REFERENCES public.healthcare_facilities(id) ON DELETE SET NULL,\n\n  procedure_type varchar(30) NOT NULL,\n  started_at timestamptz,\n  ended_at timestamptz,\n  room_identifier varchar(100),\n  notes text,\n\n  CONSTRAINT clinical_procedure_type_check CHECK (\n    procedure_type IN (\n      'surgery',\n      'xray',\n      'ultrasound',\n      'ct_scan',\n      'other'\n    )\n  ),\n\n  CONSTRAINT clinical_procedure_time_check CHECK (\n    ended_at IS NULL\n    OR started_at IS NULL\n    OR ended_at >= started_at\n  )\n);"
+      }
+    ]
+  },
+  {
+    "name": "continuity_of_care_assessments",
+    "columns": [
+      "id",
+      "incident_id",
+      "ems_coverage_disruption",
+      "facility_care_disruption",
+      "notes",
+      "assessed_by",
+      "assessed_at",
+      "updated_at"
+    ],
+    "sources": [
+      "disaster-casualty-system/api/sql/Add continuity-of-care assessment.sql"
+    ],
+    "definitions": [
+      {
+        "source": "disaster-casualty-system/api/sql/Add continuity-of-care assessment.sql",
+        "sql": "CREATE TABLE IF NOT EXISTS public.continuity_of_care_assessments (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  incident_id uuid NOT NULL UNIQUE\n    REFERENCES public.incidents(id) ON DELETE CASCADE,\n  ems_coverage_disruption varchar(20),\n  facility_care_disruption varchar(20),\n  notes text,\n  assessed_by uuid\n    REFERENCES public.users(id) ON DELETE SET NULL,\n  assessed_at timestamptz NOT NULL DEFAULT now(),\n  updated_at timestamptz NOT NULL DEFAULT now()\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/Add continuity-of-care assessment.sql",
+        "sql": "ALTER TABLE public.continuity_of_care_assessments\n  ADD COLUMN IF NOT EXISTS ems_coverage_disruption varchar(20),\n  ADD COLUMN IF NOT EXISTS facility_care_disruption varchar(20),\n  ADD COLUMN IF NOT EXISTS notes text,\n  ADD COLUMN IF NOT EXISTS assessed_by uuid,\n  ADD COLUMN IF NOT EXISTS assessed_at timestamptz DEFAULT now(),\n  ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();"
+      }
+    ]
+  },
+  {
+    "name": "dmmp_staff_call_downs",
+    "columns": [
+      "id",
+      "incident_id",
+      "staff_name",
+      "role_name",
+      "was_contacted",
+      "contacted_at",
+      "required_arrival_at",
+      "arrived_at",
+      "arrived_within_standard",
+      "recorded_by",
+      "created_at",
+      "call_down_staff_id",
+      "linked_user_id",
+      "has_arrived",
+      "status"
+    ],
+    "sources": [
+      "UP-Manila-DB.sql",
+      "disaster-casualty-system/api/sql/add-call-down-staff-and-reopen.sql",
+      "disaster-casualty-system/api/sql/add-dmmp-staffing-records.sql",
+      "disaster-casualty-system/api/sql/apply-utstein-operations-supabase.sql"
+    ],
+    "definitions": [
+      {
+        "source": "UP-Manila-DB.sql",
+        "sql": "CREATE TABLE public.dmmp_staff_call_downs (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n\n  incident_id uuid NOT NULL,\n\n  staff_name varchar(150),\n  role_name varchar(150),\n  was_contacted boolean NOT NULL DEFAULT false,\n  contacted_at timestamptz,\n  required_arrival_at timestamptz,\n  arrived_at timestamptz,\n  arrived_within_standard boolean,\n\n  recorded_by uuid,\n\n  created_at timestamptz NOT NULL DEFAULT now(),\n\n  CONSTRAINT dmmp_staff_call_downs_incident_id_fkey\n    FOREIGN KEY (incident_id)\n    REFERENCES public.incidents(id)\n    ON DELETE CASCADE,\n\n  CONSTRAINT dmmp_staff_call_downs_recorded_by_fkey\n    FOREIGN KEY (recorded_by)\n    REFERENCES public.users(id)\n    ON DELETE SET NULL\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/add-call-down-staff-and-reopen.sql",
+        "sql": "ALTER TABLE public.dmmp_staff_call_downs\n  ADD COLUMN IF NOT EXISTS call_down_staff_id uuid REFERENCES public.call_down_staff(id) ON DELETE SET NULL,\n  ADD COLUMN IF NOT EXISTS linked_user_id uuid REFERENCES public.users(id) ON DELETE SET NULL,\n  ADD COLUMN IF NOT EXISTS has_arrived boolean NOT NULL DEFAULT false,\n  ADD COLUMN IF NOT EXISTS status text;"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/add-dmmp-staffing-records.sql",
+        "sql": "CREATE TABLE public.dmmp_staff_call_downs (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  incident_id uuid NOT NULL\n    REFERENCES public.incidents(id) ON DELETE CASCADE,\n\n  staff_name varchar(150),\n  role_name varchar(150),\n  was_contacted boolean NOT NULL DEFAULT false,\n  contacted_at timestamptz,\n  required_arrival_at timestamptz,\n  arrived_at timestamptz,\n  arrived_within_standard boolean,\n\n  recorded_by uuid\n    REFERENCES public.users(id) ON DELETE SET NULL,\n\n  created_at timestamptz NOT NULL DEFAULT now()\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/apply-utstein-operations-supabase.sql",
+        "sql": "CREATE TABLE IF NOT EXISTS public.dmmp_staff_call_downs (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  incident_id uuid NOT NULL\n    REFERENCES public.incidents(id) ON DELETE CASCADE,\n  staff_name varchar(150),\n  role_name varchar(150),\n  was_contacted boolean NOT NULL DEFAULT false,\n  contacted_at timestamptz,\n  required_arrival_at timestamptz,\n  arrived_at timestamptz,\n  arrived_within_standard boolean,\n  recorded_by uuid REFERENCES public.users(id) ON DELETE SET NULL,\n  created_at timestamptz NOT NULL DEFAULT now()\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/apply-utstein-operations-supabase.sql",
+        "sql": "ALTER TABLE public.dmmp_staff_call_downs\n  ADD COLUMN IF NOT EXISTS staff_name varchar(150),\n  ADD COLUMN IF NOT EXISTS role_name varchar(150),\n  ADD COLUMN IF NOT EXISTS was_contacted boolean NOT NULL DEFAULT false,\n  ADD COLUMN IF NOT EXISTS contacted_at timestamptz,\n  ADD COLUMN IF NOT EXISTS required_arrival_at timestamptz,\n  ADD COLUMN IF NOT EXISTS arrived_at timestamptz,\n  ADD COLUMN IF NOT EXISTS arrived_within_standard boolean,\n  ADD COLUMN IF NOT EXISTS recorded_by uuid,\n  ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();"
+      }
+    ]
+  },
+  {
+    "name": "ems_vehicle_arrivals",
+    "columns": [
+      "id",
+      "incident_id",
+      "vehicle_identifier",
+      "unit_type",
+      "arrived_scene_at",
+      "departed_scene_at",
+      "recorded_by"
+    ],
+    "sources": [
+      "disaster-casualty-system/api/sql/add-incident-level-ems.sql"
+    ],
+    "definitions": [
+      {
+        "source": "disaster-casualty-system/api/sql/add-incident-level-ems.sql",
+        "sql": "CREATE TABLE public.ems_vehicle_arrivals (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  incident_id uuid NOT NULL\n    REFERENCES public.incidents(id) ON DELETE CASCADE,\n\n  vehicle_identifier varchar(100),\n  unit_type varchar(20) NOT NULL,\n  arrived_scene_at timestamptz NOT NULL,\n  departed_scene_at timestamptz,\n\n  recorded_by uuid\n    REFERENCES public.users(id) ON DELETE SET NULL,\n\n  CONSTRAINT ems_vehicle_type_check CHECK (\n    unit_type IN ('bls', 'als', 'other')\n  )\n);"
+      }
+    ]
+  },
+  {
+    "name": "evacuation_centers",
+    "columns": [
+      "id",
+      "incident_id",
+      "center_name",
+      "address",
+      "barangay",
+      "municipality",
+      "province",
+      "capacity",
+      "contact_person",
+      "contact_number",
+      "latitude",
+      "longitude",
+      "is_active",
+      "created_at",
+      "updated_at"
+    ],
+    "sources": [
+      "UP-Manila-DB.sql"
+    ],
+    "definitions": [
+      {
+        "source": "UP-Manila-DB.sql",
+        "sql": "CREATE TABLE public.evacuation_centers (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n\n  incident_id uuid NOT NULL,\n\n  center_name varchar(200) NOT NULL,\n  address text,\n\n  barangay varchar(150),\n  municipality varchar(150),\n  province varchar(150),\n\n  capacity integer,\n\n  contact_person varchar(150),\n  contact_number varchar(30),\n\n  latitude decimal(10,7),\n  longitude decimal(10,7),\n\n  is_active boolean NOT NULL DEFAULT true,\n\n  created_at timestamptz NOT NULL DEFAULT now(),\n  updated_at timestamptz NOT NULL DEFAULT now(),\n\n  CONSTRAINT evacuation_centers_incident_id_fkey\n    FOREIGN KEY (incident_id)\n    REFERENCES public.incidents(id)\n    ON DELETE CASCADE,\n\n  CONSTRAINT evacuation_centers_capacity_check\n    CHECK (\n      capacity IS NULL\n      OR capacity >= 0\n    ),\n\n  CONSTRAINT evacuation_centers_latitude_check\n    CHECK (\n      latitude IS NULL\n      OR latitude BETWEEN -90 AND 90\n    ),\n\n  CONSTRAINT evacuation_centers_longitude_check\n    CHECK (\n      longitude IS NULL\n      OR longitude BETWEEN -180 AND 180\n    )\n);"
+      }
+    ]
+  },
+  {
+    "name": "facility_encounters",
+    "columns": [
+      "id",
+      "casualty_incident_id",
+      "facility_id",
+      "arrived_at",
+      "ed_admitted_at",
+      "ed_departed_at",
+      "disposition",
+      "referred_or_transferred",
+      "sought_ed_care",
+      "admitted_to_hospital",
+      "discharged_home",
+      "ed_resuscitation_started_at",
+      "recorded_by",
+      "created_at",
+      "surgical_intervention_started_at",
+      "surgical_intervention_ended_at",
+      "operating_room_started_at",
+      "xray_required",
+      "xray_performed_at",
+      "ultrasound_required",
+      "ultrasound_performed_at",
+      "ct_required",
+      "ct_performed_at",
+      "icu_admitted_at",
+      "mechanical_ventilation_required",
+      "alternative_icu_used",
+      "hospital_admitted_at",
+      "hospital_discharged_at",
+      "icu_discharged_at",
+      "ventilation_started_at",
+      "ventilation_ended_at",
+      "pre_transport_triage_category"
+    ],
+    "sources": [
+      "disaster-casualty-system/api/sql/Add facility-arrival and ED encounter data.sql",
+      "disaster-casualty-system/api/sql/Add hospital resources utilization.sql",
+      "disaster-casualty-system/api/sql/Add morbidity and mortality outcomes.sql",
+      "disaster-casualty-system/api/sql/add-hcfd-pre-transport-triage-category.sql"
+    ],
+    "definitions": [
+      {
+        "source": "disaster-casualty-system/api/sql/Add facility-arrival and ED encounter data.sql",
+        "sql": "CREATE TABLE IF NOT EXISTS public.facility_encounters (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  casualty_incident_id uuid NOT NULL\n    REFERENCES public.casualty_incidents(id) ON DELETE CASCADE,\n\n  facility_id uuid NOT NULL\n    REFERENCES public.healthcare_facilities(id) ON DELETE RESTRICT,\n\n  arrived_at timestamptz,\n  ed_admitted_at timestamptz,\n  ed_departed_at timestamptz,\n\n  disposition varchar(30),\n  referred_or_transferred boolean,\n  sought_ed_care boolean,\n  admitted_to_hospital boolean,\n  discharged_home boolean,\n  ed_resuscitation_started_at timestamptz,\n\n  recorded_by uuid\n    REFERENCES public.users(id) ON DELETE SET NULL,\n\n  created_at timestamptz NOT NULL DEFAULT now(),\n\n  CONSTRAINT facility_disposition_check CHECK (\n    disposition IN (\n      'active_care',\n      'hospital_admission',\n      'discharged_home',\n      'transferred',\n      'deceased',\n      'left_without_treatment',\n      'unknown'\n    )\n  )\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/Add facility-arrival and ED encounter data.sql",
+        "sql": "ALTER TABLE public.facility_encounters\n  ADD COLUMN IF NOT EXISTS casualty_incident_id uuid,\n  ADD COLUMN IF NOT EXISTS facility_id uuid,\n  ADD COLUMN IF NOT EXISTS arrived_at timestamptz,\n  ADD COLUMN IF NOT EXISTS ed_admitted_at timestamptz,\n  ADD COLUMN IF NOT EXISTS ed_departed_at timestamptz,\n  ADD COLUMN IF NOT EXISTS disposition varchar(30),\n  ADD COLUMN IF NOT EXISTS referred_or_transferred boolean,\n  ADD COLUMN IF NOT EXISTS sought_ed_care boolean,\n  ADD COLUMN IF NOT EXISTS admitted_to_hospital boolean,\n  ADD COLUMN IF NOT EXISTS discharged_home boolean,\n  ADD COLUMN IF NOT EXISTS ed_resuscitation_started_at timestamptz,\n  ADD COLUMN IF NOT EXISTS recorded_by uuid,\n  ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/Add hospital resources utilization.sql",
+        "sql": "ALTER TABLE public.facility_encounters\n  ADD COLUMN IF NOT EXISTS surgical_intervention_started_at timestamptz,\n  ADD COLUMN IF NOT EXISTS surgical_intervention_ended_at timestamptz,\n  ADD COLUMN IF NOT EXISTS operating_room_started_at timestamptz,\n  ADD COLUMN IF NOT EXISTS xray_required boolean,\n  ADD COLUMN IF NOT EXISTS xray_performed_at timestamptz,\n  ADD COLUMN IF NOT EXISTS ultrasound_required boolean,\n  ADD COLUMN IF NOT EXISTS ultrasound_performed_at timestamptz,\n  ADD COLUMN IF NOT EXISTS ct_required boolean,\n  ADD COLUMN IF NOT EXISTS ct_performed_at timestamptz,\n  ADD COLUMN IF NOT EXISTS icu_admitted_at timestamptz,\n  ADD COLUMN IF NOT EXISTS mechanical_ventilation_required boolean,\n  ADD COLUMN IF NOT EXISTS alternative_icu_used boolean;"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/Add morbidity and mortality outcomes.sql",
+        "sql": "ALTER TABLE public.facility_encounters\n  ADD COLUMN IF NOT EXISTS hospital_admitted_at timestamptz,\n  ADD COLUMN IF NOT EXISTS hospital_discharged_at timestamptz,\n  ADD COLUMN IF NOT EXISTS icu_discharged_at timestamptz,\n  ADD COLUMN IF NOT EXISTS ventilation_started_at timestamptz,\n  ADD COLUMN IF NOT EXISTS ventilation_ended_at timestamptz;"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/add-hcfd-pre-transport-triage-category.sql",
+        "sql": "ALTER TABLE public.facility_encounters\n  ADD COLUMN IF NOT EXISTS pre_transport_triage_category varchar(20);"
+      }
+    ]
+  },
+  {
+    "name": "facility_resource_snapshots",
+    "columns": [
+      "id",
+      "incident_id",
+      "facility_id",
+      "recorded_at",
+      "total_resuscitation_rooms",
+      "used_resuscitation_rooms",
+      "total_operating_rooms",
+      "used_operating_rooms",
+      "alternative_icu_in_use",
+      "notes",
+      "recorded_by",
+      "created_at",
+      "updated_at"
+    ],
+    "sources": [
+      "disaster-casualty-system/api/sql/Add hospital capacity snapshots.sql",
+      "disaster-casualty-system/api/sql/Add hospital resources utilization.sql"
+    ],
+    "definitions": [
+      {
+        "source": "disaster-casualty-system/api/sql/Add hospital capacity snapshots.sql",
+        "sql": "CREATE TABLE public.facility_resource_snapshots (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  incident_id uuid NOT NULL\n    REFERENCES public.incidents(id) ON DELETE CASCADE,\n\n  facility_id uuid NOT NULL\n    REFERENCES public.healthcare_facilities(id) ON DELETE CASCADE,\n\n  recorded_at timestamptz NOT NULL,\n\n  total_resuscitation_rooms integer,\n  used_resuscitation_rooms integer,\n  total_operating_rooms integer,\n  used_operating_rooms integer,\n\n  alternative_icu_in_use boolean,\n  notes text,\n\n  CONSTRAINT resuscitation_room_count_check CHECK (\n    used_resuscitation_rooms IS NULL\n    OR total_resuscitation_rooms IS NULL\n    OR used_resuscitation_rooms <= total_resuscitation_rooms\n  ),\n\n  CONSTRAINT operating_room_count_check CHECK (\n    used_operating_rooms IS NULL\n    OR total_operating_rooms IS NULL\n    OR used_operating_rooms <= total_operating_rooms\n  )\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/Add hospital resources utilization.sql",
+        "sql": "CREATE TABLE IF NOT EXISTS public.facility_resource_snapshots (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  incident_id uuid NOT NULL\n    REFERENCES public.incidents(id) ON DELETE CASCADE,\n  facility_id uuid\n    REFERENCES public.healthcare_facilities(id) ON DELETE SET NULL,\n  recorded_at timestamptz NOT NULL DEFAULT now(),\n  total_resuscitation_rooms integer,\n  used_resuscitation_rooms integer,\n  total_operating_rooms integer,\n  used_operating_rooms integer,\n  alternative_icu_in_use boolean,\n  notes text,\n  recorded_by uuid\n    REFERENCES public.users(id) ON DELETE SET NULL,\n  created_at timestamptz NOT NULL DEFAULT now(),\n  updated_at timestamptz NOT NULL DEFAULT now()\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/Add hospital resources utilization.sql",
+        "sql": "ALTER TABLE public.facility_resource_snapshots\n  ADD COLUMN IF NOT EXISTS incident_id uuid,\n  ADD COLUMN IF NOT EXISTS facility_id uuid,\n  ADD COLUMN IF NOT EXISTS recorded_at timestamptz DEFAULT now(),\n  ADD COLUMN IF NOT EXISTS total_resuscitation_rooms integer,\n  ADD COLUMN IF NOT EXISTS used_resuscitation_rooms integer,\n  ADD COLUMN IF NOT EXISTS total_operating_rooms integer,\n  ADD COLUMN IF NOT EXISTS used_operating_rooms integer,\n  ADD COLUMN IF NOT EXISTS alternative_icu_in_use boolean,\n  ADD COLUMN IF NOT EXISTS notes text,\n  ADD COLUMN IF NOT EXISTS recorded_by uuid,\n  ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now(),\n  ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();"
+      }
+    ]
+  },
+  {
+    "name": "form_drafts",
+    "columns": [
+      "id",
+      "owner_id",
+      "form_type",
+      "title",
+      "payload",
+      "status",
+      "created_at",
+      "updated_at"
+    ],
+    "sources": [
+      "disaster-casualty-system/api/sql/add-form-drafts.sql"
+    ],
+    "definitions": [
+      {
+        "source": "disaster-casualty-system/api/sql/add-form-drafts.sql",
+        "sql": "CREATE TABLE IF NOT EXISTS public.form_drafts (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  owner_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,\n  form_type text NOT NULL,\n  title text NOT NULL,\n  payload jsonb NOT NULL DEFAULT '{}'::jsonb,\n  status text NOT NULL DEFAULT 'draft',\n  created_at timestamptz NOT NULL DEFAULT now(),\n  updated_at timestamptz NOT NULL DEFAULT now()\n);"
+      }
+    ]
+  },
+  {
+    "name": "healthcare_facilities",
+    "columns": [
+      "id",
+      "facility_name",
+      "facility_level",
+      "address",
+      "barangay",
+      "municipality",
+      "province",
+      "contact_person",
+      "contact_number",
+      "latitude",
+      "longitude",
+      "is_active",
+      "created_by",
+      "created_at",
+      "updated_at"
+    ],
+    "sources": [
+      "UP-Manila-DB.sql",
+      "disaster-casualty-system/api/sql/add-healthcare-facilities.sql"
+    ],
+    "definitions": [
+      {
+        "source": "UP-Manila-DB.sql",
+        "sql": "CREATE TABLE public.healthcare_facilities (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n\n  facility_name varchar(200) NOT NULL,\n  facility_level varchar(50) NOT NULL DEFAULT 'unknown',\n  address text,\n\n  barangay varchar(150),\n  municipality varchar(150),\n  province varchar(150),\n\n  contact_person varchar(150),\n  contact_number varchar(30),\n\n  latitude decimal(10,7),\n  longitude decimal(10,7),\n\n  is_active boolean NOT NULL DEFAULT true,\n  created_by uuid,\n\n  created_at timestamptz NOT NULL DEFAULT now(),\n  updated_at timestamptz NOT NULL DEFAULT now(),\n\n  CONSTRAINT healthcare_facilities_created_by_fkey\n    FOREIGN KEY (created_by)\n    REFERENCES public.users(id)\n    ON DELETE SET NULL,\n\n  CONSTRAINT healthcare_facilities_level_check\n    CHECK (\n      facility_level IN (\n        'primary',\n        'secondary',\n        'tertiary',\n        'specialized',\n        'unknown'\n      )\n    ),\n\n  CONSTRAINT healthcare_facilities_latitude_check\n    CHECK (\n      latitude IS NULL\n      OR latitude BETWEEN -90 AND 90\n    ),\n\n  CONSTRAINT healthcare_facilities_longitude_check\n    CHECK (\n      longitude IS NULL\n      OR longitude BETWEEN -180 AND 180\n    )\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/add-healthcare-facilities.sql",
+        "sql": "CREATE TABLE IF NOT EXISTS public.healthcare_facilities (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  facility_name varchar(200) NOT NULL,\n  facility_level varchar(50) NOT NULL DEFAULT 'unknown',\n  address text,\n  barangay varchar(150),\n  municipality varchar(150),\n  province varchar(150),\n  contact_person varchar(150),\n  contact_number varchar(30),\n  latitude decimal(10,7),\n  longitude decimal(10,7),\n  is_active boolean NOT NULL DEFAULT true,\n  created_by uuid\n    REFERENCES public.users(id)\n    ON DELETE SET NULL,\n  created_at timestamptz NOT NULL DEFAULT now(),\n  updated_at timestamptz NOT NULL DEFAULT now(),\n  CONSTRAINT healthcare_facilities_level_check\n    CHECK (\n      facility_level IN (\n        'primary',\n        'secondary',\n        'tertiary',\n        'specialized',\n        'unknown'\n      )\n    ),\n  CONSTRAINT healthcare_facilities_latitude_check\n    CHECK (\n      latitude IS NULL\n      OR latitude BETWEEN -90 AND 90\n    ),\n  CONSTRAINT healthcare_facilities_longitude_check\n    CHECK (\n      longitude IS NULL\n      OR longitude BETWEEN -180 AND 180\n    )\n);"
+      }
+    ]
+  },
+  {
+    "name": "icu_encounters",
+    "columns": [
+      "id",
+      "casualty_incident_id",
+      "facility_id",
+      "admitted_at",
+      "discharged_at",
+      "alternative_icu_used",
+      "mechanical_ventilation_used",
+      "ventilation_started_at",
+      "ventilation_ended_at"
+    ],
+    "sources": [
+      "disaster-casualty-system/api/sql/add icu encounters.sql"
+    ],
+    "definitions": [
+      {
+        "source": "disaster-casualty-system/api/sql/add icu encounters.sql",
+        "sql": "CREATE TABLE public.icu_encounters (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  casualty_incident_id uuid NOT NULL\n    REFERENCES public.casualty_incidents(id) ON DELETE CASCADE,\n\n  facility_id uuid\n    REFERENCES public.healthcare_facilities(id) ON DELETE SET NULL,\n\n  admitted_at timestamptz NOT NULL,\n  discharged_at timestamptz,\n  alternative_icu_used boolean,\n  mechanical_ventilation_used boolean,\n  ventilation_started_at timestamptz,\n  ventilation_ended_at timestamptz,\n\n  CONSTRAINT icu_time_check CHECK (\n    discharged_at IS NULL OR discharged_at >= admitted_at\n  ),\n\n  CONSTRAINT ventilation_time_check CHECK (\n    ventilation_ended_at IS NULL\n    OR ventilation_started_at IS NULL\n    OR ventilation_ended_at >= ventilation_started_at\n  )\n);"
+      }
+    ]
+  },
+  {
+    "name": "incident_ic_backups",
+    "columns": [
+      "id",
+      "incident_id",
+      "user_id",
+      "priority",
+      "designated_by",
+      "created_at",
+      "updated_at"
+    ],
+    "sources": [
+      "disaster-casualty-system/api/sql/add-incident-acting-ic-delegation.sql"
+    ],
+    "definitions": [
+      {
+        "source": "disaster-casualty-system/api/sql/add-incident-acting-ic-delegation.sql",
+        "sql": "create table if not exists public.incident_ic_backups (\n  id uuid primary key default gen_random_uuid(),\n  incident_id uuid not null references public.incidents(id) on delete cascade,\n  user_id uuid not null references public.users(id) on delete cascade,\n  priority integer not null default 1 check (priority > 0),\n  designated_by uuid not null references public.users(id) on delete restrict,\n  created_at timestamptz not null default now(),\n  updated_at timestamptz not null default now(),\n  unique (incident_id, user_id)\n);"
+      }
+    ]
+  },
+  {
+    "name": "incident_ic_delegations",
+    "columns": [
+      "id",
+      "incident_id",
+      "primary_ic_user_id",
+      "acting_ic_user_id",
+      "delegated_by",
+      "reason",
+      "delegated_at",
+      "resumed_at",
+      "resumed_by",
+      "resume_reason",
+      "created_at"
+    ],
+    "sources": [
+      "disaster-casualty-system/api/sql/add-incident-acting-ic-delegation.sql"
+    ],
+    "definitions": [
+      {
+        "source": "disaster-casualty-system/api/sql/add-incident-acting-ic-delegation.sql",
+        "sql": "create table if not exists public.incident_ic_delegations (\n  id uuid primary key default gen_random_uuid(),\n  incident_id uuid not null references public.incidents(id) on delete cascade,\n  primary_ic_user_id uuid not null references public.users(id) on delete restrict,\n  acting_ic_user_id uuid not null references public.users(id) on delete restrict,\n  delegated_by uuid not null references public.users(id) on delete restrict,\n  reason text,\n  delegated_at timestamptz not null default now(),\n  resumed_at timestamptz,\n  resumed_by uuid references public.users(id) on delete set null,\n  resume_reason text,\n  created_at timestamptz not null default now(),\n  check (primary_ic_user_id <> acting_ic_user_id)\n);"
+      }
+    ]
+  },
+  {
+    "name": "incident_response_timelines",
+    "columns": [
+      "id",
+      "incident_id",
+      "event_notification_at",
+      "dmmp_activated",
+      "dmmp_activation_trigger",
+      "dmmp_activated_at",
+      "medical_coordinator_notified_at",
+      "last_dmmp_staff_arrived_at",
+      "first_ems_on_scene_at",
+      "triage_ordered_at",
+      "first_site_triage_at",
+      "last_site_triage_at",
+      "first_transport_from_scene_at",
+      "last_transport_from_scene_at",
+      "scene_demobilized_at",
+      "updated_by",
+      "created_at",
+      "updated_at",
+      "custom_events",
+      "last_facility_deactivated_at",
+      "acute_response_started_at",
+      "acute_response_ended_at"
+    ],
+    "sources": [
+      "UP-Manila-DB.sql",
+      "disaster-casualty-system/api/sql/add-custom-timeline-events.sql",
+      "disaster-casualty-system/api/sql/add-incident-response-timelines.sql",
+      "disaster-casualty-system/api/sql/apply-onsite-triage-supabase.sql",
+      "disaster-casualty-system/api/sql/apply-utstein-operations-supabase.sql",
+      "disaster-casualty-system/api/sql/incident-response-timeline-addition.sql"
+    ],
+    "definitions": [
+      {
+        "source": "UP-Manila-DB.sql",
+        "sql": "CREATE TABLE public.incident_response_timelines (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n\n  incident_id uuid NOT NULL UNIQUE,\n\n  event_notification_at timestamptz,\n  dmmp_activated boolean,\n  dmmp_activation_trigger text,\n  dmmp_activated_at timestamptz,\n  medical_coordinator_notified_at timestamptz,\n  last_dmmp_staff_arrived_at timestamptz,\n  first_ems_on_scene_at timestamptz,\n  triage_ordered_at timestamptz,\n  first_site_triage_at timestamptz,\n  last_site_triage_at timestamptz,\n  first_transport_from_scene_at timestamptz,\n  last_transport_from_scene_at timestamptz,\n  scene_demobilized_at timestamptz,\n\n  updated_by uuid,\n\n  created_at timestamptz NOT NULL DEFAULT now(),\n  updated_at timestamptz NOT NULL DEFAULT now(),\n\n  CONSTRAINT incident_response_timelines_incident_id_fkey\n    FOREIGN KEY (incident_id)\n    REFERENCES public.incidents(id)\n    ON DELETE CASCADE,\n\n  CONSTRAINT incident_response_timelines_updated_by_fkey\n    FOREIGN KEY (updated_by)\n    REFERENCES public.users(id)\n    ON DELETE SET NULL,\n\n  CONSTRAINT incident_response_timelines_triage_order_check\n    CHECK (\n      first_site_triage_at IS NULL\n      OR last_site_triage_at IS NULL\n      OR last_site_triage_at >= first_site_triage_at\n    ),\n\n  CONSTRAINT incident_response_timelines_transport_order_check\n    CHECK (\n      first_transport_from_scene_at IS NULL\n      OR last_transport_from_scene_at IS NULL\n      OR last_transport_from_scene_at >= first_transport_from_scene_at\n    )\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/add-custom-timeline-events.sql",
+        "sql": "ALTER TABLE public.incident_response_timelines\n  ADD COLUMN IF NOT EXISTS custom_events jsonb NOT NULL DEFAULT '[]'::jsonb;"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/add-incident-response-timelines.sql",
+        "sql": "CREATE TABLE IF NOT EXISTS public.incident_response_timelines (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  incident_id uuid NOT NULL UNIQUE\n    REFERENCES public.incidents(id)\n    ON DELETE CASCADE,\n  event_notification_at timestamptz,\n  dmmp_activated boolean,\n  dmmp_activation_trigger text,\n  dmmp_activated_at timestamptz,\n  medical_coordinator_notified_at timestamptz,\n  last_dmmp_staff_arrived_at timestamptz,\n  first_ems_on_scene_at timestamptz,\n  triage_ordered_at timestamptz,\n  first_site_triage_at timestamptz,\n  last_site_triage_at timestamptz,\n  first_transport_from_scene_at timestamptz,\n  last_transport_from_scene_at timestamptz,\n  scene_demobilized_at timestamptz,\n  last_facility_deactivated_at timestamptz,\n  acute_response_started_at timestamptz,\n  acute_response_ended_at timestamptz,\n  updated_by uuid\n    REFERENCES public.users(id)\n    ON DELETE SET NULL,\n  created_at timestamptz NOT NULL DEFAULT now(),\n  updated_at timestamptz NOT NULL DEFAULT now(),\n  CONSTRAINT incident_response_timelines_triage_order_check\n    CHECK (\n      last_site_triage_at IS NULL\n      OR first_site_triage_at IS NULL\n      OR last_site_triage_at >= first_site_triage_at\n    ),\n  CONSTRAINT incident_response_timelines_transport_order_check\n    CHECK (\n      last_transport_from_scene_at IS NULL\n      OR first_transport_from_scene_at IS NULL\n      OR last_transport_from_scene_at >= first_transport_from_scene_at\n    )\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/add-incident-response-timelines.sql",
+        "sql": "ALTER TABLE public.incident_response_timelines\n  ADD COLUMN IF NOT EXISTS event_notification_at timestamptz,\n  ADD COLUMN IF NOT EXISTS dmmp_activated boolean,\n  ADD COLUMN IF NOT EXISTS dmmp_activation_trigger text,\n  ADD COLUMN IF NOT EXISTS dmmp_activated_at timestamptz,\n  ADD COLUMN IF NOT EXISTS medical_coordinator_notified_at timestamptz,\n  ADD COLUMN IF NOT EXISTS last_dmmp_staff_arrived_at timestamptz,\n  ADD COLUMN IF NOT EXISTS first_ems_on_scene_at timestamptz,\n  ADD COLUMN IF NOT EXISTS triage_ordered_at timestamptz,\n  ADD COLUMN IF NOT EXISTS first_site_triage_at timestamptz,\n  ADD COLUMN IF NOT EXISTS last_site_triage_at timestamptz,\n  ADD COLUMN IF NOT EXISTS first_transport_from_scene_at timestamptz,\n  ADD COLUMN IF NOT EXISTS last_transport_from_scene_at timestamptz,\n  ADD COLUMN IF NOT EXISTS scene_demobilized_at timestamptz,\n  ADD COLUMN IF NOT EXISTS last_facility_deactivated_at timestamptz,\n  ADD COLUMN IF NOT EXISTS acute_response_started_at timestamptz,\n  ADD COLUMN IF NOT EXISTS acute_response_ended_at timestamptz,\n  ADD COLUMN IF NOT EXISTS updated_by uuid,\n  ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now(),\n  ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/apply-onsite-triage-supabase.sql",
+        "sql": "ALTER TABLE public.incident_response_timelines\n  ADD COLUMN IF NOT EXISTS triage_ordered_at timestamptz,\n  ADD COLUMN IF NOT EXISTS first_site_triage_at timestamptz,\n  ADD COLUMN IF NOT EXISTS last_site_triage_at timestamptz;"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/apply-utstein-operations-supabase.sql",
+        "sql": "CREATE TABLE IF NOT EXISTS public.incident_response_timelines (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  incident_id uuid NOT NULL UNIQUE\n    REFERENCES public.incidents(id) ON DELETE CASCADE,\n  event_notification_at timestamptz,\n  dmmp_activated boolean,\n  dmmp_activation_trigger text,\n  dmmp_activated_at timestamptz,\n  medical_coordinator_notified_at timestamptz,\n  last_dmmp_staff_arrived_at timestamptz,\n  last_facility_deactivated_at timestamptz,\n  acute_response_started_at timestamptz,\n  acute_response_ended_at timestamptz,\n  first_ems_on_scene_at timestamptz,\n  triage_ordered_at timestamptz,\n  first_site_triage_at timestamptz,\n  last_site_triage_at timestamptz,\n  first_transport_from_scene_at timestamptz,\n  last_transport_from_scene_at timestamptz,\n  scene_demobilized_at timestamptz,\n  custom_events jsonb NOT NULL DEFAULT '[]'::jsonb,\n  updated_by uuid REFERENCES public.users(id) ON DELETE SET NULL,\n  created_at timestamptz NOT NULL DEFAULT now(),\n  updated_at timestamptz NOT NULL DEFAULT now()\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/apply-utstein-operations-supabase.sql",
+        "sql": "ALTER TABLE public.incident_response_timelines\n  ADD COLUMN IF NOT EXISTS event_notification_at timestamptz,\n  ADD COLUMN IF NOT EXISTS dmmp_activated boolean,\n  ADD COLUMN IF NOT EXISTS dmmp_activation_trigger text,\n  ADD COLUMN IF NOT EXISTS dmmp_activated_at timestamptz,\n  ADD COLUMN IF NOT EXISTS medical_coordinator_notified_at timestamptz,\n  ADD COLUMN IF NOT EXISTS last_dmmp_staff_arrived_at timestamptz,\n  ADD COLUMN IF NOT EXISTS last_facility_deactivated_at timestamptz,\n  ADD COLUMN IF NOT EXISTS acute_response_started_at timestamptz,\n  ADD COLUMN IF NOT EXISTS acute_response_ended_at timestamptz,\n  ADD COLUMN IF NOT EXISTS first_ems_on_scene_at timestamptz,\n  ADD COLUMN IF NOT EXISTS triage_ordered_at timestamptz,\n  ADD COLUMN IF NOT EXISTS first_site_triage_at timestamptz,\n  ADD COLUMN IF NOT EXISTS last_site_triage_at timestamptz,\n  ADD COLUMN IF NOT EXISTS first_transport_from_scene_at timestamptz,\n  ADD COLUMN IF NOT EXISTS last_transport_from_scene_at timestamptz,\n  ADD COLUMN IF NOT EXISTS scene_demobilized_at timestamptz,\n  ADD COLUMN IF NOT EXISTS custom_events jsonb NOT NULL DEFAULT '[]'::jsonb,\n  ADD COLUMN IF NOT EXISTS updated_by uuid,\n  ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now(),\n  ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/incident-response-timeline-addition.sql",
+        "sql": "ALTER TABLE public.incident_response_timelines\n  ADD COLUMN IF NOT EXISTS last_dmmp_staff_arrived_at timestamptz,\n  ADD COLUMN IF NOT EXISTS last_facility_deactivated_at timestamptz,\n  ADD COLUMN IF NOT EXISTS acute_response_started_at timestamptz,\n  ADD COLUMN IF NOT EXISTS acute_response_ended_at timestamptz;"
+      }
+    ]
+  },
+  {
+    "name": "incidents",
+    "columns": [
+      "id",
+      "incident_code",
+      "incident_name",
+      "disaster_type",
+      "description",
+      "province",
+      "municipality",
+      "barangay",
+      "started_at",
+      "ended_at",
+      "status",
+      "created_by",
+      "created_at",
+      "updated_at",
+      "reopen_request_status",
+      "reopen_request_reason",
+      "reopen_requested_by",
+      "reopen_requested_at",
+      "reopen_approved_by",
+      "reopen_approved_at",
+      "triage_mode"
+    ],
+    "sources": [
+      "UP-Manila-DB.sql",
+      "disaster-casualty-system/api/sql/add-call-down-staff-and-reopen.sql",
+      "disaster-casualty-system/api/sql/add-incident-triage-mode.sql"
+    ],
+    "definitions": [
+      {
+        "source": "UP-Manila-DB.sql",
+        "sql": "CREATE TABLE public.incidents (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n\n  incident_code varchar(50) UNIQUE NOT NULL,\n  incident_name varchar(200) NOT NULL,\n  disaster_type varchar(100) NOT NULL,\n  description text,\n\n  province varchar(150),\n  municipality varchar(150),\n  barangay varchar(150),\n\n  started_at timestamptz NOT NULL,\n  ended_at timestamptz,\n\n  status public.incident_status NOT NULL DEFAULT 'draft',\n\n  created_by uuid NOT NULL,\n\n  created_at timestamptz NOT NULL DEFAULT now(),\n  updated_at timestamptz NOT NULL DEFAULT now(),\n\n  CONSTRAINT incidents_created_by_fkey\n    FOREIGN KEY (created_by)\n    REFERENCES public.users(id)\n    ON DELETE RESTRICT,\n\n  CONSTRAINT incidents_valid_dates_check\n    CHECK (\n      ended_at IS NULL\n      OR ended_at >= started_at\n    )\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/add-call-down-staff-and-reopen.sql",
+        "sql": "ALTER TABLE public.incidents\n  ADD COLUMN IF NOT EXISTS reopen_request_status text,\n  ADD COLUMN IF NOT EXISTS reopen_request_reason text,\n  ADD COLUMN IF NOT EXISTS reopen_requested_by uuid REFERENCES public.users(id) ON DELETE SET NULL,\n  ADD COLUMN IF NOT EXISTS reopen_requested_at timestamptz,\n  ADD COLUMN IF NOT EXISTS reopen_approved_by uuid REFERENCES public.users(id) ON DELETE SET NULL,\n  ADD COLUMN IF NOT EXISTS reopen_approved_at timestamptz;"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/add-incident-triage-mode.sql",
+        "sql": "ALTER TABLE public.incidents\n  ADD COLUMN IF NOT EXISTS triage_mode varchar(20) NOT NULL DEFAULT 'assisted';"
+      }
+    ]
+  },
+  {
+    "name": "medical_coordination_assessments",
+    "columns": [
+      "id",
+      "incident_id",
+      "initial_actions_rating",
+      "scene_coordination_rating",
+      "system_coordination_rating",
+      "communications_rating",
+      "resource_management_rating",
+      "notes",
+      "assessed_by",
+      "assessed_at"
+    ],
+    "sources": [
+      "UP-Manila-DB.sql",
+      "disaster-casualty-system/api/sql/add-medical-coordination-evaluation.sql",
+      "disaster-casualty-system/api/sql/apply-utstein-operations-supabase.sql"
+    ],
+    "definitions": [
+      {
+        "source": "UP-Manila-DB.sql",
+        "sql": "CREATE TABLE public.medical_coordination_assessments (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n\n  incident_id uuid NOT NULL UNIQUE,\n\n  initial_actions_rating smallint,\n  scene_coordination_rating smallint,\n  system_coordination_rating smallint,\n  communications_rating smallint,\n  resource_management_rating smallint,\n\n  notes text,\n  assessed_by uuid,\n  assessed_at timestamptz NOT NULL DEFAULT now(),\n\n  CONSTRAINT medical_coordination_assessments_incident_id_fkey\n    FOREIGN KEY (incident_id)\n    REFERENCES public.incidents(id)\n    ON DELETE CASCADE,\n\n  CONSTRAINT medical_coordination_assessments_assessed_by_fkey\n    FOREIGN KEY (assessed_by)\n    REFERENCES public.users(id)\n    ON DELETE SET NULL,\n\n  CONSTRAINT medical_coordination_assessments_rating_check\n    CHECK (\n      (initial_actions_rating IS NULL OR initial_actions_rating BETWEEN 1 AND 7)\n      AND (scene_coordination_rating IS NULL OR scene_coordination_rating BETWEEN 1 AND 7)\n      AND (system_coordination_rating IS NULL OR system_coordination_rating BETWEEN 1 AND 7)\n      AND (communications_rating IS NULL OR communications_rating BETWEEN 1 AND 7)\n      AND (resource_management_rating IS NULL OR resource_management_rating BETWEEN 1 AND 7)\n    )\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/add-medical-coordination-evaluation.sql",
+        "sql": "CREATE TABLE public.medical_coordination_assessments (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  incident_id uuid NOT NULL UNIQUE\n    REFERENCES public.incidents(id) ON DELETE CASCADE,\n\n  initial_actions_rating smallint,\n  scene_coordination_rating smallint,\n  system_coordination_rating smallint,\n  communications_rating smallint,\n  resource_management_rating smallint,\n\n  notes text,\n  assessed_by uuid\n    REFERENCES public.users(id) ON DELETE SET NULL,\n\n  assessed_at timestamptz NOT NULL DEFAULT now(),\n\n  CONSTRAINT coordination_rating_check CHECK (\n    initial_actions_rating BETWEEN 1 AND 7\n    AND scene_coordination_rating BETWEEN 1 AND 7\n    AND system_coordination_rating BETWEEN 1 AND 7\n    AND communications_rating BETWEEN 1 AND 7\n    AND resource_management_rating BETWEEN 1 AND 7\n  )\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/apply-utstein-operations-supabase.sql",
+        "sql": "CREATE TABLE IF NOT EXISTS public.medical_coordination_assessments (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  incident_id uuid NOT NULL UNIQUE\n    REFERENCES public.incidents(id) ON DELETE CASCADE,\n  initial_actions_rating smallint,\n  scene_coordination_rating smallint,\n  system_coordination_rating smallint,\n  communications_rating smallint,\n  resource_management_rating smallint,\n  notes text,\n  assessed_by uuid REFERENCES public.users(id) ON DELETE SET NULL,\n  assessed_at timestamptz NOT NULL DEFAULT now()\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/apply-utstein-operations-supabase.sql",
+        "sql": "ALTER TABLE public.medical_coordination_assessments\n  ADD COLUMN IF NOT EXISTS initial_actions_rating smallint,\n  ADD COLUMN IF NOT EXISTS scene_coordination_rating smallint,\n  ADD COLUMN IF NOT EXISTS system_coordination_rating smallint,\n  ADD COLUMN IF NOT EXISTS communications_rating smallint,\n  ADD COLUMN IF NOT EXISTS resource_management_rating smallint,\n  ADD COLUMN IF NOT EXISTS notes text,\n  ADD COLUMN IF NOT EXISTS assessed_by uuid,\n  ADD COLUMN IF NOT EXISTS assessed_at timestamptz DEFAULT now();"
+      }
+    ]
+  },
+  {
+    "name": "notifications",
+    "columns": [
+      "id",
+      "user_id",
+      "title",
+      "message",
+      "notification_type",
+      "is_read",
+      "related_entity_type",
+      "related_entity_id",
+      "created_at",
+      "read_at"
+    ],
+    "sources": [
+      "disaster-casualty-system/api/sql/add-notifications.sql"
+    ],
+    "definitions": [
+      {
+        "source": "disaster-casualty-system/api/sql/add-notifications.sql",
+        "sql": "CREATE TABLE IF NOT EXISTS public.notifications (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  user_id uuid\n    REFERENCES public.users(id)\n    ON DELETE CASCADE,\n  title text NOT NULL,\n  message text NOT NULL,\n  notification_type text NOT NULL DEFAULT 'system',\n  is_read boolean NOT NULL DEFAULT false,\n  related_entity_type text,\n  related_entity_id uuid,\n  created_at timestamptz NOT NULL DEFAULT now(),\n  read_at timestamptz,\n  CONSTRAINT notifications_type_check\n    CHECK (\n      notification_type IN (\n        'emergency',\n        'sync',\n        'verification',\n        'verified',\n        'incident',\n        'scheduled',\n        'system'\n      )\n    )\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/add-notifications.sql",
+        "sql": "ALTER TABLE public.notifications\n  ADD COLUMN IF NOT EXISTS user_id uuid,\n  ADD COLUMN IF NOT EXISTS title text,\n  ADD COLUMN IF NOT EXISTS message text,\n  ADD COLUMN IF NOT EXISTS notification_type text DEFAULT 'system',\n  ADD COLUMN IF NOT EXISTS is_read boolean DEFAULT false,\n  ADD COLUMN IF NOT EXISTS related_entity_type text,\n  ADD COLUMN IF NOT EXISTS related_entity_id uuid,\n  ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now(),\n  ADD COLUMN IF NOT EXISTS read_at timestamptz;"
+      }
+    ]
+  },
+  {
+    "name": "responder_safety_reports",
+    "columns": [
+      "id",
+      "incident_id",
+      "safety_actions_established",
+      "ppe_decision_at",
+      "response_deactivated_at",
+      "deployed_responders",
+      "injured_responders",
+      "ill_responders",
+      "deceased_responders",
+      "reported_by",
+      "created_at",
+      "updated_at"
+    ],
+    "sources": [
+      "disaster-casualty-system/api/sql/Add responder safety.sql"
+    ],
+    "definitions": [
+      {
+        "source": "disaster-casualty-system/api/sql/Add responder safety.sql",
+        "sql": "CREATE TABLE IF NOT EXISTS public.responder_safety_reports (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  incident_id uuid NOT NULL\n    REFERENCES public.incidents(id) ON DELETE CASCADE,\n  safety_actions_established varchar(20),\n  ppe_decision_at timestamptz,\n  response_deactivated_at timestamptz,\n  deployed_responders integer NOT NULL DEFAULT 0,\n  injured_responders integer NOT NULL DEFAULT 0,\n  ill_responders integer NOT NULL DEFAULT 0,\n  deceased_responders integer NOT NULL DEFAULT 0,\n  reported_by uuid\n    REFERENCES public.users(id) ON DELETE SET NULL,\n  created_at timestamptz NOT NULL DEFAULT now(),\n  updated_at timestamptz NOT NULL DEFAULT now()\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/Add responder safety.sql",
+        "sql": "ALTER TABLE public.responder_safety_reports\n  ADD COLUMN IF NOT EXISTS safety_actions_established varchar(20),\n  ADD COLUMN IF NOT EXISTS ppe_decision_at timestamptz,\n  ADD COLUMN IF NOT EXISTS response_deactivated_at timestamptz,\n  ADD COLUMN IF NOT EXISTS deployed_responders integer DEFAULT 0,\n  ADD COLUMN IF NOT EXISTS injured_responders integer DEFAULT 0,\n  ADD COLUMN IF NOT EXISTS ill_responders integer DEFAULT 0,\n  ADD COLUMN IF NOT EXISTS deceased_responders integer DEFAULT 0,\n  ADD COLUMN IF NOT EXISTS reported_by uuid,\n  ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now(),\n  ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();"
+      }
+    ]
+  },
+  {
+    "name": "responder_safety_responses",
+    "columns": [
+      "id",
+      "incident_id",
+      "responder_id",
+      "responder_role",
+      "responder_function",
+      "safety_status",
+      "responder_arrived_at",
+      "ppe_used_at",
+      "recorded_at",
+      "updated_at"
+    ],
+    "sources": [
+      "disaster-casualty-system/api/sql/add-responder-safety-responses.sql"
+    ],
+    "definitions": [
+      {
+        "source": "disaster-casualty-system/api/sql/add-responder-safety-responses.sql",
+        "sql": "CREATE TABLE IF NOT EXISTS public.responder_safety_responses (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  incident_id uuid NOT NULL\n    REFERENCES public.incidents(id) ON DELETE CASCADE,\n  responder_id uuid NOT NULL\n    REFERENCES public.users(id) ON DELETE CASCADE,\n  responder_role text,\n  responder_function text,\n  safety_status varchar(20) NOT NULL,\n  responder_arrived_at timestamptz,\n  ppe_used_at timestamptz NOT NULL,\n  recorded_at timestamptz NOT NULL DEFAULT now(),\n  updated_at timestamptz NOT NULL DEFAULT now()\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/add-responder-safety-responses.sql",
+        "sql": "ALTER TABLE public.responder_safety_responses\n  ADD COLUMN IF NOT EXISTS responder_role text,\n  ADD COLUMN IF NOT EXISTS responder_function text,\n  ADD COLUMN IF NOT EXISTS safety_status varchar(20),\n  ADD COLUMN IF NOT EXISTS responder_arrived_at timestamptz,\n  ADD COLUMN IF NOT EXISTS ppe_used_at timestamptz,\n  ADD COLUMN IF NOT EXISTS recorded_at timestamptz DEFAULT now(),\n  ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();"
+      }
+    ]
+  },
+  {
+    "name": "sitreps",
+    "columns": [
+      "id",
+      "incident_id",
+      "report_number",
+      "period_start",
+      "period_end",
+      "summary",
+      "generated_payload",
+      "generated_by",
+      "generated_at",
+      "status",
+      "approved_by",
+      "approved_at",
+      "created_at",
+      "updated_at"
+    ],
+    "sources": [
+      "UP-Manila-DB.sql",
+      "disaster-casualty-system/api/sql/add-sitreps.sql"
+    ],
+    "definitions": [
+      {
+        "source": "UP-Manila-DB.sql",
+        "sql": "CREATE TABLE public.sitreps (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n\n  incident_id uuid NOT NULL,\n  report_number varchar(80) UNIQUE NOT NULL,\n\n  period_start timestamptz,\n  period_end timestamptz NOT NULL DEFAULT now(),\n\n  summary text NOT NULL,\n  generated_payload jsonb NOT NULL,\n\n  generated_by uuid,\n  generated_at timestamptz NOT NULL DEFAULT now(),\n\n  status varchar(30) NOT NULL DEFAULT 'generated',\n\n  approved_by uuid,\n  approved_at timestamptz,\n\n  created_at timestamptz NOT NULL DEFAULT now(),\n  updated_at timestamptz NOT NULL DEFAULT now(),\n\n  CONSTRAINT sitreps_incident_id_fkey\n    FOREIGN KEY (incident_id)\n    REFERENCES public.incidents(id)\n    ON DELETE CASCADE,\n\n  CONSTRAINT sitreps_generated_by_fkey\n    FOREIGN KEY (generated_by)\n    REFERENCES public.users(id)\n    ON DELETE SET NULL,\n\n  CONSTRAINT sitreps_approved_by_fkey\n    FOREIGN KEY (approved_by)\n    REFERENCES public.users(id)\n    ON DELETE SET NULL,\n\n  CONSTRAINT sitreps_status_check\n    CHECK (status IN ('generated', 'approved', 'archived'))\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/add-sitreps.sql",
+        "sql": "CREATE TABLE IF NOT EXISTS public.sitreps (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  incident_id uuid NOT NULL\n    REFERENCES public.incidents(id)\n    ON DELETE CASCADE,\n  report_number varchar(80) NOT NULL UNIQUE,\n  period_start timestamptz,\n  period_end timestamptz NOT NULL DEFAULT now(),\n  summary text NOT NULL,\n  generated_payload jsonb NOT NULL,\n  generated_by uuid\n    REFERENCES public.users(id)\n    ON DELETE SET NULL,\n  generated_at timestamptz NOT NULL DEFAULT now(),\n  status varchar(30) NOT NULL DEFAULT 'generated',\n  approved_by uuid\n    REFERENCES public.users(id)\n    ON DELETE SET NULL,\n  approved_at timestamptz,\n  created_at timestamptz NOT NULL DEFAULT now(),\n  updated_at timestamptz NOT NULL DEFAULT now(),\n  CONSTRAINT sitreps_status_check\n    CHECK (status IN ('generated', 'approved', 'archived'))\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/add-sitreps.sql",
+        "sql": "ALTER TABLE public.sitreps\n  ADD COLUMN IF NOT EXISTS incident_id uuid,\n  ADD COLUMN IF NOT EXISTS report_number varchar(80),\n  ADD COLUMN IF NOT EXISTS period_start timestamptz,\n  ADD COLUMN IF NOT EXISTS period_end timestamptz DEFAULT now(),\n  ADD COLUMN IF NOT EXISTS summary text,\n  ADD COLUMN IF NOT EXISTS generated_payload jsonb,\n  ADD COLUMN IF NOT EXISTS generated_by uuid,\n  ADD COLUMN IF NOT EXISTS generated_at timestamptz DEFAULT now(),\n  ADD COLUMN IF NOT EXISTS status varchar(30) DEFAULT 'generated',\n  ADD COLUMN IF NOT EXISTS approved_by uuid,\n  ADD COLUMN IF NOT EXISTS approved_at timestamptz,\n  ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now(),\n  ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();"
+      }
+    ]
+  },
+  {
+    "name": "users",
+    "columns": [
+      "id",
+      "full_name",
+      "email",
+      "phone_number",
+      "role",
+      "assigned_barangay",
+      "assigned_municipality",
+      "is_active",
+      "created_at",
+      "updated_at",
+      "created_by",
+      "last_seen_at",
+      "office_organization",
+      "reporting_context"
+    ],
+    "sources": [
+      "UP-Manila-DB.sql",
+      "disaster-casualty-system/api/sql/add-admin-account-management.sql",
+      "disaster-casualty-system/api/sql/add-user-office-organization.sql",
+      "disaster-casualty-system/api/sql/add-user-reporting-context.sql"
+    ],
+    "definitions": [
+      {
+        "source": "UP-Manila-DB.sql",
+        "sql": "CREATE TABLE public.users (\n  id uuid PRIMARY KEY\n    REFERENCES auth.users(id)\n    ON DELETE CASCADE,\n\n  full_name varchar(150) NOT NULL,\n  email varchar(150) UNIQUE NOT NULL,\n  phone_number varchar(30),\n\n  role public.user_role NOT NULL DEFAULT 'responder',\n\n  assigned_barangay varchar(150),\n  assigned_municipality varchar(150),\n\n  is_active boolean NOT NULL DEFAULT true,\n\n  created_at timestamptz NOT NULL DEFAULT now(),\n  updated_at timestamptz NOT NULL DEFAULT now()\n);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/add-admin-account-management.sql",
+        "sql": "alter table public.users\n  add column if not exists created_by uuid references public.users(id) on delete set null;"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/add-admin-account-management.sql",
+        "sql": "alter table public.users\n  add column if not exists last_seen_at timestamptz;"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/add-user-office-organization.sql",
+        "sql": "ALTER TABLE public.users\n  ADD COLUMN IF NOT EXISTS office_organization varchar(255);"
+      },
+      {
+        "source": "disaster-casualty-system/api/sql/add-user-reporting-context.sql",
+        "sql": "alter table public.users\n  add column if not exists reporting_context varchar(40) not null default 'scene';"
+      }
+    ]
+  }
+]

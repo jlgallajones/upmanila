@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img">
+<rect width="100%" height="100%" fill="white"/>
+<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="#8aa5aa"/></marker></defs>
+<rect x="30" y="30" width="540" height="95" rx="8" fill="white" stroke="#d5e3e5"/>
+<rect x="30" y="30" width="540" height="6" rx="0" fill="#00838f" stroke="#00838f"/>
+<text x="46" y="64" font-family="Arial, sans-serif" font-size="17" fill="#142d36" font-weight="700">casualty_incidents / report extensions</text>
+<text x="46" y="91" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">FK casualty_incident_id -&gt; casualty_incidents.id</text>
+<rect x="630" y="30" width="540" height="95" rx="8" fill="white" stroke="#d5e3e5"/>
+<rect x="630" y="30" width="540" height="6" rx="0" fill="#00838f" stroke="#00838f"/>
+<text x="646" y="64" font-family="Arial, sans-serif" font-size="17" fill="#142d36" font-weight="700">incidents / operational extensions</text>
+<text x="646" y="91" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">FK incident_id -&gt; incidents.id</text>
+<rect x="30" y="145" width="540" height="60" rx="8" fill="#edf6f6" stroke="#d5e3e5"/>
+<text x="45" y="169" font-family="Arial, sans-serif" font-size="16" fill="#142d36" font-weight="700">casualty_status_history</text>
+<text x="45" y="191" font-family="Arial, sans-serif" font-size="13" fill="#546c74" font-weight="400">0..N status transitions</text>
+<rect x="30" y="217" width="540" height="60" rx="8" fill="#edf6f6" stroke="#d5e3e5"/>
+<text x="45" y="241" font-family="Arial, sans-serif" font-size="16" fill="#142d36" font-weight="700">casualty_treatments</text>
+<text x="45" y="263" font-family="Arial, sans-serif" font-size="13" fill="#546c74" font-weight="400">0..N treatment entries</text>
+<rect x="30" y="289" width="540" height="60" rx="8" fill="#edf6f6" stroke="#d5e3e5"/>
+<text x="45" y="313" font-family="Arial, sans-serif" font-size="16" fill="#142d36" font-weight="700">clinical_procedures</text>
+<text x="45" y="335" font-family="Arial, sans-serif" font-size="13" fill="#546c74" font-weight="400">0..N procedures; optional facility_id</text>
+<rect x="30" y="361" width="540" height="60" rx="8" fill="#edf6f6" stroke="#d5e3e5"/>
+<text x="45" y="385" font-family="Arial, sans-serif" font-size="16" fill="#142d36" font-weight="700">icu_encounters</text>
+<text x="45" y="407" font-family="Arial, sans-serif" font-size="13" fill="#546c74" font-weight="400">0..N ICU episodes; optional facility_id</text>
+<rect x="30" y="433" width="540" height="60" rx="8" fill="#edf6f6" stroke="#d5e3e5"/>
+<text x="45" y="457" font-family="Arial, sans-serif" font-size="16" fill="#142d36" font-weight="700">casualty_outcomes</text>
+<text x="45" y="479" font-family="Arial, sans-serif" font-size="13" fill="#546c74" font-weight="400">0..1 final outcome; UNIQUE report FK</text>
+<rect x="30" y="505" width="540" height="60" rx="8" fill="#edf6f6" stroke="#d5e3e5"/>
+<text x="45" y="529" font-family="Arial, sans-serif" font-size="16" fill="#142d36" font-weight="700">casualty_case_links</text>
+<text x="45" y="551" font-family="Arial, sans-serif" font-size="13" fill="#546c74" font-weight="400">0..1 link per report; case_id is a UUID group</text>
+<rect x="630" y="145" width="540" height="60" rx="8" fill="#edf6f6" stroke="#d5e3e5"/>
+<text x="645" y="169" font-family="Arial, sans-serif" font-size="16" fill="#142d36" font-weight="700">incident_response_timelines</text>
+<text x="645" y="191" font-family="Arial, sans-serif" font-size="13" fill="#546c74" font-weight="400">0..1 timeline; UNIQUE incident FK</text>
+<rect x="630" y="217" width="540" height="60" rx="8" fill="#edf6f6" stroke="#d5e3e5"/>
+<text x="645" y="241" font-family="Arial, sans-serif" font-size="16" fill="#142d36" font-weight="700">dmmp_staff_call_downs</text>
+<text x="645" y="263" font-family="Arial, sans-serif" font-size="13" fill="#546c74" font-weight="400">0..N call-down / staffing entries</text>
+<rect x="630" y="289" width="540" height="60" rx="8" fill="#edf6f6" stroke="#d5e3e5"/>
+<text x="645" y="313" font-family="Arial, sans-serif" font-size="16" fill="#142d36" font-weight="700">medical_coordination_assessments</text>
+<text x="645" y="335" font-family="Arial, sans-serif" font-size="13" fill="#546c74" font-weight="400">0..1 evaluation; UNIQUE incident FK</text>
+<rect x="630" y="361" width="540" height="60" rx="8" fill="#edf6f6" stroke="#d5e3e5"/>
+<text x="645" y="385" font-family="Arial, sans-serif" font-size="16" fill="#142d36" font-weight="700">continuity_of_care_assessments</text>
+<text x="645" y="407" font-family="Arial, sans-serif" font-size="13" fill="#546c74" font-weight="400">0..1 assessment; UNIQUE incident FK</text>
+<rect x="630" y="433" width="540" height="60" rx="8" fill="#edf6f6" stroke="#d5e3e5"/>
+<text x="645" y="457" font-family="Arial, sans-serif" font-size="16" fill="#142d36" font-weight="700">facility_resource_snapshots</text>
+<text x="645" y="479" font-family="Arial, sans-serif" font-size="13" fill="#546c74" font-weight="400">0..N snapshots; optional facility_id</text>
+<rect x="630" y="505" width="540" height="60" rx="8" fill="#edf6f6" stroke="#d5e3e5"/>
+<text x="645" y="529" font-family="Arial, sans-serif" font-size="16" fill="#142d36" font-weight="700">sitreps / ems_vehicle_arrivals</text>
+<text x="645" y="551" font-family="Arial, sans-serif" font-size="13" fill="#546c74" font-weight="400">0..N situation reports / vehicle arrivals</text>
+<rect x="30" y="610" width="540" height="100" rx="8" fill="white" stroke="#d5e3e5"/>
+<rect x="30" y="610" width="540" height="6" rx="0" fill="#00838f" stroke="#00838f"/>
+<text x="46" y="644" font-family="Arial, sans-serif" font-size="17" fill="#142d36" font-weight="700">User-linked support tables</text>
+<text x="46" y="671" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">form_drafts, notifications, audit_logs, call_down_staff</text>
+<rect x="630" y="610" width="540" height="100" rx="8" fill="white" stroke="#d5e3e5"/>
+<rect x="630" y="610" width="540" height="6" rx="0" fill="#00838f" stroke="#00838f"/>
+<text x="646" y="644" font-family="Arial, sans-serif" font-size="17" fill="#142d36" font-weight="700">Additional incident / user links</text>
+<text x="646" y="671" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">responder_safety_reports, responder_safety_responses</text>
+<text x="646" y="694" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">incident_ic_backups, incident_ic_delegations</text>
+<text x="30" y="743" font-family="Arial, sans-serif" font-size="12" fill="#546c74" font-weight="400">Reference groups summarize declared FK links; they do not imply that every optional extension is deployed or used by every workflow.</text>
+</svg>

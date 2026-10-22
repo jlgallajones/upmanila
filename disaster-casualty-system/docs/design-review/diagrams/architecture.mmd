@@ -1,0 +1,9 @@
+flowchart TB
+  Web[Web dashboard: HTML / CSS / JS] -->|HTTPS + bearer token| API[Express / TypeScript API]
+  Mobile[Expo / React Native / PWA] -->|HTTPS + bearer token| API
+  Mobile -.->|Cache / offline queue| Local[AsyncStorage / SecureStore where supported]
+  API -->|Token validation| Auth[Supabase Auth]
+  API -->|Scoped reads / writes| DB[(PostgreSQL)]
+  API -->|Attachment objects| Storage[Supabase Storage]
+  DB --> Events[Supabase Realtime]
+  Events -.->|Scoped subscriptions| Web

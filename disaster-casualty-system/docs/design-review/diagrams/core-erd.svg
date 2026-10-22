@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img">
+<rect width="100%" height="100%" fill="white"/>
+<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="#8aa5aa"/></marker></defs>
+<polyline points="260,130 285,130 285,330 470,330" fill="none" stroke="#8aa5aa" stroke-width="2"/>
+<polyline points="440,200 440,250 520,250 520,290" fill="none" stroke="#8aa5aa" stroke-width="2"/>
+<polyline points="740,200 740,250 680,250 680,290" fill="none" stroke="#8aa5aa" stroke-width="2"/>
+<polyline points="1040,200 1040,225 805,225 805,380 730,380" fill="none" stroke="#8aa5aa" stroke-width="2"/>
+<polyline points="260,365 470,365" fill="none" stroke="#8aa5aa" stroke-width="2"/>
+<polyline points="730,340 920,340" fill="none" stroke="#8aa5aa" stroke-width="2"/>
+<polyline points="500,455 500,500 140,500 140,550" fill="none" stroke="#8aa5aa" stroke-width="2"/>
+<polyline points="560,455 560,500 440,500 440,550" fill="none" stroke="#8aa5aa" stroke-width="2"/>
+<polyline points="620,455 620,500 740,500 740,550" fill="none" stroke="#8aa5aa" stroke-width="2"/>
+<polyline points="690,455 690,500 1040,500 1040,550" fill="none" stroke="#8aa5aa" stroke-width="2"/>
+<rect x="20" y="70" width="240" height="130" rx="8" fill="white" stroke="#d5e3e5"/>
+<rect x="20" y="70" width="240" height="6" rx="0" fill="#00838f" stroke="#00838f"/>
+<text x="36" y="104" font-family="Arial, sans-serif" font-size="17" fill="#142d36" font-weight="700">users</text>
+<text x="36" y="131" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">PK id -&gt; auth.users.id</text>
+<text x="36" y="154" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">role / reporting_context</text>
+<text x="36" y="177" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">is_active / full_name</text>
+<rect x="320" y="70" width="240" height="130" rx="8" fill="white" stroke="#d5e3e5"/>
+<rect x="320" y="70" width="240" height="6" rx="0" fill="#00838f" stroke="#00838f"/>
+<text x="336" y="104" font-family="Arial, sans-serif" font-size="17" fill="#142d36" font-weight="700">incidents</text>
+<text x="336" y="131" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">PK id; UQ incident_code</text>
+<text x="336" y="154" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">FK created_by -&gt; users</text>
+<text x="336" y="177" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">status / started_at</text>
+<rect x="620" y="70" width="240" height="130" rx="8" fill="white" stroke="#d5e3e5"/>
+<rect x="620" y="70" width="240" height="6" rx="0" fill="#00838f" stroke="#00838f"/>
+<text x="636" y="104" font-family="Arial, sans-serif" font-size="17" fill="#142d36" font-weight="700">casualties</text>
+<text x="636" y="131" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">PK id; id_number</text>
+<text x="636" y="154" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">identification_status</text>
+<text x="636" y="177" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">name / age / address</text>
+<rect x="920" y="70" width="260" height="130" rx="8" fill="white" stroke="#d5e3e5"/>
+<rect x="920" y="70" width="260" height="6" rx="0" fill="#00838f" stroke="#00838f"/>
+<text x="936" y="104" font-family="Arial, sans-serif" font-size="17" fill="#142d36" font-weight="700">healthcare_facilities</text>
+<text x="936" y="131" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">PK id; FK created_by</text>
+<text x="936" y="154" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">facility_name / location</text>
+<text x="936" y="177" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">is_active</text>
+<rect x="20" y="300" width="240" height="130" rx="8" fill="white" stroke="#d5e3e5"/>
+<rect x="20" y="300" width="240" height="6" rx="0" fill="#00838f" stroke="#00838f"/>
+<text x="36" y="334" font-family="Arial, sans-serif" font-size="17" fill="#142d36" font-weight="700">evacuation_centers</text>
+<text x="36" y="361" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">PK id; FK incident_id</text>
+<text x="36" y="384" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">center_name / capacity</text>
+<text x="36" y="407" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">location / is_active</text>
+<rect x="470" y="290" width="260" height="165" rx="8" fill="white" stroke="#d5e3e5"/>
+<rect x="470" y="290" width="260" height="6" rx="0" fill="#00838f" stroke="#00838f"/>
+<text x="486" y="324" font-family="Arial, sans-serif" font-size="17" fill="#142d36" font-weight="700">casualty_incidents</text>
+<text x="486" y="351" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">PK id; UQ client_record_id</text>
+<text x="486" y="374" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">FK casualty_id / incident_id</text>
+<text x="486" y="397" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">FK encoded_by / verified_by</text>
+<text x="486" y="420" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">status / verification_status</text>
+<rect x="920" y="300" width="260" height="130" rx="8" fill="white" stroke="#d5e3e5"/>
+<rect x="920" y="300" width="260" height="6" rx="0" fill="#00838f" stroke="#00838f"/>
+<text x="936" y="334" font-family="Arial, sans-serif" font-size="17" fill="#142d36" font-weight="700">triage assessments</text>
+<text x="936" y="361" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">casualty_triage_assessments</text>
+<text x="936" y="384" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">PK id; FK casualty_incident_id</text>
+<text x="936" y="407" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">triage stage / category</text>
+<rect x="20" y="550" width="260" height="130" rx="8" fill="white" stroke="#d5e3e5"/>
+<rect x="20" y="550" width="260" height="6" rx="0" fill="#00838f" stroke="#00838f"/>
+<text x="36" y="584" font-family="Arial, sans-serif" font-size="17" fill="#142d36" font-weight="700">transport records</text>
+<text x="36" y="611" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">casualty_transport_records</text>
+<text x="36" y="634" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">PK id; FK casualty_incident_id</text>
+<text x="36" y="657" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">FK receiving_facility_id</text>
+<rect x="320" y="550" width="260" height="130" rx="8" fill="white" stroke="#d5e3e5"/>
+<rect x="320" y="550" width="260" height="6" rx="0" fill="#00838f" stroke="#00838f"/>
+<text x="336" y="584" font-family="Arial, sans-serif" font-size="17" fill="#142d36" font-weight="700">facility_encounters</text>
+<text x="336" y="611" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">PK id; FK casualty_incident_id</text>
+<text x="336" y="634" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">FK facility_id</text>
+<text x="336" y="657" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">arrival / ED / disposition</text>
+<rect x="620" y="550" width="260" height="130" rx="8" fill="white" stroke="#d5e3e5"/>
+<rect x="620" y="550" width="260" height="6" rx="0" fill="#00838f" stroke="#00838f"/>
+<text x="636" y="584" font-family="Arial, sans-serif" font-size="17" fill="#142d36" font-weight="700">attachments</text>
+<text x="636" y="611" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">PK id; FK casualty_incident_id</text>
+<text x="636" y="634" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">FK uploaded_by</text>
+<text x="636" y="657" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">file metadata / storage path</text>
+<rect x="920" y="550" width="260" height="130" rx="8" fill="white" stroke="#d5e3e5"/>
+<rect x="920" y="550" width="260" height="6" rx="0" fill="#00838f" stroke="#00838f"/>
+<text x="936" y="584" font-family="Arial, sans-serif" font-size="17" fill="#142d36" font-weight="700">verification history</text>
+<text x="936" y="611" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">casualty_verification_history</text>
+<text x="936" y="634" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">PK id; FK casualty_incident_id</text>
+<text x="936" y="657" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">decision / reviewer / reason</text>
+<text x="330" y="240" font-family="Arial, sans-serif" font-size="13" fill="#00838f" font-weight="400">1 : 0..N</text>
+<text x="755" y="240" font-family="Arial, sans-serif" font-size="13" fill="#00838f" font-weight="400">1 : 0..N</text>
+<text x="300" y="353" font-family="Arial, sans-serif" font-size="12" fill="#546c74" font-weight="400">0..1 center : 0..N reports</text>
+<text x="758" y="329" font-family="Arial, sans-serif" font-size="12" fill="#00838f" font-weight="400">1 report : 0..N</text>
+<text x="40" y="530" font-family="Arial, sans-serif" font-size="13" fill="#00838f" font-weight="400">1 report : 0..N per child table</text>
+<text x="35" y="716" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">PK = primary key; FK = foreign key; UQ = unique. Every report belongs to one incident, one casualty, and one encoder.</text>
+<text x="35" y="742" font-family="Arial, sans-serif" font-size="13" fill="#546c74" font-weight="400">Relationship view is selective. Full field declarations and all source tables are in the searchable schema catalog.</text>
+</svg>

@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img">
+<rect width="100%" height="100%" fill="white"/>
+<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="#8aa5aa"/></marker></defs>
+<polyline points="215,180 215,260 470,260 470,300" fill="none" stroke="#8aa5aa" stroke-width="2" marker-end="url(#arrow)"/>
+<polyline points="615,180 615,300" fill="none" stroke="#8aa5aa" stroke-width="2" marker-end="url(#arrow)"/>
+<polyline points="770,125 860,125" fill="none" stroke="#8aa5aa" stroke-width="2" marker-end="url(#arrow)" stroke-dasharray="7 5"/>
+<polyline points="470,440 470,505 165,505 165,590" fill="none" stroke="#8aa5aa" stroke-width="2" marker-end="url(#arrow)"/>
+<polyline points="600,440 600,505 455,505 455,590" fill="none" stroke="#8aa5aa" stroke-width="2" marker-end="url(#arrow)"/>
+<polyline points="730,440 730,505 745,505 745,590" fill="none" stroke="#8aa5aa" stroke-width="2" marker-end="url(#arrow)"/>
+<polyline points="575,640 600,640 600,725 1035,725 1035,690" fill="none" stroke="#8aa5aa" stroke-width="2" marker-end="url(#arrow)"/>
+<polyline points="1155,640 1180,640 1180,35 215,35 215,70" fill="none" stroke="#8aa5aa" stroke-width="2" marker-end="url(#arrow)" stroke-dasharray="7 5"/>
+<text x="775" y="25" font-family="Arial, sans-serif" font-size="13" fill="#546c74" font-weight="400">Realtime events to web; scoped subscription policies</text>
+<text x="780" y="111" font-family="Arial, sans-serif" font-size="12" fill="#546c74" font-weight="400">cache / retry</text>
+<text x="485" y="223" font-family="Arial, sans-serif" font-size="14" fill="#00838f" font-weight="400">HTTPS + bearer token</text>
+<text x="40" y="292" font-family="Arial, sans-serif" font-size="12" fill="#00838f" font-weight="700">APPLICATION TRUST BOUNDARY</text>
+<text x="40" y="560" font-family="Arial, sans-serif" font-size="12" fill="#00838f" font-weight="700">SUPABASE SERVICES</text>
+<rect x="60" y="70" width="310" height="110" rx="8" fill="white" stroke="#d5e3e5"/>
+<rect x="60" y="70" width="310" height="6" rx="0" fill="#00838f" stroke="#00838f"/>
+<text x="76" y="104" font-family="Arial, sans-serif" font-size="17" fill="#142d36" font-weight="700">Web command dashboard</text>
+<text x="76" y="131" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">Static HTML / CSS / JavaScript</text>
+<text x="76" y="154" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">Admins and super admins</text>
+<rect x="460" y="70" width="310" height="110" rx="8" fill="white" stroke="#d5e3e5"/>
+<rect x="460" y="70" width="310" height="6" rx="0" fill="#00838f" stroke="#00838f"/>
+<text x="476" y="104" font-family="Arial, sans-serif" font-size="17" fill="#142d36" font-weight="700">Mobile / installed PWA</text>
+<text x="476" y="131" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">Expo / React Native / TypeScript</text>
+<text x="476" y="154" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">Responders and documenters</text>
+<rect x="860" y="70" width="280" height="110" rx="8" fill="white" stroke="#d5e3e5"/>
+<rect x="860" y="70" width="280" height="6" rx="0" fill="#00838f" stroke="#00838f"/>
+<text x="876" y="104" font-family="Arial, sans-serif" font-size="17" fill="#142d36" font-weight="700">Device-local persistence</text>
+<text x="876" y="131" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">AsyncStorage: cache / queue</text>
+<text x="876" y="154" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">SecureStore where supported</text>
+<rect x="335" y="300" width="530" height="140" rx="8" fill="white" stroke="#d5e3e5"/>
+<rect x="335" y="300" width="530" height="6" rx="0" fill="#00838f" stroke="#00838f"/>
+<text x="351" y="334" font-family="Arial, sans-serif" font-size="17" fill="#142d36" font-weight="700">Express API / TypeScript</text>
+<text x="351" y="361" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">Token validation + active profile + role / unit scope</text>
+<text x="351" y="384" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">Controllers / services / audit / exports</text>
+<text x="351" y="407" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">Request IDs and error handling</text>
+<text x="45" y="461" font-family="Arial, sans-serif" font-size="12" fill="#00838f" font-weight="700">HOSTING CONFIGURATION</text>
+<text x="45" y="483" font-family="Arial, sans-serif" font-size="13" fill="#546c74" font-weight="400">Static clients + Node API service</text>
+<text x="65" y="580" font-family="Arial, sans-serif" font-size="12" fill="#546c74" font-weight="400">Validate identity</text>
+<text x="365" y="580" font-family="Arial, sans-serif" font-size="12" fill="#546c74" font-weight="400">Scoped reads / writes</text>
+<text x="655" y="580" font-family="Arial, sans-serif" font-size="12" fill="#546c74" font-weight="400">Attachment objects</text>
+<rect x="45" y="590" width="240" height="100" rx="8" fill="white" stroke="#d5e3e5"/>
+<rect x="45" y="590" width="240" height="6" rx="0" fill="#00838f" stroke="#00838f"/>
+<text x="61" y="624" font-family="Arial, sans-serif" font-size="17" fill="#142d36" font-weight="700">Supabase Auth</text>
+<text x="61" y="651" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">Sessions / user identity</text>
+<rect x="335" y="590" width="240" height="100" rx="8" fill="white" stroke="#d5e3e5"/>
+<rect x="335" y="590" width="240" height="6" rx="0" fill="#00838f" stroke="#00838f"/>
+<text x="351" y="624" font-family="Arial, sans-serif" font-size="17" fill="#142d36" font-weight="700">PostgreSQL</text>
+<text x="351" y="651" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">Operational records</text>
+<rect x="625" y="590" width="240" height="100" rx="8" fill="white" stroke="#d5e3e5"/>
+<rect x="625" y="590" width="240" height="6" rx="0" fill="#00838f" stroke="#00838f"/>
+<text x="641" y="624" font-family="Arial, sans-serif" font-size="17" fill="#142d36" font-weight="700">Object Storage</text>
+<text x="641" y="651" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">Photos / signed access</text>
+<rect x="915" y="590" width="240" height="100" rx="8" fill="white" stroke="#d5e3e5"/>
+<rect x="915" y="590" width="240" height="6" rx="0" fill="#00838f" stroke="#00838f"/>
+<text x="931" y="624" font-family="Arial, sans-serif" font-size="17" fill="#142d36" font-weight="700">Realtime</text>
+<text x="931" y="651" font-family="Arial, sans-serif" font-size="14" fill="#546c74" font-weight="400">Postgres change events</text>
+<text x="50" y="749" font-family="Arial, sans-serif" font-size="12" fill="#546c74" font-weight="400">Solid: request / data path. Dashed: client-side cache or event channel. No direct client database CRUD is shown.</text>
+</svg>
