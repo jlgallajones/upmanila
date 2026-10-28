@@ -153,6 +153,20 @@ type IncidentSitrepPayload = {
     edCareByTriageCategory: Record<string, { count: number; total: number; percentage: number }>;
     stabilizationStrategies: CountMap;
     cumulativeIntervalsMinutes: number[];
+    lineGraphs?: {
+      sceneAmbulanceArrivals: Array<{
+        key: string;
+        label: string;
+        data: Array<{
+          minutes: number;
+          label: string;
+          cutoffAt: string | null;
+          count: number;
+          total: number;
+          percentage: number;
+        }>;
+      }>;
+    };
   };
 };
 
@@ -1144,6 +1158,16 @@ type PdfChart = {
   counts: CountMap;
 };
 
+type PdfLineSeries = {
+  key: string;
+  label: string;
+  data: Array<{
+    minutes: number;
+    label: string;
+    count: number;
+  }>;
+};
+
 type PdfTableRow = [string, string | number];
 
 function getChartEntries(counts: CountMap): Array<[string, number]> {
@@ -1470,13 +1494,12 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
 
   const drawHeader = () => {
     currentPage.push(
-      "0.48 0.07 0.08 rg",
+      "0.878 0.969 0.98 rg",
       `0 742 ${pageWidth} 50 re f`,
-      "0.99 0.73 0.19 rg",
+      "0 0.51 0.56 rg",
       `${marginX} 742 112 4 re f`,
-      "0 g",
-      "1 1 1 rg",
-      `BT /F2 14 Tf ${marginX} 770 Td (${escapePdfText("DCMS INCIDENT SITUATION REPORT")}) Tj ET`,
+      "0.23 0.23 0.23 rg",
+      `BT /F2 14 Tf ${marginX} 770 Td (${escapePdfText("SCRIBER INCIDENT SITUATION REPORT")}) Tj ET`,
       `BT /F1 8 Tf ${marginX} 754 Td (${escapePdfText(`${incidentCode} | ${sitrep.report_number}`)}) Tj ET`,
       `BT /F1 8 Tf ${pageWidth - 174} 754 Td (${escapePdfText(formatSitrepDate(sitrep.generated_at))}) Tj ET`,
       "0 g",
@@ -1488,7 +1511,7 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
       "0.72 0.76 0.82 RG",
       `${marginX} 38 ${contentWidth} 0.5 re S`,
       "0 g",
-      `BT /F1 8 Tf ${marginX} 24 Td (${escapePdfText("Incident-wide SitRep - FR, Advanced Medical Responder, and HCFD records included")}) Tj ET`,
+      `BT /F1 8 Tf ${marginX} 24 Td (${escapePdfText("SCRIBER Incident-wide SitRep - FR, AMP, and HCFD records included")}) Tj ET`,
       `BT /F1 8 Tf ${pageWidth - 92} 24 Td (${escapePdfText(`Page ${pageNumber}`)}) Tj ET`,
     );
   };
@@ -1524,7 +1547,7 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
   const addSectionTitle = (sectionTitle: string) => {
     ensureSpace(34);
     currentPage.push(
-      "0.48 0.07 0.08 rg",
+      "0 0.51 0.56 rg",
       `${marginX} ${cursorY - 11} 5 16 re f`,
       "0.82 0.86 0.91 RG",
       `${marginX} ${cursorY - 17} ${contentWidth} 0.6 re S`,
@@ -1642,7 +1665,7 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
       ensureSpace(20);
       text(formatSitrepLabel(label), marginX + 6, cursorY, 8);
       currentPage.push(
-        "0.48 0.07 0.08 rg",
+        "0 0.51 0.56 rg",
         `${barX} ${cursorY - 4} ${Math.max(3, (count / maxCount) * maxBarWidth).toFixed(2)} 10 re f`,
         "0 g",
       );
@@ -1651,6 +1674,96 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
     }
 
     cursorY -= 8;
+  };
+
+  const addLineChart = (chartTitle: string, series: PdfLineSeries[]) => {
+    const usableSeries = series.filter((item) => item.data.length > 0);
+    const points = usableSeries[0]?.data ?? [];
+    const chartHeight = 166;
+
+    ensureSpace(chartHeight);
+    text(chartTitle, marginX, cursorY, 10, "F2");
+    cursorY -= 18;
+
+    if (!points.length) {
+      addWrappedParagraph("No chart data recorded.", marginX + 8, 92, 8);
+      cursorY -= 4;
+      return;
+    }
+
+    const chartLeft = marginX + 30;
+    const chartRight = marginX + contentWidth - 12;
+    const chartTop = cursorY - 8;
+    const chartBottom = chartTop - 104;
+    const chartWidth = chartRight - chartLeft;
+    const maxCount = Math.max(
+      1,
+      ...usableSeries.flatMap((item) => item.data.map((point) => point.count)),
+    );
+
+    currentPage.push(
+      "0.86 0.89 0.93 RG",
+      `${chartLeft} ${chartBottom} ${chartWidth} ${chartTop - chartBottom} re S`,
+      "0.94 0.96 0.98 RG",
+      `${chartLeft} ${chartBottom} ${chartWidth} 0.5 re S`,
+      `${chartLeft} ${chartBottom + (chartTop - chartBottom) / 2} ${chartWidth} 0.5 re S`,
+      `${chartLeft} ${chartTop} ${chartWidth} 0.5 re S`,
+      "0.23 0.23 0.23 rg",
+    );
+    text("0", marginX + 10, chartBottom - 3, 7);
+    text(String(maxCount), marginX + 2, chartTop - 3, 7);
+
+    const xFor = (index: number) =>
+      points.length === 1
+        ? chartLeft + chartWidth / 2
+        : chartLeft + (index / (points.length - 1)) * chartWidth;
+    const yFor = (count: number) =>
+      chartBottom + (count / maxCount) * (chartTop - chartBottom);
+    const colors = [
+      "0 0.51 0.56",
+      "0.91 0.55 0.08",
+      "0.18 0.49 0.31",
+      "0.82 0.18 0.18",
+    ];
+
+    points.forEach((point, index) => {
+      text(point.label, xFor(index) - 12, chartBottom - 14, 7);
+    });
+
+    usableSeries.forEach((item, seriesIndex) => {
+      const color = colors[seriesIndex % colors.length];
+      currentPage.push(`${color} RG`, "1.5 w");
+
+      item.data.forEach((point, index) => {
+        const x = xFor(index);
+        const y = yFor(point.count);
+
+        if (index > 0) {
+          const previous = item.data[index - 1];
+          if (previous) {
+            currentPage.push(
+              `${xFor(index - 1).toFixed(2)} ${yFor(previous.count).toFixed(2)} m ${x.toFixed(2)} ${y.toFixed(2)} l S`,
+            );
+          }
+        }
+
+        currentPage.push(
+          `${x - 2} ${y - 2} 4 4 re f`,
+        );
+      });
+    });
+
+    currentPage.push("0 g", "0.23 0.23 0.23 rg");
+    usableSeries.forEach((item, index) => {
+      const legendX = marginX + index * 132;
+      currentPage.push(
+        `${colors[index % colors.length]} rg`,
+        `${legendX} ${chartBottom - 34} 8 8 re f`,
+      );
+      text(item.label, legendX + 12, chartBottom - 33, 7);
+    });
+    currentPage.push("0 g");
+    cursorY = chartBottom - 50;
   };
 
   text("Incident Situation Report", marginX, cursorY, 22, "F2");
@@ -1793,6 +1906,19 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
   addSectionTitle("Visual Summary");
   for (const chart of charts) {
     addChart(chart);
+  }
+
+  const sceneAmbulanceArrivals =
+    payload.analyticsSnapshot?.lineGraphs?.sceneAmbulanceArrivals;
+  if (sceneAmbulanceArrivals?.length) {
+    addSectionTitle("Utstein Ambulance Arrival Intervals");
+    addWrappedParagraph(
+      "Cumulative ambulance arrivals after DMMP activation at 15 minutes, 30 minutes, 1 hour, 2 hours, and 3 hours.",
+      marginX,
+      96,
+      8,
+    );
+    addLineChart("Ambulances Arrived on Scene by Type", sceneAmbulanceArrivals);
   }
 
   drawFooter(pages.length);
@@ -6057,6 +6183,7 @@ export async function generateIncidentSitrep(
       timelineResult,
       casualtiesResult,
       evacuationCentersResult,
+      sceneAmbulancesResult,
     ] = await Promise.all([
       supabase
         .from("incident_response_timelines")
@@ -6102,12 +6229,20 @@ export async function generateIncidentSitrep(
         .select("id, center_name, barangay, municipality")
         .eq("incident_id", id)
         .eq("is_active", true),
+      supabase
+        .from("incident_scene_clearance_ambulances")
+        .select(
+          "id, incident_id, ambulance_provider, plate_number, ambulance_type, arrived_on_scene_at, recorded_by, created_at, updated_at",
+        )
+        .eq("incident_id", id)
+        .order("arrived_on_scene_at", { ascending: true }),
     ]);
 
     const firstError =
       timelineResult.error ??
       casualtiesResult.error ??
-      evacuationCentersResult.error;
+      evacuationCentersResult.error ??
+      sceneAmbulancesResult.error;
 
     if (firstError) {
       throw new Error(
@@ -6210,6 +6345,8 @@ export async function generateIncidentSitrep(
       (treatmentResult.data ?? []) as TreatmentRecordRow[];
     const encounterRows =
       (encounterResult.data ?? []) as FacilityEncounterRow[];
+    const sceneAmbulanceRows =
+      (sceneAmbulancesResult.data ?? []) as SceneClearanceAmbulanceRow[];
     const responderSafetyResponses =
       responderSafetyResponsesResult.error
         ? []
@@ -6430,6 +6567,24 @@ export async function generateIncidentSitrep(
       (row) => row.safety_status === "no",
     ).length;
     const edCareVictims = encounterRows.filter(soughtEdCare).length;
+    const sitrepIntervalMinutes = [15, 30, 60, 120, 180];
+    const sitrepActivationAt =
+      (timelineResult.data as { dmmp_activated_at?: string | null } | null)
+        ?.dmmp_activated_at ?? null;
+    const buildSceneAmbulanceArrivalSeries = (
+      ambulanceType: SceneClearanceAmbulanceType,
+    ) =>
+      buildCumulativeIntervalRows({
+        rows: sceneAmbulanceRows
+          .filter((row) => row.ambulance_type === ambulanceType)
+          .map((row) => ({
+            casualty_incident_id: row.id,
+            occurred_at: row.arrived_on_scene_at,
+          })),
+        activationAt: sitrepActivationAt,
+        intervalMinutes: sitrepIntervalMinutes,
+        denominator: Math.max(sceneAmbulanceRows.length, 1),
+      });
 
     const casualtySummary = {
       total: incidentCasualties.length,
@@ -6537,7 +6692,33 @@ export async function generateIncidentSitrep(
         treatmentRows,
         (row) => row.treatment_strategy,
       ),
-      cumulativeIntervalsMinutes: [15, 30, 60, 120, 180],
+      cumulativeIntervalsMinutes: sitrepIntervalMinutes,
+      lineGraphs: {
+        sceneAmbulanceArrivals: [
+          {
+            key: "bls",
+            label: "BLS",
+            data: buildSceneAmbulanceArrivalSeries("bls"),
+          },
+          {
+            key: "acls",
+            label: "ACLS",
+            data: buildSceneAmbulanceArrivalSeries("acls"),
+          },
+          {
+            key: "patient_transport_vehicle",
+            label: "Patient Transport Vehicle",
+            data: buildSceneAmbulanceArrivalSeries(
+              "patient_transport_vehicle",
+            ),
+          },
+          {
+            key: "other",
+            label: "Other",
+            data: buildSceneAmbulanceArrivalSeries("other"),
+          },
+        ],
+      },
     };
 
     const summary = buildSitrepSummary(

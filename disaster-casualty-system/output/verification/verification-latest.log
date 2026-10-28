@@ -1,5 +1,5 @@
 DCMS VERIFICATION RUN
-Started: 2026-10-28T14:21:41.2641816+08:00
+Started: 2026-10-28T15:02:38.3583027+08:00
 Root: C:\Users\jlgallajones\upmanila\disaster-casualty-system
 [RUN ] API TypeScript typecheck
        Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\api
@@ -54,8 +54,8 @@ React Compiler enabled
 Starting Metro Bundler
 
 Static rendering is enabled. Learn more: https://docs.expo.dev/router/web/static-rendering/
-? Bundled 1060ms node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js (1514 modules)
-Web Bundled 1293ms node_modules\expo-router\entry.js (1283 modules)
+? Bundled 1159ms node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js (1458 modules)
+Web Bundled 1400ms node_modules\expo-router\entry.js (1103 modules)
 
 › web bundles (2):
 _expo/static/css/global-30c341199d6e65a2dfb94ff1ee1395d4.css (551B)
@@ -106,7 +106,4 @@ Exported: dist
 [RUN ] Repository whitespace check
        Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system
        Command: git.exe diff --check
-warning: in the working copy of 'disaster-casualty-system/api/src/routes/incident.routes.ts', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'disaster-casualty-system/api/src/services/triage/accuracy-summary.ts', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'disaster-casualty-system/api/src/services/triage/triage-accuracy.test.ts', LF will be replaced by CRLF the next time Git touches it
 [PASS] Repository whitespace check (exit code 0)

@@ -13647,7 +13647,25 @@ function bindIncidentManagementActions() {
 
       try {
         setMessage("incidentActionMessage", `Preparing SitRep ${format.toUpperCase()}...`);
-        const metadata = state.sitrepMetadata[incidentId] || {};
+        let metadata = state.sitrepMetadata[incidentId] || {};
+
+        if (!metadata.generatedAt) {
+          setMessage("incidentActionMessage", "Generating the current SitRep...");
+          const generated = await apiRequest(
+            `/incidents/${encodeURIComponent(incidentId)}/sitreps`,
+            {
+              method: "POST",
+              body: JSON.stringify({}),
+            },
+          );
+          metadata = {
+            generatedAt:
+              generated.data?.generated_at || new Date().toISOString(),
+            reportNumber: generated.data?.report_number || "latest-sitrep",
+          };
+          state.sitrepMetadata[incidentId] = metadata;
+        }
+
         await downloadApiFile(
           `/incidents/${encodeURIComponent(incidentId)}/export/sitrep.${format}`,
           buildSitrepFileName({
