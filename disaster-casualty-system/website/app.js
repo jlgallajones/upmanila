@@ -1766,7 +1766,10 @@ function buildSitrepFileName({
   generatedAt,
   extension,
 }) {
-  return `SITREP-${officeName || "SCRIBER"}-${incidentName || "Incident"}-${formatSitrepFileDate(generatedAt)}.${extension}`;
+  const officeSegment = sanitizeFileName(officeName || "SCRIBER");
+  const incidentSegment = sanitizeFileName(incidentName || "Incident");
+
+  return `SITREP-${officeSegment}-${incidentSegment}-${formatSitrepFileDate(generatedAt)}.${extension}`;
 }
 
 function getUserFriendlyMessage(
@@ -4522,7 +4525,10 @@ function renderAnalyticsLineChart(title, series, options = {}) {
     }))
     .filter((item) =>
       item.data.some(
-        (row) => Number(row.total || 0) > 0 && Boolean(row.cutoffAt),
+        (row) =>
+          Number(row.count || 0) > 0 &&
+          Number(row.total || 0) > 0 &&
+          Boolean(row.cutoffAt),
       ),
     );
   const hasKnownDenominator = normalizedSeries.some((item) =>

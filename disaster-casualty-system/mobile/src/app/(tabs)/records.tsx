@@ -2313,10 +2313,16 @@ function toggleHealthcareLocationFilter(
   async function handleExportIncidentReport(incident: Incident) {
     try {
       setExportingIncidentId(incident.id);
-      await generateIncidentSitrep(incident.id);
+      const generated = await generateIncidentSitrep(incident.id);
       const file = await downloadIncidentExport(
         incident.id,
         "sitrep-pdf",
+        generated.generated_payload.responderFunctionFilter,
+        {
+          officeName: "SCRIBER",
+          incidentName: incident.incident_name,
+          generatedAt: generated.generated_at,
+        },
       );
       Alert.alert("Export ready", `Incident report saved: ${file}`);
     } catch (error) {

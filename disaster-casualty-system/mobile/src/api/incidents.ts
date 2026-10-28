@@ -1175,10 +1175,29 @@ function sanitizeFileName(value: string): string {
   return value.replace(/[^a-z0-9._-]+/gi, "-").replace(/^-|-$/g, "");
 }
 
+function formatSitrepFileDate(value?: string): string {
+  const date = new Date(value || Date.now());
+
+  if (Number.isNaN(date.getTime())) {
+    return formatSitrepFileDate();
+  }
+
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${month}${day}${date.getFullYear()}`;
+}
+
+export type IncidentExportOptions = {
+  officeName?: string;
+  incidentName?: string;
+  generatedAt?: string;
+};
+
 export async function downloadIncidentExport(
   incidentId: string,
   kind: IncidentExportKind,
   responderFunctionFilter?: SitrepResponderFunctionFilter,
+  options: IncidentExportOptions = {},
 ): Promise<string> {
   const token = await getAccessToken();
   const encodedIncidentId = encodeURIComponent(incidentId);
@@ -1189,13 +1208,22 @@ export async function downloadIncidentExport(
         )}`
       : "";
   const endpoint = `${API_BASE_URL.replace(/\/$/, "")}/incidents/${encodedIncidentId}/export/${exportPaths[kind]}${scopeQuery}`;
-  const fileName = sanitizeFileName(
-    `dcms-${incidentId}-${kind}${
-      responderFunctionFilter && kind !== "casualties-csv"
-        ? `-${responderFunctionFilter}`
-        : ""
-    }.${exportExtensions[kind]}`,
-  );
+  const fileName =
+    kind === "sitrep-pdf" || kind === "sitrep-csv"
+      ? sanitizeFileName(
+          `SITREP-${options.officeName || "SCRIBER"}-${
+            options.incidentName || "Incident"
+          }-${formatSitrepFileDate(options.generatedAt)}.${
+            exportExtensions[kind]
+          }`,
+        )
+      : sanitizeFileName(
+          `dcms-${incidentId}-${kind}${
+            responderFunctionFilter && kind !== "casualties-csv"
+              ? `-${responderFunctionFilter}`
+              : ""
+          }.${exportExtensions[kind]}`,
+        );
 
   if (Platform.OS === "web") {
     const response = await api.get<Blob>(

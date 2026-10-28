@@ -1164,6 +1164,7 @@ type PdfLineSeries = {
   data: Array<{
     minutes: number;
     label: string;
+      cutoffAt?: string | null;
     count: number;
   }>;
 };
@@ -1642,9 +1643,40 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
     cursorY -= 6;
   };
 
-  const addChart = (chart: PdfChart) => {
+  const pdfChartColor = (label: string, index: number): string => {
+    const normalized = label.toLowerCase();
+
+    if (normalized.includes("immediate") || normalized.includes("critical")) {
+      return "0.82 0.18 0.18";
+    }
+
+    if (normalized.includes("delayed") || normalized.includes("urgent")) {
+      return "0.93 0.61 0.08";
+    }
+
+    if (normalized.includes("minimal") || normalized.includes("minor")) {
+      return "0.18 0.49 0.31";
+    }
+
+    if (normalized.includes("expectant") || normalized.includes("deceased")) {
+      return "0.16 0.18 0.22";
+    }
+
+    if (normalized.includes("unknown")) {
+      return "0.39 0.45 0.55";
+    }
+
+    return [
+      "0 0.51 0.56",
+      "0.48 0.35 0.72",
+      "0.82 0.39 0.12",
+      "0.34 0.55 0.72",
+    ][index % 4]!;
+  };
+
+  const addPieChart = (chart: PdfChart) => {
     const entries = getChartEntries(chart.counts);
-    const chartHeight = entries.length > 0 ? 34 + entries.length * 21 : 52;
+    const chartHeight = entries.length > 0 ? 174 : 58;
 
     ensureSpace(chartHeight);
     text(chart.title, marginX, cursorY, 10, "F2");
@@ -1656,30 +1688,67 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
       return;
     }
 
-    const maxCount = Math.max(...entries.map(([, count]) => count), 1);
-    const labelWidth = 190;
-    const barX = marginX + labelWidth;
-    const maxBarWidth = contentWidth - labelWidth - 46;
+    const total = entries.reduce((sum, [, count]) => sum + count, 0);
+    const centerX = marginX + 112;
+    const centerY = cursorY - 70;
+    const radius = 58;
+    let startAngle = -Math.PI / 2;
 
-    for (const [label, count] of entries) {
-      ensureSpace(20);
-      text(formatSitrepLabel(label), marginX + 6, cursorY, 8);
+    entries.forEach(([label, count], index) => {
+      const endAngle = startAngle + (count / total) * Math.PI * 2;
+      const points = [`${centerX.toFixed(2)} ${centerY.toFixed(2)} m`];
+      const steps = Math.max(2, Math.ceil((endAngle - startAngle) / (Math.PI / 12)));
+
+      for (let step = 0; step <= steps; step += 1) {
+        const angle = startAngle + ((endAngle - startAngle) * step) / steps;
+        points.push(
+          `${(centerX + Math.cos(angle) * radius).toFixed(2)} ${(centerY + Math.sin(angle) * radius).toFixed(2)} l`,
+        );
+      }
+
       currentPage.push(
-        "0 0.51 0.56 rg",
-        `${barX} ${cursorY - 4} ${Math.max(3, (count / maxCount) * maxBarWidth).toFixed(2)} 10 re f`,
-        "0 g",
+        `${pdfChartColor(label, index)} rg`,
+        `${points.join(" ")} h f`,
       );
-      text(String(count), pageWidth - marginX - 28, cursorY, 8, "F2");
-      cursorY -= 20;
-    }
+      startAngle = endAngle;
+    });
 
-    cursorY -= 8;
+    currentPage.push("0.96 0.97 0.98 rg", "0.86 0.89 0.93 RG");
+    currentPage.push(
+      `${centerX - radius} ${centerY - radius} ${radius * 2} ${radius * 2} re S`,
+      "0 g",
+    );
+
+    const legendX = marginX + 220;
+    const legendStartY = cursorY - 18;
+    entries.forEach(([label, count], index) => {
+      const legendY = legendStartY - index * 21;
+      const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
+
+      currentPage.push(
+        `${pdfChartColor(label, index)} rg`,
+        `${legendX} ${legendY - 6} 8 8 re f`,
+        "0.23 0.23 0.23 rg",
+      );
+      text(formatSitrepLabel(label), legendX + 14, legendY, 8);
+      text(`${count} (${percentage}%)`, legendX + 168, legendY, 8, "F2");
+    });
+
+    cursorY -= 154;
   };
 
   const addLineChart = (chartTitle: string, series: PdfLineSeries[]) => {
-    const usableSeries = series.filter((item) => item.data.length > 0);
+    const usableSeries = series.filter((item) =>
+      item.data.some(
+        (point) => point.count > 0 && Boolean(point.cutoffAt),
+      ),
+    );
     const points = usableSeries[0]?.data ?? [];
     const chartHeight = 166;
+
+    if (!usableSeries.length) {
+      return;
+    }
 
     ensureSpace(chartHeight);
     text(chartTitle, marginX, cursorY, 10, "F2");
@@ -1766,8 +1835,9 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
     cursorY = chartBottom - 50;
   };
 
+  cursorY -= 12;
   text("Incident Situation Report", marginX, cursorY, 22, "F2");
-  cursorY -= 20;
+  cursorY -= 28;
   addWrappedParagraph(incidentName, marginX, 78, 11);
   cursorY -= 6;
 
@@ -1905,12 +1975,18 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
 
   addSectionTitle("Visual Summary");
   for (const chart of charts) {
-    addChart(chart);
+    addPieChart(chart);
   }
 
   const sceneAmbulanceArrivals =
     payload.analyticsSnapshot?.lineGraphs?.sceneAmbulanceArrivals;
-  if (sceneAmbulanceArrivals?.length) {
+  const populatedSceneAmbulanceArrivals = sceneAmbulanceArrivals?.filter(
+    (series) =>
+      series.data.some(
+        (point) => point.count > 0 && Boolean(point.cutoffAt),
+      ),
+  );
+  if (populatedSceneAmbulanceArrivals?.length) {
     addSectionTitle("Utstein Ambulance Arrival Intervals");
     addWrappedParagraph(
       "Cumulative ambulance arrivals after DMMP activation at 15 minutes, 30 minutes, 1 hour, 2 hours, and 3 hours.",
@@ -1918,7 +1994,10 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
       96,
       8,
     );
-    addLineChart("Ambulances Arrived on Scene by Type", sceneAmbulanceArrivals);
+    addLineChart(
+      "Ambulances Arrived on Scene by Type",
+      populatedSceneAmbulanceArrivals,
+    );
   }
 
   drawFooter(pages.length);

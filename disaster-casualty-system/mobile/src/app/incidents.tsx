@@ -1958,6 +1958,11 @@ export default function IncidentsPage() {
         sitrep.incident_id,
         kind,
         sitrep.generated_payload.responderFunctionFilter,
+        {
+          officeName: "SCRIBER",
+          incidentName: sitrep.generated_payload.incident.incident_name,
+          generatedAt: sitrep.generated_at,
+        },
       );
 
       Alert.alert("Export saved", uri);
