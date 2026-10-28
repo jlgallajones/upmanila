@@ -9498,7 +9498,10 @@ if (
               return false;
             }
 
-            if (!form.transferPrecaution.trim()) {
+            if (
+              !isShortAmpResponderFlow &&
+              !form.transferPrecaution.trim()
+            ) {
               Alert.alert(
                 "Precaution required",
                 "Select the transfer precaution.",
@@ -9515,6 +9518,7 @@ if (
             }
 
             if (
+              !isShortAmpResponderFlow &&
               form.usedEmsVehicle === "Yes" &&
               !form.emsVehicleType.trim()
             ) {
@@ -12149,6 +12153,7 @@ async function ensureResponderSafetyResponseSaved() {
 
       if (
         isSaResponderFlow &&
+        !isShortAmpResponderFlow &&
         form.usedEmsVehicle === "Yes" &&
         !form.emsVehicleType.trim()
       ) {
@@ -14247,12 +14252,14 @@ if (
                 </View>
               ) : null}
 
-              <SelectField
-                label="PRECAUTION"
-                value={form.transferPrecaution}
-                placeholder="Select precaution"
-                onPress={() => openChoiceSheet("transferPrecaution")}
-              />
+              {!isShortAmpResponderFlow ? (
+                <SelectField
+                  label="PRECAUTION"
+                  value={form.transferPrecaution}
+                  placeholder="Select precaution"
+                  onPress={() => openChoiceSheet("transferPrecaution")}
+                />
+              ) : null}
 
               <SelectField
                 label="RECEIVING FACILITY"
@@ -14281,32 +14288,36 @@ if (
                 </View>
               ) : null}
 
-              <SelectField
-                label="USED EMS VEHICLE?"
-                value={form.usedEmsVehicle}
-                placeholder="Yes or No"
-                onPress={() => openChoiceSheet("usedEmsVehicle")}
-              />
-
-              {form.usedEmsVehicle === "Yes" ? (
-                <View style={styles.conditionalChildGroup}>
+              {!isShortAmpResponderFlow ? (
+                <>
                   <SelectField
-                    label="TYPE OF EMS VEHICLE"
-                    value={form.emsVehicleType}
-                    placeholder="BLS or ALS"
-                    onPress={() => openChoiceSheet("emsVehicleType")}
+                    label="USED EMS VEHICLE?"
+                    value={form.usedEmsVehicle}
+                    placeholder="Yes or No"
+                    onPress={() => openChoiceSheet("usedEmsVehicle")}
                   />
-                </View>
-              ) : null}
 
-              <FormField
-                label="VEHICLE MAKE, MODEL, AND PLATE NUMBER"
-                value={form.vehicleMakeModelPlate}
-                placeholder="e.g. Toyota Hiace ABC 1234"
-                onChangeText={(value) =>
-                  updateField("vehicleMakeModelPlate", value)
-                }
-              />
+                  {form.usedEmsVehicle === "Yes" ? (
+                    <View style={styles.conditionalChildGroup}>
+                      <SelectField
+                        label="TYPE OF EMS VEHICLE"
+                        value={form.emsVehicleType}
+                        placeholder="BLS or ALS"
+                        onPress={() => openChoiceSheet("emsVehicleType")}
+                      />
+                    </View>
+                  ) : null}
+
+                  <FormField
+                    label="VEHICLE MAKE, MODEL, AND PLATE NUMBER"
+                    value={form.vehicleMakeModelPlate}
+                    placeholder="e.g. Toyota Hiace ABC 1234"
+                    onChangeText={(value) =>
+                      updateField("vehicleMakeModelPlate", value)
+                    }
+                  />
+                </>
+              ) : null}
 
               <CurrentTimeField
                 label="DEPARTED SCENE TIME"

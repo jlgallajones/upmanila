@@ -3,6 +3,11 @@ const RESPONSE_TIMELINE_SESSION_DRAFT_KEY =
   "dcms.admin.responseTimelineSessionDraft";
 const SESSION_EXPIRED_NOTICE_KEY = "dcms.admin.sessionExpiredNotice";
 const THEME_STORAGE_KEY = "dcms.admin.themeMode";
+const ACCESS_TOKEN_KEY = "dcms.admin.accessToken";
+const REFRESH_TOKEN_KEY = "dcms.admin.refreshToken";
+const SESSION_STARTED_AT_KEY = "dcms.admin.sessionStartedAt";
+const WEB_SESSION_DURATION_MS = 3 * 60 * 60 * 1000;
+const TOKEN_REFRESH_RETRY_MS = 30 * 1000;
 
 let realtimeClient = null;
 let dashboardRealtimeChannel = null;
@@ -13,6 +18,8 @@ let analyticsLiveRefreshTimer = null;
 let analyticsLiveRefreshInFlight = false;
 let auditLogsLiveRefreshTimer = null;
 let auditLogsLiveRefreshInFlight = false;
+let webSessionRefreshTimer = null;
+let webSessionRefreshPromise = null;
 
 function getDefaultApiBaseUrl() {
   if (typeof window === "undefined") {
@@ -192,7 +199,8 @@ function bindSystemThemeListener() {
 const state = {
   apiBaseUrl: getInitialApiBaseUrl(),
   user: readJson("dcms.admin.user"),
-  accessToken: localStorage.getItem("dcms.admin.accessToken"),
+  accessToken: localStorage.getItem(ACCESS_TOKEN_KEY),
+  refreshToken: localStorage.getItem(REFRESH_TOKEN_KEY),
   themeMode: getInitialThemeMode(),
   theme: "light",
   hasPassedLoginLanding: false,
@@ -812,11 +820,25 @@ function restoreResponseTimelineDraftIntoForm() {
   return true;
 }
 
-function saveSession(data) {
+function saveSession(data, preserveSessionStart = false) {
   state.user = data.user;
   state.accessToken = data.accessToken;
+  state.refreshToken = data.refreshToken || state.refreshToken;
   localStorage.setItem("dcms.admin.user", JSON.stringify(data.user));
-  localStorage.setItem("dcms.admin.accessToken", data.accessToken || "");
+  localStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken || "");
+  localStorage.setItem(REFRESH_TOKEN_KEY, state.refreshToken || "");
+
+  if (
+    !preserveSessionStart ||
+    !localStorage.getItem(SESSION_STARTED_AT_KEY)
+  ) {
+    localStorage.setItem(
+      SESSION_STARTED_AT_KEY,
+      String(Date.now()),
+    );
+  }
+
+  scheduleWebSessionRefresh();
 }
 
 function saveCurrentUser(user) {
@@ -827,14 +849,173 @@ function saveCurrentUser(user) {
 function clearSession() {
   void stopDashboardRealtime();
   stopAnalyticsLiveRefresh();
+  if (webSessionRefreshTimer !== null) {
+    window.clearTimeout(webSessionRefreshTimer);
+    webSessionRefreshTimer = null;
+  }
   
   state.user = null;
   state.accessToken = null;
+  state.refreshToken = null;
   state.hasPassedLoginLanding = true;
   state.activeView = "home";
   localStorage.removeItem("dcms.admin.user");
-  localStorage.removeItem("dcms.admin.accessToken");
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
+  localStorage.removeItem(SESSION_STARTED_AT_KEY);
   localStorage.removeItem("dcms.admin.activeView");
+}
+
+function getAccessTokenExpiry(token) {
+  try {
+    const payload = token.split(".")[1];
+
+    if (!payload) return null;
+
+    const normalized = payload
+      .replace(/-/g, "+")
+      .replace(/_/g, "/")
+      .padEnd(Math.ceil(payload.length / 4) * 4, "=");
+    const parsed = JSON.parse(window.atob(normalized));
+
+    return typeof parsed.exp === "number" ? parsed.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+async function refreshWebSession() {
+  if (webSessionRefreshPromise) {
+    return webSessionRefreshPromise;
+  }
+
+  const refreshToken =
+    state.refreshToken || localStorage.getItem(REFRESH_TOKEN_KEY);
+  const sessionStartedAt = Number(
+    localStorage.getItem(SESSION_STARTED_AT_KEY),
+  );
+
+  if (
+    !refreshToken ||
+    (sessionStartedAt > 0 &&
+      Date.now() - sessionStartedAt >= WEB_SESSION_DURATION_MS)
+  ) {
+    return null;
+  }
+
+  webSessionRefreshPromise = fetch(
+    `${state.apiBaseUrl}/auth/refresh`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+    },
+  )
+    .then(async (response) => {
+      const body = await response.json().catch(() => ({}));
+
+      if (!response.ok || !body?.data?.accessToken) {
+        throw new Error(
+          body?.message || "Unable to refresh the web session.",
+        );
+      }
+
+      saveSession(body.data, true);
+      return state.accessToken;
+    })
+    .catch((error) => {
+      logUiError("Web session refresh failed", error);
+      return null;
+    })
+    .finally(() => {
+      webSessionRefreshPromise = null;
+    });
+
+  return webSessionRefreshPromise;
+}
+
+function expireWebSession() {
+  const preservedDraft = preserveActiveResponseTimelineDraft(
+    "session-expired",
+  );
+  localStorage.setItem(
+    SESSION_EXPIRED_NOTICE_KEY,
+    preservedDraft
+      ? "Session expired. Please log in again. Your unsaved Response Timeline values were kept on this browser."
+      : "Session expired. Please log in again.",
+  );
+  clearSession();
+  render();
+
+  if (preservedDraft) {
+    setMessage(
+      "loginMessage",
+      "Your session expired. The unsaved Response Timeline values were kept on this browser. Sign in again to restore and save them.",
+      "warning",
+    );
+  }
+}
+
+function scheduleWebSessionRefresh() {
+  if (webSessionRefreshTimer !== null) {
+    window.clearTimeout(webSessionRefreshTimer);
+    webSessionRefreshTimer = null;
+  }
+
+  if (!state.accessToken || !state.refreshToken) return;
+
+  let sessionStartedAt = Number(
+    localStorage.getItem(SESSION_STARTED_AT_KEY),
+  );
+
+  if (!sessionStartedAt) {
+    sessionStartedAt = Date.now();
+    localStorage.setItem(
+      SESSION_STARTED_AT_KEY,
+      String(sessionStartedAt),
+    );
+  }
+
+  const remainingSessionMs =
+    WEB_SESSION_DURATION_MS - (Date.now() - sessionStartedAt);
+
+  if (remainingSessionMs <= 0) {
+    expireWebSession();
+    return;
+  }
+
+  const accessTokenExpiry = getAccessTokenExpiry(state.accessToken);
+  const untilTokenRefresh = accessTokenExpiry
+    ? accessTokenExpiry - Date.now() - 60 * 1000
+    : 15 * 60 * 1000;
+  const delay = Math.max(
+    1000,
+    Math.min(untilTokenRefresh, remainingSessionMs),
+  );
+
+  webSessionRefreshTimer = window.setTimeout(async () => {
+    if (
+      Date.now() - sessionStartedAt >=
+      WEB_SESSION_DURATION_MS
+    ) {
+      expireWebSession();
+      return;
+    }
+
+    const refreshedToken = await refreshWebSession();
+
+    if (refreshedToken) {
+      scheduleWebSessionRefresh();
+      return;
+    }
+
+    if (Date.now() - sessionStartedAt < WEB_SESSION_DURATION_MS) {
+      webSessionRefreshTimer = window.setTimeout(
+        scheduleWebSessionRefresh,
+        TOKEN_REFRESH_RETRY_MS,
+      );
+    }
+  }, delay);
 }
 
 function roleLabel(role) {
@@ -976,7 +1157,7 @@ function recomputeAdminDashboardSummary() {
   };
 }
 
-async function apiRequest(path, options = {}) {
+async function apiRequest(path, options = {}, hasRetried = false) {
   let response;
 
   try {
@@ -1016,26 +1197,20 @@ async function apiRequest(path, options = {}) {
       message,
     });
 
-    if (response.status === 401) {
-      const preservedDraft = preserveActiveResponseTimelineDraft(
-        "session-expired",
-      );
-      localStorage.setItem(
-        SESSION_EXPIRED_NOTICE_KEY,
-        preservedDraft
-          ? "Session expired. Please log in again. Your unsaved Response Timeline values were kept on this browser."
-          : "Session expired. Please log in again.",
-      );
-      clearSession();
-      render();
-      if (preservedDraft) {
-        setMessage(
-          "loginMessage",
-          "Your session expired. The unsaved Response Timeline values were kept on this browser. Sign in again to restore and save them.",
-          "warning",
-        );
+    if (
+      response.status === 401 &&
+      !hasRetried &&
+      path !== "/auth/login" &&
+      !path.includes("/auth/refresh")
+    ) {
+      const refreshedToken = await refreshWebSession();
+
+      if (refreshedToken) {
+        return apiRequest(path, options, true);
       }
     }
+
+    if (response.status === 401) expireWebSession();
 
     throw new Error(getUserFriendlyMessage(message));
   }
@@ -11479,7 +11654,7 @@ function renderIncidentEditView(incident) {
     ["Municipality / City", incident.municipality || "Not recorded"],
     ["Province", incident.province || "Not recorded"],
     ["Status", roleLabel(incident.status)],
-    ["Incident onsite", formatDate(incident.started_at)],
+    ["Incident onset", formatDate(incident.started_at)],
     ["Closed / ended at", formatDate(incident.ended_at)],
   ]);
 }
@@ -11534,7 +11709,7 @@ function renderIncidentEditForm(incident) {
       </div>
       <div class="form-grid three">
         <label class="field">
-          <span>Incident onsite</span>
+          <span>Incident onset</span>
           <input name="startedAt" type="datetime-local" value="${toLocalDateTimeInput(incident.started_at)}" />
         </label>
         <label class="field">
@@ -13834,7 +14009,7 @@ function renderIncidentCreator(compact = false) {
         </div>
         <div class="form-section-title">Response timeline</div>
         <div class="timeline-fields">
-          <label class="field"><span>Incident onsite</span><input name="startedAt" type="datetime-local" /></label>
+          <label class="field"><span>Incident onset</span><input name="startedAt" type="datetime-local" /></label>
           <label class="field"><span>EMS alerted</span><input name="emsAlertedAt" type="datetime-local" /></label>
           <label class="field"><span>EMS deployed</span><input name="emsDeployedAt" type="datetime-local" /></label>
           <label class="field"><span>EMS arrived</span><input name="emsArrivedAt" type="datetime-local" /></label>
@@ -14264,5 +14439,6 @@ function incidentOptions() {
     .join("");
 }
 
+scheduleWebSessionRefresh();
 bindSystemThemeListener();
 render();
