@@ -1,7 +1,7 @@
 :root {
   --maroon: #242424;
   --maroon-dark: #6B6B6B;
-  --maroon-bright: #3a3a3a;
+  --maroon-bright: #F2F2F2;
   --up-green: #014421;
   --gold: #f2c94c;
   --ink: #3A3A3A;
@@ -474,7 +474,7 @@ button {
   color: #fff;
   background:
     linear-gradient(180deg, rgba(107, 107, 107, 0.02), rgba(107, 107, 107, 0.28)),
-    #242424;
+    #E6E6E6;
 }
 
 .landing-content {
@@ -678,6 +678,21 @@ button {
   color: rgba(255, 255, 255, 0.72);
   font-size: 15px;
 }
+
+.landing-pane .institution-row strong,
+.landing-pane .institution-row small,
+.landing-pane .landing-title h1,
+.landing-pane .landing-title p {
+  color: #3A3A3A;
+}
+
+:root[data-theme="dark"] .landing-pane .institution-row strong,
+:root[data-theme="dark"] .landing-pane .institution-row small,
+:root[data-theme="dark"] .landing-pane .landing-title h1,
+:root[data-theme="dark"] .landing-pane .landing-title p {
+  color: #FFFFFF;
+}
+
 
 .brand-mark {
   width: 54px;

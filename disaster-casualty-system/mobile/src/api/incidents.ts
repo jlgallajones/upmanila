@@ -182,6 +182,7 @@ export type DeactivationContinuitySummary = {
   emsCoverageDisruption: DisruptionLevel | null;
   facilityCareDisruption: DisruptionLevel | null;
   notes: string | null;
+  facilityOperationNotes: string | null;
   assessedAt: string | null;
 };
 

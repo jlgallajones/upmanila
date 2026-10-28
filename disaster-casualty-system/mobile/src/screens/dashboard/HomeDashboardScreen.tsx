@@ -1090,7 +1090,7 @@ export default function HomeDashboardScreen() {
         current.summary.facilityCareDisruption ?? null,
 
       notes: appendFacilityActionNote(
-        current.summary.notes ?? null,
+        current.summary.facilityOperationNotes ?? current.summary.notes ?? null,
         "Open Healthcare Facility Response",
         incident,
         facility,
@@ -1180,7 +1180,7 @@ export default function HomeDashboardScreen() {
           current.summary.emsCoverageDisruption ?? null,
         facilityCareDisruption,
         notes: appendFacilityActionNote(
-          current.summary.notes ?? null,
+          current.summary.facilityOperationNotes ?? current.summary.notes ?? null,
           "Healthcare Facility Routine Care Disruption",
           incident,
           facility,
@@ -1265,7 +1265,7 @@ export default function HomeDashboardScreen() {
         facilityCareDisruption:
           current.summary.facilityCareDisruption ?? null,
         notes: appendFacilityActionNote(
-          current.summary.notes ?? null,
+          current.summary.facilityOperationNotes ?? current.summary.notes ?? null,
           "Close Healthcare Facility Response",
           incident,
           facility,

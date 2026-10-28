@@ -14,13 +14,13 @@ export default function ThemeToggleButton({
 }: ThemeToggleButtonProps) {
   const { colors, isDark, toggleTheme } = useThemeMode();
 
-  const foregroundColor = inverted ? "#FFFFFF" : colors.primary;
-  const backgroundColor = inverted
-    ? "rgba(255, 255, 255, 0.14)"
-    : colors.surface;
-  const borderColor = inverted
-    ? "rgba(255, 255, 255, 0.38)"
-    : colors.selectedBorder;
+  const foregroundColor = inverted
+    ? isDark
+      ? colors.primary
+      : colors.primaryDark
+    : colors.primary;
+  const backgroundColor = colors.surface;
+  const borderColor = colors.selectedBorder;
 
   return (
     <Pressable

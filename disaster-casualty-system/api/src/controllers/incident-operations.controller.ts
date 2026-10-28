@@ -1604,6 +1604,9 @@ function buildDeactivationContinuitySummary(
   timeline: Record<string, unknown> | null,
   assessment: Record<string, unknown> | null,
 ) {
+  const rawNotes =
+    typeof assessment?.notes === "string" ? assessment.notes : null;
+
   return {
     sceneDemobilizedAt: timeline?.scene_demobilized_at ?? null,
     lastFacilityDeactivatedAt:
@@ -1612,7 +1615,8 @@ function buildDeactivationContinuitySummary(
       assessment?.ems_coverage_disruption ?? null,
     facilityCareDisruption:
       assessment?.facility_care_disruption ?? null,
-    notes: assessment?.notes ?? null,
+    notes: stripFacilityOperationNoteEvents(rawNotes),
+    facilityOperationNotes: rawNotes,
     assessedAt: assessment?.assessed_at ?? null,
   };
 }
@@ -1624,6 +1628,48 @@ type FacilityOperationNoteEvent = {
   recordedAt: string | null;
   value: string | null;
 };
+
+function isFacilityOperationNoteBlock(block: string): boolean {
+  const lines = block
+    .split("\n")
+    .map((line) => line.trim().toLowerCase())
+    .filter(Boolean);
+
+  return Boolean(
+    lines[0]?.match(/^\[.+\]$/) &&
+      lines.some((line) => line.startsWith("healthcare facility id:")) &&
+      lines.some((line) => line.startsWith("recorded at:")),
+  );
+}
+
+function extractFacilityOperationNoteBlocks(
+  notes: string | null | undefined,
+): string[] {
+  if (!notes) {
+    return [];
+  }
+
+  return notes
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter((block) => isFacilityOperationNoteBlock(block));
+}
+
+function stripFacilityOperationNoteEvents(
+  notes: string | null | undefined,
+): string | null {
+  if (!notes) {
+    return null;
+  }
+
+  const visibleNotes = notes
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+    .filter((block) => !isFacilityOperationNoteBlock(block));
+
+  return visibleNotes.length > 0 ? visibleNotes.join("\n\n") : null;
+}
 
 function parseFacilityOperationNoteEvents(
   notes: string | null | undefined,
@@ -2117,11 +2163,39 @@ export async function saveDeactivationContinuity(
 
     const timeline = await saveTimeline(incidentId, timelineValues);
 
+    const { data: existingAssessment, error: existingAssessmentError } =
+      await supabase
+        .from("continuity_of_care_assessments")
+        .select("notes")
+        .eq("incident_id", incidentId)
+        .maybeSingle();
+
+    if (existingAssessmentError) {
+      throw new Error(
+        `Unable to retrieve existing continuity notes: ${existingAssessmentError.message}`,
+      );
+    }
+
+    const facilityOperationNotes = [
+      ...extractFacilityOperationNoteBlocks(existingAssessment?.notes),
+      ...extractFacilityOperationNoteBlocks(
+        typeof notes === "string" ? notes : null,
+      ),
+    ].filter((note, index, allNotes) => allNotes.indexOf(note) === index);
+    const visibleNotes =
+      notes === undefined
+        ? null
+        : stripFacilityOperationNoteEvents(notes);
+    const notesToStore = [
+      ...(visibleNotes ? [visibleNotes] : []),
+      ...facilityOperationNotes,
+    ].join("\n\n") || null;
+
     const assessmentValues = {
       incident_id: incidentId,
       ems_coverage_disruption: emsCoverageDisruption ?? null,
       facility_care_disruption: facilityCareDisruption ?? null,
-      notes: notes ?? null,
+      notes: notesToStore,
       assessed_by: authenticatedUser.id,
       assessed_at: assessedAt ?? new Date().toISOString(),
       updated_at: new Date().toISOString(),

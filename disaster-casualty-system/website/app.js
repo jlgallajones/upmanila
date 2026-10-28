@@ -11574,11 +11574,6 @@ function renderIncidentSectionEditContent(incident, details, sectionId) {
       return renderTimelineManagementForm(incident, details, true);
     case "dmmp-safety":
       return `
-        ${renderDmmpStaffManagement(
-          details.dmmpStaff?.data || [],
-          details.dmmpStaffSummary?.data,
-          true,
-        )}
         <section class="incident-section-card">
           <div class="section-card-header">
             <div>
@@ -11588,6 +11583,11 @@ function renderIncidentSectionEditContent(incident, details, sectionId) {
           </div>
           ${renderResponderSafetySummaryView(details)}
         </section>
+        ${renderDmmpStaffManagement(
+          details.dmmpStaff?.data || [],
+          details.dmmpStaffSummary?.data,
+          true,
+        )}
       `;
     case "coordination":
       return renderCoordinationManagementForm(details.coordination?.data, true);
@@ -11615,6 +11615,15 @@ function renderIncidentSectionViewContent(incident, details, sectionId) {
         <section class="incident-section-card">
           <div class="section-card-header">
             <div>
+              <h3>Responder Safety</h3>
+              <p class="panel-subtitle">Responder safety status and incident-level safety summary.</p>
+            </div>
+          </div>
+          ${renderResponderSafetySummaryView(details)}
+        </section>
+        <section class="incident-section-card">
+          <div class="section-card-header">
+            <div>
               <h3>DMMP Staff Call-down</h3>
               <p class="panel-subtitle">Staff call-down summary and arrival status.</p>
             </div>
@@ -11623,15 +11632,6 @@ function renderIncidentSectionViewContent(incident, details, sectionId) {
             details.dmmpStaff?.data || [],
             details.dmmpStaffSummary?.data,
           )}
-        </section>
-        <section class="incident-section-card">
-          <div class="section-card-header">
-            <div>
-              <h3>Responder Safety</h3>
-              <p class="panel-subtitle">Responder safety status and incident-level safety summary.</p>
-            </div>
-          </div>
-          ${renderResponderSafetySummaryView(details)}
         </section>
       `;
     case "coordination":
@@ -11945,13 +11945,42 @@ function renderExtractedTimelineFacts(details) {
   `;
 }
 
+function stripFacilityOperationNotes(notes) {
+  if (!notes) return null;
+
+  const isFacilityOperationBlock = (block) => {
+    const lines = block
+      .split("\n")
+      .map((line) => line.trim().toLowerCase())
+      .filter(Boolean);
+
+    return Boolean(
+      /^\[.+\]$/.test(lines[0] || "") &&
+        lines.some((line) => line.startsWith("healthcare facility id:")) &&
+        lines.some((line) => line.startsWith("recorded at:")),
+    );
+  };
+
+  const visibleNotes = String(notes)
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+    .filter((block) => !isFacilityOperationBlock(block));
+
+  return visibleNotes.length > 0 ? visibleNotes.join("\n\n") : null;
+}
+
 function renderDeactivationSummaryView(details) {
   return `
     ${renderKeyValueSection([
       ["Scene demobilized", formatDate(details.deactivation?.summary?.sceneDemobilizedAt)],
       ["EMS coverage disruption", roleLabel(details.deactivation?.summary?.emsCoverageDisruption || "unknown")],
       ["Assessed at", formatDate(details.deactivation?.summary?.assessedAt)],
-      ["Notes", details.deactivation?.summary?.notes || "Not recorded"],
+      [
+        "Notes",
+        stripFacilityOperationNotes(details.deactivation?.summary?.notes) ||
+          "Not recorded",
+      ],
     ])}
     ${renderFacilityOperationalSummary(details.facilityOperational?.data, "continuity")}
   `;
@@ -12369,7 +12398,6 @@ function buildResponderSafetyStatusSummary(details) {
 
 function renderResponderSafetySummaryView(details) {
   const {
-    rosterRows,
     statusCounts,
     totalResponders,
     analyticsSafe,
@@ -12393,44 +12421,6 @@ function renderResponderSafetySummaryView(details) {
       ["Analytics safe responders", analyticsSafe],
       ["Analytics unsafe responders", analyticsUnsafe],
     ])}
-    <div class="table-wrap" style="margin-top:14px">
-      <table>
-        <thead>
-          <tr>
-            <th>Responder / Staff</th>
-            <th>Source</th>
-            <th>Role / Team</th>
-            <th>Call-down status</th>
-            <th>Contacted?</th>
-            <th>Arrived?</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rosterRows
-            .map(({ source, name, roleName, teamName, record }) => {
-              const displayRole = [roleName, teamName].filter(Boolean).join(" / ");
-              const sourceLabel =
-                source === "account"
-                  ? "System account"
-                  : source === "staff"
-                    ? "Call Down List"
-                    : "Legacy entry";
-
-              return `
-                <tr>
-                  <td><strong>${escapeHtml(name)}</strong></td>
-                  <td>${escapeHtml(sourceLabel)}</td>
-                  <td>${escapeHtml(displayRole || "No role")}</td>
-                  <td>${escapeHtml(roleLabel(record?.status || "not_recorded"))}</td>
-                  <td>${record?.was_contacted ? "Yes" : "No"}</td>
-                  <td>${record?.has_arrived || record?.arrived_at ? "Yes" : "No"}</td>
-                </tr>
-              `;
-            })
-            .join("") || `<tr><td colspan="6"><div class="empty-state">No responder or call-down staff roster is available yet.</div></td></tr>`}
-        </tbody>
-      </table>
-    </div>
   `;
 }
 
@@ -12509,6 +12499,7 @@ function renderResponderSafetyManagementForm(report, summary, forModal = false) 
 
 function renderDeactivationManagementForm(details, forModal = false) {
   const summary = details?.deactivation?.summary ?? details ?? null;
+  const visibleNotes = stripFacilityOperationNotes(summary?.notes) || "";
 
   return `
     <form id="${forModal ? "incidentSectionEditForm" : ""}" class="incident-section-card" data-incident-section-form="deactivation">
@@ -12525,7 +12516,7 @@ function renderDeactivationManagementForm(details, forModal = false) {
         <label class="field"><span>Assessed at</span><input name="assessedAt" type="datetime-local" value="${toLocalDateTimeInput(summary?.assessedAt)}" /></label>
       </div>
       ${renderFacilityOperationalSummary(details?.facilityOperational?.data, "continuity")}
-      <label class="field"><span>Notes</span><textarea name="notes">${escapeHtml(summary?.notes || "")}</textarea></label>
+      <label class="field"><span>Notes</span><textarea name="notes">${escapeHtml(visibleNotes)}</textarea></label>
       <div id="deactivationMessage" class="status-message" hidden></div>
     </form>
   `;

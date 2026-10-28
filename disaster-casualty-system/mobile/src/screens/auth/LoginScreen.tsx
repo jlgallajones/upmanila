@@ -55,6 +55,7 @@ export default function LoginScreen() {
   const [passwordResetMessage, setPasswordResetMessage] = useState<
     string | null
   >(null);
+  const lightLoginHeaderBackground = "#f2f2f2";
   const [passwordResetMessageType, setPasswordResetMessageType] =
     useState<"success" | "error">("success");
   const { colors, isDark } = useThemeMode();
@@ -201,8 +202,8 @@ export default function LoginScreen() {
       ]}
     >
       <StatusBar
-        barStyle="light-content"
-        backgroundColor={isDark ? colors.background : COLORS.maroon}
+        barStyle={isDark ? "light-content" : "dark-content"}
+        backgroundColor={isDark ? colors.background : lightLoginHeaderBackground}
       />
 
       <SafeAreaView
@@ -210,7 +211,9 @@ export default function LoginScreen() {
         style={[
           styles.headerSafeArea,
           {
-            backgroundColor: isDark ? colors.background : COLORS.maroon,
+            backgroundColor: isDark
+              ? colors.background
+              : lightLoginHeaderBackground,
           },
         ]}
       >
@@ -218,7 +221,9 @@ export default function LoginScreen() {
           style={[
             styles.header,
             {
-              backgroundColor: isDark ? colors.background : COLORS.maroon,
+              backgroundColor: isDark
+                ? colors.background
+                : lightLoginHeaderBackground,
             },
           ]}
         >
@@ -231,12 +236,22 @@ export default function LoginScreen() {
             </View>
 
             <View style={styles.headerTextWrapper}>
-              <Text style={styles.portalText}>
+              <Text
+                style={[
+                  styles.portalText,
+                  { color: isDark ? "rgba(255, 255, 255, 0.78)" : "#3A3A3A" },
+                ]}
+              >
                 SCRIBER RESPONDER PORTAL
               </Text>
 
-              <Text style={styles.headerTitle}>
-                Emergency Responder{"\n"}Login
+              <Text
+                style={[
+                  styles.headerTitle,
+                  { color: isDark ? COLORS.white : "#3A3A3A" },
+                ]}
+              >
+                Responder Login{"\n"}
               </Text>
             </View>
           </View>
