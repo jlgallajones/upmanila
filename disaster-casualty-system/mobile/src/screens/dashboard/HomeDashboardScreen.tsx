@@ -2611,7 +2611,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
     minWidth: 120,
     borderRadius: 12,
-    backgroundColor: COLORS.maroon,
+    backgroundColor: COLORS.blackButton,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 18,
@@ -2815,7 +2815,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 13,
-    backgroundColor: COLORS.maroon,
+    backgroundColor: COLORS.blackButton,
   },
 
   quickTimeSaveText: {

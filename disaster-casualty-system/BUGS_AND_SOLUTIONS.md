@@ -962,11 +962,11 @@ The database migration is `api/sql/add-incident-acting-ic-delegation.sql`. Apply
 
 **Status:** Implemented.
 
-## 115. SIEVE Was Missing From Field Responder Triage Systems
+## 115. SIEVE Rules Needed Correction In Field Responder Triage
 
-**Problem:** The SIEVE algorithm and calculator were present in the project, but SIEVE was not available in the Field Responder's primary-triage system selector. Field Responders therefore could not choose the SIEVE assisted assessment shown in the requested flow.
+**Problem:** The SIEVE assisted assessment used an obsolete injury question and older thresholds. Walking patients could be delayed because of injury data, absent breathing after airway management did not return red, and the respiratory and pulse-rate options did not match the requested SIEVE flow.
 
-**Solution:** Added SIEVE to the primary and Field Responder triage-system options. The existing assisted SIEVE assessment now covers walking/injury status, airway response, respiratory-rate thresholds, pulse rate, and capillary refill, with results mapped to the platform's triage categories: minimal/green, delayed/yellow, immediate/red, and expectant/black. Regression tests now cover the main SIEVE decision paths.
+**Solution:** SIEVE now immediately classifies walking patients as minimal/green, removes the injury question, uses 9-or-below and 30-or-above respiratory thresholds, maps breathing after airway management to red/black, and uses 121-or-above versus 120-or-below pulse-rate thresholds. Capillary refill remains an alternative circulation check, with more than two seconds returning red and less than two seconds returning delayed/yellow. Legacy answer keys remain supported for previously saved assessments. Regression tests cover the corrected decision paths.
 
 **Status:** Implemented.
 

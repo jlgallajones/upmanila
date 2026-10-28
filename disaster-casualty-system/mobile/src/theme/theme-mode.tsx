@@ -114,6 +114,7 @@ export function ThemeModeProvider({
       mutedText: themeColors.textSecondary,
       secondaryText: themeColors.textSecondary,
       maroon: resolvedTheme === "dark" ? themeColors.primaryDark : "#6B6B6B",
+      blackButton: "#000000",
       black: themeColors.textSecondary,
       charcoal: themeColors.surfaceRaised,
       darkCyan: themeColors.primaryDark,

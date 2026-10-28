@@ -345,7 +345,7 @@ successText: {
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 12,
-    backgroundColor: COLORS.maroon,
+    backgroundColor: COLORS.blackButton,
   },
   primaryButtonPressed: {
     opacity: 0.85,

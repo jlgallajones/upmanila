@@ -58,6 +58,7 @@ export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
 
 type ThemePaletteAliases = {
   background: string;
+  blackButton: string;
   card: string;
   fieldBackground: string;
   fieldBorder: string;
@@ -82,6 +83,7 @@ export function createThemePalette<T extends Record<string, string>>(
         nativePalette.background ??
         nativePalette.surface ??
         nativePalette.white,
+      blackButton: nativePalette.blackButton ?? "#000000",
       card: nativePalette.card ?? nativePalette.surface ?? nativePalette.white,
       fieldBackground:
         nativePalette.fieldBackground ??
@@ -133,6 +135,7 @@ export function createThemePalette<T extends Record<string, string>>(
       `var(--mobile-${key}, ${value})`,
     ]),
     ["background", "var(--mobile-background, #FAFAFA)"],
+    ["blackButton", "var(--mobile-blackButton, #000000)"],
     ["card", "var(--mobile-surface, #FFFFFF)"],
     ["fieldBackground", "var(--mobile-fieldBackground, #F7F9FC)"],
     ["fieldBorder", "var(--mobile-fieldBorder, #D9E0EA)"],

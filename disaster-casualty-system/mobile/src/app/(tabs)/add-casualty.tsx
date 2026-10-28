@@ -674,15 +674,14 @@ const APPENDIX_TRIAGE_FIELDS: Record<string, AppendixQuestion[]> = {
   ],
   sieve: [
     { key: "canWalk", label: "Can walk?", options: YES_NO_OPTIONS },
-    { key: "injury", label: "Injury", options: PRESENT_ABSENT_OPTIONS },
     {
       key: "respirations",
       label: "Respirations",
       options: [
         { label: "Absent", value: "absent" },
         {
-          label: "10 or below",
-          value: "less_than_or_equal_to_10",
+          label: "9 and below",
+          value: "less_than_or_equal_to_9",
         },
         {
           label: "30 or above",
@@ -693,11 +692,11 @@ const APPENDIX_TRIAGE_FIELDS: Record<string, AppendixQuestion[]> = {
     },
     START_AIRWAY_QUESTION,
     {
-      key: "heartRate",
-      label: "Heart rate",
+      key: "pulseRate",
+      label: "Pulse rate",
       options: [
-        { label: ">120 bpm", value: "more_than_120" },
-        { label: "<120 bpm", value: "less_than_120" },
+        { label: "121 and above", value: "more_than_or_equal_to_121" },
+        { label: "120 and below", value: "less_than_or_equal_to_120" },
       ],
     },
     {
@@ -2440,9 +2439,7 @@ function calculateSieveTriage(
   answers: Record<string, unknown>,
 ): TriageCategory {
   if (readAssessmentBoolean(answers, "canWalk") === true) {
-    return readAssessmentString(answers, "injury") === "present"
-      ? "delayed"
-      : "minimal";
+    return "minimal";
   }
 
   const respirations = readAssessmentString(answers, "respirations");
@@ -2452,6 +2449,10 @@ function calculateSieveTriage(
       answers,
       "breathingAfterAirwayManagement",
     );
+
+    if (breathingAfterAirway === true) {
+      return "immediate";
+    }
 
     if (breathingAfterAirway === false) {
       return "expectant";
@@ -2463,21 +2464,30 @@ function calculateSieveTriage(
   if (
     respirations === "less_than_10" ||
     respirations === "less_than_or_equal_to_10" ||
+    respirations === "less_than_or_equal_to_9" ||
     respirations === "more_than_29" ||
     respirations === "more_than_or_equal_to_30"
   ) {
     return "immediate";
   }
 
+  const pulseRate =
+    readAssessmentString(answers, "pulseRate") ||
+    readAssessmentString(answers, "heartRate");
+  const capillaryRefill = readAssessmentString(
+    answers,
+    "capillaryRefill",
+  );
+
   if (
-    readAssessmentString(answers, "heartRate") === "more_than_120" ||
-    readAssessmentString(answers, "capillaryRefill") ===
-      "more_than_2_seconds"
+    pulseRate === "more_than_120" ||
+    pulseRate === "more_than_or_equal_to_121" ||
+    capillaryRefill === "more_than_2_seconds"
   ) {
     return "immediate";
   }
 
-  return respirations ? "delayed" : "unknown";
+  return pulseRate || capillaryRefill ? "delayed" : "unknown";
 }
 
 function calculateSortTriage(
@@ -4407,6 +4417,20 @@ function mapRecordToForm(
   latestTriage?: CasualtyTriageHistoryItem,
   latestTransport?: CasualtyTransportHistoryItem,
 ): FormState {
+  const normalizedTriageSystem = normalizeTriageSystem(
+    latestTriage?.triage_system ?? "",
+  );
+  const assessmentAnswers = Object.fromEntries(
+    Object.entries(latestTriage?.assessment_answers ?? {})
+      .filter(([key]) => key !== "triageAssistanceMode")
+      .map(([key, value]) => [
+        normalizedTriageSystem === "sieve" && key === "heartRate"
+          ? "pulseRate"
+          : key,
+        typeof value === "boolean" ? (value ? "yes" : "no") : String(value),
+      ]),
+  );
+
   return {
     responderSafetyStatus: "",
     responderArrivalTime: "",
@@ -4467,25 +4491,7 @@ function mapRecordToForm(
     triageNotes: valueOrEmpty(latestTriage?.notes),
     triageSystemOther: "",
 
-triageAssessmentAnswers: Object.fromEntries(
-  Object.entries(
-    latestTriage?.assessment_answers ?? {},
-  )
-    .filter(
-      ([key]) =>
-        key !== "triageAssistanceMode",
-    )
-    .map(
-      ([key, value]) => [
-        key,
-        typeof value === "boolean"
-          ? value
-            ? "yes"
-            : "no"
-          : String(value),
-      ],
-    ),
-),
+    triageAssessmentAnswers: assessmentAnswers,
 
     triageAssistanceMode:
       record.incident.triage_mode === "unassisted"
@@ -16012,7 +16018,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     borderRadius: 12,
     marginTop: 18,
-    backgroundColor: COLORS.maroon,
+    backgroundColor: COLORS.blackButton,
   },
   centerStateButtonText: {
     color: COLORS.white,
@@ -17430,7 +17436,7 @@ triageModeOptionTextSelected: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: COLORS.maroon,
+    backgroundColor: COLORS.blackButton,
     gap: 8,
   },
   fullWidthButton: {

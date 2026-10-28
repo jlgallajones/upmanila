@@ -702,7 +702,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: COLORS.maroon,
+    backgroundColor: COLORS.blackButton,
   },
   primaryButtonText: {
     color: COLORS.white,

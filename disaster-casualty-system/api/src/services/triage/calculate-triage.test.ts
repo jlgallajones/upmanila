@@ -139,20 +139,11 @@ const cases = [
     expected: "delayed",
   },
   {
-    name: "SIEVE walking injured patient is delayed",
+    name: "SIEVE walking patient is minimal regardless of injury data",
     system: "sieve",
     answers: {
       canWalk: true,
       injury: "present",
-    },
-    expected: "delayed",
-  },
-  {
-    name: "SIEVE walking patient without injury is minimal",
-    system: "sieve",
-    answers: {
-      canWalk: true,
-      injury: "absent",
     },
     expected: "minimal",
   },
@@ -167,6 +158,16 @@ const cases = [
     expected: "expectant",
   },
   {
+    name: "SIEVE breathing after airway management is immediate",
+    system: "sieve",
+    answers: {
+      canWalk: false,
+      respirations: "absent",
+      breathingAfterAirwayManagement: true,
+    },
+    expected: "immediate",
+  },
+  {
     name: "SIEVE respiratory rate 30 or above is immediate",
     system: "sieve",
     answers: {
@@ -176,14 +177,42 @@ const cases = [
     expected: "immediate",
   },
   {
-    name: "SIEVE pulse over 120 is immediate",
+    name: "SIEVE respiratory rate 9 or below is immediate",
+    system: "sieve",
+    answers: {
+      canWalk: false,
+      respirations: "less_than_or_equal_to_9",
+    },
+    expected: "immediate",
+  },
+  {
+    name: "SIEVE walking patient remains minimal despite abnormal respirations",
+    system: "sieve",
+    answers: {
+      canWalk: true,
+      respirations: "more_than_or_equal_to_30",
+    },
+    expected: "minimal",
+  },
+  {
+    name: "SIEVE pulse rate 121 and above is immediate",
     system: "sieve",
     answers: {
       canWalk: false,
       respirations: "eleven_to_twenty_nine",
-      heartRate: "more_than_120",
+      pulseRate: "more_than_or_equal_to_121",
     },
     expected: "immediate",
+  },
+  {
+    name: "SIEVE pulse rate 120 and below is delayed",
+    system: "sieve",
+    answers: {
+      canWalk: false,
+      respirations: "eleven_to_twenty_nine",
+      pulseRate: "less_than_or_equal_to_120",
+    },
+    expected: "delayed",
   },
   {
     name: "SIEVE capillary refill over two seconds is immediate",
@@ -195,6 +224,16 @@ const cases = [
       capillaryRefill: "more_than_2_seconds",
     },
     expected: "immediate",
+  },
+  {
+    name: "SIEVE capillary refill under two seconds is delayed",
+    system: "sieve",
+    answers: {
+      canWalk: false,
+      respirations: "eleven_to_twenty_nine",
+      capillaryRefill: "less_than_2_seconds",
+    },
+    expected: "delayed",
   },
   {
     name: "JumpSTART absent breathing and no pulse is expectant",

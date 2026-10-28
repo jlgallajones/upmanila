@@ -239,7 +239,7 @@ function calculateSieveTriage(
   answers: Record<string, unknown>,
 ): TriageCategory {
   if (readBoolean(answers, "canWalk") === true) {
-    return readString(answers, "injury") === "present" ? "delayed" : "minimal";
+    return "minimal";
   }
 
   const respirations = readString(answers, "respirations");
@@ -249,6 +249,10 @@ function calculateSieveTriage(
       answers,
       "breathingAfterAirwayManagement",
     );
+
+    if (breathingAfterAirway === true) {
+      return "immediate";
+    }
 
     if (breathingAfterAirway === false) {
       return "expectant";
@@ -260,21 +264,30 @@ function calculateSieveTriage(
   if (
     respirations === "less_than_10" ||
     respirations === "less_than_or_equal_to_10" ||
+    respirations === "less_than_or_equal_to_9" ||
     respirations === "more_than_29" ||
     respirations === "more_than_or_equal_to_30"
   ) {
     return "immediate";
   }
 
-  if (readString(answers, "heartRate") === "more_than_120") {
+  const pulseRate =
+    readString(answers, "pulseRate") ||
+    readString(answers, "heartRate");
+  const capillaryRefill = readString(answers, "capillaryRefill");
+
+  if (
+    pulseRate === "more_than_120" ||
+    pulseRate === "more_than_or_equal_to_121"
+  ) {
     return "immediate";
   }
 
-  if (readString(answers, "capillaryRefill") === "more_than_2_seconds") {
+  if (capillaryRefill === "more_than_2_seconds") {
     return "immediate";
   }
 
-  return respirations ? "delayed" : "unknown";
+  return pulseRate || capillaryRefill ? "delayed" : "unknown";
 }
 
 function calculateSortTriage(
