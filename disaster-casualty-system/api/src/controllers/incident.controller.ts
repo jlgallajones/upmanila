@@ -345,6 +345,7 @@ type TreatmentRecordRow = {
   stabilization_started_at: string | null;
   stabilized_at: string | null;
   created_at: string | null;
+  performed_by?: string | null;
 };
 
 type FacilityRow = {
@@ -408,6 +409,8 @@ type ResponderSafetyReportRow = {
 
 type ResponderSafetyResponseRow = {
   safety_status: string | null;
+  responder_role: string | null;
+  responder_arrived_at: string | null;
   ppe_used_at: string | null;
 };
 
@@ -5047,7 +5050,9 @@ export async function getIncidentAnalyticsSummary(
     .maybeSingle(),
       supabase
         .from("responder_safety_responses")
-        .select("safety_status, ppe_used_at")
+        .select(
+          "safety_status, responder_role, responder_arrived_at, ppe_used_at",
+        )
         .eq("incident_id", id),
     ]);
 
@@ -5099,7 +5104,7 @@ export async function getIncidentAnalyticsSummary(
         ? await supabase
             .from("casualty_treatments")
             .select(
-              "casualty_incident_id, treatment_strategy, treatment_area_name, stabilization_started_at, stabilized_at, created_at",
+              "casualty_incident_id, treatment_strategy, treatment_area_name, stabilization_started_at, stabilized_at, created_at, performed_by",
             )
             .in("casualty_incident_id", casualtyIncidentIds)
             .order("created_at", { ascending: true })
@@ -5156,6 +5161,35 @@ export async function getIncidentAnalyticsSummary(
         ? []
         : ((responderSafetyResponsesResult.data ??
             []) as ResponderSafetyResponseRow[]);
+    const treatmentPerformerIds = [
+      ...new Set(
+        treatmentRows
+          .map((row) => row.performed_by)
+          .filter((value): value is string => Boolean(value)),
+      ),
+    ];
+    const treatmentPerformerUsersResult =
+      treatmentPerformerIds.length > 0
+        ? await supabase
+            .from("users")
+            .select("id, role")
+            .in("id", treatmentPerformerIds)
+        : { data: [], error: null };
+
+    if (treatmentPerformerUsersResult.error) {
+      throw new Error(
+        `Unable to retrieve treatment performer roles: ${treatmentPerformerUsersResult.error.message}`,
+      );
+    }
+
+    const ampResponderIds = new Set(
+      (treatmentPerformerUsersResult.data ?? [])
+        .filter((user) => user.role === "sa_responder")
+        .map((user) => user.id),
+    );
+    const ampTreatmentRows = treatmentRows.filter(
+      (row) => Boolean(row.performed_by) && ampResponderIds.has(row.performed_by!),
+    );
     const intervalMinutes = [15, 30, 60, 120, 180];
     const totalVictims = casualtyIncidentIds.length;
     const verifiedRecords = casualtyIncidentRows.filter(
@@ -5288,6 +5322,12 @@ export async function getIncidentAnalyticsSummary(
     );
     const stabilizedEvents = dedupeEarliestEventRows(
       treatmentRows.map((row) => ({
+        casualty_incident_id: row.casualty_incident_id,
+        occurred_at: row.stabilized_at,
+      })),
+    );
+    const ampStabilizedEvents = dedupeEarliestEventRows(
+      ampTreatmentRows.map((row) => ({
         casualty_incident_id: row.casualty_incident_id,
         occurred_at: row.stabilized_at,
       })),
@@ -5461,6 +5501,25 @@ const unsafeResponders = responderSafetyResponses.filter(
         key: "lastSecondaryTriage",
         label: "Last victim triaged using secondary triage",
         at: lastDate(secondaryTriageRows.map((row) => row.triaged_at)),
+      },
+      {
+        key: "firstMedicalStaffArrivalOnScene",
+        label: "First AMP responder arrival on scene",
+        at: firstDate(
+          responderSafetyResponses
+            .filter((row) => row.responder_role === "sa_responder")
+            .map((row) => row.responder_arrived_at),
+        ),
+      },
+      {
+        key: "firstVictimStabilizedAtAmp",
+        label: "First victim stabilized at AMP",
+        at: firstDate(ampStabilizedEvents.map((row) => row.occurred_at)),
+      },
+      {
+        key: "lastVictimStabilizedAtAmp",
+        label: "Last victim stabilized at AMP",
+        at: lastDate(ampStabilizedEvents.map((row) => row.occurred_at)),
       },
       {
         key: "firstEmsVehicle",

@@ -11192,8 +11192,7 @@ const safetyOptions = ["yes", "no", "unknown"];
 const incidentManagementSections = [
   ["edit-incident", "Edit Incident", true, "accent"],
   ["timeline", "Response Timeline", true],
-  ["dmmp-staff", "DMMP Staff Call-down", true],
-  ["responder-safety", "Responder Safety", false],
+  ["dmmp-safety", "DMMP & Responder Safety", true],
   ["coordination", "Coordination Assessment", true],
   ["deactivation", "Deactivation & Continuity", true],
   ["onsite-triage", "Onsite Triage", false],
@@ -11434,7 +11433,7 @@ function getIncidentSectionLauncherSubtitle(sectionId, canEdit, details) {
     return "Locked after closure";
   }
 
-  if (sectionId === "dmmp-staff") {
+  if (sectionId === "dmmp-safety") {
     const accountNames = state.unitUsers
       .filter((user) => user.is_active !== false)
       .map((user) => user.full_name || user.email)
@@ -11451,11 +11450,14 @@ function getIncidentSectionLauncherSubtitle(sectionId, canEdit, details) {
       accountNames.length + extraNames.length - names.length,
     );
 
-    if (names.length > 0) {
-      return `${names.join(", ")}${extraCount > 0 ? ` +${extraCount} more` : ""}`;
-    }
-
-    return "Created accounts appear automatically";
+    const safetySummary = details?.responderSafety?.summary;
+    const unsafeCount =
+      Number(safetySummary?.illOrInjuredResponders || 0) +
+      Number(safetySummary?.deceasedResponders || 0);
+    const rosterSummary = names.length > 0
+      ? `${names.join(", ")}${extraCount > 0 ? ` +${extraCount} more` : ""}`
+      : "Created accounts appear automatically";
+    return `${rosterSummary}; ${unsafeCount} unsafe responder${unsafeCount === 1 ? "" : "s"} reported`;
   }
 
   return canEdit ? "View or edit" : "View summary";
@@ -11570,12 +11572,23 @@ function renderIncidentSectionEditContent(incident, details, sectionId) {
   switch (sectionId) {
     case "timeline":
       return renderTimelineManagementForm(incident, details, true);
-    case "dmmp-staff":
-      return renderDmmpStaffManagement(
-        details.dmmpStaff?.data || [],
-        details.dmmpStaffSummary?.data,
-        true,
-      );
+    case "dmmp-safety":
+      return `
+        ${renderDmmpStaffManagement(
+          details.dmmpStaff?.data || [],
+          details.dmmpStaffSummary?.data,
+          true,
+        )}
+        <section class="incident-section-card">
+          <div class="section-card-header">
+            <div>
+              <h3>Responder Safety</h3>
+              <p class="panel-subtitle">Responder safety status and incident-level safety summary.</p>
+            </div>
+          </div>
+          ${renderResponderSafetySummaryView(details)}
+        </section>
+      `;
     case "coordination":
       return renderCoordinationManagementForm(details.coordination?.data, true);
     case "deactivation":
@@ -11597,11 +11610,30 @@ function renderIncidentSectionViewContent(incident, details, sectionId) {
   switch (sectionId) {
     case "timeline":
       return renderIncidentTimelineView(incident, details);
-    case "dmmp-staff":
-      return renderDmmpStaffView(
-        details.dmmpStaff?.data || [],
-        details.dmmpStaffSummary?.data,
-      );
+    case "dmmp-safety":
+      return `
+        <section class="incident-section-card">
+          <div class="section-card-header">
+            <div>
+              <h3>DMMP Staff Call-down</h3>
+              <p class="panel-subtitle">Staff call-down summary and arrival status.</p>
+            </div>
+          </div>
+          ${renderDmmpStaffView(
+            details.dmmpStaff?.data || [],
+            details.dmmpStaffSummary?.data,
+          )}
+        </section>
+        <section class="incident-section-card">
+          <div class="section-card-header">
+            <div>
+              <h3>Responder Safety</h3>
+              <p class="panel-subtitle">Responder safety status and incident-level safety summary.</p>
+            </div>
+          </div>
+          ${renderResponderSafetySummaryView(details)}
+        </section>
+      `;
     case "coordination":
       return renderKeyValueSection([
         ...coordinationFields.map(([, label, key]) => [
@@ -11611,8 +11643,6 @@ function renderIncidentSectionViewContent(incident, details, sectionId) {
         ["Assessed at", formatDate(details.coordination?.data?.assessed_at)],
         ["Notes", details.coordination?.data?.notes || "Not recorded"],
       ]);
-    case "responder-safety":
-      return renderResponderSafetySummaryView(details);
     case "deactivation":
       return renderDeactivationSummaryView(details);
     case "onsite-triage":
