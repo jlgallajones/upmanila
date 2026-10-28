@@ -1582,7 +1582,7 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
       ) as PdfTableRow[];
       const wrappedPair = pair.map(([label, value]) => ({
         label: String(label),
-        valueLines: wrapText(String(value), 30).slice(0, 4),
+        valueLines: wrapText(String(value), 42).slice(0, 4),
       }));
       const cardHeight = Math.max(
         46,
@@ -1641,6 +1641,25 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
     }
 
     cursorY -= 6;
+  };
+
+  const addExecutiveSummary = (summary: string) => {
+    addSectionTitle("Executive Summary");
+    const lines = wrapText(summary || "No narrative summary recorded.", 96);
+    const boxHeight = Math.max(46, 22 + lines.length * 13);
+
+    ensureSpace(boxHeight + 8);
+    currentPage.push(
+      "0.96 0.98 0.99 rg",
+      `${marginX} ${cursorY - boxHeight + 8} ${contentWidth} ${boxHeight} re f`,
+      "0.75 0.86 0.89 RG",
+      `${marginX} ${cursorY - boxHeight + 8} ${contentWidth} ${boxHeight} re S`,
+      "0 g",
+    );
+    lines.forEach((line, index) => {
+      text(line, marginX + 12, cursorY - 14 - index * 13, 9);
+    });
+    cursorY -= boxHeight + 10;
   };
 
   const pdfChartColor = (label: string, index: number): string => {
@@ -1852,8 +1871,7 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
     ["Period end", formatSitrepDate(payload.period.end)],
   ]);
 
-  addSectionTitle("Executive Summary");
-  addWrappedParagraph(sitrep.summary || "No narrative summary recorded.", marginX, 96, 9);
+  addExecutiveSummary(sitrep.summary);
 
   addSectionTitle("Operational Snapshot");
   addKeyValueGrid([
@@ -1869,6 +1887,7 @@ function buildImprovedSitrepPdf(sitrep: SitrepResponseRecord): Buffer {
 
   if (payload.analyticsSnapshot) {
     const analytics = payload.analyticsSnapshot;
+    addPage();
     addTable("Incident Analytics Snapshot", [
       ["Total victims", analytics.keyPerformanceIndicators.totalVictims],
       ["Verified records", analytics.keyPerformanceIndicators.verifiedRecords],
