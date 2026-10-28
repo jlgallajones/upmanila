@@ -358,6 +358,21 @@ function formatCountMap(counts: Record<string, number>): string {
     .join("\n");
 }
 
+function formatSceneAmbulanceType(value: string): string {
+  switch (value) {
+    case "bls":
+      return "BLS";
+    case "acls":
+      return "ACLS";
+    case "patient_transport_vehicle":
+      return "Patient Transport Vehicle";
+    case "other":
+      return "Other";
+    default:
+      return value;
+  }
+}
+
 type TimelineFormState = {
   disasterOccurredAt: string;
   eventNotificationAt: string;
@@ -796,7 +811,9 @@ function getRatingLabel(value: CoordinationRating | null): string {
 }
 
 function formatTriageSystemLabel(value: string | null | undefined): string {
-  switch (value) {
+  const normalizedValue = value?.trim().toLowerCase();
+
+  switch (normalizedValue) {
     case "urgent_non_urgent":
       return "Urgent/non-urgent";
     case "stieve":
@@ -871,26 +888,7 @@ function formatTriageSystemCounts(counts: Record<string, number>): string {
     .join("\n");
 }
 
-function formatTreatmentStrategyLabel(
-  value: string | null | undefined,
-): string {
-  switch (value) {
-    case "scoop_and_run":
-      return "No (Scoop and Run/Load and Go)";
-    case "scooter":
-      return "Scooter";
-    case "stay_and_play":
-      return "Yes (Stay and Play)";
-    case "play_and_run":
-      return "Scooter";
-    case "unknown":
-      return "Unknown";
-    default:
-      return value ?? "Not recorded";
-  }
-}
-
-function formatTreatmentStrategyCounts(
+function formatOnsiteActionTotals(
   counts: Record<string, number>,
 ): string {
   const entries = Object.entries(counts).filter(([, count]) => count > 0);
@@ -901,9 +899,7 @@ function formatTreatmentStrategyCounts(
 
   return entries
     .sort(([first], [second]) => first.localeCompare(second))
-    .map(
-      ([key, count]) => `${formatTreatmentStrategyLabel(key)}: ${count}`,
-    )
+    .map(([key, count]) => `Onsite Action Total - ${key}: ${count}`)
     .join("\n");
 }
 
@@ -5866,10 +5862,18 @@ export default function IncidentsPage() {
                   </View>
                   <View style={styles.sitrepMetric}>
                     <Text style={styles.sitrepMetricValue}>
-                      {onsiteTriageSummary.onSiteTriagedTotal}
+                      {onsiteTriageSummary.primaryTriageTotal}
                     </Text>
                     <Text style={styles.sitrepMetricLabel}>
-                      On-site Triaged
+                      Primary Triage Total
+                    </Text>
+                  </View>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {onsiteTriageSummary.secondaryTriageTotal}
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      Secondary Triage Total
                     </Text>
                   </View>
                   <View style={styles.sitrepMetric}>
@@ -5887,17 +5891,18 @@ export default function IncidentsPage() {
                   </View>
                 </View>
 
-                <Text style={styles.fieldLabel}>
-                  TYPE OF FIRST TRIAGE USED
-                </Text>
+                <Text style={styles.fieldLabel}>TRIAGE SYSTEMS USED</Text>
                 <Text style={styles.sitrepSectionText}>
-                  Primary:{" "}
-                  {formatTriageSystemLabel(
-                    onsiteTriageSummary.triageSystemUsed,
-                  )}
+                  Primary: {onsiteTriageSummary.primaryTriageSystemUsed || "Not recorded"}
                   {"\n"}
                   {formatTriageSystemCounts(
-                    onsiteTriageSummary.firstTriageSystemCounts,
+                    onsiteTriageSummary.primaryTriageSystemCounts,
+                  )}
+                  {"\n\n"}
+                  Secondary: {onsiteTriageSummary.secondaryTriageSystemUsed || "Not recorded"}
+                  {"\n"}
+                  {formatTriageSystemCounts(
+                    onsiteTriageSummary.secondaryTriageSystemCounts,
                   )}
                 </Text>
 
@@ -6017,11 +6022,11 @@ export default function IncidentsPage() {
                   <View style={styles.sitrepMetric}>
                     <Text style={styles.sitrepMetricValue}>
                       {formatTriageSystemLabel(
-                        facilityTriageSummary.triageSystemUsed,
+                        facilityTriageSummary.tertiaryTriageSystemUsed,
                       )}
                     </Text>
                     <Text style={styles.sitrepMetricLabel}>
-                      Primary System
+                      Tertiary System
                     </Text>
                   </View>
                 </View>
@@ -6031,8 +6036,16 @@ export default function IncidentsPage() {
                 </Text>
                 <Text style={styles.sitrepSectionText}>
                   {formatTriageSystemCounts(
-                    facilityTriageSummary.firstTriageSystemCounts,
+                    facilityTriageSummary.tertiaryTriageSystemCounts,
                   )}
+                </Text>
+
+                <Text style={styles.fieldLabel}>TRIAGE ACCURACY TOTALS</Text>
+                <Text style={styles.sitrepSectionText}>
+                  Undertriaged Immediate Category - Primary: {facilityTriageSummary.accuracy.undertriagedImmediatePrimary}
+                  {"\n"}Undertriaged Delayed Category - Secondary: {facilityTriageSummary.accuracy.undertriagedDelayedSecondary}
+                  {"\n"}Overtriaged Immediate Category - Primary: {facilityTriageSummary.accuracy.overtriagedImmediatePrimary}
+                  {"\n"}Overtriaged Delayed Category - Secondary: {facilityTriageSummary.accuracy.overtriagedDelayedSecondary}
                 </Text>
 
                 <Text style={styles.fieldLabel}>FACILITY TRIAGE TIMES</Text>
@@ -6137,10 +6150,18 @@ export default function IncidentsPage() {
                   </View>
                   <View style={styles.sitrepMetric}>
                     <Text style={styles.sitrepMetricValue}>
-                      {onsiteCareSummary.stabilizedT1Total}
+                      {onsiteCareSummary.stabilizedImmediateCategoryTotal}
                     </Text>
                     <Text style={styles.sitrepMetricLabel}>
-                      Stabilized T1
+                      Stabilized Immediate Category Total
+                    </Text>
+                  </View>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {onsiteCareSummary.stabilizedDelayedCategoryTotal}
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      Stabilized Delayed Category Total
                     </Text>
                   </View>
                 </View>
@@ -6149,8 +6170,8 @@ export default function IncidentsPage() {
                   ON-SITE STABILIZATION / TREATMENT
                 </Text>
                 <Text style={styles.sitrepSectionText}>
-                  {formatTreatmentStrategyCounts(
-                    onsiteCareSummary.treatmentStrategyCounts,
+                  {formatOnsiteActionTotals(
+                    onsiteCareSummary.onsiteActionTotals,
                   )}
                 </Text>
 
@@ -6296,6 +6317,18 @@ export default function IncidentsPage() {
                   )}
                 </Text>
 
+                <Text style={styles.fieldLabel}>AMBULANCES ON SCENE</Text>
+                <Text style={styles.sitrepSectionText}>
+                  {sceneClearanceSummary.sceneAmbulances.length > 0
+                    ? sceneClearanceSummary.sceneAmbulances
+                        .map(
+                          (ambulance) =>
+                            `${formatSceneAmbulanceType(ambulance.ambulance_type)} - ${ambulance.ambulance_provider} (${ambulance.plate_number})\nArrived: ${formatDateTime(ambulance.arrived_on_scene_at)}`,
+                        )
+                        .join("\n\n")
+                    : "No ambulance records recorded."}
+                </Text>
+
                 {renderTriageIntervalSection(
                   "T1 IMMEDIATE TRANSPORTED BY INTERVAL",
                   sceneClearanceSummary.transported.immediate,
@@ -6311,6 +6344,22 @@ export default function IncidentsPage() {
                 {renderAmbulanceIntervalSection(
                   "ALS AMBULANCES ARRIVED BY INTERVAL",
                   sceneClearanceSummary.ambulances.als,
+                )}
+                {renderAmbulanceIntervalSection(
+                  "BLS SCENE AMBULANCES ARRIVED BY INTERVAL",
+                  sceneClearanceSummary.ambulanceArrivals.bls,
+                )}
+                {renderAmbulanceIntervalSection(
+                  "ACLS SCENE AMBULANCES ARRIVED BY INTERVAL",
+                  sceneClearanceSummary.ambulanceArrivals.acls,
+                )}
+                {renderAmbulanceIntervalSection(
+                  "PATIENT TRANSPORT VEHICLES ARRIVED BY INTERVAL",
+                  sceneClearanceSummary.ambulanceArrivals.patientTransportVehicle,
+                )}
+                {renderAmbulanceIntervalSection(
+                  "OTHER AMBULANCES ARRIVED BY INTERVAL",
+                  sceneClearanceSummary.ambulanceArrivals.other,
                 )}
 
                 <Pressable

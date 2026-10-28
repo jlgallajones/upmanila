@@ -1,0 +1,115 @@
+DCMS VERIFICATION RUN
+Started: 2026-10-28T13:43:29.5363442+08:00
+Root: C:\Users\jlgallajones\upmanila\disaster-casualty-system
+[RUN ] API TypeScript typecheck
+       Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\api
+       Command: npm.cmd run typecheck
+
+> disaster-casualty-api@1.0.0 typecheck
+> tsc --noEmit
+
+[PASS] API TypeScript typecheck (exit code 0)
+[RUN ] API production build
+       Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\api
+       Command: npm.cmd run build
+
+> disaster-casualty-api@1.0.0 build
+> tsc
+
+[PASS] API production build (exit code 0)
+[RUN ] Incident analytics tests
+       Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\api
+       Command: npm.cmd run test:analytics
+
+> disaster-casualty-api@1.0.0 test:analytics
+> tsc && node dist/services/analytics/incident-analytics.test.js
+
+Incident analytics calculation tests passed.
+[PASS] Incident analytics tests (exit code 0)
+[RUN ] Triage calculation and accuracy tests
+       Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\api
+       Command: npm.cmd run test:triage
+
+> disaster-casualty-api@1.0.0 test:triage
+> tsc && node dist/services/triage/calculate-triage.test.js && node dist/services/triage/triage-accuracy.test.js
+
+Triage calculation tests passed (42).
+Triage accuracy tests passed.
+[PASS] Triage calculation and accuracy tests (exit code 0)
+[RUN ] Mobile TypeScript typecheck
+       Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\mobile
+       Command: npm.cmd exec tsc -- --noEmit
+[PASS] Mobile TypeScript typecheck (exit code 0)
+[RUN ] Mobile/PWA web export
+       Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\mobile
+       Command: npm.cmd run build:web
+
+> mobile@1.0.0 build:web
+> expo export --platform web
+
+env: load .env
+env: export EXPO_PUBLIC_API_URL
+Using src/app as the root directory for Expo Router.
+React Compiler enabled
+Starting Metro Bundler
+
+Static rendering is enabled. Learn more: https://docs.expo.dev/router/web/static-rendering/
+| (node:25708) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:25708) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+? Bundled 2366ms node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js (1514 modules)
+Web Bundled 5083ms node_modules\expo-router\entry.js (1395 modules)
+
+› web bundles (2):
+_expo/static/css/global-30c341199d6e65a2dfb94ff1ee1395d4.css (551B)
+_expo/static/js/web/entry-aeaf5351ecd2c7a22aa9993426d55f04.js (3.4MB)
+
+› Static routes (26):
+/home (38KB)
+/ (index) (34KB)
+/login (45KB)
+/drafts (38KB)
+/explore (34KB)
+/profile (38KB)
+/records (38KB)
+/about-us (31KB)
+/_sitemap (37KB)
+/incidents (33KB)
+/+not-found (37KB)
+/action-logs (30KB)
+/(tabs)/home (38KB)
+/add-casualty (38KB)
+/(tabs)/drafts (38KB)
+/notifications (38KB)
+/casualty/[id] (39KB)
+/privacy-policy (46KB)
+/reset-password (40KB)
+/(tabs)/profile (38KB)
+/(tabs)/records (38KB)
+/account-management (34KB)
+/verification-review (39KB)
+/(tabs)/add-casualty (38KB)
+/terms-and-conditions (47KB)
+/(tabs)/notifications (38KB)
+
+Exported: dist
+[PASS] Mobile/PWA web export (exit code 0)
+[RUN ] Web dashboard syntax check
+       Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\website
+       Command: node.exe --check app.js
+[PASS] Web dashboard syntax check (exit code 0)
+[RUN ] Web configuration syntax check
+       Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\website
+       Command: node.exe --check config.js
+[PASS] Web configuration syntax check (exit code 0)
+[RUN ] PWA service worker syntax check
+       Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\mobile
+       Command: node.exe --check public/sw.js
+[PASS] PWA service worker syntax check (exit code 0)
+[RUN ] Repository whitespace check
+       Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system
+       Command: git.exe diff --check
+warning: in the working copy of 'disaster-casualty-system/api/src/services/triage/accuracy-summary.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/api/src/services/triage/triage-accuracy.test.ts', LF will be replaced by CRLF the next time Git touches it
+[PASS] Repository whitespace check (exit code 0)

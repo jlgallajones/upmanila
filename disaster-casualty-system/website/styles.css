@@ -2502,6 +2502,68 @@ tbody tr:hover td {
   margin-bottom: 2px;
 }
 
+.scene-clearance-ambulances {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--selected-border);
+  border-radius: 12px;
+  background: var(--cyan-soft);
+}
+
+.scene-clearance-ambulance-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr) minmax(0, 1.1fr) minmax(0, 1.35fr);
+  gap: 10px;
+  align-items: start;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.scene-clearance-ambulance-row .field,
+.scene-clearance-ambulance-row input,
+.scene-clearance-ambulance-row select {
+  min-width: 0;
+}
+
+.scene-clearance-ambulance-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.scene-clearance-remove {
+  margin: 0;
+}
+
+.scene-clearance-ambulance-list {
+  display: grid;
+  gap: 10px;
+}
+
+.scene-clearance-ambulance-card {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.7fr) minmax(220px, 1.4fr) minmax(180px, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.scene-clearance-ambulance-card span,
+.scene-clearance-ambulance-card time {
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .rating-guide {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -4059,6 +4121,8 @@ tbody tr:hover td {
   .analytics-timeline,
   .form-grid.two,
   .timeline-fields,
+    .scene-clearance-ambulance-row,
+    .scene-clearance-ambulance-card,
   .section-launcher-grid,
   .section-card-grid,
   .summary-facts {

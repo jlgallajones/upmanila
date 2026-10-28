@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 
-import { buildTriageAccuracySummary } from "./accuracy-summary.js";
+import {
+  buildFacilityTriageAccuracyTotals,
+  buildTriageAccuracySummary,
+} from "./accuracy-summary.js";
 import { compareTriageCategories } from "./compare-triage.js";
 
 assert.deepEqual(compareTriageCategories("delayed", "immediate"), {
@@ -121,6 +124,37 @@ const secondarySummary = buildTriageAccuracySummary([
 
 assert.equal(secondarySummary.undertriagedT1.numerator, 1);
 assert.equal(secondarySummary.overtriagedT2.numerator, 1);
+
+assert.deepEqual(
+  buildFacilityTriageAccuracyTotals([
+    {
+      calculated_category: "immediate",
+      responder_category: "delayed",
+      triage_category: "delayed",
+    },
+    {
+      calculated_category: "delayed",
+      responder_category: "minimal",
+      triage_category: "minimal",
+    },
+    {
+      calculated_category: "delayed",
+      responder_category: "immediate",
+      triage_category: "immediate",
+    },
+    {
+      calculated_category: "minimal",
+      responder_category: "delayed",
+      triage_category: "delayed",
+    },
+  ]),
+  {
+    undertriagedImmediatePrimary: 1,
+    undertriagedDelayedSecondary: 1,
+    overtriagedImmediatePrimary: 1,
+    overtriagedDelayedSecondary: 1,
+  },
+);
 
 const tertiarySummary = buildTriageAccuracySummary([
   {

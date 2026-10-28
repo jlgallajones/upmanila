@@ -259,9 +259,12 @@ export type OnsiteTriageAccuracyMetric = {
 export type OnsiteTriageSummary = {
   incidentId: string;
   totalSurvivors: number;
-  onSiteTriagedTotal: number;
-  triageSystemUsed: string | null;
-  firstTriageSystemCounts: Record<string, number>;
+  primaryTriageTotal: number;
+  secondaryTriageTotal: number;
+  primaryTriageSystemUsed: string | null;
+  secondaryTriageSystemUsed: string | null;
+  primaryTriageSystemCounts: Record<string, number>;
+  secondaryTriageSystemCounts: Record<string, number>;
   responseInitiatedAt: string | null;
   responseInitiationSource: string;
   triageOrderedAt: string | null;
@@ -286,15 +289,15 @@ export type FacilityTriageSummary = {
   incidentId: string;
   totalSurvivors: number;
   facilityTriagedTotal: number;
-  triageSystemUsed: string | null;
-  firstTriageSystemCounts: Record<string, number>;
+  tertiaryTriageSystemUsed: string | null;
+  tertiaryTriageSystemCounts: Record<string, number>;
   firstFacilityTriageAt: string | null;
   lastFacilityTriageAt: string | null;
   accuracy: {
-    undertriagedT1: OnsiteTriageAccuracyMetric;
-    undertriagedT2: OnsiteTriageAccuracyMetric;
-    overtriagedT2: OnsiteTriageAccuracyMetric;
-    overtriagedT3: OnsiteTriageAccuracyMetric;
+    undertriagedImmediatePrimary: number;
+    undertriagedDelayedSecondary: number;
+    overtriagedImmediatePrimary: number;
+    overtriagedDelayedSecondary: number;
   };
   accuracyFormula: string;
 };
@@ -311,9 +314,9 @@ export type OnsiteCareSummary = {
   incidentId: string;
   totalSurvivors: number;
   treatmentRecordedTotal: number;
-  stabilizedT1Total: number;
-  stabilizedT2Total: number;
-  treatmentStrategyCounts: Record<string, number>;
+  stabilizedImmediateCategoryTotal: number;
+  stabilizedDelayedCategoryTotal: number;
+  onsiteActionTotals: Record<string, number>;
   responseInitiatedAt: string | null;
   responseInitiationSource: string;
   intervalMinutes: number[];
@@ -337,6 +340,22 @@ export type SceneClearanceAmbulanceMetric = {
   count: number;
 };
 
+export type SceneClearanceAmbulanceRecord = {
+  id: string;
+  incident_id: string;
+  ambulance_provider: string;
+  plate_number: string;
+  ambulance_type:
+    | "bls"
+    | "acls"
+    | "patient_transport_vehicle"
+    | "other";
+  arrived_on_scene_at: string;
+  recorded_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type SceneClearanceSummary = {
   incidentId: string;
   totalSurvivors: number;
@@ -354,6 +373,13 @@ export type SceneClearanceSummary = {
   ambulances: {
     bls: SceneClearanceAmbulanceMetric[];
     als: SceneClearanceAmbulanceMetric[];
+  };
+  sceneAmbulances: SceneClearanceAmbulanceRecord[];
+  ambulanceArrivals: {
+    bls: SceneClearanceAmbulanceMetric[];
+    acls: SceneClearanceAmbulanceMetric[];
+    patientTransportVehicle: SceneClearanceAmbulanceMetric[];
+    other: SceneClearanceAmbulanceMetric[];
   };
 };
 

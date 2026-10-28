@@ -631,12 +631,15 @@ function resetResponseTimelineFormSnapshot() {
 function captureResponseTimelineFormSnapshot() {
   const modal = state.activeIncidentSectionModal;
 
-  if (modal?.section !== "timeline" || !modal.editMode) {
+  if (
+    !["timeline", "scene-clearance"].includes(modal?.section) ||
+    !modal.editMode
+  ) {
     return;
   }
 
   const form = document.querySelector(
-    '[data-incident-section-form="timeline"]',
+    `[data-incident-section-form="${modal.section}"]`,
   );
 
   if (!form) return;
@@ -649,7 +652,7 @@ function hasUnsavedResponseTimelineChanges() {
   const modal = state.activeIncidentSectionModal;
 
   if (
-    modal?.section !== "timeline" ||
+    !["timeline", "scene-clearance"].includes(modal?.section) ||
     !modal.editMode ||
     !modal.incidentId
   ) {
@@ -657,7 +660,7 @@ function hasUnsavedResponseTimelineChanges() {
   }
 
   const form = document.querySelector(
-    '[data-incident-section-form="timeline"]',
+    `[data-incident-section-form="${modal.section}"]`,
   );
   const currentSnapshot = getResponseTimelineFormSnapshot(form);
 
@@ -677,6 +680,7 @@ function collectResponseTimelineDraft(form, incidentId, reason = "manual") {
 
   return {
     incidentId,
+    section: "timeline",
     reason,
     savedAt: new Date().toISOString(),
     dmmpActivated: formValue(form, "dmmpActivated"),
@@ -701,21 +705,48 @@ function collectResponseTimelineDraft(form, incidentId, reason = "manual") {
   };
 }
 
+function collectSceneClearanceDraft(form, incidentId, reason = "manual") {
+  if (!form || !incidentId) return null;
+
+  return {
+    incidentId,
+    section: "scene-clearance",
+    reason,
+    savedAt: new Date().toISOString(),
+    sceneClearanceAmbulances: Array.from(
+      form.querySelectorAll("[data-scene-clearance-row]"),
+    ).map((row, index) => {
+      const valueFor = (field) =>
+        row.querySelector(`[data-scene-clearance-field="${field}"]`)?.value ||
+        "";
+
+      return {
+        id: valueFor("id") || `ambulance-${index + 1}`,
+        ambulanceProvider: valueFor("ambulanceProvider"),
+        plateNumber: valueFor("plateNumber"),
+        ambulanceType: valueFor("ambulanceType") || "bls",
+        arrivedOnSceneAt: valueFor("arrivedOnSceneAt"),
+      };
+    }),
+  };
+}
+
 function preserveActiveResponseTimelineDraft(reason = "manual") {
   const modal = state.activeIncidentSectionModal;
 
-  if (modal?.section !== "timeline" || !modal.incidentId) {
+  if (
+    !["timeline", "scene-clearance"].includes(modal?.section) ||
+    !modal.incidentId
+  ) {
     return null;
   }
 
   const form = document.querySelector(
-    '[data-incident-section-form="timeline"]',
+    `[data-incident-section-form="${modal.section}"]`,
   );
-  const draft = collectResponseTimelineDraft(
-    form,
-    modal.incidentId,
-    reason,
-  );
+  const draft = modal.section === "scene-clearance"
+    ? collectSceneClearanceDraft(form, modal.incidentId, reason)
+    : collectResponseTimelineDraft(form, modal.incidentId, reason);
 
   if (!draft) {
     return null;
@@ -749,7 +780,7 @@ function prepareResponseTimelineDraftRestoreAfterLogin() {
   state.expandedIncidentId = draft.incidentId;
   state.activeIncidentSectionModal = {
     incidentId: draft.incidentId,
-    section: "timeline",
+    section: draft.section || "timeline",
     editMode: true,
   };
   state.restoredResponseTimelineDraftKey = null;
@@ -763,7 +794,7 @@ function restoreResponseTimelineDraftIntoForm() {
 
   if (
     !draft?.incidentId ||
-    modal?.section !== "timeline" ||
+    !["timeline", "scene-clearance"].includes(modal?.section) ||
     modal.incidentId !== draft.incidentId
   ) {
     return false;
@@ -775,13 +806,26 @@ function restoreResponseTimelineDraftIntoForm() {
   }
 
   const form = document.querySelector(
-    '[data-incident-section-form="timeline"]',
+    `[data-incident-section-form="${modal.section}"]`,
   );
   if (!form) {
     return false;
   }
 
-  if (form.elements.dmmpActivated) {
+  if (modal.section === "scene-clearance") {
+    const customContainer = form.querySelector(
+      "[data-scene-clearance-ambulances]",
+    );
+    const records = Array.isArray(draft.sceneClearanceAmbulances)
+      ? draft.sceneClearanceAmbulances
+      : [];
+
+    if (customContainer && records.length > 0) {
+      customContainer.innerHTML = records
+        .map((record, index) => renderSceneClearanceAmbulanceRow(record, index))
+        .join("");
+    }
+  } else if (form.elements.dmmpActivated) {
     form.elements.dmmpActivated.value = draft.dmmpActivated || "";
   }
 
@@ -796,11 +840,13 @@ function restoreResponseTimelineDraftIntoForm() {
     }
   });
 
-  const customContainer = form.querySelector("[data-custom-timeline-events]");
-  if (customContainer && Array.isArray(draft.customTimelineEvents)) {
-    customContainer.innerHTML = draft.customTimelineEvents
-      .map((event, index) => renderCustomTimelineEventRow(event, index))
-      .join("");
+  if (modal.section === "timeline") {
+    const customContainer = form.querySelector("[data-custom-timeline-events]");
+    if (customContainer && Array.isArray(draft.customTimelineEvents)) {
+      customContainer.innerHTML = draft.customTimelineEvents
+        .map((event, index) => renderCustomTimelineEventRow(event, index))
+        .join("");
+    }
   }
 
   state.restoredResponseTimelineDraftKey = restoreKey;
@@ -808,7 +854,7 @@ function restoreResponseTimelineDraftIntoForm() {
   captureResponseTimelineFormSnapshot();
   setMessage(
     "incidentSectionModalMessage",
-    "Unsaved Response Timeline values were restored after your session expired. Review them, then click Save.",
+    "Unsaved incident-management values were restored after your session expired. Review them, then click Save.",
     "warning",
   );
   setMessage(
@@ -941,7 +987,7 @@ function expireWebSession() {
   localStorage.setItem(
     SESSION_EXPIRED_NOTICE_KEY,
     preservedDraft
-      ? "Session expired. Please log in again. Your unsaved Response Timeline values were kept on this browser."
+      ? "Session expired. Please log in again. Your unsaved incident-management values were kept on this browser."
       : "Session expired. Please log in again.",
   );
   clearSession();
@@ -950,7 +996,7 @@ function expireWebSession() {
   if (preservedDraft) {
     setMessage(
       "loginMessage",
-      "Your session expired. The unsaved Response Timeline values were kept on this browser. Sign in again to restore and save them.",
+      "Your session expired. The unsaved incident-management values were kept on this browser. Sign in again to restore and save them.",
       "warning",
     );
   }
@@ -4485,6 +4531,16 @@ function renderAnalyticsLineChart(title, series, options = {}) {
   const hasActivationReference = normalizedSeries.some((item) =>
     item.data.some((row) => row.cutoffAt),
   );
+  const valueKey = options.valueKey || "percentage";
+  const isCountChart = valueKey === "count";
+  const maxValue = isCountChart
+    ? Math.max(
+        1,
+        ...normalizedSeries.flatMap((item) =>
+          item.data.map((row) => Number(row.count || 0)),
+        ),
+      )
+    : 100;
 
   if (!normalizedSeries.length || !hasKnownDenominator || !hasActivationReference) {
     return "";
@@ -4495,24 +4551,36 @@ function renderAnalyticsLineChart(title, series, options = {}) {
   const padding = { top: 24, right: 30, bottom: 48, left: 58 };
   const plotWidth = width - padding.left - padding.right;
   const plotHeight = height - padding.top - padding.bottom;
-  const yTicks = [100, 75, 50, 25, 0];
+  const yTicks = isCountChart
+    ? [
+        maxValue,
+        Math.round(maxValue * 0.75),
+        Math.round(maxValue * 0.5),
+        Math.round(maxValue * 0.25),
+        0,
+      ]
+    : [100, 75, 50, 25, 0];
   const labels = normalizedSeries[0].data.map((row) =>
     compactAxisLabel(normalizeIntervalLabel(row)),
   );
   const pointX = (index) =>
     padding.left +
     (labels.length <= 1 ? plotWidth / 2 : (index / (labels.length - 1)) * plotWidth);
-  const pointY = (percentage) =>
-    padding.top + ((100 - Math.max(0, Math.min(100, percentage))) / 100) * plotHeight;
+  const pointY = (value) =>
+    padding.top +
+    ((maxValue - Math.max(0, Math.min(maxValue, value))) / maxValue) *
+      plotHeight;
   const lineMarkup = normalizedSeries
     .map((item, seriesIndex) => {
       const color = analyticsColorValue(item.label, item.key, seriesIndex);
       const points = item.data.map((row, pointIndex) => {
+        const value = Number(row[valueKey] || 0);
         const percentage = Number(row.percentage || 0);
 
         return {
           x: pointX(pointIndex),
-          y: pointY(percentage),
+          y: pointY(value),
+          value,
           percentage,
           count: Number(row.count || 0),
           total: Number(row.total || 0),
@@ -4529,7 +4597,9 @@ function renderAnalyticsLineChart(title, series, options = {}) {
           .map(
             (point) => `
               <circle cx="${point.x.toFixed(2)}" cy="${point.y.toFixed(2)}" r="5.5" fill="#fff" stroke="${color}" stroke-width="3">
-                <title>${escapeHtml(`${item.label} at ${point.label}: ${formatPercentageLabel(point.percentage)} (${point.count}/${point.total})`)}</title>
+                <title>${escapeHtml(isCountChart
+                  ? `${item.label} at ${point.label}: ${point.value} arrivals`
+                  : `${item.label} at ${point.label}: ${formatPercentageLabel(point.percentage)} (${point.count}/${point.total})`)}</title>
               </circle>
             `,
           )
@@ -4557,7 +4627,7 @@ function renderAnalyticsLineChart(title, series, options = {}) {
 
                 return `
                   <line x1="${padding.left}" y1="${y}" x2="${width - padding.right}" y2="${y}" class="analytics-line-grid"></line>
-                  <text x="${padding.left - 12}" y="${y + 4}" text-anchor="end" class="analytics-line-tick">${tick}%</text>
+                  <text x="${padding.left - 12}" y="${y + 4}" text-anchor="end" class="analytics-line-tick">${tick}${isCountChart ? "" : "%"}</text>
                 `;
               })
               .join("")}
@@ -4571,7 +4641,7 @@ function renderAnalyticsLineChart(title, series, options = {}) {
                 `;
               })
               .join("")}
-            <text x="18" y="${padding.top + plotHeight / 2}" text-anchor="middle" class="analytics-line-axis-label" transform="rotate(-90 18 ${padding.top + plotHeight / 2})">Cumulative percentage</text>
+            <text x="18" y="${padding.top + plotHeight / 2}" text-anchor="middle" class="analytics-line-axis-label" transform="rotate(-90 18 ${padding.top + plotHeight / 2})">${isCountChart ? "Arrivals" : "Cumulative percentage"}</text>
             <text x="${padding.left + plotWidth / 2}" y="${height - 8}" text-anchor="middle" class="analytics-line-axis-label">${escapeHtml(options.xAxisLabel || "Minutes after DMMP activation")}</text>
             ${lineMarkup}
           </svg>
@@ -4787,6 +4857,7 @@ function renderAnalyticsGraphGrid(analytics, incidentId) {
         ${renderAnalyticsLineChart("Immediate and Delayed Victims Stabilized in the Stabilization Area", lineGraphs.stabilizationByActivation, { note: cumulativeNote })}
         ${renderAnalyticsLineChart("Immediate and Delayed Victims Departed Scene and Arrived at a Healthcare Facility", lineGraphs.departedAndArrivedByActivation, { note: cumulativeNote })}
         ${renderAnalyticsLineChart("Victims Arriving at a Healthcare Facility", lineGraphs.facilityArrivalByActivation, { note: cumulativeNote })}
+        ${renderAnalyticsLineChart("Ambulances Arrived on Scene by Type", lineGraphs.sceneAmbulanceArrivals, { note: cumulativeNote, valueKey: "count", xAxisLabel: "Minutes after DMMP activation" })}
       </div>`,
     )}
     ${renderAnalyticsSectionIfVisible(
@@ -11195,10 +11266,10 @@ const incidentManagementSections = [
   ["dmmp-safety", "DMMP & Responder Safety", true],
   ["coordination", "Coordination Assessment", true],
   ["deactivation", "Deactivation & Continuity", true],
+  ["scene-clearance", "Scene Clearance", true],
   ["onsite-triage", "Onsite Triage", false],
   ["facility-triage", "Facility Triage", false],
   ["onsite-care", "Onsite Care", false],
-  ["scene-clearance", "Scene Clearance", false],
   ["survivor-distribution", "Survivor Distribution", false],
   ["ed-resources", "ED Resources", false],
   ["hospital-resources", "Hospital Resources", false],
@@ -11593,6 +11664,8 @@ function renderIncidentSectionEditContent(incident, details, sectionId) {
       return renderCoordinationManagementForm(details.coordination?.data, true);
     case "deactivation":
       return renderDeactivationManagementForm(details, true);
+    case "scene-clearance":
+      return renderSceneClearanceManagementForm(details, true);
     case "hospital-resources":
       return renderHospitalResourcesManagementForm(
         details.hospitalResources?.data,
@@ -11648,11 +11721,11 @@ function renderIncidentSectionViewContent(incident, details, sectionId) {
     case "onsite-triage":
       return renderSummaryFacts(details.onsiteTriage?.data);
     case "facility-triage":
-      return renderSummaryFacts(details.facilityTriage?.data);
+      return renderSummaryFacts(details.facilityTriage?.data, null);
     case "onsite-care":
       return renderSummaryFacts(details.onsiteCare?.data);
     case "scene-clearance":
-      return renderSummaryFacts(details.sceneClearance?.data);
+      return renderSceneClearanceView(details.sceneClearance?.data);
     case "survivor-distribution":
       return renderSummaryFacts(details.survivorDistribution?.data);
     case "ed-resources":
@@ -12170,6 +12243,170 @@ function formatBoolean(value) {
   return "Unknown";
 }
 
+function sceneClearanceAmbulanceTypeLabel(value) {
+  switch (value) {
+    case "bls":
+      return "BLS";
+    case "acls":
+      return "ACLS";
+    case "patient_transport_vehicle":
+      return "Patient Transport Vehicle";
+    case "other":
+      return "Other";
+    default:
+      return value || "Other";
+  }
+}
+
+function renderSceneClearanceAmbulanceRow(record = {}, index = 0) {
+  return `
+    <div class="scene-clearance-ambulance-row" data-scene-clearance-row>
+      <input type="hidden" data-scene-clearance-field="id" value="${escapeHtml(record.id || `ambulance-${index + 1}`)}" />
+      <label class="field">
+        <span>Ambulance Provider</span>
+        <input data-scene-clearance-field="ambulanceProvider" placeholder="Example: Manila DRRMO" value="${escapeHtml(record.ambulance_provider || record.ambulanceProvider || "")}" />
+      </label>
+      <label class="field">
+        <span>Plate Number</span>
+        <input data-scene-clearance-field="plateNumber" placeholder="Example: ABC-1234" value="${escapeHtml(record.plate_number || record.plateNumber || "")}" />
+      </label>
+      <label class="field">
+        <span>Type</span>
+        <select data-scene-clearance-field="ambulanceType">
+          ${[
+            ["bls", "BLS"],
+            ["acls", "ACLS"],
+            ["patient_transport_vehicle", "Patient Transport Vehicle"],
+            ["other", "Other"],
+          ]
+            .map(
+              ([value, label]) =>
+                `<option value="${value}" ${(record.ambulance_type || record.ambulanceType || "bls") === value ? "selected" : ""}>${label}</option>`,
+            )
+            .join("")}
+        </select>
+      </label>
+      <label class="field timeline-timepoint-field">
+        <span>Arrival on Scene</span>
+        <input data-scene-clearance-field="arrivedOnSceneAt" inputmode="text" placeholder="MM/DD/YYYY HH:MM AM/PM" value="${escapeHtml(formatManualDateTimeInput(record.arrived_on_scene_at || record.arrivedOnSceneAt))}" />
+      </label>
+      <div class="scene-clearance-ambulance-actions">
+        <button class="ghost-button mini" type="button" data-use-current-scene-clearance-time>Use current time</button>
+        <button class="ghost-button mini scene-clearance-remove" type="button" data-remove-scene-clearance-ambulance>Remove</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderSceneClearanceView(data) {
+  const ambulances = Array.isArray(data?.sceneAmbulances)
+    ? data.sceneAmbulances
+    : [];
+
+  return `
+    ${renderSummaryFacts(data)}
+    <section class="incident-section-card summary-preview full-width">
+      <div class="section-card-header">
+        <div>
+          <h3>Ambulances Arrived on Scene</h3>
+          <p class="panel-subtitle">Recorded EMS BLS, ACLS, patient transport vehicle, and other ambulance arrivals.</p>
+        </div>
+      </div>
+      ${ambulances.length
+        ? `<div class="scene-clearance-ambulance-list">
+            ${ambulances
+              .map(
+                (ambulance) => `
+                  <div class="scene-clearance-ambulance-card">
+                    <strong>${escapeHtml(sceneClearanceAmbulanceTypeLabel(ambulance.ambulance_type))}</strong>
+                    <span>${escapeHtml(ambulance.ambulance_provider)} · ${escapeHtml(ambulance.plate_number)}</span>
+                    <time>${escapeHtml(formatDate(ambulance.arrived_on_scene_at))}</time>
+                  </div>
+                `,
+              )
+              .join("")}
+          </div>`
+        : `<div class="empty-state">No ambulance arrival records recorded.</div>`}
+    </section>
+  `;
+}
+
+function renderSceneClearanceManagementForm(details, forModal = false) {
+  const ambulances = Array.isArray(details?.sceneClearance?.data?.sceneAmbulances)
+    ? details.sceneClearance.data.sceneAmbulances
+    : [];
+  const rows = [{ id: "ambulance-new", ambulance_type: "bls" }];
+
+  return `
+    <section class="incident-section-card scene-clearance-summary-panel">
+      <div class="section-card-header">
+        <div>
+          <h3>Scene Clearance Summary</h3>
+          <p class="panel-subtitle">Existing transport and response-clearance information.</p>
+        </div>
+      </div>
+      ${renderSummaryFacts(details?.sceneClearance?.data)}
+    </section>
+    <form id="${forModal ? "incidentSectionEditForm" : ""}" class="incident-section-card" data-incident-section-form="scene-clearance">
+      <div class="section-card-header">
+        <div>
+          <h3>Scene Clearance</h3>
+          <p class="panel-subtitle">Add each ambulance that arrived on scene. Saved records appear below.</p>
+        </div>
+      </div>
+      <div class="scene-clearance-ambulances" data-scene-clearance-ambulances>
+        ${rows.map((record, index) => renderSceneClearanceAmbulanceRow(record, index)).join("")}
+      </div>
+      <button class="ghost-button mini" type="button" data-add-scene-clearance-ambulance>Add ambulance</button>
+      <div id="sceneClearanceMessage" class="status-message" hidden></div>
+    </form>
+    <section class="incident-section-card scene-clearance-records-panel">
+      <div class="section-card-header">
+        <div>
+          <h3>Saved Ambulance Records</h3>
+          <p class="panel-subtitle">Ambulances recorded for this incident.</p>
+        </div>
+      </div>
+      ${renderSceneClearanceRecordsTable(ambulances)}
+    </section>
+  `;
+}
+
+function renderSceneClearanceRecordsTable(ambulances) {
+  if (!ambulances.length) {
+    return `<div class="empty-state">No ambulance records saved yet.</div>`;
+  }
+
+  return `
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Ambulance Provider</th>
+            <th>Plate Number</th>
+            <th>Type</th>
+            <th>Arrival on Scene</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${ambulances
+            .map(
+              (ambulance) => `
+                <tr>
+                  <td>${escapeHtml(ambulance.ambulance_provider)}</td>
+                  <td>${escapeHtml(ambulance.plate_number)}</td>
+                  <td>${escapeHtml(sceneClearanceAmbulanceTypeLabel(ambulance.ambulance_type))}</td>
+                  <td>${escapeHtml(formatDate(ambulance.arrived_on_scene_at))}</td>
+                </tr>
+              `,
+            )
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
 function renderTimelineManagementForm(incident, details, forModal = false) {
   const timeline = details?.timeline?.data ?? null;
   const customEvents = normalizeCustomTimelineEvents(timeline?.custom_events);
@@ -12587,8 +12824,9 @@ function renderSummarySection(title, data, fullWidth = false) {
   `;
 }
 
-function renderSummaryFacts(data) {
-  const facts = flattenSummaryFacts(data).slice(0, 10);
+function renderSummaryFacts(data, limit = 10) {
+  const allFacts = flattenSummaryFacts(data);
+  const facts = limit === null ? allFacts : allFacts.slice(0, limit);
   return `
     <div class="summary-facts">
       ${
@@ -12608,12 +12846,22 @@ function renderSummaryFacts(data) {
 const summaryFactLabels = {
   totalSurvivors: "Total survivors",
   onSiteTriagedTotal: "On-site triaged total",
+  primaryTriageTotal: "Primary Triage Total",
+  secondaryTriageTotal: "Secondary Triage Total",
   facilityTriagedTotal: "Facility triaged total",
-  triageSystemUsed: "Triage system used",
-  firstTriageSystemCounts: "First triage system counts",
+  tertiaryTriageSystemUsed: "Tertiary triage system used",
+  tertiaryTriageSystemCounts: "Tertiary triage system totals",
+  "accuracy.undertriagedImmediatePrimary":
+    "Undertriaged Immediate Category - Primary",
+  "accuracy.undertriagedDelayedSecondary":
+    "Undertriaged Delayed Category - Secondary",
+  "accuracy.overtriagedImmediatePrimary":
+    "Overtriaged Immediate Category - Primary",
+  "accuracy.overtriagedDelayedSecondary":
+    "Overtriaged Delayed Category - Secondary",
   treatmentRecordedTotal: "Treatment records total",
-  stabilizedT1Total: "Stabilized T1 total",
-  stabilizedT2Total: "Stabilized T2 total",
+  stabilizedImmediateCategoryTotal: "Stabilized Immediate Category Total",
+  stabilizedDelayedCategoryTotal: "Stabilized Delayed Category Total",
   firstEmsVehicleOnSceneAt: "First EMS vehicle on scene",
   lastEmsVehicleOnSceneAt: "Last EMS vehicle on scene",
   firstTransportFromSceneAt: "First transport from scene",
@@ -12635,8 +12883,7 @@ const summaryFactLabels = {
   responseInitiatedAt: "Response initiated",
   responseInitiationSource: "Response initiation source",
   intervalMinutes: "Time intervals",
-  treatmentStrategyCounts: "Treatment strategy counts",
-  "treatmentStrategyCounts.unknown": "Treatment strategy: Unknown",
+  onsiteActionTotals: "Onsite action totals",
   "categories.immediate": "Immediate category intervals",
   "categories.delayed": "Delayed category intervals",
   "transported.immediate": "Immediate transported intervals",
@@ -12708,6 +12955,21 @@ function formatSummaryFactLabel(path) {
     return summaryFactLabels[path];
   }
 
+  if (/^tertiaryTriageSystemCounts\./.test(path)) {
+    const system = String(path).split(".").pop() || "UNKNOWN";
+    return `Tertiary Triage - ${system.toUpperCase()} Total`;
+  }
+
+  if (/^onsiteActionTotals\./.test(path)) {
+    const action = String(path).split(".").pop() || "UNKNOWN";
+    return `Onsite Action Total - ${action}`;
+  }
+
+  if (/TriageSystemCounts\./.test(path)) {
+    const system = String(path).split(".").pop() || "UNKNOWN";
+    return `Triage system used: ${system.toUpperCase()}`;
+  }
+
   const parts = String(path || "")
     .split(".")
     .filter(Boolean);
@@ -12724,6 +12986,13 @@ function formatSummaryFactValue(path, value) {
 
   if (path === "responseInitiationSource") {
     return summarySourceLabels[value] || roleLabel(value);
+  }
+
+  if (
+    /triageSystemUsed$/i.test(path) ||
+    /TriageSystemCounts\./.test(path)
+  ) {
+    return String(value).toUpperCase();
   }
 
   if (
@@ -13018,7 +13287,9 @@ function bindIncidentManagementActions() {
       state.activeIncidentSectionModal = {
         incidentId,
         section,
-        editMode: section === "timeline" && canManageIncident,
+        editMode:
+          ["timeline", "scene-clearance"].includes(section) &&
+          canManageIncident,
       };
       resetResponseTimelineFormSnapshot();
       renderCurrentView();
@@ -13050,7 +13321,7 @@ function bindIncidentManagementActions() {
         }
       }
 
-      if (modal?.section === "timeline") {
+      if (["timeline", "scene-clearance"].includes(modal?.section)) {
         clearResponseTimelineSessionDraft(modal.incidentId);
       }
 
@@ -13172,6 +13443,59 @@ function bindIncidentManagementActions() {
       if (!input) return;
 
       input.value = formatManualDateTimeInput(new Date().toISOString());
+    });
+  });
+
+  document.querySelectorAll("[data-scene-clearance-ambulances]").forEach((container) => {
+    container.addEventListener("click", (event) => {
+      const currentTimeButton = event.target.closest(
+        "[data-use-current-scene-clearance-time]",
+      );
+      const removeButton = event.target.closest(
+        "[data-remove-scene-clearance-ambulance]",
+      );
+
+      if (currentTimeButton) {
+        const row = currentTimeButton.closest("[data-scene-clearance-row]");
+        const input = row?.querySelector(
+          '[data-scene-clearance-field="arrivedOnSceneAt"]',
+        );
+
+        if (input) {
+          input.value = formatManualDateTimeInput(new Date().toISOString());
+        }
+      }
+
+      if (removeButton) {
+        const row = removeButton.closest("[data-scene-clearance-row]");
+        const rows = container.querySelectorAll("[data-scene-clearance-row]");
+
+        if (row && rows.length > 1) {
+          row.remove();
+        } else if (row) {
+          row.querySelectorAll("input").forEach((input) => {
+            if (input.type !== "hidden") input.value = "";
+          });
+        }
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-add-scene-clearance-ambulance]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const form = button.closest("form");
+      const container = form?.querySelector("[data-scene-clearance-ambulances]");
+
+      if (!container) return;
+
+      const index = container.querySelectorAll("[data-scene-clearance-row]").length;
+      container.insertAdjacentHTML(
+        "beforeend",
+        renderSceneClearanceAmbulanceRow(
+          { id: `ambulance-${Date.now()}-${index + 1}`, ambulance_type: "bls" },
+          index,
+        ),
+      );
     });
   });
 
@@ -13407,6 +13731,7 @@ async function handleIncidentSectionSubmit(form) {
     "dmmp-staff": saveDmmpStaffSection,
     coordination: saveCoordinationSection,
     deactivation: saveDeactivationSection,
+    "scene-clearance": saveSceneClearanceSection,
     "hospital-resources": saveHospitalResourcesSection,
   };
 
@@ -13422,6 +13747,7 @@ async function handleIncidentSectionSubmit(form) {
       "dmmp-staff": "dmmpStaffMessage",
       coordination: "coordinationMessage",
       deactivation: "deactivationMessage",
+      "scene-clearance": "sceneClearanceMessage",
       "hospital-resources": "hospitalResourcesMessage",
     }[section] || "incidentSectionModalMessage";
 
@@ -13440,6 +13766,7 @@ async function handleIncidentSectionSubmit(form) {
       "dmmp-staff": "dmmpStaffMessage",
       coordination: "coordinationMessage",
       deactivation: "deactivationMessage",
+      "scene-clearance": "sceneClearanceMessage",
       "hospital-resources": "hospitalResourcesMessage",
     }[section];
 
@@ -13470,7 +13797,7 @@ async function saveIncidentDetailsSection(incidentId, form) {
   await reloadExpandedIncident("Incident details saved.");
 }
 
-async function reloadExpandedIncident(successMessage) {
+async function reloadExpandedIncident(successMessage, keepEditMode = false) {
   const incidentId =
     state.activeIncidentSectionModal?.incidentId ??
     state.expandedIncidentId;
@@ -13482,7 +13809,7 @@ async function reloadExpandedIncident(successMessage) {
   if (state.activeIncidentSectionModal) {
     state.activeIncidentSectionModal = {
       ...state.activeIncidentSectionModal,
-      editMode: false,
+      editMode: keepEditMode,
     };
   }
 
@@ -13643,6 +13970,52 @@ async function saveDeactivationSection(incidentId, form) {
     }),
   });
   await reloadExpandedIncident("Deactivation and continuity saved.");
+}
+
+async function saveSceneClearanceSection(incidentId, form) {
+  setMessage("sceneClearanceMessage", "Saving scene clearance...");
+
+  const ambulances = Array.from(
+    form.querySelectorAll("[data-scene-clearance-row]"),
+  ).flatMap((row, index) => {
+    const valueFor = (field) =>
+      row.querySelector(`[data-scene-clearance-field="${field}"]`)?.value || "";
+    const provider = valueFor("ambulanceProvider").trim();
+    const plateNumber = valueFor("plateNumber").trim();
+    const ambulanceType = valueFor("ambulanceType");
+    const rawArrival = valueFor("arrivedOnSceneAt").trim();
+
+    if (!provider && !plateNumber && !rawArrival) {
+      return [];
+    }
+
+    if (!provider || !plateNumber || !rawArrival) {
+      throw new Error(
+        `Ambulance ${index + 1} requires a provider, plate number, and arrival-on-scene time.`,
+      );
+    }
+
+    const arrivedOnSceneAt = toNullableIsoFromManualDateTime(rawArrival);
+    if (!arrivedOnSceneAt) {
+      throw new Error(
+        `Ambulance ${index + 1} must use MM/DD/YYYY HH:MM AM/PM for arrival-on-scene time.`,
+      );
+    }
+
+    return [{
+      ambulanceProvider: provider,
+      plateNumber,
+      ambulanceType,
+      arrivedOnSceneAt,
+    }];
+  });
+
+  await apiRequest(`/incidents/${encodeURIComponent(incidentId)}/scene-clearance`, {
+    method: "PUT",
+    body: JSON.stringify({ ambulances }),
+  });
+  clearResponseTimelineSessionDraft(incidentId);
+  await reloadExpandedIncident("Scene clearance saved.", true);
 }
 
 async function saveHospitalResourcesSection(incidentId, form) {

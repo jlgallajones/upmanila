@@ -18,6 +18,7 @@ import {
   getIncidentTimeline,
   getIncidentOnsiteTriageSummary,
   getIncidentSceneClearanceSummary,
+  updateIncidentSceneClearance,
   getIncidentSurvivorDistributionSummary,
   requestIncidentReopen,
   updateIncident,
@@ -86,6 +87,19 @@ incidentRouter.get(
   "/:id/scene-clearance-summary",
   requireAuth,
   getIncidentSceneClearanceSummary,
+);
+incidentRouter.put(
+  "/:id/scene-clearance",
+  requireAuth,
+  requireRole([
+    "super_admin",
+    "admin",
+    "administrator",
+    "responder",
+    "encoder",
+    "medical_personnel",
+  ]),
+  updateIncidentSceneClearance,
 );
 incidentRouter.get(
   "/:id/survivor-distribution-summary",

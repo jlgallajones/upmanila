@@ -20,6 +20,13 @@ export type TriageAccuracySummary = {
   overtriagedT3: TriageAccuracyMetric;
 };
 
+export type FacilityTriageAccuracyTotals = {
+  undertriagedImmediatePrimary: number;
+  undertriagedDelayedSecondary: number;
+  overtriagedImmediatePrimary: number;
+  overtriagedDelayedSecondary: number;
+};
+
 function buildAccuracyMetric(
   rows: TriageAccuracyRow[],
   label: string,
@@ -79,5 +86,18 @@ export function buildTriageAccuracySummary(
       "minimal",
       ["immediate", "delayed"],
     ),
+  };
+}
+
+export function buildFacilityTriageAccuracyTotals(
+  rows: TriageAccuracyRow[],
+): FacilityTriageAccuracyTotals {
+  const summary = buildTriageAccuracySummary(rows);
+
+  return {
+    undertriagedImmediatePrimary: summary.undertriagedT1.numerator,
+    undertriagedDelayedSecondary: summary.undertriagedT2.numerator,
+    overtriagedImmediatePrimary: summary.overtriagedT2.numerator,
+    overtriagedDelayedSecondary: summary.overtriagedT3.numerator,
   };
 }
