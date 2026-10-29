@@ -9,7 +9,7 @@ export default function AboutUsScreen() {
       sections={[
         {
           title: "About SCRIBER",
-          body: "SCRIBER emphasizes the systematic documentation of casualties and emergency response activities, highlighting the application's holistic role in promoting consistent, reliable, and standardized disaster reporting. Hence the application's name: Standardized Casualty Reporting for Incidents and Basic Emergency Response. The development process of the tool started in 2026 by engaging with software developers from TechFactors Inc. The tools were developed primarily referencing the disaster medical response data elements elaborated in Debacker et al. (2012)1.",
+          body: "SCRIBER emphasizes the systematic documentation of victims and emergency response activities, highlighting the application's holistic role in promoting consistent, reliable, and standardized disaster reporting. Hence the application's name: Standardized Victim Reporting for Incidents and Basic Emergency Response. The development process of the tool started in 2026 by engaging with software developers from TechFactors Inc. The tools were developed primarily referencing the disaster medical response data elements elaborated in Debacker et al. (2012)1.",
         },
         {
           title: "Reference",

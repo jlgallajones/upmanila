@@ -4299,6 +4299,23 @@ export async function getIncidentSurvivorDistributionSummary(
       (item) => item.id,
     );
 
+    const primaryTriageResult =
+      casualtyIncidentIds.length > 0
+        ? await supabase
+            .from("casualty_triage_assessments")
+            .select(
+              "casualty_incident_id, triage_system, triage_category, responder_category, calculated_category, triage_stage, triaged_at, assessment_answers",
+            )
+            .in("casualty_incident_id", casualtyIncidentIds)
+            .order("triaged_at", { ascending: true })
+        : { data: [], error: null };
+
+    if (primaryTriageResult.error) {
+      throw new Error(
+        `Unable to retrieve primary triage data: ${primaryTriageResult.error.message}`,
+      );
+    }
+
     const transportResult =
       casualtyIncidentIds.length > 0
         ? await supabase
@@ -4388,6 +4405,80 @@ export async function getIncidentSurvivorDistributionSummary(
         )
       );
     });
+
+    const firstPrimaryTriageByCasualty = new Map<
+      string,
+      TriageAssessmentRow
+    >();
+
+    for (const row of (primaryTriageResult.data ?? []) as TriageAssessmentRow[]) {
+      const isPrimaryTriage =
+        row.triage_stage === "on_site" ||
+        primaryTriageSystems.has(normalizeAnalyticsTriageSystem(row.triage_system));
+
+      if (isPrimaryTriage && !firstPrimaryTriageByCasualty.has(row.casualty_incident_id)) {
+        firstPrimaryTriageByCasualty.set(row.casualty_incident_id, row);
+      }
+    }
+
+    const isNonEmsTransport = (transportMode: string | null) =>
+      ["private_vehicle", "independent", "walk_in", "other"].includes(
+        transportMode ?? "",
+      );
+
+    const primaryTriageTransport = (
+      ["immediate", "delayed", "minimal", "expectant"] as const
+    ).reduce(
+      (result, category) => {
+        const categoryRows = arrivedRows.filter(
+          (row) =>
+            getAnalyticsTriageCategory(
+              firstPrimaryTriageByCasualty.get(row.casualty_incident_id),
+            ) === category,
+        );
+        const denominator = categoryRows.length;
+        const emsNumerator = categoryRows.filter(
+          (row) => row.transport_mode === "ems",
+        ).length;
+        const nonEmsNumerator = categoryRows.filter((row) =>
+          isNonEmsTransport(row.transport_mode),
+        ).length;
+        const buildTransportMetric = (
+          numerator: number,
+        ) => ({
+          numerator,
+          denominator,
+          percentage:
+            denominator > 0
+              ? Number(((numerator / denominator) * 100).toFixed(2))
+              : 0,
+        });
+
+        result[category] = {
+          totalFacilityArrivals: denominator,
+          ems: buildTransportMetric(emsNumerator),
+          nonEms: buildTransportMetric(nonEmsNumerator),
+        };
+
+        return result;
+      },
+      {} as Record<
+        "immediate" | "delayed" | "minimal" | "expectant",
+        {
+          totalFacilityArrivals: number;
+          ems: {
+            numerator: number;
+            denominator: number;
+            percentage: number;
+          };
+          nonEms: {
+            numerator: number;
+            denominator: number;
+            percentage: number;
+          };
+        }
+      >,
+    );
 
     const buildFacilityMetric = (
       level: (typeof facilityLevels)[number],
@@ -4498,6 +4589,7 @@ export async function getIncidentSurvivorDistributionSummary(
             ems: buildFacilityMetric("specialized", true),
           },
         },
+        primaryTriageTransport,
         edArrivalsByInterval,
         interhospitalTransfer: {
           numerator: transferNumerator,
@@ -4655,6 +4747,12 @@ export async function getIncidentEdResourceSummary(
       "minimal",
       "expectant",
     ] as const;
+    const categoryLabels = {
+      immediate: "Immediate",
+      delayed: "Delayed",
+      minimal: "Minor",
+      expectant: "Expectant",
+    } as const;
 
     const encounterRows = Array.from(firstEncounterByCasualty.values());
     const soughtEdRows = encounterRows.filter(
@@ -4706,12 +4804,12 @@ export async function getIncidentEdResourceSummary(
 
       return {
         soughtCare: buildRatioMetric(
-          "Sought ED/similar facility care",
+          `${categoryLabels[category]} survivors among ED care seekers`,
           categoryRows.length,
           totalEdCareSeekers,
         ),
         admitted: buildRatioMetric(
-          "Admitted after ED/similar facility care",
+          `${categoryLabels[category]} survivors admitted after ED care`,
           categoryRows.filter(
             (row) =>
               row.admitted_to_hospital === true ||
@@ -4720,7 +4818,7 @@ export async function getIncidentEdResourceSummary(
           categoryRows.length,
         ),
         discharged: buildRatioMetric(
-          "Discharged after ED/similar facility care",
+          `${categoryLabels[category]} survivors discharged after ED care`,
           categoryRows.filter(
             (row) =>
               row.discharged_home === true ||
@@ -5350,6 +5448,7 @@ export async function getIncidentMorbidityMortalitySummary(
         meanMinutes: average(values),
         medianMinutes: median(values),
         count: values.length,
+        transferredOutCount: rows.filter((row) => Boolean(getEnd(row))).length,
       };
     };
 
@@ -5371,6 +5470,7 @@ export async function getIncidentMorbidityMortalitySummary(
         meanDays: average(values),
         medianDays: median(values),
         count: values.length,
+        transferredOutCount: rows.filter((row) => Boolean(getEnd(row))).length,
       };
     };
 
@@ -5420,6 +5520,7 @@ export async function getIncidentMorbidityMortalitySummary(
       data: {
         incidentId: id,
         totalVictims,
+        totalDeaths: mortalityRows.length,
         morbidity: {
           ed: {
             immediate: buildMinuteStayMetric(

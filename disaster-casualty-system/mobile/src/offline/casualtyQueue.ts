@@ -417,11 +417,11 @@ async function syncQueueItem(
         status: "failed",
         attempts: item.attempts + 1,
         updatedAt: new Date().toISOString(),
-        lastError: "Queued casualty has no selected incident.",
+        lastError: "Queued victim has no selected incident.",
       },
       issue: {
         queueId: item.id,
-        reason: "Queued casualty has no selected incident.",
+        reason: "Queued victim has no selected incident.",
       },
     };
   }
@@ -713,7 +713,7 @@ async function runQueuedCasualtySync(): Promise<QueueSyncResult> {
       issues.push(result.issue);
       if (
         result.issue.reason ===
-        "Queued casualty has no selected incident."
+        "Queued victim has no selected incident."
       ) {
         skipped += 1;
       }

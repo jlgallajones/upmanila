@@ -409,10 +409,10 @@ const superAdminNavGroups = [
     label: "Incidents",
     icon: "IN",
     views: [
-      ["call-down-list", "Call Down List"],
+      ["incidents", "Official Incidents"],
       ["incident-management", "Incident Management"],
       ["incident-analytics", "Incident Analytics"],
-      ["incidents", "Official Incidents"],
+      ["call-down-list", "Call Down List"],
       ["history", "Incident History"],
     ],
   },
@@ -463,10 +463,10 @@ const adminNavGroups = [
     label: "Incidents",
     icon: "IN",
     views: [
-      ["call-down-list", "Call Down List"],
+      ["incidents", "Official Incidents"],
       ["incident-management", "Incident Management"],
       ["incident-analytics", "Incident Analytics"],
-      ["incidents", "Official Incidents"],
+      ["call-down-list", "Call Down List"],
     ],
   },
   {
@@ -1327,7 +1327,7 @@ function formatTimelineDate(value) {
 }
 
 function fullCasualtyName(casualty) {
-  if (!casualty) return "Unknown casualty";
+  if (!casualty) return "Unknown victim";
 
   const name = [
     casualty.first_name,
@@ -1460,6 +1460,23 @@ function renderSidebarNavButton([id, label]) {
 }
 
 function renderSidebarNavGroup(group) {
+  if (group.views.length === 1) {
+    const [id, label] = group.views[0];
+    const isActive = state.activeView === id;
+
+    return `
+      <button
+        class="nav-group-summary nav-direct-link ${isActive ? "active" : ""}"
+        data-view="${escapeHtml(id)}"
+        type="button"
+        title="${escapeHtml(label)}"
+      >
+        <span class="nav-glyph">${escapeHtml(getNavInitials(label))}</span>
+        <span class="nav-group-label">${escapeHtml(label)}</span>
+      </button>
+    `;
+  }
+
   const isActiveGroup = group.views.some(([id]) => id === state.activeView);
   const viewCountLabel = `${group.views.length} ${group.views.length === 1 ? "menu" : "menus"}`;
 
@@ -1486,7 +1503,7 @@ function renderSidebarNavigation() {
 }
 
 function updateSidebarActiveState() {
-  document.querySelectorAll(".nav-button").forEach((item) => {
+  document.querySelectorAll(".nav-button, .nav-direct-link").forEach((item) => {
     item.classList.toggle("active", item.dataset.view === state.activeView);
   });
 
@@ -2187,8 +2204,8 @@ function showDashboardTextPrompt({
 
 const resetCountLabels = [
   ["incidents", "incidents"],
-  ["casualty_incidents", "casualty records"],
-  ["casualties", "casualty identities"],
+  ["casualty_incidents", "victim records"],
+  ["casualties", "victim identities"],
   ["attachments", "attachment records"],
   ["attachment_files", "attachment files"],
   ["sitreps", "SitReps"],
@@ -2204,10 +2221,10 @@ const resetCountLabels = [
   ["casualty_transport_records", "transport records"],
   ["casualty_treatments", "treatment records"],
   ["facility_encounters", "facility encounters"],
-  ["casualty_outcomes", "casualty outcomes"],
+  ["casualty_outcomes", "victim outcomes"],
   ["casualty_status_history", "status history entries"],
   ["casualty_verification_history", "verification history entries"],
-  ["casualty_notifications", "casualty notifications"],
+  ["casualty_notifications", "victim notifications"],
   ["incident_notifications", "incident notifications"],
 ];
 
@@ -2714,7 +2731,7 @@ function renderLoginLanding() {
       ${renderThemeToggle("theme-toggle-floating")}
       <section class="prelogin-landing-card" aria-labelledby="preloginLandingTitle">
         <div class="logo-strip prelogin-logo-strip">
-          <img class="seal-logo" src="./assets/UP-Logo.svg" alt="University of the Philippines logo" />
+          <img class="seal-logo" src="./assets/upmanila.png" alt="University of the Philippines logo" />
           <img class="seal-logo" src="./assets/UPM DRRMH Logo.png" alt="UPM DRRMH logo" />
           <img class="partner-logo" src="./assets/DOST Logo.png" alt="DOST logo" />
           <img class="partner-logo" src="./assets/DOST PCHRD Logo.png" alt="DOST PCHRD logo" />
@@ -2722,7 +2739,7 @@ function renderLoginLanding() {
         ${renderAnimatedMedSortLogo()}
         <span class="prelogin-kicker">Administrator Portal</span>
         <h1 id="preloginLandingTitle">SCRIBER</h1>
-        <p>Standardized Casualty Reporting for Incidents and Basic Emergency Response.</p>
+        <p>Standardized Victim Reporting for Incidents and Basic Emergency Response.</p>
         <button id="continueToLoginButton" class="prelogin-continue-button" type="button">
           Continue
         </button>
@@ -2779,7 +2796,7 @@ function renderLogin() {
       <section class="landing-pane">
         <div class="landing-content">
           <div class="logo-strip">
-            <img class="seal-logo" src="./assets/UP-Logo.svg" alt="University of the Philippines logo" />
+            <img class="seal-logo" src="./assets/upmanila.png" alt="University of the Philippines logo" />
             <img class="seal-logo" src="./assets/UPM DRRMH Logo.png" alt="UPM DRRMH logo" />
             <img class="partner-logo" src="./assets/DOST Logo.png" alt="DOST logo" />
             <img class="partner-logo" src="./assets/DOST PCHRD Logo.png" alt="DOST PCHRD logo" />
@@ -2802,7 +2819,7 @@ function renderLogin() {
 
           <div class="landing-title">
             <h1>SCRIBER</h1>
-            <p>Standardized Casualty Reporting for Incidents and Basic Emergency Response</p>
+            <p>Standardized Victim Reporting for Incidents and Basic Emergency Response</p>
           </div>
         </div>
       </section>
@@ -2941,7 +2958,7 @@ function bindShell() {
     applySidebarCollapsedState();
   });
 
-  document.querySelectorAll(".nav-button").forEach((button) => {
+  document.querySelectorAll(".nav-button, .nav-direct-link").forEach((button) => {
     button.addEventListener("click", () => {
       setActiveView(button.dataset.view);
       updateSidebarActiveState();
@@ -3431,10 +3448,24 @@ function bindIncidentSearchFilters() {
 
   if (searchInput) {
     searchInput.addEventListener("input", () => {
+      const selectionStart = searchInput.selectionStart;
+      const selectionEnd = searchInput.selectionEnd;
       state.incidentSearchQuery = searchInput.value;
       renderCurrentView();
       bindView();
-      qs("#incidentSearchInput")?.focus();
+      const nextSearchInput = qs("#incidentSearchInput");
+
+      if (nextSearchInput) {
+        nextSearchInput.focus();
+        const nextCursorPosition =
+          selectionStart === null ? nextSearchInput.value.length : selectionStart;
+        const nextSelectionEnd =
+          selectionEnd === null ? nextCursorPosition : selectionEnd;
+        nextSearchInput.setSelectionRange(
+          nextCursorPosition,
+          nextSelectionEnd,
+        );
+      }
     });
   }
 
@@ -3532,7 +3563,7 @@ function renderCasualtyRecordFilters(resultCount, totalCount) {
       </button>
     </div>
     <p class="panel-subtitle" style="margin-top:10px">
-      Showing ${resultCount} of ${totalCount} casualty records, sorted ${sortLabel} by submitted time.
+      Showing ${resultCount} of ${totalCount} victim records, sorted ${sortLabel} by submitted time.
     </p>
   `;
 }
@@ -5176,7 +5207,7 @@ const incidentLocation = selectedIncident
             <strong>${selectedIncident ? 1 : 0}</strong>
           </div>
           <div>
-            <span>Casualty Records</span>
+            <span>Victim Records</span>
             <strong>${totalCasualties}</strong>
             <small>For selected incident</small>
           </div>
@@ -5249,7 +5280,7 @@ function renderOngoingIncidentSummary() {
                   <dl>
                     <div><dt>Location</dt><dd>${escapeHtml(location || "Not specified")}</dd></div>
                     <div><dt>Time started</dt><dd>${formatDate(incident.started_at)}</dd></div>
-                    <div><dt>Casualties reported</dt><dd>${casualtiesReported}</dd></div>
+                    <div><dt>Victims reported</dt><dd>${casualtiesReported}</dd></div>
                     <div><dt>Status</dt><dd>Ongoing</dd></div>
                   </dl>
                 </article>
@@ -10834,11 +10865,11 @@ function formatAuditAction(action) {
     "account.updated": "Account updated",
     "account.deleted": "Account deleted",
     "account.deactivated": "Account deactivated",
-    "casualty.created": "Casualty added",
-    "casualty.verified": "Casualty verified",
-    "casualty.rejected": "Casualty rejected",
-    "casualty.deleted": "Casualty deleted",
-    "casualty.resubmitted": "Casualty resubmitted",
+    "casualty.created": "Victim added",
+    "casualty.verified": "Victim verified",
+    "casualty.rejected": "Victim rejected",
+    "casualty.deleted": "Victim deleted",
+    "casualty.resubmitted": "Victim resubmitted",
     "casualty.verification_updated": "Verification updated",
     "incident.created": "Incident created",
     "incident.updated": "Incident updated",
@@ -11733,13 +11764,13 @@ function renderIncidentSectionViewContent(incident, details, sectionId) {
     case "scene-clearance":
       return renderSceneClearanceView(details.sceneClearance?.data);
     case "survivor-distribution":
-      return renderSummaryFacts(details.survivorDistribution?.data);
+      return renderSurvivorDistributionView(details.survivorDistribution?.data);
     case "ed-resources":
-      return renderSummaryFacts(details.edResources?.data);
+      return renderEdResourceView(details.edResources?.data);
     case "hospital-resources":
       return renderHospitalResourceSummaryView(details);
     case "morbidity-mortality":
-      return renderSummaryFacts(details.morbidityMortality?.data);
+      return renderMorbidityMortalityView(details.morbidityMortality?.data);
     case "sitrep-close":
       return renderSitrepAndCloseSection(
         incident,
@@ -12849,6 +12880,357 @@ function renderSummaryFacts(data, limit = 10) {
   `;
 }
 
+function formatDistributionMetricValue(metric) {
+  if (!metric || Number(metric.denominator || 0) === 0) {
+    return "No recorded arrivals";
+  }
+
+  return `${Number(metric.numerator || 0)} of ${Number(
+    metric.denominator || 0,
+  )} (${Number(metric.percentage || 0)}%)`;
+}
+
+function formatDistributionCategoryLabel(category) {
+  return roleLabel(category)
+    .replace(/\bMinimal\b/i, "Minor")
+    .replace(/\bExpectant\b/i, "Expectant");
+}
+
+function renderDistributionMetricFact(label, description, metric) {
+  return `
+    <div>
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(formatDistributionMetricValue(metric))}</strong>
+      <small>${escapeHtml(description)}</small>
+    </div>
+  `;
+}
+
+function renderSurvivorDistributionView(data) {
+  if (!data) {
+    return `<div class="empty-state">No survivor distribution data available.</div>`;
+  }
+
+  const categoryOrder = ["immediate", "delayed", "minimal", "expectant"];
+  const primaryTriageTransport = data.primaryTriageTransport || {};
+  const primaryTriageFacts = categoryOrder.flatMap((category) => {
+    const distribution = primaryTriageTransport[category];
+
+    if (!distribution || Number(distribution.totalFacilityArrivals || 0) === 0) {
+      return [];
+    }
+
+    const categoryLabel = formatDistributionCategoryLabel(category);
+    return [
+      renderDistributionMetricFact(
+        `${categoryLabel} survivors transported by EMS`,
+        "Primary triage category; arrived at a recorded healthcare facility.",
+        distribution.ems,
+      ),
+      renderDistributionMetricFact(
+        `${categoryLabel} survivors without EMS transport`,
+        "Primary triage category; arrived without EMS transport.",
+        distribution.nonEms,
+      ),
+    ];
+  });
+
+  const facilityLevelLabels = {
+    primary: "Primary healthcare facility",
+    secondary: "Secondary healthcare facility",
+    tertiary: "Tertiary healthcare facility",
+    specialized: "Specialized healthcare facility",
+  };
+  const facilityLevelFacts = ["primary", "secondary", "tertiary", "specialized"].flatMap(
+    (level) => {
+      const metrics = data.facilityLevels?.[level];
+
+      if (!metrics) return [];
+
+      return [
+        renderDistributionMetricFact(
+          `${facilityLevelLabels[level]} arrivals transported by EMS`,
+          "Utstein facility-level arrival measure.",
+          metrics.ems,
+        ),
+        renderDistributionMetricFact(
+          `${facilityLevelLabels[level]} arrivals without EMS transport`,
+          "Utstein facility-level arrival measure.",
+          metrics.nonEms,
+        ),
+      ];
+    },
+  );
+
+  const intervalFacts = (data.edArrivalsByInterval || []).map((row) => ({
+    label: `Facility arrivals within ${row.minutes === 60 ? "1 hour" : `${row.minutes} minutes`}`,
+    value: `${Number(row.count || 0)} of ${Number(row.totalArrivals || 0)} (${Number(row.percentage || 0)}%)`,
+  }));
+
+  return `
+    <div class="summary-facts">
+      <div><span>Total survivors</span><strong>${escapeHtml(data.totalSurvivors ?? 0)}</strong></div>
+      <div><span>Total facility arrivals</span><strong>${escapeHtml(data.totalFacilityArrivals ?? 0)}</strong></div>
+      <div><span>Response initiated</span><strong>${escapeHtml(formatDate(data.responseInitiatedAt))}</strong></div>
+      ${
+        data.interhospitalTransfer
+          ? `<div><span>Interhospital transfers</span><strong>${escapeHtml(
+              formatDistributionMetricValue(data.interhospitalTransfer),
+            )}</strong></div>`
+          : ""
+      }
+    </div>
+    <h4 class="summary-subsection-title">Primary triage survivor distribution</h4>
+    <div class="summary-facts">
+      ${
+        primaryTriageFacts.join("") ||
+        `<div class="empty-state">No primary-triage facility arrivals recorded.</div>`
+      }
+    </div>
+    <h4 class="summary-subsection-title">Facility arrivals by healthcare level</h4>
+    <div class="summary-facts">
+      ${facilityLevelFacts.join("")}
+    </div>
+    <h4 class="summary-subsection-title">Facility arrivals by response interval</h4>
+    <div class="summary-facts">
+      ${
+        intervalFacts
+          .map(
+            (fact) =>
+              `<div><span>${escapeHtml(fact.label)}</span><strong>${escapeHtml(fact.value)}</strong></div>`,
+          )
+          .join("") || `<div class="empty-state">No interval data available.</div>`
+      }
+    </div>
+  `;
+}
+
+function formatEdResourceMetricValue(metric) {
+  if (!metric || Number(metric.denominator || 0) === 0) {
+    return "No recorded cases";
+  }
+
+  return `${Number(metric.numerator || 0)} of ${Number(
+    metric.denominator || 0,
+  )} (${Number(metric.percentage || 0)}%)`;
+}
+
+function renderEdResourceView(data) {
+  if (!data) {
+    return `<div class="empty-state">No ED resource data available.</div>`;
+  }
+
+  const categoryOrder = ["immediate", "delayed", "minimal", "expectant"];
+  const categoryFacts = categoryOrder.flatMap((category) => {
+    const summary = data.categories?.[category];
+
+    if (!summary) return [];
+
+    const categoryLabel = formatDistributionCategoryLabel(category);
+    const arrivalTime =
+      summary.medianArrivalMinutes === null ||
+      summary.medianArrivalMinutes === undefined
+        ? "No recorded arrival time"
+        : `${summary.medianArrivalMinutes} minutes`;
+
+    return [
+      renderDistributionMetricFact(
+        `${categoryLabel} survivors among ED care seekers`,
+        "Share of survivors who sought ED or similar facility care.",
+        summary.soughtCare,
+      ),
+      renderDistributionMetricFact(
+        `${categoryLabel} survivors admitted after ED care`,
+        "Share of this triage category's ED care seekers admitted to hospital.",
+        summary.admitted,
+      ),
+      renderDistributionMetricFact(
+        `${categoryLabel} survivors discharged after ED care`,
+        "Share of this triage category's ED care seekers discharged home.",
+        summary.discharged,
+      ),
+      `<div><span>${escapeHtml(categoryLabel)} median arrival time</span><strong>${escapeHtml(arrivalTime)}</strong><small>${escapeHtml(
+        `${Number(summary.arrivalIntervalCount || 0)} arrival times recorded`,
+      )}</small></div>`,
+    ];
+  });
+
+  const resuscitationFacts = (data.resuscitationIntervals || []).map((row) => ({
+    label: `Immediate-category resuscitation started by ${row.minutes === 0 ? "response initiation" : row.minutes === 60 ? "1 hour" : `${row.minutes} minutes`}`,
+    value: `${Number(row.count || 0)} of ${Number(row.totalT1EdCareSeekers || 0)}`,
+  }));
+
+  const roomUseFacts = (data.resuscitationRoomUseByInterval || []).map((row) => ({
+    label: `Resuscitation rooms used by ${row.minutes === 0 ? "response initiation" : row.minutes === 60 ? "1 hour" : `${row.minutes} minutes`}`,
+    value: `${Number(row.count || 0)} of ${Number(row.totalResuscitationRooms || 0)} (${Number(row.percentage || 0)}%)`,
+  }));
+
+  return `
+    <div class="summary-facts">
+      <div><span>Total survivors</span><strong>${escapeHtml(data.totalSurvivors ?? 0)}</strong></div>
+      <div><span>Survivors who sought ED or similar facility care</span><strong>${escapeHtml(data.totalEdCareSeekers ?? 0)}</strong></div>
+      <div><span>Response initiated</span><strong>${escapeHtml(formatDate(data.responseInitiatedAt))}</strong></div>
+      <div><span>Disaster onset</span><strong>${escapeHtml(formatDate(data.disasterOnsetAt))}</strong></div>
+    </div>
+    <h4 class="summary-subsection-title">ED care outcomes by primary triage category</h4>
+    <div class="summary-facts">
+      ${categoryFacts.join("") || `<div class="empty-state">No ED care records available.</div>`}
+    </div>
+    <h4 class="summary-subsection-title">Immediate-category resuscitation</h4>
+    <div class="summary-facts">
+      ${
+        resuscitationFacts
+          .map(
+            (fact) =>
+              `<div><span>${escapeHtml(fact.label)}</span><strong>${escapeHtml(fact.value)}</strong></div>`,
+          )
+          .join("") || `<div class="empty-state">No resuscitation interval data available.</div>`
+      }
+    </div>
+    <h4 class="summary-subsection-title">Resuscitation room use</h4>
+    <div class="summary-facts">
+      ${
+        roomUseFacts
+          .map(
+            (fact) =>
+              `<div><span>${escapeHtml(fact.label)}</span><strong>${escapeHtml(fact.value)}</strong></div>`,
+          )
+          .join("") || `<div class="empty-state">No resuscitation room data available.</div>`
+      }
+    </div>
+  `;
+}
+
+function renderMorbidityFact(label, value, description = "") {
+  return `
+    <div>
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value ?? "Not recorded")}</strong>
+      ${description ? `<small>${escapeHtml(description)}</small>` : ""}
+    </div>
+  `;
+}
+
+function formatMorbidityStayValue(value, unit) {
+  return value === null || value === undefined
+    ? "Not recorded"
+    : `${value} ${unit}`;
+}
+
+function formatMortalityMetricValue(metric) {
+  if (!metric || Number(metric.denominator || 0) === 0) {
+    return "No recorded cases";
+  }
+
+  return `${Number(metric.numerator || 0)} of ${Number(
+    metric.denominator || 0,
+  )} (${Number(metric.percentage || 0)}%)`;
+}
+
+function renderMorbidityMortalityView(data) {
+  if (!data) {
+    return `<div class="empty-state">No morbidity or mortality data available.</div>`;
+  }
+
+  const edImmediate = data.morbidity?.ed?.immediate || {};
+  const edDelayed = data.morbidity?.ed?.delayed || {};
+  const icuImmediate = data.morbidity?.icu?.immediate || {};
+  const ventilator = data.morbidity?.ventilator || {};
+  const hospital = data.morbidity?.hospital || {};
+  const mortality = data.mortality || {};
+
+  const mortalityFacts = [
+    ["Impact deaths", mortality.impactDeaths, "Deaths before medical contact / total victims."],
+    ["Pre-hospital deaths", mortality.prehospitalDeaths, "Deaths after medical contact but before hospital arrival / total victims."],
+    ["In-hospital deaths", mortality.inHospitalDeaths, "Deaths after arrival at a healthcare facility / total victims."],
+    ["Immediate-category deaths", mortality.immediateDeaths, "Deaths among immediate-category victims / total immediate-category victims."],
+  ]
+    .map(([label, metric, description]) =>
+      renderMorbidityFact(label, formatMortalityMetricValue(metric), description),
+    )
+    .join("");
+
+  return `
+    <div class="summary-facts">
+      ${renderMorbidityFact("Total victims", data.totalVictims ?? 0)}
+      ${renderMorbidityFact("Total recorded deaths", data.totalDeaths ?? 0)}
+    </div>
+    <h4 class="summary-subsection-title">Emergency department length of stay</h4>
+    <div class="summary-facts">
+      ${renderMorbidityFact(
+        "Average LOS (minutes) of immediate category in the ED",
+        formatMorbidityStayValue(edImmediate.meanMinutes, "minutes"),
+      )}
+      ${renderMorbidityFact(
+        "Median LOS (minutes) of immediate category in the ED",
+        formatMorbidityStayValue(edImmediate.medianMinutes, "minutes"),
+      )}
+      ${renderMorbidityFact(
+        "Total immediate category transferred out of the ED",
+        edImmediate.transferredOutCount ?? 0,
+      )}
+      ${renderMorbidityFact(
+        "Average LOS (minutes) of delayed category in the ED",
+        formatMorbidityStayValue(edDelayed.meanMinutes, "minutes"),
+      )}
+      ${renderMorbidityFact(
+        "Median LOS (minutes) of delayed category in the ED",
+        formatMorbidityStayValue(edDelayed.medianMinutes, "minutes"),
+      )}
+      ${renderMorbidityFact(
+        "Total delayed category transferred out of the ED",
+        edDelayed.transferredOutCount ?? 0,
+      )}
+    </div>
+    <h4 class="summary-subsection-title">Intensive care unit length of stay</h4>
+    <div class="summary-facts">
+      ${renderMorbidityFact(
+        "Average LOS (days) of immediate category in the ICU",
+        formatMorbidityStayValue(icuImmediate.meanDays, "days"),
+      )}
+      ${renderMorbidityFact(
+        "Median LOS (days) of immediate category in the ICU",
+        formatMorbidityStayValue(icuImmediate.medianDays, "days"),
+      )}
+      ${renderMorbidityFact(
+        "Total immediate category transferred out of the ICU",
+        icuImmediate.transferredOutCount ?? 0,
+      )}
+    </div>
+    <h4 class="summary-subsection-title">Additional hospital stay measures</h4>
+    <div class="summary-facts">
+      ${renderMorbidityFact(
+        "Average ventilator LOS (days)",
+        formatMorbidityStayValue(ventilator.meanDays, "days"),
+      )}
+      ${renderMorbidityFact(
+        "Median ventilator LOS (days)",
+        formatMorbidityStayValue(ventilator.medianDays, "days"),
+      )}
+      ${renderMorbidityFact(
+        "Completed ventilator stays",
+        ventilator.count ?? 0,
+      )}
+      ${renderMorbidityFact(
+        "Average hospital LOS (days)",
+        formatMorbidityStayValue(hospital.meanDays, "days"),
+      )}
+      ${renderMorbidityFact(
+        "Median hospital LOS (days)",
+        formatMorbidityStayValue(hospital.medianDays, "days"),
+      )}
+      ${renderMorbidityFact(
+        "Completed hospital stays",
+        hospital.count ?? 0,
+      )}
+    </div>
+    <h4 class="summary-subsection-title">Mortality by Utstein category</h4>
+    <div class="summary-facts">
+      ${mortalityFacts || `<div class="empty-state">No mortality records available.</div>`}
+    </div>
+  `;
+}
+
 const summaryFactLabels = {
   totalSurvivors: "Total survivors",
   onSiteTriagedTotal: "On-site triaged total",
@@ -12896,42 +13278,6 @@ const summaryFactLabels = {
   "transported.delayed": "Delayed transported intervals",
   "ambulances.bls": "BLS ambulance intervals",
   "ambulances.als": "ALS ambulance intervals",
-  "facilityLevels.primary.nonEms.level":
-    "Primary non-EMS facility level",
-  "facilityLevels.primary.nonEms.transportUse":
-    "Primary non-EMS transport use",
-  "facilityLevels.primary.nonEms.numerator":
-    "Primary non-EMS numerator",
-  "facilityLevels.primary.nonEms.denominator":
-    "Primary non-EMS denominator",
-  "facilityLevels.primary.nonEms.percentage":
-    "Primary non-EMS percentage",
-  "facilityLevels.primary.ems.level":
-    "Primary EMS facility level",
-  "facilityLevels.primary.ems.transportUse":
-    "Primary EMS transport use",
-  "facilityLevels.primary.ems.numerator":
-    "Primary EMS numerator",
-  "facilityLevels.primary.ems.denominator":
-    "Primary EMS denominator",
-  "facilityLevels.primary.ems.percentage":
-    "Primary EMS percentage",
-  "categories.immediate.soughtCare.label":
-    "Immediate sought care label",
-  "categories.immediate.soughtCare.numerator":
-    "Immediate sought care numerator",
-  "categories.immediate.soughtCare.denominator":
-    "Immediate sought care denominator",
-  "categories.immediate.soughtCare.percentage":
-    "Immediate sought care percentage",
-  "categories.immediate.admitted.label":
-    "Immediate admitted label",
-  "categories.immediate.admitted.numerator":
-    "Immediate admitted numerator",
-  "categories.immediate.admitted.denominator":
-    "Immediate admitted denominator",
-  "categories.immediate.admitted.percentage":
-    "Immediate admitted percentage",
 };
 
 const summarySourceLabels = {
@@ -13071,7 +13417,7 @@ function renderSitrepAndCloseSection(incident, canManageIncident = true) {
         : `<div class="status-message warning">Close this incident before exporting the Final SitRep.</div>`}
       ${canManageIncident
         ? `<div class="button-row">
-             <button class="secondary-button" type="button" data-generate-sitrep="${escapeHtml(incident.id)}" data-incident-status="${escapeHtml(incident.status || "")}" data-office-name="${escapeHtml(sitrepOfficeName)}" data-incident-name="${escapeHtml(sitrepIncidentName)}">Generate Final Incident SitRep</button>
+             <button class="secondary-button sitrep-final-button" type="button" data-generate-sitrep="${escapeHtml(incident.id)}" data-incident-status="${escapeHtml(incident.status || "")}" data-office-name="${escapeHtml(sitrepOfficeName)}" data-incident-name="${escapeHtml(sitrepIncidentName)}">Generate Final Incident SitRep</button>
              <button class="ghost-button" type="button" data-download-sitrep="pdf" data-incident-id="${escapeHtml(incident.id)}" data-office-name="${escapeHtml(sitrepOfficeName)}" data-incident-name="${escapeHtml(sitrepIncidentName)}" ${finalSitrepExportDisabled}>Download Incident SitRep Draft</button>
             ${
               incident.status === "closed"
@@ -13081,7 +13427,7 @@ function renderSitrepAndCloseSection(incident, canManageIncident = true) {
                     : `<span class="pill blue">Closed</span>`
                   : incident.reopen_request_status === "pending"
                       ? `<span class="pill orange">Reopen requested</span>`
-                      : `<button class="secondary-button" type="button" data-request-reopen-incident="${escapeHtml(incident.id)}">Request Reopen</button>`
+                      : `<button class="secondary-button reopen-request-button" type="button" data-request-reopen-incident="${escapeHtml(incident.id)}">Request Reopen</button>`
                 : `<button class="danger-button" type="button" data-close-incident="${escapeHtml(incident.id)}">Close Incident</button>`
             }
            </div>`
@@ -14417,7 +14763,7 @@ function renderIncidentCreator(compact = false) {
             <option value="assisted">Assisted</option>
             <option value="unassisted">Unassisted</option>
           </select>
-          <small class="field-hint">This setting is applied to all mobile casualty records under this incident.</small>
+          <small class="field-hint">This setting is applied to all mobile victim records under this incident.</small>
         </label>
         <label class="field"><span>Incident exact location</span><input name="description" placeholder="Street, landmark, building, purok, or coordinates" /></label>
         <div class="form-grid three">

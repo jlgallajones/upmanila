@@ -13,7 +13,7 @@ export default function DashboardScreen() {
         <Text style={styles.title}>Responder Dashboard</Text>
 
         <Text style={styles.description}>
-          Select an active incident before encoding a casualty.
+          Select an active incident before encoding a victim.
         </Text>
 
         <Pressable

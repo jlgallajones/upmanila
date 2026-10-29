@@ -24,7 +24,7 @@ const medsortLogoBase = require("../../assets/images/medsort-login-base.png");
 const medsortBallYellow = require("../../assets/images/medsort-ball-yellow.png");
 const medsortBallGreen = require("../../assets/images/medsort-ball-green.png");
 const medsortBallRed = require("../../assets/images/medsort-ball-red.png");
-const upLogo = require("../assets/UP-Logo.svg");
+const upLogo = require("../assets/UP-Manila.png");
 const upmDrrmhLogo = require("../assets/UPM DRRMH Logo.png");
 const dostLogo = require("../assets/DOST Logo.png");
 const dostPchrdLogo = require("../assets/DOST PCHRD Logo.png");
@@ -222,7 +222,7 @@ export default function LandingScreen() {
           <Text style={styles.kicker}>Emergency Response</Text>
           <Text style={styles.title}>SCRIBER</Text>
           <Text style={styles.subtitle}>
-            Disaster casualty management and triage support for
+            Disaster victim management and triage support for
             authorized responders.
           </Text>
         </View>

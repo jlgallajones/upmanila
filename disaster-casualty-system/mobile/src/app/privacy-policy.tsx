@@ -5,14 +5,14 @@ export default function PrivacyPolicyScreen() {
     <LegalDocumentScreen
       title="Privacy Policy"
       updatedAt="October 11, 2026"
-      intro="SCRIBER supports disaster casualty management, responder coordination, incident analytics, and official situation reporting. This policy explains the information handled by the system and the expected safeguards for authorized users."
+      intro="SCRIBER supports disaster victim management, responder coordination, incident analytics, and official situation reporting. This policy explains the information handled by the system and the expected safeguards for authorized users."
       sections={[
         {
           title: "Information We Collect",
           bullets: [
             "Account details such as name, role, office or organization, contact details, and login activity.",
             "Incident records including location, timeline entries, status updates, and operational notes.",
-            "Casualty records including triage, treatment, transport, facility, morbidity, mortality, and related timestamps.",
+            "Victim records including triage, treatment, transport, facility, morbidity, mortality, and related timestamps.",
             "Photos, attachments, and draft/offline records when submitted by authorized users.",
             "System logs used for security, audit, troubleshooting, and accountability.",
           ],
@@ -20,7 +20,7 @@ export default function PrivacyPolicyScreen() {
         {
           title: "How Information Is Used",
           bullets: [
-            "To coordinate emergency response and casualty documentation.",
+            "To coordinate emergency response and victim documentation.",
             "To support verification, analytics, SitRep generation, exports, and official reporting.",
             "To maintain account security, prevent unauthorized access, and investigate system issues.",
             "To preserve operational history required for incident review and continuity.",

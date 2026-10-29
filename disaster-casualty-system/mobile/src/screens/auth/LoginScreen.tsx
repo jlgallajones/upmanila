@@ -279,7 +279,7 @@ export default function LoginScreen() {
             ]}
           >
             Sign in with your official responder credentials to use SCRIBER,
-            the Standardized Casualty Reporting for Incidents and Basic
+            the Standardized Victim Reporting for Incidents and Basic
             Emergency Response platform.
           </Text>
 
@@ -556,7 +556,7 @@ export default function LoginScreen() {
             />
 
             <Text style={styles.warningText}>
-              This system contains sensitive disaster and casualty
+              This system contains sensitive disaster and victim
               data. Unauthorized access is prohibited and logged.
             </Text>
           </View>

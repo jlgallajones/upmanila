@@ -918,6 +918,30 @@ function formatFacilityLevelLabel(value: string): string {
   }
 }
 
+function formatSurvivorDistributionMetricValue(metric: {
+  numerator: number;
+  denominator: number;
+  percentage: number;
+}): string {
+  if (metric.denominator === 0) {
+    return "No recorded arrivals";
+  }
+
+  return `${metric.numerator} of ${metric.denominator} (${metric.percentage}%)`;
+}
+
+function formatEdResourceMetricValue(metric: {
+  numerator: number;
+  denominator: number;
+  percentage: number;
+}): string {
+  if (metric.denominator === 0) {
+    return "No recorded cases";
+  }
+
+  return `${metric.numerator} of ${metric.denominator} (${metric.percentage}%)`;
+}
+
 function formatTriageCategoryLabel(value: string): string {
   switch (value) {
     case "immediate":
@@ -1035,7 +1059,7 @@ function IncidentCard({
           color={COLORS.white}
         />
         <Text style={styles.addCasualtyButtonText}>
-          Add Casualty to This Incident
+          Add Victim to This Incident
         </Text>
       </Pressable>
 
@@ -1788,10 +1812,10 @@ export default function IncidentsPage() {
 
       Alert.alert(
         "Incident created",
-        "The new disaster incident is now available for casualty records.",
+        "The new disaster incident is now available for victim records.",
         [
           {
-            text: "Add Casualty",
+            text: "Add Victim",
             onPress: () => handleAddCasualty(created),
           },
           {
@@ -3673,16 +3697,50 @@ export default function IncidentsPage() {
       >
         <View style={styles.triageAccuracyTextGroup}>
           <Text style={styles.triageAccuracyTitle}>
-            {formatFacilityLevelLabel(metric.level)} -{" "}
-            {metric.transportUse === "ems" ? "EMS" : "No EMS"}
+            {formatFacilityLevelLabel(metric.level)} healthcare facility arrivals{" "}
+            {metric.transportUse === "ems"
+              ? "transported by EMS"
+              : "without EMS transport"}
           </Text>
           <Text style={styles.triageAccuracyDescription}>
-            Facility arrivals by transport use
+            Utstein facility-level arrival measure
           </Text>
         </View>
         <Text style={styles.triageAccuracyValue}>
-          {metric.numerator}/{metric.denominator} -{" "}
-          {metric.percentage}%
+          {formatSurvivorDistributionMetricValue(metric)}
+        </Text>
+      </View>
+    );
+  }
+
+  function renderPrimaryTriageTransportRow(
+    category: "immediate" | "delayed" | "minimal" | "expectant",
+    transportUse: "ems" | "nonEms",
+    metric: { numerator: number; denominator: number; percentage: number },
+  ) {
+    const categoryLabel = formatTriageCategoryLabel(category).replace(
+      /^T\d+\s+/,
+      "",
+    );
+
+    return (
+      <View
+        key={`${category}-${transportUse}`}
+        style={styles.triageAccuracyRow}
+      >
+        <View style={styles.triageAccuracyTextGroup}>
+          <Text style={styles.triageAccuracyTitle}>
+            {categoryLabel} survivors{" "}
+            {transportUse === "ems"
+              ? "transported by EMS"
+              : "without EMS transport"}
+          </Text>
+          <Text style={styles.triageAccuracyDescription}>
+            Primary triage category; arrived at a recorded healthcare facility
+          </Text>
+        </View>
+        <Text style={styles.triageAccuracyValue}>
+          {formatSurvivorDistributionMetricValue(metric)}
         </Text>
       </View>
     );
@@ -3711,19 +3769,26 @@ export default function IncidentsPage() {
 
   function renderMorbidityMinuteRow(
     title: string,
-    metric: { meanMinutes: number | null; medianMinutes: number | null; count: number },
+    transferLabel: string,
+    metric: {
+      meanMinutes: number | null;
+      medianMinutes: number | null;
+      count: number;
+      transferredOutCount?: number;
+    },
   ) {
     return (
       <View style={styles.triageAccuracyRow}>
         <View style={styles.triageAccuracyTextGroup}>
           <Text style={styles.triageAccuracyTitle}>{title}</Text>
           <Text style={styles.triageAccuracyDescription}>
-            Mean {metric.meanMinutes ?? "Not available"} min
-            {"\n"}Median {metric.medianMinutes ?? "Not available"} min
+            Average LOS: {metric.meanMinutes ?? "Not recorded"} minutes
+            {"\n"}Median LOS: {metric.medianMinutes ?? "Not recorded"} minutes
+            {"\n"}{transferLabel}: {metric.transferredOutCount ?? metric.count}
           </Text>
         </View>
         <Text style={styles.triageAccuracyValue}>
-          {metric.count}
+          {metric.transferredOutCount ?? metric.count}
         </Text>
       </View>
     );
@@ -3731,19 +3796,26 @@ export default function IncidentsPage() {
 
   function renderMorbidityDayRow(
     title: string,
-    metric: { meanDays: number | null; medianDays: number | null; count: number },
+    transferLabel: string,
+    metric: {
+      meanDays: number | null;
+      medianDays: number | null;
+      count: number;
+      transferredOutCount?: number;
+    },
   ) {
     return (
       <View style={styles.triageAccuracyRow}>
         <View style={styles.triageAccuracyTextGroup}>
           <Text style={styles.triageAccuracyTitle}>{title}</Text>
           <Text style={styles.triageAccuracyDescription}>
-            Mean {metric.meanDays ?? "Not available"} days
-            {"\n"}Median {metric.medianDays ?? "Not available"} days
+            Average LOS: {metric.meanDays ?? "Not recorded"} days
+            {"\n"}Median LOS: {metric.medianDays ?? "Not recorded"} days
+            {"\n"}{transferLabel}: {metric.transferredOutCount ?? metric.count}
           </Text>
         </View>
         <Text style={styles.triageAccuracyValue}>
-          {metric.count}
+          {metric.transferredOutCount ?? metric.count}
         </Text>
       </View>
     );
@@ -3763,18 +3835,13 @@ export default function IncidentsPage() {
       <View key={category} style={styles.triageAccuracyRow}>
         <View style={styles.triageAccuracyTextGroup}>
           <Text style={styles.triageAccuracyTitle}>
-            {formatTriageCategoryLabel(category)}
+            {formatTriageCategoryLabel(category)} ED care outcomes
           </Text>
           <Text style={styles.triageAccuracyDescription}>
-            Care {categorySummary.soughtCare.numerator}/
-            {categorySummary.soughtCare.denominator} -{" "}
-            {categorySummary.soughtCare.percentage}%
-            {"\n"}Admitted {categorySummary.admitted.numerator}/
-            {categorySummary.admitted.denominator} -{" "}
-            {categorySummary.admitted.percentage}%
-            {"\n"}Discharged {categorySummary.discharged.numerator}/
-            {categorySummary.discharged.denominator} -{" "}
-            {categorySummary.discharged.percentage}%
+            Among ED or similar facility care records:{"\n"}
+            Sought care: {formatEdResourceMetricValue(categorySummary.soughtCare)}
+            {"\n"}Admitted after ED care: {formatEdResourceMetricValue(categorySummary.admitted)}
+            {"\n"}Discharged after ED care: {formatEdResourceMetricValue(categorySummary.discharged)}
           </Text>
         </View>
         <Text style={styles.triageAccuracyValue}>
@@ -4783,7 +4850,7 @@ export default function IncidentsPage() {
                     )
                   }
                   style={styles.input}
-                  placeholder="e.g. mass casualty declaration"
+                  placeholder="e.g. mass victim incident"
                   placeholderTextColor={COLORS.mutedText}
                   editable={canUpdateOperations}
                 />
@@ -6471,7 +6538,41 @@ export default function IncidentsPage() {
                 </View>
 
                 <Text style={styles.fieldLabel}>
-                  FACILITY ARRIVALS BY LEVEL
+                  PRIMARY TRIAGE SURVIVOR DISTRIBUTION
+                </Text>
+                <View style={styles.triageAccuracyList}>
+                  {(
+                    [
+                      "immediate",
+                      "delayed",
+                      "minimal",
+                      "expectant",
+                    ] as const
+                  ).flatMap((category) => {
+                    const distribution =
+                      distributionSummary.primaryTriageTransport?.[category];
+
+                    if (!distribution || distribution.totalFacilityArrivals === 0) {
+                      return [];
+                    }
+
+                    return [
+                      renderPrimaryTriageTransportRow(
+                        category,
+                        "ems",
+                        distribution.ems,
+                      ),
+                      renderPrimaryTriageTransportRow(
+                        category,
+                        "nonEms",
+                        distribution.nonEms,
+                      ),
+                    ];
+                  })}
+                </View>
+
+                <Text style={styles.fieldLabel}>
+                  FACILITY ARRIVALS BY HEALTHCARE LEVEL
                 </Text>
                 <View style={styles.triageAccuracyList}>
                   {(
@@ -6618,7 +6719,7 @@ export default function IncidentsPage() {
                       }
                     </Text>
                     <Text style={styles.sitrepMetricLabel}>
-                      T1 ED Care
+                      Immediate ED care seekers
                     </Text>
                   </View>
                 </View>
@@ -6964,29 +7065,46 @@ export default function IncidentsPage() {
 
                 <Text style={styles.fieldLabel}>ED LENGTH OF STAY</Text>
                 {renderMorbidityMinuteRow(
-                  "T1 Immediate ED LOS",
+                  "Average and median LOS (minutes) of immediate category in the ED",
+                  "Total immediate category transferred out of the ED",
                   morbidityMortalitySummary.morbidity.ed.immediate,
                 )}
                 {renderMorbidityMinuteRow(
-                  "T2 Delayed ED LOS",
+                  "Average and median LOS (minutes) of delayed category in the ED",
+                  "Total delayed category transferred out of the ED",
                   morbidityMortalitySummary.morbidity.ed.delayed,
                 )}
 
-                <Text style={styles.fieldLabel}>ICU AND VENTILATOR</Text>
+                <Text style={styles.fieldLabel}>ICU LENGTH OF STAY</Text>
                 {renderMorbidityDayRow(
-                  "T1 Immediate ICU LOS",
+                  "Average and median LOS (days) of immediate category in the ICU",
+                  "Total immediate category transferred out of the ICU",
                   morbidityMortalitySummary.morbidity.icu.immediate,
                 )}
+
+                <Text style={styles.fieldLabel}>ADDITIONAL HOSPITAL STAY MEASURES</Text>
                 {renderMorbidityDayRow(
                   "Mechanical Ventilator Days",
+                  "Completed ventilator stays",
                   morbidityMortalitySummary.morbidity.ventilator,
                 )}
 
-                <Text style={styles.fieldLabel}>HOSPITAL STAY</Text>
                 {renderMorbidityDayRow(
-                  "All Survivors Hospital LOS",
+                  "Average and median hospital LOS (days)",
+                  "Completed hospital stays",
                   morbidityMortalitySummary.morbidity.hospital,
                 )}
+
+                <View style={styles.sitrepMetricGrid}>
+                  <View style={styles.sitrepMetric}>
+                    <Text style={styles.sitrepMetricValue}>
+                      {morbidityMortalitySummary.totalDeaths}
+                    </Text>
+                    <Text style={styles.sitrepMetricLabel}>
+                      Total recorded deaths
+                    </Text>
+                  </View>
+                </View>
 
                 <Text style={styles.fieldLabel}>MORTALITY</Text>
                 {renderDistributionRatioRow(
@@ -7095,7 +7213,7 @@ export default function IncidentsPage() {
                       {sitrep.generated_payload.casualtySummary.total}
                     </Text>
                     <Text style={styles.sitrepMetricLabel}>
-                      Casualties
+                      Victims
                     </Text>
                   </View>
                   <View style={styles.sitrepMetric}>
@@ -7225,7 +7343,7 @@ export default function IncidentsPage() {
 
                 {renderSitrepFunctionChart(sitrep)}
                 {renderSitrepBarChart(
-                  "CASUALTY STATUS",
+                  "VICTIM STATUS",
                   sitrep.generated_payload.casualtySummary.byStatus,
                 )}
                 {renderSitrepBarChart(
@@ -7242,7 +7360,7 @@ export default function IncidentsPage() {
                   sitrep.generated_payload.transportSummary.modes,
                 )}
 
-                <Text style={styles.fieldLabel}>CASUALTY STATUS</Text>
+                <Text style={styles.fieldLabel}>VICTIM STATUS</Text>
                 <Text style={styles.sitrepSectionText}>
                   {formatCountMap(
                     sitrep.generated_payload.casualtySummary.byStatus,

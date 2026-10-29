@@ -9191,7 +9191,7 @@ if (
         if (isShortAmpResponderFlow && !form.idNumber.trim()) {
           Alert.alert(
             "ID number required",
-            "The casualty ID number is required before continuing.",
+            "The victim ID number is required before continuing.",
           );
           return false;
         }
@@ -10170,7 +10170,7 @@ if (
         ) {
           Alert.alert(
             "Death stage required",
-            "Select Impact, Pre-hospital, or In-hospital for deceased casualties.",
+            "Select Impact, Pre-hospital, or In-hospital for deceased victims.",
           );
           return false;
         }

@@ -1232,7 +1232,7 @@ function IncidentRecordCard({
         </View>
 
         <View style={styles.incidentInfoItem}>
-          <Text style={styles.incidentInfoLabel}>Casualties</Text>
+          <Text style={styles.incidentInfoLabel}>Victims</Text>
           <Text style={styles.incidentInfoValue}>{casualtyCount}</Text>
         </View>
       </View>

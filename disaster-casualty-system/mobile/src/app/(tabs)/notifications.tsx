@@ -243,8 +243,8 @@ function buildLocalNotifications({
 
     items.push({
       id,
-      title: "Casualty records waiting to sync",
-      message: `${queuedCount} local casualty record${
+      title: "Victim records waiting to sync",
+      message: `${queuedCount} local victim record${
         queuedCount === 1 ? "" : "s"
       } will upload after login, connectivity, and incident assignment are available.`,
       time: "On this device",

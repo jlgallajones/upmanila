@@ -123,7 +123,7 @@ function compareText(a: string, b: string): number {
 function getCasualtySortLabel(record: CasualtyRecord): string {
   const fullName = getFullName(record);
 
-  return fullName === "Unidentified Casualty"
+  return fullName === "Unidentified Victim"
     ? record.casualty.id_number ?? fullName
     : fullName;
 }
@@ -363,7 +363,7 @@ export default function VerificationReviewScreen() {
     if (reviewAction === "rejected" && !reviewNotes.trim()) {
       Alert.alert(
         "Review note required",
-        "Enter a reason before rejecting this casualty record.",
+        "Enter a reason before rejecting this victim record.",
       );
       return;
     }
@@ -388,7 +388,7 @@ export default function VerificationReviewScreen() {
 
       Alert.alert(
         "Review saved",
-        "The casualty verification status has been updated.",
+        "The victim verification status has been updated.",
       );
     } catch (error) {
       console.error("Unable to save verification review:", error);

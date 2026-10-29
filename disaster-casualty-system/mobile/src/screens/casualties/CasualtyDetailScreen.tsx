@@ -644,7 +644,7 @@ function getFullName(record: CasualtyRecord): string {
 
   return parts.length > 0
     ? parts.join(" ")
-    : "Unidentified Casualty";
+    : "Unidentified Victim";
 }
 
 function getInitials(name: string): string {
@@ -785,7 +785,7 @@ export default function CasualtyDetailScreen() {
 
   const loadCasualty = useCallback(async () => {
     if (!casualtyId) {
-      setErrorMessage("Casualty record id is missing.");
+      setErrorMessage("Victim record ID is missing.");
       setIsLoading(false);
       return;
     }
@@ -805,7 +805,7 @@ export default function CasualtyDetailScreen() {
 
       if (!token) {
         setErrorMessage(
-          "Your session has expired. Please sign in again before opening casualty records.",
+          "Your session has expired. Please sign in again before opening victim records.",
         );
         router.replace("/login");
         return;
@@ -844,7 +844,7 @@ export default function CasualtyDetailScreen() {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : "Unable to load casualty details.",
+          : "Unable to load victim details.",
       );
     } finally {
       setIsLoading(false);
@@ -997,7 +997,7 @@ export default function CasualtyDetailScreen() {
         />
 
         <Text style={styles.centerStateText}>
-          Loading casualty details...
+          Loading victim details...
         </Text>
       </View>
     );
@@ -1017,7 +1017,7 @@ export default function CasualtyDetailScreen() {
         </Text>
 
         <Text style={styles.centerStateText}>
-          {errorMessage ?? "Casualty record unavailable."}
+          {errorMessage ?? "Victim record unavailable."}
         </Text>
 
         <Pressable
@@ -1109,7 +1109,7 @@ export default function CasualtyDetailScreen() {
           </Pressable>
 
           <Text style={styles.recordCode}>
-            CASUALTY RECORD - {casualty.id}
+            VICTIM RECORD - {casualty.id}
           </Text>
 
           <Text style={styles.headerName}>
@@ -1197,7 +1197,7 @@ export default function CasualtyDetailScreen() {
                 pressed && styles.pressed,
               ]}
               accessibilityRole="button"
-              accessibilityLabel="Edit casualty"
+              accessibilityLabel="Edit victim"
             >
               <Ionicons
                 name="create-outline"
@@ -1240,7 +1240,7 @@ export default function CasualtyDetailScreen() {
               />
 
               <DetailRow
-                label="Casualty ID"
+                label="Victim ID"
                 value={casualty.id}
               />
 
@@ -2211,7 +2211,7 @@ export default function CasualtyDetailScreen() {
                 No attachments yet
               </Text>
               <Text style={styles.emptyAttachmentText}>
-                Photos uploaded from add or edit casualty will appear here.
+                Photos uploaded from add or edit victim will appear here.
               </Text>
             </View>
           )}

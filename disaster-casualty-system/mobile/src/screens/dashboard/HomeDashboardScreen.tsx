@@ -402,7 +402,7 @@ function getFullName(activity: RecentActivity): string {
 
   return parts.length > 0
     ? parts.join(" ")
-    : "Unidentified Casualty";
+    : "Unidentified Victim";
 }
 
 function getInitials(name: string): string {
@@ -753,7 +753,7 @@ export default function HomeDashboardScreen() {
       if (syncResult.synced > 0 && syncResult.remaining === 0) {
         setSyncFeedback({
           title: "Sync complete",
-          message: `${syncResult.synced} queued casualty record${
+          message: `${syncResult.synced} queued victim record${
             syncResult.synced === 1 ? "" : "s"
           } uploaded successfully.`,
           tone: "success",
@@ -766,10 +766,10 @@ export default function HomeDashboardScreen() {
         setSyncFeedback({
           title: "Sync not completed",
           message: firstIssue
-            ? `${syncResult.remaining} casualty record${
+            ? `${syncResult.remaining} victim record${
                 syncResult.remaining === 1 ? "" : "s"
               } still waiting to sync. Reason: ${firstIssue}`
-            : `${syncResult.remaining} casualty record${
+            : `${syncResult.remaining} victim record${
                 syncResult.remaining === 1 ? "" : "s"
               } still waiting to sync.`,
           tone: "warning",
@@ -780,7 +780,7 @@ export default function HomeDashboardScreen() {
       setSyncFeedback({
         title: "Refresh complete",
         message:
-          "Data is up to date. There are no offline casualty records waiting to sync.",
+          "Data is up to date. There are no offline victim records waiting to sync.",
         tone: "success",
       });
     } finally {
@@ -1440,7 +1440,7 @@ export default function HomeDashboardScreen() {
               color={COLORS.black}
             />
             <Text style={styles.offlineBannerText}>
-              {queuedCasualtyCount} casualty record
+              {queuedCasualtyCount} victim record
               {queuedCasualtyCount === 1 ? "" : "s"} waiting to sync.
             </Text>
           </View>
@@ -1526,7 +1526,7 @@ export default function HomeDashboardScreen() {
           {!isSuperAdmin && !hideDataEntryQuickLinks ? (
             <QuickAction
               icon="add-circle-outline"
-              label="Add Casualty"
+              label="Add Victim"
               caption="New record"
               iconColor={COLORS.text}
               iconBackground="#F5E9EB"
@@ -1735,7 +1735,7 @@ export default function HomeDashboardScreen() {
             </Text>
 
             <Text style={styles.emptyActivityDescription}>
-              Newly submitted casualty records will appear
+              Newly submitted victim records will appear
               here.
             </Text>
           </View>

@@ -405,6 +405,12 @@ export type SurvivorDistributionRatioMetric = {
   percentage: number;
 };
 
+export type SurvivorDistributionPrimaryTriageMetric = {
+  totalFacilityArrivals: number;
+  ems: SurvivorDistributionRatioMetric;
+  nonEms: SurvivorDistributionRatioMetric;
+};
+
 export type SurvivorDistributionSummary = {
   incidentId: string;
   totalSurvivors: number;
@@ -417,6 +423,10 @@ export type SurvivorDistributionSummary = {
       nonEms: SurvivorDistributionFacilityMetric;
       ems: SurvivorDistributionFacilityMetric;
     }
+  >;
+  primaryTriageTransport?: Record<
+    "immediate" | "delayed" | "minimal" | "expectant",
+    SurvivorDistributionPrimaryTriageMetric
   >;
   edArrivalsByInterval: SurvivorDistributionIntervalMetric[];
   interhospitalTransfer: SurvivorDistributionRatioMetric;
@@ -532,12 +542,14 @@ export type MorbidityMinuteMetric = {
   meanMinutes: number | null;
   medianMinutes: number | null;
   count: number;
+  transferredOutCount: number;
 };
 
 export type MorbidityDayMetric = {
   meanDays: number | null;
   medianDays: number | null;
   count: number;
+  transferredOutCount: number;
 };
 
 export type MortalityRatioMetric = {
@@ -549,6 +561,7 @@ export type MortalityRatioMetric = {
 export type MorbidityMortalitySummary = {
   incidentId: string;
   totalVictims: number;
+  totalDeaths: number;
   morbidity: {
     ed: {
       immediate: MorbidityMinuteMetric;

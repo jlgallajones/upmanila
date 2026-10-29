@@ -1002,6 +1002,64 @@ The database migration is `api/sql/add-incident-acting-ic-delegation.sql`. Apply
 
 **Status:** Implemented.
 
+## 120. Survivor Distribution Exposed Vague EMS And Facility Metrics
+
+**Problem:** The Survivor Distribution summary flattened internal fields into user-facing cards such as **Primary non-EMS facility level**, **Primary non-EMS transport use**, and **Primary EMS facility level**. Values like `primary`, `non_ems`, and separate zeroed numerator/denominator cards did not explain what was being measured.
+
+**Solution:** The API now calculates a primary-triage survivor transport breakdown for Immediate, Delayed, Minor, and Expectant categories. Each category distinguishes survivors who arrived at a recorded healthcare facility using EMS from those who arrived without EMS, with an explicit count, denominator, and percentage. The existing Utstein facility-level measures remain available but are now presented as **[facility level] healthcare facility arrivals transported by EMS** or **[facility level] healthcare facility arrivals without EMS transport**. Web and mobile views no longer expose raw internal codes, and zero-denominator metrics display **No recorded arrivals** instead of an unexplained `0`.
+
+The summary also keeps the total survivors, total facility arrivals, response initiation time, interhospital transfer ratio, and facility-arrival interval measures visible with descriptive labels.
+
+**Status:** Implemented.
+
+## 121. ED Resources Exposed Vague Care And Admission Metrics
+
+**Problem:** The ED Resources summary displayed raw fields such as **Immediate sought care label**, **Immediate sought care numerator**, **Immediate sought care denominator**, and **Immediate admitted label**. These labels did not explain that the sought-care percentage represented the triage-category share among all ED or similar facility care seekers, while admission and discharge percentages used that triage category's own ED-care denominator.
+
+**Solution:** Updated the API, web dashboard, and mobile incident-management view with explicit labels. The summary now identifies measures such as **Immediate survivors among ED care seekers**, **Immediate survivors admitted after ED care**, and **Immediate survivors discharged after ED care**. The interface also shows the total survivors, total ED-care seekers, response and disaster-onset times, median arrival timing, resuscitation intervals, and room-use intervals with descriptive labels. Existing numerator, denominator, and percentage calculations were preserved; zero-denominator results now display **No recorded cases** instead of an unexplained value.
+
+**Status:** Implemented.
+
+## 122. Hospital Resource Facility Cards Had Poor Dark-Mode Contrast
+
+**Problem:** In the web dashboard's dark-mode **Hospital Resources** summary, the nested hospital cards kept a light background while their headings and facility details used dark-mode light text. The result was white text on a near-white card, making the hospital name and location difficult to read.
+
+**Solution:** Added a dark-mode-specific surface for facility summary cards. The outer hospital card now uses the dark raised surface while its metric cards retain the darker contrast layer, keeping the existing light-mode presentation unchanged.
+
+**Status:** Implemented.
+
+## 123. Morbidity And Mortality Summary Needed Utstein Labels And Mortality Output
+
+**Problem:** The Morbidity & Mortality summary exposed internal labels such as **Morbidity - ED - Immediate - Mean Minutes**, and the web summary's default card limit could hide the mortality section entirely. ED and ICU counts represented completed LOS calculations without clearly identifying transfers out of the department or ICU.
+
+**Solution:** Added explicit ED and ICU labels for average LOS, median LOS, and total immediate/delayed survivors transferred out of the ED or ICU. The API now returns separate transferred-out counts while preserving the LOS calculations. The web view now presents total victims, total recorded deaths, ED and ICU measures, additional hospital-stay measures, and Utstein mortality categories for impact, pre-hospital, in-hospital, and immediate-category deaths. The mobile view uses the same terminology and displays the mortality results alongside the LOS measures.
+
+**Status:** Implemented.
+
+## 124. Incident Management Search Input Reversed Typed Characters
+
+**Problem:** The Incident Management search field rebuilt the current view after every keystroke and then focused the newly rendered input. Because the caret defaulted to the beginning of the replacement field, subsequent characters were inserted before the existing text and the query appeared backwards.
+
+**Solution:** The search handler now captures the input selection range before re-rendering and restores the same caret or selection after the new field is focused. Search filtering behavior is unchanged, but normal typing now proceeds from the expected cursor position.
+
+**Status:** Implemented.
+
+## 125. Login Landing Used The Older UP Logo Asset
+
+**Problem:** The first University of the Philippines logo in the web and mobile landing/login screens still referenced the older SVG asset instead of the supplied UP Manila PNG. This made the branding inconsistent with the requested logo asset.
+
+**Solution:** The web landing and login views now use `website/assets/upmanila.png`, and the mobile landing screen now uses `mobile/src/assets/UP-Manila.png`. Both supplied PNGs already have transparent pixels outside the seal, so the official white portions inside the emblem were preserved while no rectangular background is rendered around the logo.
+
+**Status:** Implemented.
+
+## 126. User-Facing Casualty Terminology Needed To Be Replaced
+
+**Problem:** The web and mobile interfaces still exposed casualty/casualties terminology in headings, record labels, notifications, validation messages, legal pages, login copy, exports, and summary views even though the preferred user-facing term is victim/victims.
+
+**Solution:** Updated rendered web and mobile text to use victim/victims terminology, including record cards, incident summaries, verification messages, offline-queue messages, login/about/legal copy, and SitRep labels. Internal API routes, database table names, payload fields, TypeScript types, route paths, storage keys, and other application identifiers were left unchanged.
+
+**Status:** Implemented.
+
 ## Verification Instructions
 
 Run these commands from the repository root in PowerShell:
@@ -1050,5 +1108,17 @@ Manual Acting IC acceptance test:
 28. Confirm the SitRep Executive Summary is displayed in a bordered callout and the Incident Analytics Snapshot starts on a new page with its table.
 29. Confirm categorical SitRep charts render as pie charts, time-based ambulance arrivals render as a line chart, and ambulance types with no arrivals do not appear in the line-chart legend.
 30. Confirm **Generate Final Incident SitRep** creates the current report and **Download Incident SitRep Draft** does not silently export an older stored snapshot after a fresh page session.
+31. Open **Survivor Distribution** for an incident and confirm the primary-triage section uses clear labels such as **Immediate survivors transported by EMS** and **Immediate survivors without EMS transport**.
+32. Confirm the facility-level section uses descriptive healthcare-facility and transport labels, does not show `primary` or `non_ems` as standalone values, and shows **No recorded arrivals** when the denominator is zero.
+33. Verify the same Survivor Distribution labels and values in the mobile incident-management view, including the response-interval and interhospital-transfer summaries.
+34. Open **ED Resources** and confirm the category cards explain that sought-care values are the category share among ED-care seekers, while admitted and discharged values use the category's ED-care total as their denominator.
+35. Confirm the ED Resources view no longer exposes raw label, numerator, denominator, or percentage field names, and that zero-denominator categories display **No recorded cases**.
+36. Open **Hospital Resources** with dark mode enabled and confirm hospital names, locations, and metrics remain readable with no white card behind white text. Switch to light mode and confirm the existing light layout remains readable.
+37. Open **Morbidity & Mortality** and confirm the ED cards identify average/median LOS and total immediate or delayed survivors transferred out of the ED.
+38. Confirm the ICU cards identify average/median LOS and total immediate survivors transferred out of the ICU.
+39. Confirm the summary displays total recorded deaths and the Utstein mortality categories for impact, pre-hospital, in-hospital, and immediate-category deaths in both web and mobile views.
+40. Open **Incident Management**, type a search query character by character, and confirm the text remains in the entered order. Move the caret into the middle of the query, type or select text, and confirm the selection position is preserved after filtering.
+41. Open the web and mobile login/landing screens and confirm the first UP logo uses the supplied UP Manila PNG, with transparent space outside the seal and no white rectangular background.
+42. Open the web and mobile interfaces and confirm visible record, incident, notification, validation, login, about, legal, and SitRep text uses **victim/victims** terminology while API routes, database identifiers, and internal record handling continue to function normally.
 
 Latest full verification run: **10 / 10 checks passed**.

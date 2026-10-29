@@ -5,7 +5,7 @@ export default function TermsAndConditionsScreen() {
     <LegalDocumentScreen
       title="Terms and Conditions"
       updatedAt="October 11, 2026"
-      intro="By using SCRIBER, you agree to use the system only for authorized disaster responses, casualty documentation, incident management, reporting, and in compliance with the following terms and conditions."
+      intro="By using SCRIBER, you agree to use the system only for authorized disaster responses, victim documentation, incident management, reporting, and in compliance with the following terms and conditions."
       sections={[
         {
           title: "Authorized Use",
@@ -18,7 +18,7 @@ export default function TermsAndConditionsScreen() {
         },
         {
           title: "Sensitive",
-          body: "SCRIBER may contain sensitive incident, casualty, healthcare, responder, and operational information. Users must handle all data with care and avoid unauthorized copying, screenshots, exports, or disclosure.",
+          body: "SCRIBER may contain sensitive incident, victim, healthcare, responder, and operational information. Users must handle all data with care and avoid unauthorized copying, screenshots, exports, or disclosure.",
         },
         {
           title: "Offline and Draft Records",
