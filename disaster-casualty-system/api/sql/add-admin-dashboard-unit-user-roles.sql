@@ -18,6 +18,7 @@ alter type public.user_role add value if not exists 'bystander';
 alter type public.user_role add value if not exists 'encoder';
 alter type public.user_role add value if not exists 'documenter';
 alter type public.user_role add value if not exists 'medical_personnel';
+alter type public.user_role add value if not exists 'responsible_officer';
 alter type public.user_role add value if not exists 'viewer';
 
 -- Do not restrict public.users globally to only responder/documenter.

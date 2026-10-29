@@ -763,6 +763,10 @@ button {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.form-grid.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .field {
   display: grid;
   gap: 7px;
@@ -895,6 +899,19 @@ button {
   color: #3a321f;
   background: var(--reopen-yellow-hover);
   border-color: var(--reopen-yellow-hover);
+}
+
+.verification-approve-button {
+  color: #fff;
+  background: var(--sitrep-green);
+  border-color: var(--sitrep-green);
+  box-shadow: 0 8px 18px rgba(61, 127, 81, 0.14);
+}
+
+.verification-approve-button:hover {
+  color: #fff;
+  background: var(--sitrep-green-hover);
+  border-color: var(--sitrep-green-hover);
 }
 
 .danger-button {
@@ -2842,31 +2859,273 @@ tbody tr:hover td {
   font-size: 11px;
 }
 
+.incident-acting-ic-designation {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-raised, #fff);
+}
+
+.incident-acting-ic-designation-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.incident-acting-ic-designation-copy strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.incident-acting-ic-designation-copy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .incident-acting-ic-form {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
-  gap: 10px;
-  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .incident-acting-ic-form label {
   display: grid;
   gap: 5px;
-  min-width: min(100%, 320px);
   color: var(--muted);
   font-size: 11px;
   font-weight: 700;
 }
 
+.incident-acting-ic-form label span {
+  color: var(--ink);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .incident-acting-ic-form select {
-  min-height: 38px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 38px 0 12px;
+  border: 1px solid var(--line-strong, var(--line));
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--surface-input, #fff);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.incident-acting-ic-form select:focus {
+  outline: 3px solid var(--cyan);
+  outline-offset: 1px;
+}
+
+.incident-acting-ic-picker {
+  position: relative;
+}
+
+.incident-acting-ic-picker-trigger {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong, var(--line));
+  border-radius: 8px;
+  color: var(--muted);
+  background: var(--surface-input, #fff);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.incident-acting-ic-picker-trigger:hover:not(:disabled),
+.incident-acting-ic-picker-trigger[aria-expanded="true"] {
+  border-color: var(--cyan);
+  color: var(--ink);
+}
+
+.incident-acting-ic-picker-trigger:focus-visible {
+  outline: 3px solid var(--cyan);
+  outline-offset: 1px;
+}
+
+.incident-acting-ic-picker-trigger.has-selection {
+  color: var(--ink);
+}
+
+.incident-acting-ic-picker-chevron {
+  flex: 0 0 auto;
+  color: var(--cyan);
+  font-size: 11px;
+}
+
+.incident-acting-ic-picker-menu {
+  position: absolute;
+  z-index: 30;
+  bottom: calc(100% + 6px);
+  right: 0;
+  left: 0;
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--line-strong, var(--line));
+  border-radius: 10px;
+  background: var(--surface-raised, #fff);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.18);
+}
+
+.incident-acting-ic-picker-menu[hidden] {
+  display: none;
+}
+
+.incident-acting-ic-picker-search {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--ink);
+  background: var(--surface-input, #fff);
+  font: inherit;
+  font-size: 12px;
+}
+
+.incident-acting-ic-picker-search:focus {
+  outline: 2px solid var(--cyan);
+  outline-offset: 1px;
+}
+
+.incident-acting-ic-picker-options {
+  display: grid;
+  max-height: 230px;
+  gap: 4px;
+  overflow-y: auto;
+}
+
+.incident-acting-ic-picker-option {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--ink);
+  background: transparent;
+  text-align: left;
+}
+
+.incident-acting-ic-picker-option:hover,
+.incident-acting-ic-picker-option[aria-selected="true"] {
+  border-color: var(--cyan-soft);
+  background: var(--cyan-soft);
+}
+
+.incident-acting-ic-picker-option-name {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.incident-acting-ic-picker-option-role {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.incident-acting-ic-picker-empty {
+  padding: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.incident-acting-ic-form .secondary-button {
+  min-height: 44px;
+  white-space: nowrap;
+}
+
+.incident-responsible-officer-section {
+  display: grid;
+  gap: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.incident-responsible-officer-list {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-raised, #fff);
+}
+
+.incident-responsible-officer-list .section-card-header {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.incident-responsible-officer-list h4 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.responsible-officer-form .field input {
+  min-height: 42px;
+}
+
+.responsible-officer-form .button-row {
+  grid-column: 1 / -1;
+  padding-top: 6px;
+  justify-content: flex-end;
+}
+
+.table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+:root[data-theme="dark"] .incident-responsible-officer-section,
+:root[data-theme="dark"] .incident-responsible-officer-list {
+  border-color: var(--line);
 }
 
 :root[data-theme="dark"] .incident-acting-ic-panel,
 :root[data-theme="dark"] .incident-acting-ic-active,
-:root[data-theme="dark"] .incident-acting-ic-backups {
+:root[data-theme="dark"] .incident-acting-ic-backups,
+:root[data-theme="dark"] .incident-acting-ic-designation {
   background: var(--surface-raised);
   border-color: var(--line);
+}
+
+:root[data-theme="dark"] .incident-acting-ic-form select {
+  background: var(--surface-input);
+  border-color: var(--line-strong, var(--line));
+}
+
+:root[data-theme="dark"] .incident-acting-ic-picker-trigger,
+:root[data-theme="dark"] .incident-acting-ic-picker-menu,
+:root[data-theme="dark"] .incident-acting-ic-picker-search {
+  background: var(--surface-input);
+  border-color: var(--line-strong, var(--line));
+}
+
+:root[data-theme="dark"] .incident-acting-ic-picker-menu {
+  background: var(--surface-raised);
 }
 
 .incident-final-sitrep-ready {
@@ -3543,6 +3802,28 @@ tbody tr:hover td {
   scrollbar-color: rgba(0, 131, 143, 0.42) transparent;
 }
 
+.incident-timeline-panel-expanded {
+  position: fixed;
+  inset: 16px;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin: 0;
+  overflow: hidden;
+  box-shadow: 0 24px 70px rgba(24, 34, 58, 0.28);
+}
+
+.incident-timeline-panel-expanded .panel-header {
+  flex: 0 0 auto;
+}
+
+.incident-timeline-panel-expanded .incident-timeline-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+}
+
 .incident-timeline-scroll::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -4034,6 +4315,16 @@ tbody tr:hover td {
   text-transform: uppercase;
 }
 
+.analytics-line-point-label {
+  fill: var(--ink);
+  font-size: 11px;
+  font-weight: 950;
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-linejoin: round;
+  stroke-width: 4px;
+}
+
 .analytics-line-legend {
   display: flex;
   flex-wrap: wrap;
@@ -4206,6 +4497,7 @@ tbody tr:hover td {
   .analytics-stage-chart-grid,
   .analytics-timeline,
   .form-grid.two,
+  .form-grid.three,
   .timeline-fields,
     .scene-clearance-ambulance-row,
     .scene-clearance-ambulance-card,
@@ -4247,6 +4539,14 @@ tbody tr:hover td {
   .incident-management-meta {
     justify-items: start;
     white-space: normal;
+  }
+
+  .incident-acting-ic-form {
+    grid-template-columns: 1fr;
+  }
+
+  .incident-acting-ic-form .secondary-button {
+    justify-self: start;
   }
 
   .mini-table-row,

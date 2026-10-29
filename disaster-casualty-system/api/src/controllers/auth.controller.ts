@@ -94,7 +94,8 @@ type UnitUserRole =
   | "sa_responder"
   | "minor_incident_documenter"
   | "documenter"
-  | "medical_personnel";
+  | "medical_personnel"
+  | "responsible_officer";
 
 const unitUserRoles: UnitUserRole[] = [
   "responder",
@@ -103,6 +104,7 @@ const unitUserRoles: UnitUserRole[] = [
   "minor_incident_documenter",
   "documenter",
   "medical_personnel",
+  "responsible_officer",
 ];
 
 function isUnitUserRole(role: string | null | undefined): role is UnitUserRole {
@@ -935,6 +937,11 @@ function getUnitUserContext(
   reportingContext: string;
 } {
   switch (role) {
+    case "responsible_officer":
+      return {
+        role: "responsible_officer",
+        reportingContext: "command_admin",
+      };
     case "documenter":
     case "medical_personnel":
       return {
@@ -1166,6 +1173,17 @@ export async function registerUnitUser(
       return;
     }
 
+    if (
+      requestedRole === "responsible_officer" &&
+      !["super_admin", "admin", "administrator"].includes(currentUser.role ?? "")
+    ) {
+      response.status(403).json({
+        success: false,
+        message: "Only admin accounts can create Responsible Officer accounts.",
+      });
+      return;
+    }
+
     if (password.length < 6) {
       response.status(400).json({
         success: false,
@@ -1371,6 +1389,16 @@ export async function bulkRegisterUnitUsers(
               rowNumber,
               "Admins can only assign FR, Advanced Medical Responder, or healthcare facility documenter roles.",
             ),
+          );
+          continue;
+        }
+
+        if (
+          requestedRole === "responsible_officer" &&
+          !["super_admin", "admin", "administrator"].includes(currentUser.role ?? "")
+        ) {
+          results.push(
+            rowError(rowNumber, "Only admin accounts can create Responsible Officer accounts."),
           );
           continue;
         }
@@ -2182,6 +2210,17 @@ export async function updateUnitUser(
       return;
     }
 
+    if (
+      existingUser.role === "responsible_officer" &&
+      currentUser.role === "encoder"
+    ) {
+      response.status(403).json({
+        success: false,
+        message: "Only admin accounts can manage Responsible Officer accounts.",
+      });
+      return;
+    }
+
     let canEditUnitUser = currentUser.role === "super_admin";
 
     if (!canEditUnitUser && existingUser.created_by === currentUser.id) {
@@ -2348,6 +2387,17 @@ export async function deleteUnitUser(
         success: false,
         message:
           "Only FR, Advanced Medical Responder, healthcare facility documenter, and legacy responder accounts can be deleted here.",
+      });
+      return;
+    }
+
+    if (
+      existingUser.role === "responsible_officer" &&
+      currentUser.role === "encoder"
+    ) {
+      response.status(403).json({
+        success: false,
+        message: "Only admin accounts can manage Responsible Officer accounts.",
       });
       return;
     }

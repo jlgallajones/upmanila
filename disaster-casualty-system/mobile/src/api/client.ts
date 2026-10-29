@@ -60,6 +60,7 @@ export const api = axios.create({
   timeout: apiTimeoutMs,
   headers: {
     "Content-Type": "application/json",
+    "X-DCMS-Client": "mobile",
   },
 });
 

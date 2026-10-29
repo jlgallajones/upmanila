@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS public.casualty_case_links (
   incident_id uuid NOT NULL
     REFERENCES public.incidents(id) ON DELETE CASCADE,
   role text NOT NULL,
+  case_name text,
   linked_by uuid REFERENCES public.users(id) ON DELETE SET NULL,
   notes text,
   linked_at timestamptz NOT NULL DEFAULT now(),
@@ -13,6 +14,9 @@ CREATE TABLE IF NOT EXISTS public.casualty_case_links (
   UNIQUE (casualty_incident_id),
   UNIQUE (case_id, role)
 );
+
+ALTER TABLE public.casualty_case_links
+  ADD COLUMN IF NOT EXISTS case_name text;
 
 CREATE INDEX IF NOT EXISTS casualty_case_links_case_id_idx
   ON public.casualty_case_links (case_id);

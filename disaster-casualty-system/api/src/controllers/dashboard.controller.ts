@@ -14,6 +14,7 @@ const responderIncidentViewerRoles = new Set([
   "minor_incident_documenter",
   "documenter",
   "medical_personnel",
+  "responsible_officer",
 ]);
 
 const adminSummaryRoles = new Set([

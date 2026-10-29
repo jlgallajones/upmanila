@@ -20,6 +20,7 @@ export type UserRole =
   | "encoder"
   | "documenter"
   | "medical_personnel"
+  | "responsible_officer"
   | "viewer";
 
 export type ReportingContext =

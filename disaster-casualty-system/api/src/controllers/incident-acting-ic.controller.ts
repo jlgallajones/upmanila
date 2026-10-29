@@ -141,9 +141,13 @@ export async function getIncidentManagementAccess(
   if (!incident) return null;
 
   const activeDelegation = await loadActiveDelegation(incidentId);
+  const currentUserCreatedBy = await loadCurrentUserCreatedBy(user.id);
   const isSuperAdmin = user.role === "super_admin";
   const isPrimaryOwner = incident.created_by === user.id;
   const isActingIc = activeDelegation?.acting_ic_user_id === user.id;
+  const isResponsibleOfficer =
+    user.role === "responsible_officer" &&
+    currentUserCreatedBy === incident.created_by;
   const canManageIncident =
     isSuperAdmin ||
     isActingIc ||
@@ -155,6 +159,7 @@ export async function getIncidentManagementAccess(
     isSuperAdmin,
     isPrimaryOwner,
     isActingIc,
+    isResponsibleOfficer,
     canManageIncident,
     canDelegate: isSuperAdmin || (isPrimaryOwner && !activeDelegation),
     canResume:
@@ -223,6 +228,7 @@ export async function getIncidentActingIc(
       access.isSuperAdmin ||
       access.isPrimaryOwner ||
       access.isActingIc ||
+      access.isResponsibleOfficer ||
       currentUserCreatedBy === access.incident.created_by;
 
     if (!canView) {
@@ -260,6 +266,7 @@ export async function getIncidentActingIc(
         canResume: access.canResume,
         isPrimaryOwner: access.isPrimaryOwner,
         isActingIc: access.isActingIc,
+        isResponsibleOfficer: access.isResponsibleOfficer,
       },
     });
   } catch (error) {

@@ -16,6 +16,7 @@ import {
   getCasualtyVerificationActionLogs,
   getCasualtyVerificationHistory,
   matchCasualtyCaseRecords,
+  updateCasualtyCaseName,
   unmatchCasualtyCaseRecord,
   updateCasualty,
   updateCasualtyVerification,
@@ -59,6 +60,16 @@ casualtyRouter.post(
     "administrator",
   ]),
   matchCasualtyCaseRecords,
+);
+casualtyRouter.patch(
+  "/case-links/:caseId",
+  requireAuth,
+  requireRole([
+    "super_admin",
+    "admin",
+    "administrator",
+  ]),
+  updateCasualtyCaseName,
 );
 casualtyRouter.delete(
   "/:id/case-link",

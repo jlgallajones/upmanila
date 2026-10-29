@@ -1,5 +1,5 @@
 DCMS VERIFICATION RUN
-Started: 2026-10-29T17:25:53.5640171+08:00
+Started: 2026-10-29T18:08:17.6018096+08:00
 Root: C:\Users\jlgallajones\upmanila\disaster-casualty-system
 [RUN ] API TypeScript typecheck
        Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\api
@@ -33,7 +33,7 @@ Incident analytics calculation tests passed.
 > disaster-casualty-api@1.0.0 test:triage
 > tsc && node dist/services/triage/calculate-triage.test.js && node dist/services/triage/triage-accuracy.test.js
 
-Triage calculation tests passed (42).
+Triage calculation tests passed (43).
 Triage accuracy tests passed.
 [PASS] Triage calculation and accuracy tests (exit code 0)
 [RUN ] Mobile TypeScript typecheck
@@ -54,12 +54,12 @@ React Compiler enabled
 Starting Metro Bundler
 
 Static rendering is enabled. Learn more: https://docs.expo.dev/router/web/static-rendering/
-? Bundled 1063ms node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js (1337 modules)
-Web Bundled 1282ms node_modules\expo-router\entry.js (1395 modules)
+? Bundled 1268ms node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js (1352 modules)
+Web Bundled 1524ms node_modules\expo-router\entry.js (1395 modules)
 
 › web bundles (2):
 _expo/static/css/global-30c341199d6e65a2dfb94ff1ee1395d4.css (551B)
-_expo/static/js/web/entry-9f73a4cde4b19aac0e8fea9814a4f9a6.js (3.4MB)
+_expo/static/js/web/entry-71b248410c3b85d6feb794f8f32b1dda.js (3.4MB)
 
 › Static routes (26):
 /home (38KB)
@@ -106,16 +106,13 @@ Exported: dist
 [RUN ] Repository whitespace check
        Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system
        Command: git.exe diff --check
+warning: in the working copy of 'disaster-casualty-system/api/sql/add-admin-dashboard-unit-user-roles.sql', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/api/sql/add-casualty-case-links.sql', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/api/src/controllers/dashboard.controller.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/api/src/controllers/incident-acting-ic.controller.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/api/src/routes/casualty.routes.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/api/src/services/triage/calculate-triage.test.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/api/src/services/triage/calculate-triage.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/mobile/src/api/client.ts', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'disaster-casualty-system/mobile/src/app/(tabs)/add-casualty.tsx', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'disaster-casualty-system/mobile/src/app/(tabs)/records.tsx', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'disaster-casualty-system/mobile/src/app/about-us.tsx', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'disaster-casualty-system/mobile/src/app/privacy-policy.tsx', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'disaster-casualty-system/mobile/src/app/terms-and-conditions.tsx', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'disaster-casualty-system/mobile/src/offline/casualtyQueue.ts', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'disaster-casualty-system/mobile/src/screens/auth/LoginScreen.tsx', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'disaster-casualty-system/mobile/src/screens/casualties/CasualtyDetailScreen.tsx', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'disaster-casualty-system/mobile/src/screens/dashboard/HomeDashboardScreen.tsx', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'disaster-casualty-system/website/about-us.html', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'disaster-casualty-system/website/privacy-policy.html', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'disaster-casualty-system/website/terms-and-conditions.html', LF will be replaced by CRLF the next time Git touches it
 [PASS] Repository whitespace check (exit code 0)

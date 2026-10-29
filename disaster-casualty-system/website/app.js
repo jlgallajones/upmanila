@@ -217,6 +217,7 @@ const state = {
   casualtyRecordDateFilter: "",
   verificationReviewIncidentFilter: "all",
   analyticsAdminScopeFilter: "all",
+  incidentTimelineExpanded: false,
   matchCasingIncidentFilter: "all",
   selectedMatchCasingRecordIds: [],
   matchCasingPickerRole: null,
@@ -341,6 +342,7 @@ const unitAccountRoles = [
 const editableUnitAccountRoles = [
   "responder",
   "medical_personnel",
+  "responsible_officer",
   ...unitAccountRoles,
 ];
 
@@ -396,6 +398,12 @@ const unitUserRolesForWeb = [
   "documenter",
   "medical_personnel",
 ];
+
+const responsibleOfficerRolesForWeb = ["responsible_officer"];
+
+function isRestrictedWebRole(role) {
+  return unitUserRolesForWeb.includes(role) || responsibleOfficerRolesForWeb.includes(role);
+}
 
 const superAdminNavGroups = [
   {
@@ -514,7 +522,7 @@ const matchCasingRoleSlots = [
 ];
 
 function getViewsForRole(role) {
-  if (unitUserRolesForWeb.includes(role)) return actingIcViews;
+  if (isRestrictedWebRole(role)) return actingIcViews;
   return role === "super_admin" ? superAdminViews : adminViews;
 }
 
@@ -528,8 +536,12 @@ function isActingIcAnalyticsView() {
   return state.activeView === "acting-ic-analytics";
 }
 
+function isAssignmentScopedAnalyticsView() {
+  return isActingIcAnalyticsView() && !responsibleOfficerRolesForWeb.includes(state.user?.role);
+}
+
 function getNavGroupsForRole(role) {
-  if (unitUserRolesForWeb.includes(role)) {
+  if (isRestrictedWebRole(role)) {
     return [
       {
         id: "acting-ic",
@@ -1072,6 +1084,7 @@ function roleLabel(role) {
     minor_incident_documenter: "Minor Incident Documenter",
     documenter: "Healthcare Facility Documenter",
     medical_personnel: "Legacy Medical Personnel",
+    responsible_officer: "Responsible Officer",
   };
 
   if (labels[role]) {
@@ -2123,6 +2136,7 @@ function showDashboardTextPrompt({
   message,
   label,
   placeholder = "",
+  initialValue = "",
   confirmLabel = "Submit",
   cancelLabel = "Cancel",
   required = false,
@@ -2147,8 +2161,8 @@ function showDashboardTextPrompt({
               <span>${escapeHtml(label)}</span>
               ${
                 multiline
-                  ? `<textarea data-dashboard-prompt-input placeholder="${escapeHtml(placeholder)}"></textarea>`
-                  : `<input type="${escapeHtml(inputType)}" data-dashboard-prompt-input placeholder="${escapeHtml(placeholder)}" />`
+                  ? `<textarea data-dashboard-prompt-input placeholder="${escapeHtml(placeholder)}">${escapeHtml(initialValue)}</textarea>`
+                  : `<input type="${escapeHtml(inputType)}" data-dashboard-prompt-input placeholder="${escapeHtml(placeholder)}" value="${escapeHtml(initialValue)}" />`
               }
             </label>
             <p class="dashboard-dialog-error" data-dashboard-prompt-error hidden>${escapeHtml(requiredMessage)}</p>
@@ -2882,12 +2896,15 @@ function bindLogin() {
           clearSession();
           throw new Error("This account can access the web only while it has an active Acting IC assignment.");
         }
-      } else if (!["super_admin", "admin", "administrator", "encoder"].includes(response.data.user.role)) {
+      } else if (
+        !responsibleOfficerRolesForWeb.includes(response.data.user.role) &&
+        !["super_admin", "admin", "administrator", "encoder"].includes(response.data.user.role)
+      ) {
         clearSession();
         throw new Error("This desktop dashboard is only available to admin accounts or designated Acting ICs.");
       }
 
-      if (unitUserRolesForWeb.includes(response.data.user.role)) {
+      if (isRestrictedWebRole(response.data.user.role)) {
         state.activeView = "acting-ic";
         localStorage.setItem("dcms.admin.activeView", "acting-ic");
       } else if (!prepareResponseTimelineDraftRestoreAfterLogin()) {
@@ -2908,7 +2925,7 @@ function renderDashboardShell() {
           <img class="sidebar-mark" src="./assets/medsort.png" alt="SCRIBER" />
           <div class="sidebar-brand-text">
             <strong>SCRIBER Portal</strong>
-            <span>${isSuperAdmin() ? "Super Admin Portal" : unitUserRolesForWeb.includes(state.user?.role) ? "Acting IC Workspace" : "Admin Portal"}</span>
+            <span>${isSuperAdmin() ? "Super Admin Portal" : responsibleOfficerRolesForWeb.includes(state.user?.role) ? "Responsible Officer Workspace" : unitUserRolesForWeb.includes(state.user?.role) ? "Acting IC Workspace" : "Admin Portal"}</span>
           </div>
           <button
             id="sidebarToggle"
@@ -3639,7 +3656,7 @@ function bindVerificationReviewFilters() {
 function getAnalyticsIncidents() {
   const incidents = state.allIncidents.length ? state.allIncidents : state.incidents;
 
-  if (isActingIcAnalyticsView()) {
+  if (isActingIcAnalyticsView() && !responsibleOfficerRolesForWeb.includes(state.user?.role)) {
     const assignedIncidentIds = new Set(
       state.actingIcAssignments.map((assignment) => assignment.incident_id),
     );
@@ -3800,7 +3817,7 @@ function bindIncidentAnalyticsActions() {
     setAnalyticsIncidentId(selectedIncidentId);
   }
 
-  if (select && !isActingIcAnalyticsView()) {
+  if (select && !isAssignmentScopedAnalyticsView()) {
     select.addEventListener("change", async () => {
       setAnalyticsIncidentId(select.value);
 
@@ -3835,6 +3852,14 @@ function bindIncidentAnalyticsActions() {
 
       delete state.incidentManagementDetails[incidentId];
       await loadIncidentManagementDetails(incidentId);
+      renderCurrentView();
+      bindView();
+    });
+  });
+
+  document.querySelectorAll("[data-toggle-incident-timeline]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.incidentTimelineExpanded = !state.incidentTimelineExpanded;
       renderCurrentView();
       bindView();
     });
@@ -3880,7 +3905,7 @@ function bindIncidentHistoryActions() {
 
       setAnalyticsIncidentId(incidentId);
       setActiveView(
-        unitUserRolesForWeb.includes(state.user?.role)
+        isRestrictedWebRole(state.user?.role)
           ? "acting-ic-analytics"
           : "incident-analytics",
       );
@@ -4151,7 +4176,7 @@ function renderTimelineVisual(analytics) {
     });
 
   return `
-    <section class="panel analytics-wide">
+    <section class="panel analytics-wide incident-timeline-panel${state.incidentTimelineExpanded ? " incident-timeline-panel-expanded" : ""}">
       <div class="panel-header">
         <div>
           <h2>Incident Timeline</h2>
@@ -4160,9 +4185,18 @@ function renderTimelineVisual(analytics) {
             HCFD, and responder safety records.
           </p>
         </div>
+        <button
+          class="ghost-button mini incident-timeline-toggle"
+          type="button"
+          data-toggle-incident-timeline
+          aria-expanded="${state.incidentTimelineExpanded ? "true" : "false"}"
+          aria-controls="incidentTimelineScroll"
+        >
+          ${state.incidentTimelineExpanded ? "Minimize" : "Expand"}
+        </button>
       </div>
 
-      <div class="table-wrap incident-timeline-scroll">
+      <div id="incidentTimelineScroll" class="table-wrap incident-timeline-scroll">
         <table class="incident-timeline-table">
 
           <thead>
@@ -4627,6 +4661,7 @@ function renderAnalyticsLineChart(title, series, options = {}) {
       const pointString = points
         .map((point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`)
         .join(" ");
+      const pointLabelOffset = [-12, 18, -24, 30][seriesIndex % 4];
 
       return `
         <polyline points="${pointString}" fill="none" stroke="${color}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></polyline>
@@ -4638,6 +4673,15 @@ function renderAnalyticsLineChart(title, series, options = {}) {
                   ? `${item.label} at ${point.label}: ${point.value} arrivals`
                   : `${item.label} at ${point.label}: ${formatPercentageLabel(point.percentage)} (${point.count}/${point.total})`)}</title>
               </circle>
+              <text
+                x="${point.x.toFixed(2)}"
+                y="${Math.max(
+                  padding.top + 12,
+                  Math.min(height - padding.bottom - 6, point.y + pointLabelOffset),
+                ).toFixed(2)}"
+                text-anchor="middle"
+                class="analytics-line-point-label"
+              >${Math.round(isCountChart ? point.value : point.count)}</text>
             `,
           )
           .join("")}
@@ -4882,7 +4926,7 @@ function renderAnalyticsGraphGrid(analytics, incidentId) {
       "Treatment / Stabilization & Responder Safety",
       "Stabilization strategies and responder safety responses for the selected incident.",
       `<div class="analytics-graph-grid">
-        ${renderAnalyticsGraphSection("On-site stabilization", graphs.stabilizationStrategies, { chart: "pie" })}
+        ${renderAnalyticsGraphSection("On-site Action", graphs.stabilizationStrategies, { chart: "pie" })}
         ${renderAnalyticsGraphSection("Safe and Unsafe Responders", graphs.responderSafety, { chart: "pie", viewResponders: true, incidentId })}
       </div>`,
     )}
@@ -5085,6 +5129,7 @@ function bindResponderSafetyViewActions() {
 
 function renderIncidentAnalytics() {
   const actingIcAnalytics = isActingIcAnalyticsView();
+  const responsibleOfficerAnalytics = responsibleOfficerRolesForWeb.includes(state.user?.role);
   const analyticsSourceIncidents =
     state.allIncidents.length ? state.allIncidents : state.incidents;
   const incidents = getAnalyticsIncidents();
@@ -5142,10 +5187,12 @@ const incidentLocation = selectedIncident
     )
   : "Not recorded";
 
-  const analyticsSubtitle = actingIcAnalytics
+  const analyticsSubtitle = responsibleOfficerAnalytics
+    ? "Read-only analytics for incidents in your admin unit."
+    : actingIcAnalytics
     ? "Read-only analytics for the incident currently delegated to you as Acting IC."
     : "Read-only timeline, duration, and graph summaries for one incident.";
-  const analyticsScopeMarkup = actingIcAnalytics
+  const analyticsScopeMarkup = actingIcAnalytics && !responsibleOfficerAnalytics
     ? `<div class="field analytics-scope-note"><span>Incident scope</span><strong>Current Acting IC assignment only</strong></div>`
     : `${renderAnalyticsAdminScopeFilter(analyticsSourceIncidents)}
         <label class="field">
@@ -6783,8 +6830,11 @@ function bindRegisterUnitUserForm() {
 
 function renderAccountEditModal(user) {
   const isCommandAdmin = editableAdminAccountRoles.includes(user.role);
+  const isResponsibleOfficer = user.role === "responsible_officer";
   const roleOptions = isCommandAdmin
     ? [["administrator", "Administrator"]]
+    : isResponsibleOfficer
+      ? [["responsible_officer", "Responsible Officer"]]
     : editableUnitAccountRoles.map((role) => [role, roleLabel(role)]);
   const endpointType = isCommandAdmin ? "admin" : "unit";
 
@@ -6823,15 +6873,15 @@ function renderAccountEditModal(user) {
                   <option value="false" ${!user.is_active ? "selected" : ""}>Inactive</option>
                 </select>
               </label>
-              <label class="field"><span>Phone number</span><input name="phoneNumber" value="${escapeHtml(user.phone_number || "")}" /></label>
+              ${isResponsibleOfficer ? "" : `<label class="field"><span>Phone number</span><input name="phoneNumber" value="${escapeHtml(user.phone_number || "")}" /></label>`}
               <label class="field"><span>New password</span><input name="password" type="password" minlength="6" placeholder="Leave blank to keep current password" /></label>
               ${
                 isCommandAdmin
                   ? `<label class="field"><span>Office / organization</span><input name="officeOrganization" value="${escapeHtml(user.office_organization || "")}" placeholder="CDRRMO - City of Manila; BDRRMO - Brgy. San Isidro" /></label>`
                   : ""
               }
-              <label class="field"><span>Assigned municipality</span><input name="assignedMunicipality" value="${escapeHtml(user.assigned_municipality || "")}" /></label>
-              <label class="field"><span>${isCommandAdmin ? "Assigned barangay / area" : "Assigned barangay"}</span><input name="assignedBarangay" value="${escapeHtml(user.assigned_barangay || "")}" /></label>
+              ${isResponsibleOfficer ? "" : `<label class="field"><span>Assigned municipality</span><input name="assignedMunicipality" value="${escapeHtml(user.assigned_municipality || "")}" /></label>
+              <label class="field"><span>${isCommandAdmin ? "Assigned barangay / area" : "Assigned barangay"}</span><input name="assignedBarangay" value="${escapeHtml(user.assigned_barangay || "")}" /></label>`}
             </div>
             <div class="account-status-strip">
               <span class="pill ${user.is_active ? "green" : "red"}">${user.is_active ? "Active" : "Inactive"}</span>
@@ -7797,19 +7847,23 @@ function renderMatchedCaseGroup({ caseId, links }) {
       ),
     }))
     .filter((item) => item.record);
+  const caseName = links[0]?.case_name?.trim() || caseId.slice(0, 8).toUpperCase();
 
   return `
     <section class="incident-management-item">
       <div class="incident-management-toggle">
         <div>
           <span class="eyebrow">Matched Case</span>
-          <h3>${escapeHtml(caseId.slice(0, 8).toUpperCase())}</h3>
-          <p>${linkedRecords.length} linked role record${linkedRecords.length === 1 ? "" : "s"}</p>
+          <h3>${escapeHtml(caseName)}</h3>
+          <p>${linkedRecords.length} linked role record${linkedRecords.length === 1 ? "" : "s"} · Case ${escapeHtml(caseId.slice(0, 8).toUpperCase())}</p>
         </div>
         <div class="incident-management-meta">
-          ${linkedRecords
-            .map(({ link }) => `<strong>${escapeHtml(matchCasingRoleLabel(link.role))}</strong>`)
-            .join("")}
+          <div>
+            ${linkedRecords
+              .map(({ link }) => `<strong>${escapeHtml(matchCasingRoleLabel(link.role))}</strong>`)
+              .join("")}
+          </div>
+          <button class="ghost-button mini" type="button" data-edit-matched-case="${escapeHtml(caseId)}" data-matched-case-name="${escapeHtml(caseName)}">Edit name</button>
         </div>
       </div>
       <div class="incident-management-body">
@@ -8238,6 +8292,45 @@ function bindMatchCasingActions() {
     });
   });
 
+  document.querySelectorAll("[data-edit-matched-case]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      const caseId = button.dataset.editMatchedCase;
+      if (!caseId) return;
+
+      const caseName = await showDashboardTextPrompt({
+        title: "Edit matched case name",
+        message:
+          "Use the identified victim name or another clear label. This changes only the display name; linked victim records remain unchanged.",
+        label: "Matched case name",
+        placeholder: "Enter the identified victim name",
+        initialValue: button.dataset.matchedCaseName || "",
+        confirmLabel: "Save name",
+        required: true,
+        multiline: false,
+        requiredMessage: "Enter a name for this matched case.",
+      });
+
+      if (!caseName) return;
+
+      try {
+        await apiRequest(
+          `/casualties/case-links/${encodeURIComponent(caseId)}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({ caseName }),
+          },
+        );
+        await loadSharedData();
+        renderCurrentView();
+        bindView();
+        showDashboardToast("Matched case name updated.", "success");
+      } catch (error) {
+        showDashboardToast(getErrorMessage(error), "error");
+      }
+    });
+  });
+
   bindAttachmentPreviewActions();
 }
 
@@ -8289,8 +8382,7 @@ function renderAdminVerificationReview() {
                       <td>
                         <div class="table-actions">
                           <button class="ghost-button mini" data-open-casualty="${escapeHtml(item.id)}">Open record</button>
-                          <button class="ghost-button mini" data-review-action="under_review" data-casualty-id="${escapeHtml(item.id)}">Review</button>
-                          <button class="secondary-button mini" data-review-action="verified" data-casualty-id="${escapeHtml(item.id)}">Approve</button>
+                          <button class="secondary-button verification-approve-button mini" data-review-action="verified" data-casualty-id="${escapeHtml(item.id)}">Approve</button>
                           <button class="danger-button mini" data-review-action="rejected" data-casualty-id="${escapeHtml(item.id)}">Reject</button>
                           <button class="danger-button mini" data-delete-casualty="${escapeHtml(item.id)}">Delete</button>
                         </div>
@@ -10870,6 +10962,8 @@ function formatAuditAction(action) {
     "casualty.rejected": "Victim rejected",
     "casualty.deleted": "Victim deleted",
     "casualty.resubmitted": "Victim resubmitted",
+    "casualty.updated": "Victim record updated",
+    "casualty.case_name_updated": "Matched case name updated",
     "casualty.verification_updated": "Verification updated",
     "incident.created": "Incident created",
     "incident.updated": "Incident updated",
@@ -10919,6 +11013,14 @@ function formatAuditDetails(log) {
 
   if (Array.isArray(metadata.updatedFields) && metadata.updatedFields.length) {
     parts.push(`Fields: ${metadata.updatedFields.join(", ")}`);
+  }
+
+  if (Array.isArray(metadata.updatedSections) && metadata.updatedSections.length) {
+    parts.push(`Sections: ${metadata.updatedSections.join(", ")}`);
+  }
+
+  if (metadata.source) {
+    parts.push(`Source: ${metadata.source}`);
   }
 
   if (metadata.incidentCode) {
@@ -11312,6 +11414,7 @@ const incidentManagementSections = [
   ["hospital-resources", "Hospital Resources", false],
   ["morbidity-mortality", "Morbidity & Mortality", false],
   ["sitrep-close", "SitRep & Close Incident", true, "accent"],
+  ["incident-control", "Incident Control", false],
 ];
 
 async function loadIncidentManagementDetails(incidentId, options = {}) {
@@ -11387,9 +11490,19 @@ function renderIncidentActingIcPanel(incident, details) {
   const isClosed = isIncidentManagementLocked(incident);
   const canDesignate = Boolean(assignment.canDelegate) && !isClosed;
   const canResume = Boolean(assignment.canResume) && Boolean(activeDelegation);
+  const canManageResponsibleOfficers =
+    !isClosed &&
+    ["super_admin", "admin", "administrator"].includes(state.user?.role) &&
+    (assignment.isSuperAdmin || assignment.isPrimaryOwner);
+  const responsibleOfficers = state.unitUsers.filter(
+    (user) =>
+      user.role === "responsible_officer" &&
+      user.created_by === incident.created_by,
+  );
   const availableUsers = state.unitUsers.filter(
     (user) =>
       user.is_active !== false &&
+      user.role !== "responsible_officer" &&
       user.id !== incident.created_by &&
       !backups.some((backup) => backup.user_id === user.id),
   );
@@ -11424,21 +11537,87 @@ function renderIncidentActingIcPanel(incident, details) {
             .join("")}</div>`
         : `<p class="incident-acting-ic-empty">No backup IC has been designated for this incident.</p>`}
       ${canDesignate && !activeDelegation
-        ? `<form class="incident-acting-ic-form" data-designate-acting-ic-form="${escapeHtml(incident.id)}">
+        ? `<div class="incident-acting-ic-designation">
+            <div class="incident-acting-ic-designation-copy">
+              <span class="eyebrow">Backup coverage</span>
+              <strong>Designate a backup Incident Commander</strong>
+              <p>Select an active unit user who can take control when needed.</p>
+            </div>
+            <form class="incident-acting-ic-form" data-designate-acting-ic-form="${escapeHtml(incident.id)}">
             <label>
               <span>Designate backup IC</span>
-              <select name="userId" required>
-                <option value="">Select an active unit user</option>
-                ${availableUsers
-                  .map((user) => `<option value="${escapeHtml(user.id)}">${escapeHtml(getActingIcUserLabel(user))} · ${escapeHtml(roleLabel(user.role))}</option>`)
-                  .join("")}
-              </select>
+              <div class="incident-acting-ic-picker" data-acting-ic-picker>
+                <input type="hidden" name="userId" data-acting-ic-value />
+                <button class="incident-acting-ic-picker-trigger" type="button" data-acting-ic-trigger aria-haspopup="listbox" aria-expanded="false" ${availableUsers.length ? "" : "disabled"}>
+                  <span data-acting-ic-selected>Select an active unit user</span>
+                  <span class="incident-acting-ic-picker-chevron" aria-hidden="true">&#9662;</span>
+                </button>
+                <div class="incident-acting-ic-picker-menu" data-acting-ic-menu hidden>
+                  <input class="incident-acting-ic-picker-search" type="search" placeholder="Search by name or role" data-acting-ic-search />
+                  <div class="incident-acting-ic-picker-options" role="listbox" aria-label="Available backup IC users">
+                    ${availableUsers
+                      .map((user) => {
+                        const name = getActingIcUserLabel(user);
+                        const role = roleLabel(user.role);
+                        return `<button class="incident-acting-ic-picker-option" type="button" role="option" data-acting-ic-option data-user-id="${escapeHtml(user.id)}" data-search-text="${escapeHtml(`${name} ${role}`.toLowerCase())}">
+                          <span class="incident-acting-ic-picker-option-name">${escapeHtml(name)}</span>
+                          <span class="incident-acting-ic-picker-option-role">${escapeHtml(role)}</span>
+                        </button>`;
+                      })
+                      .join("") || `<span class="incident-acting-ic-picker-empty">No active unit users are available.</span>`}
+                  </div>
+                </div>
+              </div>
             </label>
             <button class="secondary-button" type="submit" ${availableUsers.length ? "" : "disabled"}>Save Backup IC</button>
-          </form>`
+            </form>
+          </div>`
         : ""}
       ${canDesignate && backups.length && !activeDelegation
         ? `<button class="primary-button" type="button" data-delegate-acting-ic="${escapeHtml(incident.id)}">Delegate Incident Control</button>`
+        : ""}
+      ${canManageResponsibleOfficers
+        ? `<section class="incident-responsible-officer-section" aria-labelledby="responsibleOfficerTitle-${escapeHtml(incident.id)}">
+            <div class="incident-acting-ic-designation-copy">
+              <span class="eyebrow">Responsible officer access</span>
+              <strong id="responsibleOfficerTitle-${escapeHtml(incident.id)}">Create a Responsible Officer account</strong>
+              <p>Responsible Officers can sign in to the web dashboard and access Incident Management and Incident Analytics without incident delegation.</p>
+            </div>
+            <form class="responsible-officer-form" data-responsible-officer-form="${escapeHtml(incident.id)}">
+              <div class="form-grid three">
+                <label class="field"><span>Name</span><input name="fullName" required placeholder="Full name" /></label>
+                <label class="field"><span>Email</span><input name="email" type="email" required placeholder="name@example.com" /></label>
+                <label class="field"><span>Password</span><input name="password" type="password" minlength="6" required placeholder="At least 6 characters" /></label>
+              </div>
+              <div class="button-row">
+                <button class="primary-button" type="submit">Create Responsible Officer</button>
+              </div>
+            </form>
+            <div class="incident-responsible-officer-list">
+              <div class="section-card-header compact">
+                <div><h4>Responsible Officer accounts</h4><p class="panel-subtitle">Accounts created under this admin unit.</p></div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Actions</th></tr></thead>
+                  <tbody>
+                    ${responsibleOfficers.map((user) => `
+                      <tr>
+                        <td><strong>${escapeHtml(user.full_name || "Unnamed account")}</strong></td>
+                        <td>${escapeHtml(user.email || "No email")}</td>
+                        <td><span class="pill ${user.is_active ? "green" : "red"}">${user.is_active ? "Active" : "Suspended"}</span></td>
+                        <td class="table-actions">
+                          <button class="ghost-button mini" type="button" data-edit-account="${escapeHtml(user.id)}">Edit</button>
+                          <button class="ghost-button mini" type="button" data-toggle-responsible-officer="${escapeHtml(user.id)}" data-responsible-officer-active="${user.is_active ? "true" : "false"}">${user.is_active ? "Suspend" : "Reactivate"}</button>
+                        </td>
+                      </tr>
+                    `).join("") || `<tr><td colspan="4"><div class="empty-state">No Responsible Officer accounts created yet.</div></td></tr>`}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div id="responsibleOfficerMessage-${escapeHtml(incident.id)}" class="status-message" hidden></div>
+          </section>`
         : ""}
       <div id="actingIcMessage-${escapeHtml(incident.id)}" class="status-message" hidden></div>
     </section>
@@ -11473,12 +11652,13 @@ function renderIncidentManagement() {
 }
 
 function renderActingIcWorkspace() {
+  const isResponsibleOfficer = responsibleOfficerRolesForWeb.includes(state.user?.role);
   const assignedIncidentIds = new Set(
     state.actingIcAssignments.map((assignment) => assignment.incident_id),
   );
   const sourceIncidents = [...state.allIncidents, ...state.incidents].filter(
     (incident, index, all) =>
-      assignedIncidentIds.has(incident.id) &&
+      (isResponsibleOfficer || assignedIncidentIds.has(incident.id)) &&
       all.findIndex((candidate) => candidate.id === incident.id) === index,
   );
 
@@ -11487,12 +11667,12 @@ function renderActingIcWorkspace() {
       <div class="panel-header">
         <div>
           <span class="eyebrow">Incident command</span>
-          <h2>Acting IC Workspace</h2>
-          <p class="panel-subtitle">You have temporary management access only for the incident assigned to you. Your responder account and unit scope remain unchanged.</p>
+          <h2>${isResponsibleOfficer ? "Responsible Officer Workspace" : "Acting IC Workspace"}</h2>
+          <p class="panel-subtitle">${isResponsibleOfficer ? "Read-only access to Incident Management and Incident Analytics for your admin unit." : "You have temporary management access only for the incident assigned to you. Your responder account and unit scope remain unchanged."}</p>
         </div>
-        <span class="pill orange">${sourceIncidents.length} assigned</span>
+        <span class="pill ${isResponsibleOfficer ? "blue" : "orange"}">${sourceIncidents.length} ${isResponsibleOfficer ? "available" : "assigned"}</span>
       </div>
-      <div class="status-message warning">Primary ownership remains with the original admin. Your access ends when primary ownership is resumed.</div>
+      <div class="status-message ${isResponsibleOfficer ? "info" : "warning"}">${isResponsibleOfficer ? "Responsible Officer access is read-only. Incident changes remain with the primary admin or Acting IC." : "Primary ownership remains with the original admin. Your access ends when primary ownership is resumed."}</div>
       <div class="incident-management-list">
         ${sourceIncidents.map((incident) => renderIncidentManagementItem(incident)).join("") || `<div class="empty-state">The assigned incident is not currently available. Refresh or contact the primary IC.</div>`}
       </div>
@@ -11539,6 +11719,14 @@ function getIncidentSectionLauncherSubtitle(sectionId, canEdit, details) {
   const incident = details?.incident;
   if (canEdit && isIncidentManagementLocked(incident)) {
     return "Locked after closure";
+  }
+
+  if (sectionId === "incident-control") {
+    const assignment = details?.actingIc?.data;
+    if (assignment?.activeDelegation?.actingUser) {
+      return `${getActingIcUserLabel(assignment.activeDelegation.actingUser)} is Acting IC`;
+    }
+    return "Designate or delegate incident control";
   }
 
   if (sectionId === "dmmp-safety") {
@@ -11589,7 +11777,6 @@ function renderIncidentManagementSections(incident, details) {
       ${isIncidentManagementLocked(incident)
         ? `<div class="status-message warning incident-management-lock-notice">This incident is ${escapeHtml(roleLabel(incident.status))}. Incident management sections are view-only.</div>`
         : ""}
-      ${renderIncidentActingIcPanel(incident, details)}
       <div class="section-launcher-grid">
         ${incidentManagementSections
           .map(
@@ -11644,7 +11831,7 @@ function renderIncidentSectionModal() {
 
   return `
     <div class="modal-backdrop" data-close-incident-section-modal>
-      <section class="record-modal incident-section-modal" role="dialog" aria-modal="true" aria-labelledby="incidentSectionModalTitle">
+      <section class="record-modal incident-section-modal ${meta.id === "incident-control" ? "incident-control-modal" : ""}" role="dialog" aria-modal="true" aria-labelledby="incidentSectionModalTitle">
         <div class="modal-header">
           <div>
             <span class="eyebrow">${escapeHtml(incident.incident_code)}</span>
@@ -11771,6 +11958,8 @@ function renderIncidentSectionViewContent(incident, details, sectionId) {
       return renderHospitalResourceSummaryView(details);
     case "morbidity-mortality":
       return renderMorbidityMortalityView(details.morbidityMortality?.data);
+    case "incident-control":
+      return renderIncidentActingIcPanel(incident, details);
     case "sitrep-close":
       return renderSitrepAndCloseSection(
         incident,
@@ -13469,6 +13658,76 @@ function getIncidentCloseWarnings(incidentId) {
 }
 
 function bindIncidentManagementActions() {
+  document.querySelectorAll("[data-acting-ic-picker]").forEach((picker) => {
+    const trigger = picker.querySelector("[data-acting-ic-trigger]");
+    const menu = picker.querySelector("[data-acting-ic-menu]");
+    const search = picker.querySelector("[data-acting-ic-search]");
+    const hiddenValue = picker.querySelector("[data-acting-ic-value]");
+    const selectedLabel = picker.querySelector("[data-acting-ic-selected]");
+    const options = [...picker.querySelectorAll("[data-acting-ic-option]")];
+
+    if (!trigger || !menu || !hiddenValue || !selectedLabel) return;
+
+    const closePicker = () => {
+      menu.hidden = true;
+      trigger.setAttribute("aria-expanded", "false");
+    };
+
+    trigger.addEventListener("click", () => {
+      const isOpen = !menu.hidden;
+      document.querySelectorAll("[data-acting-ic-menu]").forEach((otherMenu) => {
+        otherMenu.hidden = true;
+      });
+      document.querySelectorAll("[data-acting-ic-trigger]").forEach((otherTrigger) => {
+        otherTrigger.setAttribute("aria-expanded", "false");
+      });
+
+      menu.hidden = isOpen;
+      trigger.setAttribute("aria-expanded", isOpen ? "false" : "true");
+      if (!isOpen) search?.focus();
+    });
+
+    search?.addEventListener("input", () => {
+      const query = search.value.trim().toLowerCase();
+      options.forEach((option) => {
+        option.hidden = Boolean(query) && !option.dataset.searchText?.includes(query);
+      });
+    });
+
+    options.forEach((option) => {
+      option.addEventListener("click", () => {
+        hiddenValue.value = option.dataset.userId || "";
+        const name = option.querySelector(".incident-acting-ic-picker-option-name")?.textContent || "Select an active unit user";
+        const role = option.querySelector(".incident-acting-ic-picker-option-role")?.textContent || "";
+        selectedLabel.textContent = role ? `${name} · ${role}` : name;
+        trigger.classList.add("has-selection");
+        if (search) search.value = "";
+        options.forEach((item) => {
+          item.hidden = false;
+          item.setAttribute("aria-selected", item === option ? "true" : "false");
+        });
+        closePicker();
+      });
+    });
+
+    trigger.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closePicker();
+    });
+  });
+
+  if (document.body.dataset.actingIcPickerBound !== "true") {
+    document.addEventListener("click", (event) => {
+      if (event.target?.closest?.("[data-acting-ic-picker]")) return;
+      document.querySelectorAll("[data-acting-ic-menu]").forEach((menu) => {
+        menu.hidden = true;
+      });
+      document.querySelectorAll("[data-acting-ic-trigger]").forEach((trigger) => {
+        trigger.setAttribute("aria-expanded", "false");
+      });
+    });
+    document.body.dataset.actingIcPickerBound = "true";
+  }
+
   document.querySelectorAll("[data-designate-acting-ic-form]").forEach((form) => {
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -13490,6 +13749,71 @@ function bindIncidentManagementActions() {
         setMessage(`actingIcMessage-${incidentId}`, "Backup IC designated.", "success");
       } catch (error) {
         setMessage(messageId, error.message, "error");
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-responsible-officer-form]").forEach((form) => {
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const incidentId = form.dataset.responsibleOfficerForm;
+      const messageId = `responsibleOfficerMessage-${incidentId}`;
+      setMessage(messageId, "Creating Responsible Officer account...", "loading");
+
+      try {
+        await apiRequest("/auth/register-unit-user", {
+          method: "POST",
+          body: JSON.stringify({
+            fullName: formValue(form, "fullName"),
+            email: formValue(form, "email"),
+            password: form.elements.password.value,
+            role: "responsible_officer",
+          }),
+        });
+        await loadSharedData();
+        renderCurrentView();
+        bindView();
+        showDashboardToast("Responsible Officer account created.", "success");
+      } catch (error) {
+        setMessage(messageId, getErrorMessage(error), "error");
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-toggle-responsible-officer]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const userId = button.dataset.toggleResponsibleOfficer;
+      const user = state.unitUsers.find((item) => item.id === userId);
+      if (!user) return;
+
+      const nextActive = button.dataset.responsibleOfficerActive !== "true";
+      const confirmed = await showDashboardConfirm({
+        title: nextActive ? "Reactivate account?" : "Suspend account?",
+        message: `${nextActive ? "Reactivate" : "Suspend"} ${user.full_name || user.email}'s Responsible Officer access?`,
+        confirmLabel: nextActive ? "Reactivate" : "Suspend",
+        cancelLabel: "Cancel",
+        danger: !nextActive,
+      });
+      if (!confirmed) return;
+
+      button.disabled = true;
+      try {
+        await apiRequest(`/auth/unit-users/${encodeURIComponent(userId)}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            fullName: user.full_name,
+            email: user.email,
+            role: "responsible_officer",
+            isActive: nextActive,
+          }),
+        });
+        await loadSharedData();
+        renderCurrentView();
+        bindView();
+        showDashboardToast(`Responsible Officer account ${nextActive ? "reactivated" : "suspended"}.`, "success");
+      } catch (error) {
+        button.disabled = false;
+        showDashboardToast(getErrorMessage(error), "error");
       }
     });
   });
@@ -14914,7 +15238,7 @@ function renderFacilityCreator() {
           <label class="field"><span>Facility name</span><input name="facilityName" required /></label>
           <label class="field"><span>Facility level</span><select name="facilityLevel">${facilityLevels.map((level) => `<option value="${level}">${roleLabel(level)}</option>`).join("")}</select></label>
         </div>
-        <label class="field"><span>Address</span><input name="address" /></label>
+        <label class="field"><span>Street</span><input name="address" /></label>
         <div class="form-grid three">
           <label class="field"><span>Barangay</span><input name="barangay" /></label>
           <label class="field"><span>Municipality</span><input name="municipality" /></label>
@@ -15042,7 +15366,7 @@ function renderHealthcareFacilityEditModal(facility) {
               <label class="field"><span>Municipality</span><input name="municipality" value="${escapeHtml(facility.municipality || "")}" /></label>
               <label class="field"><span>Province</span><input name="province" value="${escapeHtml(facility.province || "")}" /></label>
             </div>
-            <label class="field"><span>Address</span><input name="address" value="${escapeHtml(facility.address || "")}" /></label>
+            <label class="field"><span>Street</span><input name="address" value="${escapeHtml(facility.address || "")}" /></label>
             <div class="account-status-strip">
               <span class="pill ${facility.is_active ? "green" : "red"}">${facility.is_active ? "Active" : "Inactive"}</span>
               <span>${facility.created_at ? `Created ${formatDate(facility.created_at)}` : "No creation date recorded"}</span>

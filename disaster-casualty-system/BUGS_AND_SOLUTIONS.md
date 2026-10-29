@@ -966,7 +966,7 @@ The database migration is `api/sql/add-incident-acting-ic-delegation.sql`. Apply
 
 **Problem:** The SIEVE assisted assessment used an obsolete injury question and older thresholds. Walking patients could be delayed because of injury data, absent breathing after airway management did not return red, and the respiratory and pulse-rate options did not match the requested SIEVE flow.
 
-**Solution:** SIEVE now immediately classifies walking patients as minimal/green, removes the injury question, uses 9-or-below and 30-or-above respiratory thresholds, maps breathing after airway management to red/black, and uses 121-or-above versus 120-or-below pulse-rate thresholds. Capillary refill remains an alternative circulation check, with more than two seconds returning red and less than two seconds returning delayed/yellow. Legacy answer keys remain supported for previously saved assessments. Regression tests cover the corrected decision paths.
+**Solution:** SIEVE now immediately classifies walking patients as minimal/green, removes the injury question from the SIEVE assessment, uses 9-or-below and 30-or-above respiratory thresholds, maps breathing after airway management to red/black, and uses 121-or-above versus 120-or-below pulse-rate thresholds. Capillary refill remains an alternative circulation check, with more than two seconds returning red and less than two seconds returning delayed/yellow. Legacy answer keys, including the older `more_than_30` respiratory value, remain supported for previously saved assessments. Regression tests cover the corrected decision paths.
 
 **Status:** Implemented.
 
@@ -1060,6 +1060,62 @@ The summary also keeps the total survivors, total facility arrivals, response in
 
 **Status:** Implemented.
 
+## 127. Action Logs Needed Incident And Mobile Record Edit Events
+
+**Problem:** Incident edits were already stored as `incident.updated`, but successful edits to an existing mobile victim record did not create a corresponding general audit-log entry, making those changes difficult to trace in Action Logs.
+
+**Solution:** Existing incident edit logging was retained. Successful victim-record updates now create `casualty.updated` audit entries with the edited sections, incident context, actor, timestamp, and client source. Mobile API requests identify themselves as mobile, and the web Action Logs display the event as **Victim record updated**.
+
+**Status:** Implemented.
+
+## 128. Matched Cases Needed Editable Identified-Victim Names
+
+**Problem:** Completed matched cases displayed only the generated case identifier, such as `2C354368`. When a victim was later identified, administrators could not replace that opaque label with the victim's actual name. The linked Field Responder, Advanced Medical Responder, and HCFD records also needed to remain separate and permanently associated.
+
+**Solution:** Added an optional `case_name` display field to `casualty_case_links`, with migration `api/sql/add-casualty-case-name.sql`. Administrators can now select **Edit name** in **Victims > Matched Cases**, enter the identified victim name, and save it. The API updates the display label across the existing links for that `case_id` without changing, deleting, or recreating any linked victim records. The generated case ID remains visible as a stable reference, and the rename is recorded in Action Logs as **Matched case name updated**.
+
+**Status:** Implemented. Apply the migration in Supabase and restart the API before testing.
+
+## 129. Incident Management Needed A Dedicated Incident Control Card
+
+**Problem:** The Acting IC delegation panel was rendered above the Incident Management section grid. This made the launcher layout uneven and mixed incident-control actions with the general section content.
+
+**Solution:** Added an **Incident Control** launcher card in the final grid position and moved the existing Acting IC panel into its section modal. Delegating control, designating backup ICs, resuming primary ownership, notifications, permissions, and API behavior remain unchanged.
+
+**Status:** Implemented.
+
+## 130. Incident Control Backup Selector Needed A More Intentional Layout
+
+**Problem:** The Acting IC backup selector appeared as an isolated default dropdown beside the save button, making the Incident Control modal look unfinished.
+
+**Solution:** Added a dedicated backup-coverage block with explanatory context, consistent field styling, a full-width themed selector, clear focus treatment, and responsive action layout for light and dark modes. Existing backup designation and delegation handlers remain unchanged.
+
+**Status:** Implemented.
+
+## 131. Incident Control User Dropdown Was Difficult To Scan
+
+**Problem:** The native backup IC dropdown displayed a long browser-controlled list of plain text names and roles. It was difficult to scan and visually inconsistent with the Incident Control modal.
+
+**Solution:** Replaced the native option list with a searchable user picker. Each available user is presented as a distinct row with the name and role separated, while the selected user remains visible in the field. The picker supports keyboard focus, outside-click closing, light/dark styling, and continues submitting the same `userId` value to the existing backup designation endpoint.
+
+**Status:** Implemented.
+
+## 132. Incident Control Modal Clipped The User Picker
+
+**Problem:** The Incident Control modal sized itself to its closed content. When the backup IC picker opened, the list extended beyond the modal body and required unnecessary scrolling.
+
+**Solution:** Preserved the shared height of the other Incident Management modals and changed the searchable user picker to open upward from the selector. This keeps the list visible without making the Incident Control window unusually tall.
+
+**Status:** Implemented.
+
+## 133. Incident Control Needed Responsible Officer Accounts
+
+**Problem:** Admins needed a separate read-only command account for incident management and analytics, without requiring the user to be delegated as Acting IC. The existing account workflow did not provide a dedicated Responsible Officer form, account list, or suspension controls.
+
+**Solution:** Added the `responsible_officer` authenticated role and Supabase migration. The Incident Control section now provides a Name, Email, and Password form plus a scoped Responsible Officer account table with edit and suspend/reactivate actions. Responsible Officer accounts are restricted to their creating admin's unit, can access only Incident Management and Incident Analytics, and remain read-only. Acting IC backup selection explicitly excludes Responsible Officer accounts.
+
+**Status:** Implemented.
+
 ## Verification Instructions
 
 Run these commands from the repository root in PowerShell:
@@ -1120,5 +1176,16 @@ Manual Acting IC acceptance test:
 40. Open **Incident Management**, type a search query character by character, and confirm the text remains in the entered order. Move the caret into the middle of the query, type or select text, and confirm the selection position is preserved after filtering.
 41. Open the web and mobile login/landing screens and confirm the first UP logo uses the supplied UP Manila PNG, with transparent space outside the seal and no white rectangular background.
 42. Open the web and mobile interfaces and confirm visible record, incident, notification, validation, login, about, legal, and SitRep text uses **victim/victims** terminology while API routes, database identifiers, and internal record handling continue to function normally.
+43. Edit an official incident and confirm **Incident updated** appears in Action Logs. Edit an existing victim record from mobile and confirm **Victim record updated** appears with the edited sections and **Source: mobile**.
+44. Apply `api/sql/add-casualty-case-name.sql` in Supabase, open **Victims > Matched Cases**, select **Edit name** on a completed case, enter an identified victim name, and save. Confirm the name appears with the stable case ID, the linked role records remain unchanged, and **Matched case name updated** appears in Action Logs.
+45. Open **Incident Management**, expand an incident, and confirm the launcher grid has an **Incident Control** card in the previously empty position. Open it and confirm backup designation, **Delegate Incident Control**, and **Resume Primary Ownership** retain their existing behavior and permissions.
+46. Open **Incident Control** in light and dark mode, confirm the backup selector matches the modal surface, has visible focus styling, and remains aligned with **Save Backup IC** on desktop and stacked cleanly on narrow screens.
+47. Open the backup IC picker, search by a user name or role, select a user, and confirm the selected name remains visible. Submit it and confirm the existing backup designation and delegation flow still works.
+48. Open **Incident Control** on desktop and mobile widths, open the backup IC picker, and confirm the user list remains inside the enlarged modal without requiring the modal itself to scroll.
+49. Apply `api/sql/add-responsible-officer-role.sql` in Supabase before creating the first Responsible Officer account.
+50. As an admin, open an incident's **Incident Control** section, create a Responsible Officer with a name, email, and password, and confirm the account appears in the scoped table.
+51. Edit the Responsible Officer name/email or password, then suspend and reactivate the account. Confirm the account status changes and a suspended account cannot sign in.
+52. Sign in as the Responsible Officer and confirm only **Incident Management** and **Incident Analytics** are available, with no Acting IC delegation required.
+53. Confirm the Responsible Officer can view incidents and analytics in the creating admin's unit but cannot edit incidents, delegate Acting IC control, or access other admin modules.
 
 Latest full verification run: **10 / 10 checks passed**.

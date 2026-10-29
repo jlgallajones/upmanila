@@ -2438,6 +2438,7 @@ function calculateJumpstartTriage(
 function calculateSieveTriage(
   answers: Record<string, unknown>,
 ): TriageCategory {
+  // SIEVE has no injury branch; walking patients are green before vital checks.
   if (readAssessmentBoolean(answers, "canWalk") === true) {
     return "minimal";
   }
@@ -2466,6 +2467,7 @@ function calculateSieveTriage(
     respirations === "less_than_or_equal_to_10" ||
     respirations === "less_than_or_equal_to_9" ||
     respirations === "more_than_29" ||
+    respirations === "more_than_30" ||
     respirations === "more_than_or_equal_to_30"
   ) {
     return "immediate";

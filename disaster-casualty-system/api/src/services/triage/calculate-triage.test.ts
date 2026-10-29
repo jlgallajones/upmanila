@@ -177,6 +177,15 @@ const cases = [
     expected: "immediate",
   },
   {
+    name: "SIEVE legacy respiratory rate above 30 remains immediate",
+    system: "sieve",
+    answers: {
+      canWalk: false,
+      respirations: "more_than_30",
+    },
+    expected: "immediate",
+  },
+  {
     name: "SIEVE respiratory rate 9 or below is immediate",
     system: "sieve",
     answers: {

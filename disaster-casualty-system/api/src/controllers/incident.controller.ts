@@ -19,6 +19,7 @@ const responderIncidentViewerRoles = new Set([
   "field_responder",
   "sa_responder",
   "documenter",
+  "responsible_officer",
 ]);
 
 const actingIcWebRoles = new Set([
@@ -28,6 +29,7 @@ const actingIcWebRoles = new Set([
   "minor_incident_documenter",
   "documenter",
   "medical_personnel",
+  "responsible_officer",
 ]);
 
 type CreateIncidentRequest = {
@@ -5603,7 +5605,16 @@ export async function getIncidentAnalyticsSummary(
     const { id } = request.params;
     const user = getAuthenticatedUser(request);
 
-    if (actingIcWebRoles.has(user.role)) {
+    if (user.role === "responsible_officer") {
+      const access = await getIncidentManagementAccess(id, user);
+      if (!access?.isResponsibleOfficer) {
+        response.status(403).json({
+          success: false,
+          message: "This incident is outside your unit scope.",
+        });
+        return;
+      }
+    } else if (actingIcWebRoles.has(user.role)) {
       const access = await getIncidentManagementAccess(id, user);
       if (!access?.isActingIc) {
         response.status(403).json({

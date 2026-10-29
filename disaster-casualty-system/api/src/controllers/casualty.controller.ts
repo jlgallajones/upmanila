@@ -2297,6 +2297,7 @@ export async function getCasualties(
 type CasualtyCaseLinkRow = {
   id: string;
   case_id: string;
+  case_name: string | null;
   casualty_incident_id: string;
   incident_id: string;
   role: CaseMatchRoleBucket;
@@ -2364,7 +2365,7 @@ async function getCaseLinksForUser(user: {
   let query = supabase
     .from("casualty_case_links")
     .select(
-      "id, case_id, casualty_incident_id, incident_id, role, linked_by, notes, linked_at, created_at",
+      "id, case_id, case_name, casualty_incident_id, incident_id, role, linked_by, notes, linked_at, created_at",
     )
     .order("linked_at", { ascending: false });
 
@@ -2429,6 +2430,118 @@ export async function getCasualtyCaseLinks(
       success: true,
       count: links.length,
       data: links,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateCasualtyCaseName(
+  request: Request<{ caseId: string }>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const user = getAuthenticatedUser(request);
+    const caseId = request.params.caseId?.trim();
+    const body = request.body as { caseName?: unknown };
+    const caseName =
+      typeof body.caseName === "string" ? body.caseName.trim() : "";
+
+    if (!caseId) {
+      response.status(400).json({
+        success: false,
+        message: "Matched case ID is required.",
+      });
+      return;
+    }
+
+    if (!caseName) {
+      response.status(400).json({
+        success: false,
+        message: "Matched case name is required.",
+      });
+      return;
+    }
+
+    if (caseName.length > 120) {
+      response.status(400).json({
+        success: false,
+        message: "Matched case name must be 120 characters or fewer.",
+      });
+      return;
+    }
+
+    const accessibleIds = await getAccessibleCasualtyIncidentIds(user);
+    const { data: existingLinks, error: existingError } = await supabase
+      .from("casualty_case_links")
+      .select(
+        "id, case_id, case_name, casualty_incident_id, incident_id, role, linked_by, notes, linked_at, created_at",
+      )
+      .eq("case_id", caseId);
+
+    if (existingError) {
+      throw new Error(
+        `Unable to retrieve matched case: ${existingError.message}`,
+      );
+    }
+
+    const links = (existingLinks ?? []) as CasualtyCaseLinkRow[];
+    if (links.length === 0) {
+      response.status(404).json({
+        success: false,
+        message: "Matched case was not found.",
+      });
+      return;
+    }
+
+    if (
+      accessibleIds &&
+      links.some((link) => !accessibleIds.includes(link.casualty_incident_id))
+    ) {
+      response.status(403).json({
+        success: false,
+        message: "Matched case is outside your admin scope.",
+      });
+      return;
+    }
+
+    const { data: updatedLinks, error: updateError } = await supabase
+      .from("casualty_case_links")
+      .update({ case_name: caseName })
+      .eq("case_id", caseId)
+      .select(
+        "id, case_id, case_name, casualty_incident_id, incident_id, role, linked_by, notes, linked_at, created_at",
+      )
+      .order("linked_at", { ascending: true });
+
+    if (updateError) {
+      throw new Error(
+        `Unable to update matched case name: ${updateError.message}`,
+      );
+    }
+
+    await recordAuditLog({
+      actor: {
+        id: user.id,
+        fullName: user.fullName,
+        role: user.role,
+      },
+      action: "casualty.case_name_updated",
+      entityType: "casualty_case",
+      entityId: caseId,
+      entityLabel: caseName,
+      metadata: {
+        previousName: links[0]?.case_name ?? null,
+        linkedCasualtyIncidentIds: links.map(
+          (link) => link.casualty_incident_id,
+        ),
+      },
+    });
+
+    response.status(200).json({
+      success: true,
+      data: updatedLinks ?? [],
     });
   } catch (error) {
     next(error);
@@ -2553,7 +2666,7 @@ export async function matchCasualtyCaseRecords(
     const { data: existingLinks, error: existingError } = await supabase
       .from("casualty_case_links")
       .select(
-        "id, case_id, casualty_incident_id, incident_id, role, linked_by, notes, linked_at, created_at",
+        "id, case_id, case_name, casualty_incident_id, incident_id, role, linked_by, notes, linked_at, created_at",
       )
       .in("casualty_incident_id", recordIds);
 
@@ -2601,7 +2714,7 @@ export async function matchCasualtyCaseRecords(
     const { data: updatedLinks, error: updatedError } = await supabase
       .from("casualty_case_links")
       .select(
-        "id, case_id, casualty_incident_id, incident_id, role, linked_by, notes, linked_at, created_at",
+        "id, case_id, case_name, casualty_incident_id, incident_id, role, linked_by, notes, linked_at, created_at",
       )
       .eq("case_id", caseId)
       .order("linked_at", { ascending: true });
@@ -4573,6 +4686,35 @@ export async function updateCasualty(
         }`,
       );
     }
+
+    const updatedCasualty = getRelationRecord(updatedRecord.casualty);
+    const updatedIncident = getRelationRecord(updatedRecord.incident);
+    const updatedSections = [
+      person ? "personal details" : null,
+      incidentDetails || incidentId ? "incident details" : null,
+      triageAssessment ? "triage assessment" : null,
+      transportRecord ? "transport record" : null,
+      treatmentRecord ? "treatment record" : null,
+      facilityEncounter ? "facility encounter" : null,
+      casualtyOutcome ? "outcome" : null,
+    ].filter((section): section is string => Boolean(section));
+
+    await recordAuditLog({
+      actor: user,
+      action: "casualty.updated",
+      entityType: "casualty_incident",
+      entityId: id,
+      entityLabel: buildCasualtyNotificationLabel(updatedCasualty),
+      metadata: {
+        source:
+          request.header("x-dcms-client")?.toLowerCase() === "mobile"
+            ? "mobile"
+            : "web",
+        updatedSections,
+        incidentName: getTextField(updatedIncident, "incident_name"),
+        incidentCode: getTextField(updatedIncident, "incident_code"),
+      },
+    });
 
     response.status(200).json({
       success: true,
