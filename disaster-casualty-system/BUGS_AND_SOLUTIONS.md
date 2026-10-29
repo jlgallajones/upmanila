@@ -820,7 +820,7 @@ Create a short checklist for the exact demo flow:
 
 **Problem:** SitRep downloads did not consistently follow the required naming convention, and the SitRep action labels did not clearly distinguish draft generation from final generation. Empty line-graph series could also leave misleading chart color/legend output.
 
-**Solution:** SitRep files now use `SITREP-[office name]-[incident name]-[date].[extension]`, with the date taken from the generation/download operation. The SitRep and Close Incident actions were renamed to **Generate Final Incident SitRep** and **Download Incident SitRep Draft**, and chart series are filtered before rendering. The final report remains gated until the incident is closed.
+**Solution:** SitRep files now use `SITREP-[office name]-[incident name]-[date].[extension]` on web and mobile, with filename segments sanitized for safe downloads and the date taken from the generation/download operation. The SitRep and Close Incident actions were renamed to **Generate Final Incident SitRep** and **Download Incident SitRep Draft**, and chart series are filtered before rendering so zero-count series do not leave misleading legends. The final report remains gated until the incident is closed.
 
 **Status:** Implemented.
 
@@ -970,6 +970,38 @@ The database migration is `api/sql/add-incident-acting-ic-delegation.sql`. Apply
 
 **Status:** Implemented.
 
+## 116. Scene Clearance Needed The Legacy Summary And A New Ambulance Editor
+
+**Problem:** The Scene Clearance modal had lost the original incident summary layout, and the new ambulance editor placed too many controls in one row. The rounded editor containers became crowded at narrower widths, making the fields and actions look as though they overlapped.
+
+**Solution:** Restored the original Scene Clearance summary at the top of the modal, placed the current ambulance editor below it, and added a saved-records table underneath. The ambulance fields now use a responsive field grid, while **Use current time** and **Remove** use a separate action row so the controls remain inside their rounded container on smaller screens.
+
+**Status:** Implemented.
+
+## 117. Scene Clearance Ambulances Did Not Persist As Separate Saved Records
+
+**Problem:** After an ambulance was entered, the editor remained populated and the record did not appear in the table below. Saving also used replacement behavior, which could remove previously saved ambulance records when a new ambulance was added.
+
+**Solution:** Added the `incident_scene_clearance_ambulances` table and Scene Clearance save endpoint. Ambulance entries are now appended to the incident's saved records, the table reloads from the database after saving, and the editor resets to one blank ambulance row for the next entry. The migration is `api/sql/add-incident-scene-clearance-ambulances.sql`.
+
+**Status:** Implemented. Apply the migration in Supabase and restart the API before testing.
+
+## 118. SitRep Used A Legacy Template And Did Not Include Current Ambulance Analytics
+
+**Problem:** Newly exported SitReps could still use the older maroon/DCMS report presentation and did not include the current Scene Clearance ambulance arrival data used by Incident Analytics.
+
+**Solution:** SitRep generation now reads saved Scene Clearance ambulance records and stores BLS, ACLS, Patient Transport Vehicle, and Other arrival series at the Utstein intervals of 15 minutes, 30 minutes, 1 hour, 2 hours, and 3 hours after DMMP activation. The PDF header, footer, and section accents now use SCRIBER branding. Downloading a draft without a current-session report first generates a fresh SitRep so an old stored snapshot is not silently exported.
+
+**Status:** Implemented.
+
+## 119. SitRep Charts And Page Layout Needed Better Report Structure
+
+**Problem:** SitRep visual summaries were rendered as bar graphs, empty line series could leave misleading legends, the Executive Summary looked like an unformatted paragraph, and the Incident Analytics Snapshot heading could be stranded at the bottom of a page while its table began on the next page.
+
+**Solution:** Categorical SitRep charts now use pie charts with counts and percentages, while time-based ambulance data uses line graphs. Empty line series are removed from both web and PDF legends. The Executive Summary is shown in a bordered narrative callout, longer card values wrap using the available width, and the Incident Analytics Snapshot begins on a new page with its table.
+
+**Status:** Implemented.
+
 ## Verification Instructions
 
 Run these commands from the repository root in PowerShell:
@@ -1009,3 +1041,14 @@ Manual Acting IC acceptance test:
 19. Create enough offline queued records to exceed the queue panel height, scroll inside the queue, collapse it, and confirm the normal submitted Records list remains reachable and scrollable.
 20. Submit a victim with and without photos and confirm the saved-record feedback appears before photo processing finishes; verify any photo failure is shown as a warning.
 21. Queue at least six victims for one account, run **Sync all queued**, and confirm multiple records enter syncing together and the queue completes without duplicate server records.
+22. Apply `api/sql/add-incident-scene-clearance-ambulances.sql` in Supabase and restart the API server.
+23. Open an incident's **Scene Clearance** section and confirm the legacy summary appears first, followed by the ambulance editor and the saved-records table.
+24. Add a BLS ambulance with provider, plate number, and arrival time, select **Save**, and confirm the record appears in the table while the editor resets to a blank row.
+25. Add an ACLS, Patient Transport Vehicle, or Other ambulance and confirm earlier saved rows remain in the table.
+26. Resize the Scene Clearance modal to a narrow width and confirm fields stay inside their rounded container and the action buttons remain separated below the fields.
+27. Generate or download a SitRep and confirm the filename follows `SITREP-[office]-[incident]-[date].[extension]` on web and mobile.
+28. Confirm the SitRep Executive Summary is displayed in a bordered callout and the Incident Analytics Snapshot starts on a new page with its table.
+29. Confirm categorical SitRep charts render as pie charts, time-based ambulance arrivals render as a line chart, and ambulance types with no arrivals do not appear in the line-chart legend.
+30. Confirm **Generate Final Incident SitRep** creates the current report and **Download Incident SitRep Draft** does not silently export an older stored snapshot after a fresh page session.
+
+Latest full verification run: **10 / 10 checks passed**.
