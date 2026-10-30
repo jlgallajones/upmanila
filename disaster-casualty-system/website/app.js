@@ -3024,6 +3024,13 @@ function renderProfileModal() {
   const resetScopeLabel = isSystemReset
     ? "Admin-scoped selection"
     : "Incident selection";
+  const closedIncidents = (state.allIncidents.length
+    ? state.allIncidents
+    : state.incidents
+  ).filter(
+    (incident) =>
+      String(incident.status || "").toLowerCase() === "closed",
+  );
   const dataManagementCopy = isSystemReset
     ? "Select one admin account to back up or restore its incident records and related mobile and web submissions. One backup file is created per incident."
     : "Select one or more incidents to back up or restore their related mobile and web submissions. One backup file is created per incident.";
@@ -3051,9 +3058,9 @@ function renderProfileModal() {
         `
       : `
           <label class="field">
-            <span>Incidents to ${actionLabel}</span>
+            <span>Closed incidents to ${actionLabel}</span>
             <select id="${selectorId}" class="profile-scope-select" multiple size="5">
-              ${state.incidents
+              ${closedIncidents
                 .map(
                   (incident) => `
                     <option value="${escapeHtml(incident.id)}">
@@ -3064,8 +3071,8 @@ function renderProfileModal() {
                 .join("")}
             </select>
             ${
-              state.incidents.length === 0
-                ? `<small class="field-hint">No incidents are available in your admin scope.</small>`
+              closedIncidents.length === 0
+                ? `<small class="field-hint">No closed incidents are available in your admin scope.</small>`
                 : `<small class="field-hint">Hold Ctrl or Command to select more than one incident.</small>`
             }
           </label>

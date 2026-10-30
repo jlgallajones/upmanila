@@ -1,0 +1,91 @@
+﻿{
+    "project":  "Disaster Casualty Management System",
+    "started":  "2026-10-30T14:52:20.3881149+08:00",
+    "finished":  "2026-10-30T14:52:41.7819426+08:00",
+    "total":  10,
+    "passed":  10,
+    "failed":  0,
+    "log":  "C:\\Users\\jlgallajones\\upmanila\\disaster-casualty-system\\output\\verification\\verification-20261030-145220.log",
+    "tests":  [
+                  {
+                      "test":  "API TypeScript typecheck",
+                      "result":  "PASS",
+                      "exitCode":  0,
+                      "started":  "2026-10-30T14:52:20.3881149+08:00",
+                      "finished":  "2026-10-30T14:52:23.8242856+08:00",
+                      "evidence":  "C:\\Users\\jlgallajones\\upmanila\\disaster-casualty-system\\output\\verification\\verification-20261030-145220.log"
+                  },
+                  {
+                      "test":  "API production build",
+                      "result":  "PASS",
+                      "exitCode":  0,
+                      "started":  "2026-10-30T14:52:23.8242856+08:00",
+                      "finished":  "2026-10-30T14:52:27.5251228+08:00",
+                      "evidence":  "C:\\Users\\jlgallajones\\upmanila\\disaster-casualty-system\\output\\verification\\verification-20261030-145220.log"
+                  },
+                  {
+                      "test":  "Incident analytics tests",
+                      "result":  "PASS",
+                      "exitCode":  0,
+                      "started":  "2026-10-30T14:52:27.5251228+08:00",
+                      "finished":  "2026-10-30T14:52:31.1864722+08:00",
+                      "evidence":  "C:\\Users\\jlgallajones\\upmanila\\disaster-casualty-system\\output\\verification\\verification-20261030-145220.log"
+                  },
+                  {
+                      "test":  "Triage calculation and accuracy tests",
+                      "result":  "PASS",
+                      "exitCode":  0,
+                      "started":  "2026-10-30T14:52:31.1874573+08:00",
+                      "finished":  "2026-10-30T14:52:34.8843794+08:00",
+                      "evidence":  "C:\\Users\\jlgallajones\\upmanila\\disaster-casualty-system\\output\\verification\\verification-20261030-145220.log"
+                  },
+                  {
+                      "test":  "Mobile TypeScript typecheck",
+                      "result":  "PASS",
+                      "exitCode":  0,
+                      "started":  "2026-10-30T14:52:34.8851607+08:00",
+                      "finished":  "2026-10-30T14:52:38.6762626+08:00",
+                      "evidence":  "C:\\Users\\jlgallajones\\upmanila\\disaster-casualty-system\\output\\verification\\verification-20261030-145220.log"
+                  },
+                  {
+                      "test":  "Mobile/PWA web export",
+                      "result":  "PASS",
+                      "exitCode":  0,
+                      "started":  "2026-10-30T14:52:38.6774098+08:00",
+                      "finished":  "2026-10-30T14:52:41.5837177+08:00",
+                      "evidence":  "C:\\Users\\jlgallajones\\upmanila\\disaster-casualty-system\\output\\verification\\verification-20261030-145220.log"
+                  },
+                  {
+                      "test":  "Web dashboard syntax check",
+                      "result":  "PASS",
+                      "exitCode":  0,
+                      "started":  "2026-10-30T14:52:41.5854793+08:00",
+                      "finished":  "2026-10-30T14:52:41.6323535+08:00",
+                      "evidence":  "C:\\Users\\jlgallajones\\upmanila\\disaster-casualty-system\\output\\verification\\verification-20261030-145220.log"
+                  },
+                  {
+                      "test":  "Web configuration syntax check",
+                      "result":  "PASS",
+                      "exitCode":  0,
+                      "started":  "2026-10-30T14:52:41.6341544+08:00",
+                      "finished":  "2026-10-30T14:52:41.6758940+08:00",
+                      "evidence":  "C:\\Users\\jlgallajones\\upmanila\\disaster-casualty-system\\output\\verification\\verification-20261030-145220.log"
+                  },
+                  {
+                      "test":  "PWA service worker syntax check",
+                      "result":  "PASS",
+                      "exitCode":  0,
+                      "started":  "2026-10-30T14:52:41.6781419+08:00",
+                      "finished":  "2026-10-30T14:52:41.7206354+08:00",
+                      "evidence":  "C:\\Users\\jlgallajones\\upmanila\\disaster-casualty-system\\output\\verification\\verification-20261030-145220.log"
+                  },
+                  {
+                      "test":  "Repository whitespace check",
+                      "result":  "PASS",
+                      "exitCode":  0,
+                      "started":  "2026-10-30T14:52:41.7216278+08:00",
+                      "finished":  "2026-10-30T14:52:41.7651624+08:00",
+                      "evidence":  "C:\\Users\\jlgallajones\\upmanila\\disaster-casualty-system\\output\\verification\\verification-20261030-145220.log"
+                  }
+              ]
+}
