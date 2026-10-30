@@ -80,6 +80,7 @@ app.use(
       "Content-Type",
       "Authorization",
       "x-request-id",
+      "x-dcms-client",
       "ngrok-skip-browser-warning",
     ],
   }),

@@ -5701,12 +5701,19 @@ const [
     useState(true);
   const [selectedPhoto, setSelectedPhoto] =
     useState<SelectedPhoto | null>(null);
+  const [selectedVictimPhotos, setSelectedVictimPhotos] = useState<
+    SelectedPhoto[]
+  >([]);
   const [selectedPcrPhotos, setSelectedPcrPhotos] = useState<
     SelectedPhoto[]
   >([]);
   const [existingAttachments, setExistingAttachments] = useState<
     Attachment[]
   >([]);
+  const [isLoadingExistingAttachments, setIsLoadingExistingAttachments] =
+    useState(false);
+  const [existingAttachmentsError, setExistingAttachmentsError] =
+    useState<string | null>(null);
   const [
     isExistingAttachmentsVisible,
     setIsExistingAttachmentsVisible,
@@ -5852,6 +5859,7 @@ const [
         const payload = draft.payload as {
           form?: Partial<FormState>;
           selectedPhoto?: SelectedPhoto | null;
+          selectedVictimPhotos?: SelectedPhoto[];
           selectedPcrPhoto?: SelectedPhoto | null;
           selectedPcrPhotos?: SelectedPhoto[];
           currentStep?: number;
@@ -5870,6 +5878,13 @@ const [
           ...draftForm,
         }));
         setSelectedPhoto(payload.selectedPhoto ?? null);
+        setSelectedVictimPhotos(
+          Array.isArray(payload.selectedVictimPhotos)
+            ? payload.selectedVictimPhotos
+            : payload.selectedPhoto
+              ? [payload.selectedPhoto]
+              : [],
+        );
         setSelectedPcrPhotos(
           Array.isArray(payload.selectedPcrPhotos)
             ? payload.selectedPcrPhotos
@@ -7225,6 +7240,7 @@ const victimCodeAlreadyExists = useMemo(() => {
     async function loadEditableRecord() {
       if (!casualtyId) {
         setExistingAttachments([]);
+        setExistingAttachmentsError(null);
         setIsExistingAttachmentsVisible(false);
         setIsLoadingRecord(false);
         return;
@@ -7234,18 +7250,26 @@ const victimCodeAlreadyExists = useMemo(() => {
         setIsLoadingRecord(true);
         setLoadError(null);
 
-        const [
-          record,
-          triageHistory,
-          transportHistory,
-          attachmentData,
-        ] =
+        const [record, triageHistory, transportHistory] =
           await Promise.all([
             getCasualty(casualtyId),
             getCasualtyTriageHistory(casualtyId),
             getCasualtyTransportHistory(casualtyId),
-            getAttachments(casualtyId),
           ]);
+
+        let attachmentData: Attachment[] = [];
+        try {
+          attachmentData = await getAttachments(casualtyId);
+        } catch (error) {
+          console.error("Failed to load previously attached photos:", error);
+          if (isMounted) {
+            setExistingAttachmentsError(
+              error instanceof Error
+                ? error.message
+                : "Unable to load previously attached photos.",
+            );
+          }
+        }
 
         if (isMounted) {
           const mappedForm = mapRecordToForm(
@@ -7267,6 +7291,7 @@ const victimCodeAlreadyExists = useMemo(() => {
              getFacilityEncounterFormSignature(mappedForm),
            );
           setExistingAttachments(attachmentData);
+          setExistingAttachmentsError(null);
         }
       } catch (error) {
         console.error("Failed to load victim for editing:", error);
@@ -7938,6 +7963,7 @@ function handleTriageAssessmentDone() {
     setCurrentStep(0);
 
     setSelectedPhoto(null);
+    setSelectedVictimPhotos([]);
     setSelectedPcrPhotos([]);
 
     setSelectedFieldResponderRecordId(null);
@@ -8026,6 +8052,7 @@ function handleTriageAssessmentDone() {
         payload: {
           form,
           selectedPhoto,
+          selectedVictimPhotos,
           selectedPcrPhotos,
           currentStep,
         },
@@ -10479,6 +10506,15 @@ if (
   }
 
   setSelectedPhoto(photo);
+  setSelectedVictimPhotos((current) =>
+    current.some(
+      (existing) =>
+        existing.uri === photo.uri ||
+        existing.fileName === photo.fileName,
+    )
+      ? current
+      : [...current, photo],
+  );
 }
 
   async function setPhotoFromPickerResult(
@@ -10527,7 +10563,7 @@ if (
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.72,
       allowsEditing: false,
-      allowsMultipleSelection: photoTarget === "pcr",
+      allowsMultipleSelection: true,
     });
 
     await setPhotoFromPickerResult(result);
@@ -10831,12 +10867,18 @@ if (
     photo: SelectedPhoto;
   }> = [];
 
-  if (selectedPhoto) {
+  const victimPhotos = selectedVictimPhotos.length
+    ? selectedVictimPhotos
+    : selectedPhoto
+      ? [selectedPhoto]
+      : [];
+
+  victimPhotos.forEach((photo, index) => {
     photos.push({
-      label: "victim photo",
-      photo: selectedPhoto,
+      label: `victim photo ${index + 1}`,
+      photo,
     });
-  }
+  });
 
   selectedPcrPhotos.forEach((photo, index) => {
     photos.push({
@@ -10891,7 +10933,11 @@ if (
   const attachments: QueuedCasualtyAttachment[] = [];
 
   const photos = [
-    ...(selectedPhoto ? [selectedPhoto] : []),
+    ...(selectedVictimPhotos.length
+      ? selectedVictimPhotos
+      : selectedPhoto
+        ? [selectedPhoto]
+        : []),
     ...selectedPcrPhotos,
   ];
 
@@ -11884,7 +11930,9 @@ async function ensureResponderSafetyResponseSaved() {
         const createdRecordId =
           response.data.casualtyIncident.id;
         const hasSelectedPhotos =
-          Boolean(selectedPhoto) || selectedPcrPhotos.length > 0;
+          selectedVictimPhotos.length > 0 ||
+          Boolean(selectedPhoto) ||
+          selectedPcrPhotos.length > 0;
 
         const photoUploadPromise =
           uploadSelectedPhotos(createdRecordId);
@@ -15190,6 +15238,26 @@ if (
     );
   }
 
+  async function refreshExistingAttachments() {
+    if (!casualtyId) return;
+
+    setIsLoadingExistingAttachments(true);
+    setExistingAttachmentsError(null);
+
+    try {
+      const attachmentData = await getAttachments(casualtyId);
+      setExistingAttachments(attachmentData);
+    } catch (error) {
+      setExistingAttachmentsError(
+        error instanceof Error
+          ? error.message
+          : "Unable to load previously attached photos.",
+      );
+    } finally {
+      setIsLoadingExistingAttachments(false);
+    }
+  }
+
   function renderExistingAttachmentsAction() {
     if (!isEditing) {
       return null;
@@ -15197,7 +15265,10 @@ if (
 
     return (
       <Pressable
-        onPress={() => setIsExistingAttachmentsVisible(true)}
+        onPress={() => {
+          setIsExistingAttachmentsVisible(true);
+          void refreshExistingAttachments();
+        }}
         style={({ pressed }) => [
           styles.viewAttachmentsButton,
           pressed && styles.pressed,
@@ -15222,7 +15293,73 @@ if (
     );
   }
 
+  function removePendingPhoto(
+    target: PhotoTarget,
+    index: number,
+  ) {
+    if (target === "pcr") {
+      setSelectedPcrPhotos((current) =>
+        current.filter((_, currentIndex) => currentIndex !== index),
+      );
+      return;
+    }
+
+    setSelectedVictimPhotos((current) => {
+      const next = current.filter(
+        (_, currentIndex) => currentIndex !== index,
+      );
+      setSelectedPhoto(next[0] ?? null);
+      return next;
+    });
+  }
+
+  function renderPendingPhotoStrip(
+    photos: SelectedPhoto[],
+    target: PhotoTarget,
+  ) {
+    if (photos.length === 0) return null;
+
+    return (
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.pendingPhotoStrip}
+      >
+        {photos.map((photo, index) => (
+          <View key={`${photo.uri}-${index}`} style={styles.pendingPhotoTile}>
+            <Image
+              source={{ uri: photo.uri }}
+              style={styles.pendingPhotoThumb}
+              resizeMode="cover"
+            />
+            <Pressable
+              onPress={() => removePendingPhoto(target, index)}
+              style={({ pressed }) => [
+                styles.pendingPhotoRemove,
+                pressed && styles.pressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={`Remove photo ${index + 1}`}
+            >
+              <Ionicons name="close" size={13} color={COLORS.white} />
+            </Pressable>
+            <Text style={styles.pendingPhotoName} numberOfLines={1}>
+              {photo.fileName}
+            </Text>
+          </View>
+        ))}
+      </ScrollView>
+    );
+  }
+
   function renderCasualtyPhotoAttachmentCard() {
+    const victimPhotos = selectedVictimPhotos.length
+      ? selectedVictimPhotos
+      : selectedPhoto
+        ? [selectedPhoto]
+        : [];
+    const photoCount = victimPhotos.length;
+
     return (
       <View style={styles.uploadCard}>
         <Pressable
@@ -15244,14 +15381,14 @@ if (
 
           <View style={styles.uploadTextWrapper}>
             <Text style={styles.uploadTitle}>
-              {selectedPhoto
-                ? "Victim photo selected"
-                : "Add victim photo (optional)"}
+              {photoCount > 0
+                ? `${photoCount} victim photo${photoCount === 1 ? "" : "s"} selected`
+                : "Add victim photos (optional)"}
             </Text>
             <Text style={styles.uploadDescription}>
-              {selectedPhoto
-                ? `${selectedPhoto.fileName} - uploads when saved.`
-                : "Select or capture a photo to upload with this record."}
+              {photoCount > 0
+                ? "Tap to add more photos. Photos upload when you save."
+                : "Select or capture one or more photos for this victim."}
             </Text>
           </View>
 
@@ -15261,6 +15398,7 @@ if (
             color={COLORS.secondaryText}
           />
         </Pressable>
+        {renderPendingPhotoStrip(victimPhotos, "casualty")}
         {renderExistingAttachmentsAction()}
       </View>
     );
@@ -15268,9 +15406,6 @@ if (
 
   function renderPcrPhotoAttachmentCard() {
     const photoCount = selectedPcrPhotos.length;
-    const fileNames = selectedPcrPhotos
-      .map((photo) => photo.fileName)
-      .join(", ");
 
     return (
       <View style={styles.uploadCard}>
@@ -15300,7 +15435,7 @@ if (
 
             <Text style={styles.uploadDescription}>
               {photoCount > 0
-                ? `${fileNames} - uploads when saved. Tap to add more.`
+                ? "Tap to add more photos. Photos upload when you save."
                 : "Capture or import one or more photos of the currently used Patient Care Report."}
             </Text>
           </View>
@@ -15311,6 +15446,7 @@ if (
             color={COLORS.secondaryText}
           />
         </Pressable>
+        {renderPendingPhotoStrip(selectedPcrPhotos, "pcr")}
         {renderExistingAttachmentsAction()}
       </View>
     );
@@ -15357,7 +15493,41 @@ if (
               contentContainerStyle={styles.attachmentsList}
               showsVerticalScrollIndicator={false}
             >
-              {existingAttachments.length === 0 ? (
+              {isLoadingExistingAttachments ? (
+                <View style={styles.attachmentsEmptyState}>
+                  <ActivityIndicator color={COLORS.primary} size="large" />
+                  <Text style={styles.attachmentsEmptyTitle}>
+                    Loading attached photos
+                  </Text>
+                </View>
+              ) : existingAttachmentsError ? (
+                <View style={styles.attachmentsEmptyState}>
+                  <Ionicons
+                    name="alert-circle-outline"
+                    size={34}
+                    color={COLORS.secondaryText}
+                  />
+                  <Text style={styles.attachmentsEmptyTitle}>
+                    Unable to load attached photos
+                  </Text>
+                  <Text style={styles.attachmentsEmptyText}>
+                    {existingAttachmentsError}
+                  </Text>
+                  <Pressable
+                    onPress={() => {
+                      void refreshExistingAttachments();
+                    }}
+                    style={({ pressed }) => [
+                      styles.attachmentsCloseButton,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Text style={styles.attachmentsCloseButtonText}>
+                      Try again
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : existingAttachments.length === 0 ? (
                 <View style={styles.attachmentsEmptyState}>
                   <Ionicons
                     name="images-outline"
@@ -15374,7 +15544,10 @@ if (
               ) : (
                 existingAttachments.map((attachment) => {
                   const isImage =
-                    attachment.mime_type?.startsWith("image/") ?? false;
+                    attachment.mime_type?.startsWith("image/") ||
+                    /\.(gif|jpe?g|png|webp|heic|heif)$/i.test(
+                      attachment.file_name,
+                    );
 
                   return (
                     <View
@@ -17240,6 +17413,37 @@ triageModeOptionTextSelected: {
     fontSize: 11,
     lineHeight: 16,
     marginTop: 5,
+  },
+  pendingPhotoStrip: {
+    gap: 9,
+    paddingTop: 11,
+    paddingBottom: 2,
+  },
+  pendingPhotoTile: {
+    width: 82,
+    position: "relative",
+  },
+  pendingPhotoThumb: {
+    width: 82,
+    height: 70,
+    borderRadius: 10,
+    backgroundColor: COLORS.surface,
+  },
+  pendingPhotoRemove: {
+    position: "absolute",
+    top: 5,
+    right: 5,
+    width: 22,
+    height: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 11,
+    backgroundColor: "rgba(23,33,58,0.82)",
+  },
+  pendingPhotoName: {
+    color: COLORS.secondaryText,
+    fontSize: 9,
+    marginTop: 4,
   },
   viewAttachmentsButton: {
     minHeight: 40,

@@ -1,5 +1,5 @@
 DCMS VERIFICATION RUN
-Started: 2026-10-29T18:08:17.6018096+08:00
+Started: 2026-10-30T13:21:14.8569745+08:00
 Root: C:\Users\jlgallajones\upmanila\disaster-casualty-system
 [RUN ] API TypeScript typecheck
        Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\api
@@ -54,12 +54,14 @@ React Compiler enabled
 Starting Metro Bundler
 
 Static rendering is enabled. Learn more: https://docs.expo.dev/router/web/static-rendering/
-? Bundled 1268ms node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js (1352 modules)
-Web Bundled 1524ms node_modules\expo-router\entry.js (1395 modules)
+| (node:26460) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+? Bundled 2135ms node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js (1502 modules)
+Web Bundled 3985ms node_modules\expo-router\entry.js (1383 modules)
 
 › web bundles (2):
 _expo/static/css/global-30c341199d6e65a2dfb94ff1ee1395d4.css (551B)
-_expo/static/js/web/entry-71b248410c3b85d6feb794f8f32b1dda.js (3.4MB)
+_expo/static/js/web/entry-04fd4782f7fd135ff9fb29e850e13470.js (3.4MB)
 
 › Static routes (26):
 /home (38KB)
@@ -106,13 +108,5 @@ Exported: dist
 [RUN ] Repository whitespace check
        Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system
        Command: git.exe diff --check
-warning: in the working copy of 'disaster-casualty-system/api/sql/add-admin-dashboard-unit-user-roles.sql', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'disaster-casualty-system/api/sql/add-casualty-case-links.sql', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'disaster-casualty-system/api/src/controllers/dashboard.controller.ts', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'disaster-casualty-system/api/src/controllers/incident-acting-ic.controller.ts', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'disaster-casualty-system/api/src/routes/casualty.routes.ts', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'disaster-casualty-system/api/src/services/triage/calculate-triage.test.ts', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'disaster-casualty-system/api/src/services/triage/calculate-triage.ts', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'disaster-casualty-system/mobile/src/api/client.ts', LF will be replaced by CRLF the next time Git touches it
 warning: in the working copy of 'disaster-casualty-system/mobile/src/app/(tabs)/add-casualty.tsx', LF will be replaced by CRLF the next time Git touches it
 [PASS] Repository whitespace check (exit code 0)
