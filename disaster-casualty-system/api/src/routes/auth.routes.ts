@@ -3,6 +3,7 @@ import { Router } from "express";
 import {
   bulkRegisterAdmins,
   bulkRegisterUnitUsers,
+  backupOperationalData,
   deleteUnitUser,
   forgotPassword,
   getManagedAccounts,
@@ -12,6 +13,7 @@ import {
   recoverPassword,
   registerAdmin,
   registerUnitUser,
+  restoreOperationalData,
   resetOperationalData,
   refreshSession,
   updateAdminAccount,
@@ -32,6 +34,18 @@ authRouter.get(
   requireAuth,
   requireRole(["super_admin", "admin", "administrator"]),
   previewOperationalDataReset,
+);
+authRouter.get(
+  "/backup-operational-data",
+  requireAuth,
+  requireRole(["super_admin", "admin", "administrator"]),
+  backupOperationalData,
+);
+authRouter.post(
+  "/restore-operational-data",
+  requireAuth,
+  requireRole(["super_admin", "admin", "administrator"]),
+  restoreOperationalData,
 );
 authRouter.post(
   "/reset-operational-data",

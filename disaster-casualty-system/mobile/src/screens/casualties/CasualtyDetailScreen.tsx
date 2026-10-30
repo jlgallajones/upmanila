@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Image,
+  Modal,
   Pressable,
   ScrollView,
   StatusBar,
@@ -227,17 +228,39 @@ function TimelineItem({
   );
 }
 
-function AttachmentCard({ item }: { item: Attachment }) {
-  const isImage = item.mime_type?.startsWith("image/") ?? false;
-
+function isImageAttachment(item: Attachment): boolean {
   return (
+    item.mime_type?.startsWith("image/") === true ||
+    /\.(gif|jpe?g|png|webp|heic|heif)$/i.test(item.file_name)
+  );
+}
+
+function AttachmentCard({
+  item,
+  onPress,
+}: {
+  item: Attachment;
+  onPress?: () => void;
+}) {
+  const isImage = isImageAttachment(item) && Boolean(item.signed_url);
+
+  const card = (
     <View style={styles.attachmentCard}>
-      {isImage && item.signed_url ? (
-        <Image
-          source={{ uri: item.signed_url }}
-          style={styles.attachmentImage}
-          resizeMode="cover"
-        />
+      {isImage ? (
+        <View style={styles.attachmentImageFrame}>
+          <Image
+            source={{ uri: item.signed_url ?? undefined }}
+            style={styles.attachmentImage}
+            resizeMode="cover"
+          />
+          <View style={styles.attachmentImageHint}>
+            <Ionicons
+              name="expand-outline"
+              size={14}
+              color={COLORS.white}
+            />
+          </View>
+        </View>
       ) : (
         <View style={styles.attachmentIcon}>
           <Ionicons
@@ -253,10 +276,23 @@ function AttachmentCard({ item }: { item: Attachment }) {
           {item.file_name}
         </Text>
         <Text style={styles.attachmentMeta}>
-          {formatDateTime(item.created_at)}
+          {isImage ? "Tap to view photo" : "Attachment"} - {formatDateTime(item.created_at)}
         </Text>
       </View>
     </View>
+  );
+
+  return onPress ? (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [pressed && styles.pressed]}
+      accessibilityRole="button"
+      accessibilityLabel={`View ${item.file_name}`}
+    >
+      {card}
+    </Pressable>
+  ) : (
+    card
   );
 }
 
@@ -782,6 +818,8 @@ export default function CasualtyDetailScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] =
     useState<string | null>(null);
+  const [selectedImageAttachment, setSelectedImageAttachment] =
+    useState<Attachment | null>(null);
 
   const loadCasualty = useCallback(async () => {
     if (!casualtyId) {
@@ -1079,6 +1117,31 @@ export default function CasualtyDetailScreen() {
       ? treatmentDetails.admittedToUnit
       : null) ??
     admittedUnitFromFacility;
+
+  const imageAttachments = attachments.filter(
+    (attachment) =>
+      isImageAttachment(attachment) && Boolean(attachment.signed_url),
+  );
+  const selectedImageIndex = selectedImageAttachment
+    ? imageAttachments.findIndex(
+        (attachment) => attachment.id === selectedImageAttachment.id,
+      )
+    : -1;
+
+  function closeImageViewer() {
+    setSelectedImageAttachment(null);
+  }
+
+  function moveToImage(offset: number) {
+    if (imageAttachments.length === 0 || selectedImageIndex < 0) {
+      return;
+    }
+
+    const nextIndex =
+      (selectedImageIndex + offset + imageAttachments.length) %
+      imageAttachments.length;
+    setSelectedImageAttachment(imageAttachments[nextIndex] ?? null);
+  }
 
   return (
     <View style={styles.screen}>
@@ -2197,6 +2260,11 @@ export default function CasualtyDetailScreen() {
                 <AttachmentCard
                   key={attachment.id}
                   item={attachment}
+                  onPress={
+                    isImageAttachment(attachment) && attachment.signed_url
+                      ? () => setSelectedImageAttachment(attachment)
+                      : undefined
+                  }
                 />
               ))}
             </View>
@@ -2219,6 +2287,106 @@ export default function CasualtyDetailScreen() {
 
         <View style={styles.bottomSpacing} />
       </ScrollView>
+
+      <Modal
+        visible={Boolean(selectedImageAttachment)}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={closeImageViewer}
+      >
+        <View style={styles.attachmentViewerBackdrop}>
+          <SafeAreaView style={styles.attachmentViewer}>
+            <View style={styles.attachmentViewerHeader}>
+              <View style={styles.attachmentViewerHeading}>
+                <Text style={styles.attachmentViewerTitle}>
+                  Attached photo
+                </Text>
+                <Text style={styles.attachmentViewerCount}>
+                  {selectedImageIndex >= 0
+                    ? `Photo ${selectedImageIndex + 1} of ${imageAttachments.length}`
+                    : ""}
+                </Text>
+              </View>
+
+              <Pressable
+                onPress={closeImageViewer}
+                style={({ pressed }) => [
+                  styles.attachmentViewerClose,
+                  pressed && styles.pressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Close photo viewer"
+              >
+                <Ionicons
+                  name="close"
+                  size={24}
+                  color={COLORS.white}
+                />
+              </Pressable>
+            </View>
+
+            {selectedImageAttachment?.signed_url ? (
+              <View style={styles.attachmentViewerImageFrame}>
+                <Image
+                  source={{ uri: selectedImageAttachment.signed_url }}
+                  style={styles.attachmentViewerImage}
+                  resizeMode="contain"
+                />
+              </View>
+            ) : null}
+
+            <Text
+              style={styles.attachmentViewerFileName}
+              numberOfLines={2}
+            >
+              {selectedImageAttachment?.file_name ?? ""}
+            </Text>
+
+            {imageAttachments.length > 1 ? (
+              <View style={styles.attachmentViewerActions}>
+                <Pressable
+                  onPress={() => moveToImage(-1)}
+                  style={({ pressed }) => [
+                    styles.attachmentViewerNavButton,
+                    pressed && styles.pressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Previous attached photo"
+                >
+                  <Ionicons
+                    name="chevron-back"
+                    size={22}
+                    color={COLORS.white}
+                  />
+                  <Text style={styles.attachmentViewerNavText}>
+                    Previous
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => moveToImage(1)}
+                  style={({ pressed }) => [
+                    styles.attachmentViewerNavButton,
+                    pressed && styles.pressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Next attached photo"
+                >
+                  <Text style={styles.attachmentViewerNavText}>
+                    Next
+                  </Text>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={22}
+                    color={COLORS.white}
+                  />
+                </Pressable>
+              </View>
+            ) : null}
+          </SafeAreaView>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -2704,8 +2872,29 @@ const styles = StyleSheet.create({
     width: 58,
     height: 58,
     borderRadius: 11,
-    marginRight: 11,
     backgroundColor: COLORS.border,
+  },
+
+  attachmentImageFrame: {
+    width: 58,
+    height: 58,
+    position: "relative",
+    marginRight: 11,
+    borderRadius: 11,
+    overflow: "hidden",
+    backgroundColor: COLORS.border,
+  },
+
+  attachmentImageHint: {
+    position: "absolute",
+    right: 4,
+    bottom: 4,
+    width: 22,
+    height: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 11,
+    backgroundColor: "rgba(23,33,58,0.78)",
   },
 
   attachmentIcon: {
@@ -2757,6 +2946,102 @@ const styles = StyleSheet.create({
     lineHeight: 15,
     textAlign: "center",
     marginTop: 5,
+  },
+
+  attachmentViewerBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(10,16,29,0.94)",
+  },
+
+  attachmentViewer: {
+    flex: 1,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+  },
+
+  attachmentViewerHeader: {
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  attachmentViewerHeading: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 12,
+  },
+
+  attachmentViewerTitle: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: "900",
+  },
+
+  attachmentViewerCount: {
+    color: "#C7D0E0",
+    fontSize: 11,
+    marginTop: 3,
+  },
+
+  attachmentViewerClose: {
+    width: 42,
+    height: 42,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.35)",
+    backgroundColor: "rgba(255,255,255,0.12)",
+  },
+
+  attachmentViewerImageFrame: {
+    flex: 1,
+    minHeight: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    marginVertical: 14,
+    borderRadius: 16,
+    backgroundColor: "rgba(0,0,0,0.24)",
+  },
+
+  attachmentViewerImage: {
+    width: "100%",
+    height: "100%",
+  },
+
+  attachmentViewerFileName: {
+    color: "#E8EDF6",
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: "center",
+  },
+
+  attachmentViewerActions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+    marginTop: 14,
+  },
+
+  attachmentViewerNavButton: {
+    minWidth: 132,
+    minHeight: 44,
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.32)",
+    backgroundColor: "rgba(255,255,255,0.12)",
+  },
+
+  attachmentViewerNavText: {
+    color: COLORS.white,
+    fontSize: 12,
+    fontWeight: "800",
   },
 
   modalBackdrop: {

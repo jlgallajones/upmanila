@@ -86,7 +86,7 @@ app.use(
   }),
 );
 
-app.use(express.json({ limit: "20mb" }));
+app.use(express.json({ limit: "100mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 app.use((request: Request, response: Response, next: NextFunction) => {

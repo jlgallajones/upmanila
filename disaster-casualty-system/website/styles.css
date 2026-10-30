@@ -107,6 +107,21 @@
   background: linear-gradient(180deg, rgba(255, 184, 108, 0.12), var(--surface-raised));
 }
 
+:root[data-theme="dark"] .profile-data-panel {
+  color: var(--ink);
+  border-color: rgba(35, 200, 213, 0.42);
+  background: linear-gradient(180deg, rgba(35, 200, 213, 0.1), var(--surface-raised));
+}
+
+:root[data-theme="dark"] .profile-data-panel h3 {
+  color: var(--cyan);
+}
+
+:root[data-theme="dark"] .profile-data-panel .panel-subtitle,
+:root[data-theme="dark"] .profile-data-panel .reset-safety-list {
+  color: var(--muted);
+}
+
 :root[data-theme="dark"] .profile-reset-panel h3 {
   color: var(--orange);
 }
@@ -1870,6 +1885,41 @@ button:disabled {
   background: linear-gradient(180deg, #fffaf0, #fff);
 }
 
+.profile-data-panel {
+  margin-top: 4px;
+  padding: 14px;
+  border: 1px solid #b8e8ed;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f1fcfd, #fff);
+}
+
+.profile-data-panel h3 {
+  color: var(--cyan);
+}
+
+.profile-data-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.profile-data-actions button {
+  flex: 1 1 180px;
+}
+
+.profile-scope-selector {
+  margin: 12px 0 14px;
+}
+
+.profile-scope-select {
+  width: 100%;
+}
+
+.profile-scope-select[multiple] {
+  min-height: 132px;
+  padding: 8px 10px;
+}
+
 .reset-panel-heading {
   display: flex;
   align-items: center;
@@ -2145,7 +2195,17 @@ thead th:last-child {
   border-top-right-radius: 10px;
 }
 
-tbody tr:hover td {
+tbody tr:hover > td {
+  background: var(--selected-bg);
+}
+
+/* The expanded incident row wraps the nested victim table. Keep its cell from
+   inheriting hover state so only the record under the pointer is highlighted. */
+tr[data-records-incident-details]:hover > td {
+  background: transparent;
+}
+
+.victim-record-row:hover > td {
   background: var(--selected-bg);
 }
 

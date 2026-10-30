@@ -78,6 +78,37 @@ type UpdateCurrentUserRequest = {
 type ResetOperationalDataRequest = {
   confirmation?: string;
   currentPassword?: string;
+  incidentIds?: string[];
+  adminId?: string;
+};
+
+type OperationalBackup = {
+  format: "SCRIBER_OPERATIONAL_BACKUP";
+  version: 1;
+  createdAt: string;
+  scope: {
+    type: "incident" | "admin";
+    ownerId: string | null;
+    incidentIds: string[];
+  };
+  datasets: Record<string, unknown[]>;
+  attachments: Array<{
+    row: Record<string, unknown>;
+    dataBase64: string;
+  }>;
+};
+
+type OperationalBackupRequest = {
+  confirmation?: string;
+  currentPassword?: string;
+  backup?: OperationalBackup;
+  incidentIds?: string[];
+  adminId?: string;
+};
+
+type OperationalScopeSelection = {
+  incidentIds?: string[];
+  adminId?: string;
 };
 
 type BulkRegisterAdminRequest = {
@@ -144,6 +175,34 @@ const unitUserSelect = `
 `;
 
 const operationalResetConfirmation = "RESET RECORDS";
+const operationalRestoreConfirmation = "RESTORE BACKUP";
+
+const backupCasualtyTables = [
+  "casualty_case_links",
+  "casualty_outcomes",
+  "casualty_status_history",
+  "casualty_transport_records",
+  "casualty_treatments",
+  "casualty_triage_assessments",
+  "casualty_verification_history",
+  "clinical_procedures",
+  "facility_encounters",
+  "icu_encounters",
+];
+
+const backupIncidentTables = [
+  "continuity_of_care_assessments",
+  "dmmp_staff_call_downs",
+  "ems_vehicle_arrivals",
+  "facility_resource_snapshots",
+  "incident_ic_backups",
+  "incident_ic_delegations",
+  "incident_response_timelines",
+  "medical_coordination_assessments",
+  "responder_safety_reports",
+  "responder_safety_responses",
+  "sitreps",
+];
 
 function rowError(rowNumber: number, message: string) {
   return {
@@ -1839,6 +1898,138 @@ async function getSystemOperationalScope(): Promise<{
   };
 }
 
+async function getIncidentOperationalScope(
+  adminId: string,
+  incidentIds: string[],
+): Promise<OperationalScope> {
+  const uniqueIncidentIds = [...new Set(incidentIds)];
+  const { data: incidents, error: incidentsError } = await supabase
+    .from("incidents")
+    .select("id")
+    .in("id", uniqueIncidentIds)
+    .eq("created_by", adminId);
+
+  if (incidentsError) {
+    throw new Error(
+      `Unable to retrieve selected incidents: ${incidentsError.message}`,
+    );
+  }
+
+  const ownedIncidentIds = (incidents ?? [])
+    .map((incident) => incident.id)
+    .filter(
+      (id): id is string =>
+        typeof id === "string" && id.trim().length > 0,
+    );
+
+  if (ownedIncidentIds.length !== uniqueIncidentIds.length) {
+    throw new Error(
+      "One or more selected incidents are outside your admin scope.",
+    );
+  }
+
+  const { data: casualtyRows, error: casualtyError } = await supabase
+    .from("casualty_incidents")
+    .select("id, casualty_id")
+    .in("incident_id", ownedIncidentIds);
+
+  if (casualtyError) {
+    throw new Error(
+      `Unable to retrieve selected incident records: ${casualtyError.message}`,
+    );
+  }
+
+  return {
+    incidentIds: ownedIncidentIds,
+    casualtyIncidentIds: (casualtyRows ?? [])
+      .map((row) => row.id)
+      .filter(
+        (id): id is string =>
+          typeof id === "string" && id.trim().length > 0,
+      ),
+    casualtyIds: [
+      ...new Set(
+        (casualtyRows ?? [])
+          .map((row) => row.casualty_id)
+          .filter(
+            (id): id is string =>
+              typeof id === "string" && id.trim().length > 0,
+          ),
+      ),
+    ],
+  };
+}
+
+async function resolveOperationalScope(
+  currentUser: { id?: string; role?: string },
+  selection: OperationalScopeSelection,
+): Promise<{
+  scope: OperationalScope;
+  scopeType: "incident" | "admin";
+  ownerId: string;
+  userIds: string[];
+}> {
+  if (!currentUser.id || !currentUser.role) {
+    throw new Error("Authentication token is required.");
+  }
+
+  if (currentUser.role === "super_admin") {
+    const targetAdminId = selection.adminId?.trim();
+    if (!targetAdminId) {
+      throw new Error("Select an admin account before continuing.");
+    }
+
+    const { data: targetAdmin, error: targetAdminError } = await supabase
+      .from("users")
+      .select("id, role")
+      .eq("id", targetAdminId)
+      .maybeSingle();
+
+    if (targetAdminError) {
+      throw new Error(
+        `Unable to retrieve selected admin account: ${targetAdminError.message}`,
+      );
+    }
+
+    if (
+      !targetAdmin ||
+      !["admin", "administrator"].includes(targetAdmin.role)
+    ) {
+      throw new Error("The selected account is not an admin account.");
+    }
+
+    return {
+      scope: await getAdminOperationalScope(targetAdminId),
+      scopeType: "admin",
+      ownerId: targetAdminId,
+      userIds: await getScopedUserIds(targetAdminId, false),
+    };
+  }
+
+  const selectedIncidentIds = [
+    ...new Set(
+      (selection.incidentIds ?? []).filter(
+        (id): id is string =>
+          typeof id === "string" && id.trim().length > 0,
+      ),
+    ),
+  ];
+
+  if (selectedIncidentIds.length === 0) {
+    throw new Error("Select at least one incident before continuing.");
+  }
+
+  return {
+    scope: await getIncidentOperationalScope(
+      currentUser.id,
+      selectedIncidentIds,
+    ),
+    scopeType: "incident",
+    ownerId: currentUser.id,
+    userIds: [],
+  };
+}
+
 async function deleteByColumn(
   tableName: string,
   columnName: string,
@@ -1912,7 +2103,7 @@ async function countOperationalData(scope: {
   incidentIds: string[];
   casualtyIncidentIds: string[];
   casualtyIds: string[];
-}): Promise<Record<string, number>> {
+}, userIds: string[] = []): Promise<Record<string, number>> {
   const counts: Record<string, number> = {};
 
   for (const tableName of casualtyChildTables) {
@@ -1948,6 +2139,27 @@ async function countOperationalData(scope: {
     scope.incidentIds,
   );
 
+  counts.call_down_staff = await countByColumn(
+    "call_down_staff",
+    "created_by",
+    userIds,
+  );
+  counts.form_drafts = await countByColumn(
+    "form_drafts",
+    "owner_id",
+    userIds,
+  );
+  counts.healthcare_facilities = await countByColumn(
+    "healthcare_facilities",
+    "created_by",
+    userIds,
+  );
+  counts.user_notifications = await countByColumn(
+    "notifications",
+    "user_id",
+    userIds,
+  );
+
   counts.incidents = scope.incidentIds.length;
 
   return counts;
@@ -1957,7 +2169,7 @@ async function clearOperationalData(scope: {
   incidentIds: string[];
   casualtyIncidentIds: string[];
   casualtyIds: string[];
-}): Promise<Record<string, number>> {
+}, userIds: string[] = []): Promise<Record<string, number>> {
   const counts: Record<string, number> = {};
 
   const attachmentPaths =
@@ -2035,6 +2247,27 @@ async function clearOperationalData(scope: {
     scope.incidentIds,
   );
 
+  counts.call_down_staff = await deleteByColumn(
+    "call_down_staff",
+    "created_by",
+    userIds,
+  );
+  counts.form_drafts = await deleteByColumn(
+    "form_drafts",
+    "owner_id",
+    userIds,
+  );
+  counts.healthcare_facilities = await deleteByColumn(
+    "healthcare_facilities",
+    "created_by",
+    userIds,
+  );
+  counts.user_notifications = await deleteByColumn(
+    "notifications",
+    "user_id",
+    userIds,
+  );
+
   counts.incidents = await deleteByColumn(
     "incidents",
     "id",
@@ -2042,6 +2275,368 @@ async function clearOperationalData(scope: {
   );
 
   return counts;
+}
+
+type OperationalScope = {
+  incidentIds: string[];
+  casualtyIncidentIds: string[];
+  casualtyIds: string[];
+};
+
+async function getRowsByColumn(
+  tableName: string,
+  columnName: string,
+  ids: string[],
+): Promise<Record<string, unknown>[]> {
+  if (ids.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from(tableName)
+    .select("*")
+    .in(columnName, ids);
+
+  if (error) {
+    throw new Error(
+      `Unable to back up ${tableName}: ${error.message}`,
+    );
+  }
+
+  return (data ?? []) as Record<string, unknown>[];
+}
+
+function mergeRowsById(
+  ...rowGroups: Record<string, unknown>[][]
+): Record<string, unknown>[] {
+  const rowsById = new Map<string, Record<string, unknown>>();
+
+  for (const rows of rowGroups) {
+    for (const row of rows) {
+      const id = typeof row.id === "string" ? row.id : null;
+      if (id) {
+        rowsById.set(id, row);
+      }
+    }
+  }
+
+  return Array.from(rowsById.values());
+}
+
+async function getScopedUserIds(
+  currentUserId: string,
+  isSystemScope: boolean,
+): Promise<string[]> {
+  if (isSystemScope) {
+    const { data, error } = await supabase
+      .from("users")
+      .select("id");
+
+    if (error) {
+      throw new Error(
+        `Unable to retrieve system users: ${error.message}`,
+      );
+    }
+
+    return (data ?? [])
+      .map((row) => row.id)
+      .filter(
+        (id): id is string =>
+          typeof id === "string" && id.trim().length > 0,
+      );
+  }
+
+  const { data, error } = await supabase
+    .from("users")
+    .select("id")
+    .or(`id.eq.${currentUserId},created_by.eq.${currentUserId}`);
+
+  if (error) {
+    throw new Error(
+      `Unable to retrieve admin users: ${error.message}`,
+    );
+  }
+
+  return (data ?? [])
+    .map((row) => row.id)
+    .filter(
+      (id): id is string =>
+        typeof id === "string" && id.trim().length > 0,
+    );
+}
+
+async function buildOperationalBackup(
+  scope: OperationalScope,
+  scopeType: "incident" | "admin",
+  ownerId: string | null,
+  incidentIds: string[],
+): Promise<OperationalBackup> {
+  const userIds = scopeType === "admin" && ownerId
+    ? await getScopedUserIds(ownerId, false)
+    : [];
+  const datasets: Record<string, unknown[]> = {};
+
+  datasets.incidents = await getRowsByColumn(
+    "incidents",
+    "id",
+    scope.incidentIds,
+  );
+  datasets.casualties = await getRowsByColumn(
+    "casualties",
+    "id",
+    scope.casualtyIds,
+  );
+  datasets.casualty_incidents = await getRowsByColumn(
+    "casualty_incidents",
+    "id",
+    scope.casualtyIncidentIds,
+  );
+  datasets.evacuation_centers = await getRowsByColumn(
+    "evacuation_centers",
+    "incident_id",
+    scope.incidentIds,
+  );
+
+  const casualtyIncidentRows = datasets.casualty_incidents as Record<
+    string,
+    unknown
+  >[];
+  const facilityIds = [
+    ...new Set(
+      casualtyIncidentRows
+        .map((row) => row.healthcare_facility_id)
+        .filter(
+          (id): id is string =>
+            typeof id === "string" && id.trim().length > 0,
+        ),
+    ),
+  ];
+  const facilitiesById = await getRowsByColumn(
+    "healthcare_facilities",
+    "id",
+    facilityIds,
+  );
+  const facilitiesByOwner = await getRowsByColumn(
+    "healthcare_facilities",
+    "created_by",
+    userIds,
+  );
+  datasets.healthcare_facilities = mergeRowsById(
+    facilitiesById,
+    facilitiesByOwner,
+  );
+
+  for (const tableName of backupCasualtyTables) {
+    datasets[tableName] = await getRowsByColumn(
+      tableName,
+      "casualty_incident_id",
+      scope.casualtyIncidentIds,
+    );
+  }
+
+  for (const tableName of backupIncidentTables) {
+    datasets[tableName] = await getRowsByColumn(
+      tableName,
+      "incident_id",
+      scope.incidentIds,
+    );
+  }
+
+  datasets.attachments = await getRowsByColumn(
+    "attachments",
+    "casualty_incident_id",
+    scope.casualtyIncidentIds,
+  );
+  datasets.call_down_staff = await getRowsByColumn(
+    "call_down_staff",
+    "created_by",
+    userIds,
+  );
+  datasets.form_drafts = await getRowsByColumn(
+    "form_drafts",
+    "owner_id",
+    userIds,
+  );
+
+  const notificationsByIncident = await getRowsByColumn(
+    "notifications",
+    "related_entity_id",
+    [...scope.incidentIds, ...scope.casualtyIncidentIds],
+  );
+  const notificationsByUser = await getRowsByColumn(
+    "notifications",
+    "user_id",
+    userIds,
+  );
+  datasets.notifications = mergeRowsById(
+    notificationsByIncident,
+    notificationsByUser,
+  );
+  datasets.audit_logs =
+    scopeType === "incident"
+      ? await getRowsByColumn("audit_logs", "entity_id", [
+          ...scope.incidentIds,
+          ...scope.casualtyIncidentIds,
+          ...scope.casualtyIds,
+        ])
+      : mergeRowsById(
+          await getRowsByColumn(
+            "audit_logs",
+            "scope_admin_id",
+            ownerId ? [ownerId] : [],
+          ),
+          await getRowsByColumn("audit_logs", "actor_id", userIds),
+        );
+
+  const attachmentRows = datasets.attachments as Record<
+    string,
+    unknown
+  >[];
+  const attachmentFiles = await Promise.all(
+    attachmentRows.map(async (row) => {
+      const storagePath = row.storage_path;
+      if (typeof storagePath !== "string" || !storagePath.trim()) {
+        return {
+          row,
+          dataBase64: "",
+        };
+      }
+
+      const { data, error } = await supabase.storage
+        .from(process.env.SUPABASE_ATTACHMENTS_BUCKET ?? "attachments")
+        .download(storagePath);
+
+      if (error || !data) {
+        throw new Error(
+          `Unable to back up attachment ${storagePath}: ${
+            error?.message ?? "File was not found."
+          }`,
+        );
+      }
+
+      return {
+        row,
+        dataBase64: Buffer.from(await data.arrayBuffer()).toString("base64"),
+      };
+    }),
+  );
+
+  return {
+    format: "SCRIBER_OPERATIONAL_BACKUP",
+    version: 1,
+    createdAt: new Date().toISOString(),
+    scope: {
+      type: scopeType,
+      ownerId,
+      incidentIds,
+    },
+    datasets,
+    attachments: attachmentFiles,
+  };
+}
+
+async function insertBackupRows(
+  tableName: string,
+  rows: unknown[],
+): Promise<number> {
+  if (rows.length === 0) {
+    return 0;
+  }
+
+  let inserted = 0;
+  for (let index = 0; index < rows.length; index += 250) {
+    const chunk = rows.slice(index, index + 250);
+    const { error } = await supabase
+      .from(tableName)
+      .upsert(chunk, { onConflict: "id" });
+
+    if (error) {
+      throw new Error(
+        `Unable to restore ${tableName}: ${error.message}`,
+      );
+    }
+
+    inserted += chunk.length;
+  }
+
+  return inserted;
+}
+
+async function restoreOperationalBackup(
+  backup: OperationalBackup,
+): Promise<Record<string, number>> {
+  const datasets = backup.datasets ?? {};
+  const counts: Record<string, number> = {};
+  const restoreOrder = [
+    "healthcare_facilities",
+    "incidents",
+    "evacuation_centers",
+    "casualties",
+    "casualty_incidents",
+    ...backupCasualtyTables,
+    ...backupIncidentTables,
+    "call_down_staff",
+    "form_drafts",
+    "notifications",
+    "audit_logs",
+  ];
+
+  for (const tableName of restoreOrder) {
+    counts[tableName] = await insertBackupRows(
+      tableName,
+      datasets[tableName] ?? [],
+    );
+  }
+
+  const attachments = backup.attachments ?? [];
+  const bucket = process.env.SUPABASE_ATTACHMENTS_BUCKET ?? "attachments";
+
+  for (const attachment of attachments) {
+    const storagePath = attachment.row.storage_path;
+    if (
+      typeof storagePath === "string" &&
+      storagePath.trim() &&
+      attachment.dataBase64
+    ) {
+      const { error } = await supabase.storage
+        .from(bucket)
+        .upload(storagePath, Buffer.from(attachment.dataBase64, "base64"), {
+          contentType:
+            typeof attachment.row.mime_type === "string"
+              ? attachment.row.mime_type
+              : "application/octet-stream",
+          upsert: true,
+        });
+
+      if (error) {
+        throw new Error(
+          `Unable to restore attachment ${storagePath}: ${error.message}`,
+        );
+      }
+    }
+  }
+
+  counts.attachments = await insertBackupRows(
+    "attachments",
+    datasets.attachments ?? [],
+  );
+
+  return counts;
+}
+
+function isValidOperationalBackup(
+  backup: OperationalBackup | undefined,
+): backup is OperationalBackup {
+  return Boolean(
+    backup &&
+      backup.format === "SCRIBER_OPERATIONAL_BACKUP" &&
+      backup.version === 1 &&
+      backup.scope &&
+      (backup.scope.type === "incident" || backup.scope.type === "admin") &&
+      Array.isArray(backup.scope.incidentIds) &&
+      backup.datasets &&
+      backup.attachments,
+  );
 }
 
 export async function resetOperationalData(
@@ -2097,10 +2692,14 @@ export async function resetOperationalData(
     }
 
     const isSuperAdmin = currentUser.role === "super_admin";
-    const scope = isSuperAdmin
-      ? await getSystemOperationalScope()
-      : await getAdminOperationalScope(currentUser.id);
-    const counts = await clearOperationalData(scope);
+    const resolved = await resolveOperationalScope(currentUser, {
+      incidentIds: request.body.incidentIds,
+      adminId: request.body.adminId,
+    });
+    const counts = await clearOperationalData(
+      resolved.scope,
+      resolved.userIds,
+    );
 
     await recordAuditLog({
       actor: {
@@ -2110,22 +2709,26 @@ export async function resetOperationalData(
       action: "operational_data.reset",
       entityType: "system",
       entityLabel: isSuperAdmin
-        ? "System operational data"
-        : "Admin operational data",
+        ? "Admin operational data"
+        : "Incident operational data",
       metadata: {
-        scope: isSuperAdmin ? "system" : "admin",
+        scope: resolved.scopeType,
+        ownerId: resolved.ownerId,
+        incidentIds: resolved.scope.incidentIds,
         counts,
       },
-      scopeAdminId: isSuperAdmin ? null : currentUser.id,
+      scopeAdminId: resolved.ownerId,
     });
 
     response.status(200).json({
       success: true,
       message: isSuperAdmin
-        ? "All operational records and incidents were reset. Accounts were kept."
-        : "Your admin unit operational records and incidents were reset. Accounts were kept.",
+        ? "The selected admin operational records and incidents were reset. Accounts were kept."
+        : "The selected incident operational records were reset. Accounts were kept.",
       data: {
-        scope: isSuperAdmin ? "system" : "admin",
+        scope: resolved.scopeType,
+        ownerId: resolved.ownerId,
+        incidentIds: resolved.scope.incidentIds,
         counts,
       },
     });
@@ -2153,18 +2756,254 @@ export async function previewOperationalDataReset(
     }
 
     const isSuperAdmin = currentUser.role === "super_admin";
-    const scope = isSuperAdmin
-      ? await getSystemOperationalScope()
-      : await getAdminOperationalScope(currentUser.id);
-    const counts = await countOperationalData(scope);
+    const resolved = await resolveOperationalScope(currentUser, {
+      incidentIds:
+        typeof request.query.incidentIds === "string"
+          ? request.query.incidentIds.split(",")
+          : [],
+      adminId:
+        typeof request.query.adminId === "string"
+          ? request.query.adminId
+          : undefined,
+    });
+    const counts = await countOperationalData(
+      resolved.scope,
+      resolved.userIds,
+    );
 
     response.status(200).json({
       success: true,
       message: "Reset preview generated.",
       data: {
-        scope: isSuperAdmin ? "system" : "admin",
+        scope: resolved.scopeType,
+        ownerId: resolved.ownerId,
+        incidentIds: resolved.scope.incidentIds,
         accountsKept: true,
         attachmentFilesIncluded: true,
+        counts,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function backupOperationalData(
+  request: Request,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const currentUser = (request as Request & {
+      user?: { id?: string; role?: string };
+    }).user;
+
+    if (!currentUser?.id || !currentUser.role) {
+      response.status(401).json({
+        success: false,
+        message: "Authentication token is required.",
+      });
+      return;
+    }
+
+    const resolved = await resolveOperationalScope(currentUser, {
+      incidentIds:
+        typeof request.query.incidentIds === "string"
+          ? request.query.incidentIds.split(",")
+          : [],
+      adminId:
+        typeof request.query.adminId === "string"
+          ? request.query.adminId
+          : undefined,
+    });
+    const backup = await buildOperationalBackup(
+      resolved.scope,
+      resolved.scopeType,
+      resolved.ownerId,
+      resolved.scope.incidentIds,
+    );
+
+    await recordAuditLog({
+      actor: {
+        id: currentUser.id,
+        role: currentUser.role,
+      },
+      action: "operational_data.backup_created",
+      entityType: "system",
+      entityLabel:
+        resolved.scopeType === "admin"
+          ? "Admin operational backup"
+          : "Incident operational backup",
+      metadata: {
+        scope: resolved.scopeType,
+        ownerId: resolved.ownerId,
+        incidentIds: resolved.scope.incidentIds,
+        datasetCounts: Object.fromEntries(
+          Object.entries(backup.datasets).map(([tableName, rows]) => [
+            tableName,
+            rows.length,
+          ]),
+        ),
+        attachmentFiles: backup.attachments.length,
+      },
+      scopeAdminId: resolved.ownerId,
+    });
+
+    response.status(200).json({
+      success: true,
+      message: "Operational backup created successfully.",
+      data: backup,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function restoreOperationalData(
+  request: Request<
+    Record<string, never>,
+    unknown,
+    OperationalBackupRequest
+  >,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const currentUser = (request as Request & {
+      user?: { id?: string; role?: string; email?: string };
+    }).user;
+    const backup = request.body.backup;
+
+    if (
+      !currentUser?.id ||
+      !currentUser.role ||
+      !currentUser.email
+    ) {
+      response.status(401).json({
+        success: false,
+        message: "Authentication token is required.",
+      });
+      return;
+    }
+
+    if (request.body.confirmation !== operationalRestoreConfirmation) {
+      response.status(400).json({
+        success: false,
+        message: `Type ${operationalRestoreConfirmation} to confirm restore.`,
+      });
+      return;
+    }
+
+    if (!request.body.currentPassword) {
+      response.status(400).json({
+        success: false,
+        message: "Current password is required to restore records.",
+      });
+      return;
+    }
+
+    if (!isValidOperationalBackup(backup)) {
+      response.status(400).json({
+        success: false,
+        message: "The selected file is not a valid SCRIBER operational backup.",
+      });
+      return;
+    }
+
+    const isSuperAdmin = currentUser.role === "super_admin";
+
+    if (
+      (isSuperAdmin && backup.scope.type !== "admin") ||
+      (!isSuperAdmin &&
+        (backup.scope.type !== "incident" ||
+          backup.scope.ownerId !== currentUser.id))
+    ) {
+      response.status(403).json({
+        success: false,
+        message: isSuperAdmin
+          ? "Super Admin restore requires an admin-scoped backup."
+          : "This backup does not belong to your selected incident scope.",
+      });
+      return;
+    }
+
+    const resolved = await resolveOperationalScope(currentUser, {
+      incidentIds:
+        backup.scope.type === "incident"
+          ? backup.scope.incidentIds
+          : [],
+      adminId:
+        backup.scope.type === "admin"
+          ? backup.scope.ownerId ?? undefined
+          : undefined,
+    });
+
+    const { error: passwordError } =
+      await supabaseAuth.auth.signInWithPassword({
+        email: currentUser.email,
+        password: request.body.currentPassword,
+      });
+
+    if (passwordError) {
+      response.status(403).json({
+        success: false,
+        message: "Current password is incorrect.",
+      });
+      return;
+    }
+
+    const currentCounts = await countOperationalData(
+      resolved.scope,
+      resolved.userIds,
+    );
+    const currentRecordCount = Object.values(currentCounts).reduce(
+      (total, count) => total + count,
+      0,
+    );
+
+    if (currentRecordCount > 0) {
+      response.status(409).json({
+        success: false,
+        message:
+          "Restore requires an empty operational scope. Reset the current records first, then upload the backup again.",
+        data: { counts: currentCounts },
+      });
+      return;
+    }
+
+    const counts = await restoreOperationalBackup(backup);
+
+    await recordAuditLog({
+      actor: {
+        id: currentUser.id,
+        role: currentUser.role,
+      },
+      action: "operational_data.restored",
+      entityType: "system",
+      entityLabel:
+        resolved.scopeType === "admin"
+          ? "Admin operational backup restored"
+          : "Incident operational backup restored",
+      metadata: {
+        scope: resolved.scopeType,
+        ownerId: resolved.ownerId,
+        incidentIds: resolved.scope.incidentIds,
+        counts,
+        backupCreatedAt: backup.createdAt,
+      },
+      scopeAdminId: resolved.ownerId,
+    });
+
+    response.status(200).json({
+      success: true,
+      message:
+        resolved.scopeType === "admin"
+          ? "Admin operational backup restored successfully."
+          : "Incident operational backup restored successfully.",
+      data: {
+        scope: resolved.scopeType,
+        ownerId: resolved.ownerId,
+        incidentIds: resolved.scope.incidentIds,
         counts,
       },
     });

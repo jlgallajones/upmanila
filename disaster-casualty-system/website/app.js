@@ -2238,8 +2238,12 @@ const resetCountLabels = [
   ["casualty_outcomes", "victim outcomes"],
   ["casualty_status_history", "status history entries"],
   ["casualty_verification_history", "verification history entries"],
+  ["call_down_staff", "call-down staff entries"],
+  ["form_drafts", "saved mobile drafts"],
+  ["healthcare_facilities", "healthcare facilities"],
   ["casualty_notifications", "victim notifications"],
   ["incident_notifications", "incident notifications"],
+  ["user_notifications", "user notifications"],
 ];
 
 function getResetCountLines(counts = {}) {
@@ -2259,9 +2263,11 @@ function getResetTotalCount(counts = {}) {
 function getResetPreviewMessage(previewData, isSuperAdmin) {
   const counts = previewData?.counts || {};
   const lines = getResetCountLines(counts);
-  const scope = isSuperAdmin
-    ? "SYSTEM-WIDE RESET: this will clear operational records and incidents across every admin account."
-    : "ADMIN-SCOPED RESET: this will clear operational records and incidents connected to your admin account and its created users.";
+  const scope = previewData?.scope === "incident"
+    ? "INCIDENT RESET: this will clear only the selected incident records and their related entries."
+    : isSuperAdmin
+      ? "ADMIN-SCOPED RESET: this will clear operational records belonging to the selected admin and created users."
+      : "INCIDENT RESET: this will clear only the selected incident records and their related entries.";
   const countSummary =
     lines.length > 0
       ? `Affected data: ${lines.slice(0, 8).join(", ")}${
@@ -2277,7 +2283,9 @@ function getResetCompletionMessage(resetData) {
   const lines = getResetCountLines(counts);
   const total = getResetTotalCount(counts);
   const scope =
-    resetData?.scope === "system" ? "System-wide reset" : "Admin-scoped reset";
+    resetData?.scope === "incident"
+      ? "Incident reset"
+      : "Admin-scoped reset";
 
   if (lines.length === 0) {
     return `${scope} completed. No operational records were deleted. Accounts were kept.`;
@@ -3011,11 +3019,56 @@ function renderProfileModal() {
   const user = state.user || {};
   const isSystemReset = user.role === "super_admin";
   const resetCopy = isSystemReset
-    ? "System-wide reset clears operational records and incidents across every admin account."
-    : "Admin-scoped reset clears operational records and incidents connected to your admin account and users you created.";
+    ? "Admin-scoped reset clears operational records and incidents belonging to the selected admin and created users, including mobile and web entries."
+    : "Incident reset clears only the selected incident and its related operational records, including mobile and web entries.";
   const resetScopeLabel = isSystemReset
-    ? "System-wide reset"
-    : "Admin-scoped reset";
+    ? "Admin-scoped selection"
+    : "Incident selection";
+  const dataManagementCopy = isSystemReset
+    ? "Select one admin account to back up or restore all of its incidents and related mobile and web submissions."
+    : "Select one or more incidents to back up or restore their related mobile and web submissions.";
+  const operationalScopeSelector = isSystemReset
+    ? `
+        <label class="field">
+          <span>Admin account to manage</span>
+          <select id="operationalAdminSelector" class="profile-scope-select">
+            <option value="">Select an admin account</option>
+            ${state.adminAccounts
+              .filter((account) =>
+                ["admin", "administrator"].includes(account.role),
+              )
+              .map(
+                (account) => `
+                  <option value="${escapeHtml(account.id)}">
+                    ${escapeHtml(account.full_name || account.email)} - ${escapeHtml(roleLabel(account.role))}
+                  </option>
+                `,
+              )
+              .join("")}
+          </select>
+        </label>
+      `
+    : `
+        <label class="field">
+          <span>Incidents to manage</span>
+          <select id="operationalIncidentSelector" class="profile-scope-select" multiple size="5">
+            ${state.incidents
+              .map(
+                (incident) => `
+                  <option value="${escapeHtml(incident.id)}">
+                    ${escapeHtml(incident.incident_name)} - ${escapeHtml(roleLabel(incident.status))}
+                  </option>
+                `,
+              )
+              .join("")}
+          </select>
+          ${
+            state.incidents.length === 0
+              ? `<small class="field-hint">No incidents are available in your admin scope.</small>`
+              : `<small class="field-hint">Hold Ctrl or Command to select more than one incident.</small>`
+          }
+        </label>
+      `;
 
   return `
     <div class="modal-backdrop" data-close-modal>
@@ -3072,6 +3125,31 @@ function renderProfileModal() {
             <div id="profileMessage" class="status-message" hidden></div>
           </form>
 
+          <section class="record-section profile-data-panel">
+            <div class="reset-panel-heading">
+              <h3>Data Management</h3>
+              <span class="reset-scope-badge">${escapeHtml(resetScopeLabel)}</span>
+            </div>
+            <p class="panel-subtitle">${escapeHtml(dataManagementCopy)}</p>
+            <div class="profile-scope-selector">
+              ${operationalScopeSelector}
+            </div>
+            <ul class="reset-safety-list">
+              <li>Backups include the selected incident or admin scope, related assessments, and stored photos.</li>
+              <li>Accounts and login access are kept separate from operational backups.</li>
+              <li>Restore requires a backup created for this same scope and an empty operational scope.</li>
+            </ul>
+            <div class="profile-data-actions">
+              <button class="secondary-button" type="button" id="createOperationalBackupButton">
+                Download backup
+              </button>
+              <button class="primary-button" type="button" id="restoreOperationalDataButton">
+                Restore backup
+              </button>
+            </div>
+            <input id="restoreOperationalDataFile" type="file" accept="application/json,.json" hidden />
+          </section>
+
           <section class="record-section profile-reset-panel ${isSystemReset ? "system-reset" : "admin-reset"}">
             <div class="reset-panel-heading">
               <h3>Reset Records</h3>
@@ -3125,7 +3203,39 @@ function openProfileModal() {
 
 function bindProfileModalActions() {
   const form = qs("#profileForm");
+  const backupButton = qs("#createOperationalBackupButton");
+  const restoreButton = qs("#restoreOperationalDataButton");
+  const restoreInput = qs("#restoreOperationalDataFile");
   const resetButton = qs("#resetOperationalDataButton");
+  const operationalAdminSelector = qs("#operationalAdminSelector");
+  const operationalIncidentSelector = qs("#operationalIncidentSelector");
+
+  function getOperationalSelection() {
+    if (state.user?.role === "super_admin") {
+      return {
+        adminId: operationalAdminSelector?.value || "",
+        incidentIds: [],
+      };
+    }
+
+    return {
+      adminId: "",
+      incidentIds: Array.from(
+        operationalIncidentSelector?.selectedOptions || [],
+      ).map((option) => option.value),
+    };
+  }
+
+  function getOperationalScopeQuery(selection) {
+    const params = new URLSearchParams();
+    if (selection.adminId) {
+      params.set("adminId", selection.adminId);
+    }
+    if (selection.incidentIds.length > 0) {
+      params.set("incidentIds", selection.incidentIds.join(","));
+    }
+    return params.toString();
+  }
 
   if (form) {
     form.addEventListener("submit", async (event) => {
@@ -3173,16 +3283,174 @@ function bindProfileModalActions() {
     });
   }
 
+  if (backupButton) {
+    backupButton.addEventListener("click", async () => {
+      try {
+        const selection = getOperationalSelection();
+        const query = getOperationalScopeQuery(selection);
+        if (!query) {
+          const message = state.user?.role === "super_admin"
+            ? "Select an admin account before creating a backup."
+            : "Select at least one incident before creating a backup.";
+          setMessage("profileMessage", message, "error");
+          showDashboardToast(message, "error");
+          return;
+        }
+
+        backupButton.disabled = true;
+        backupButton.textContent = "Creating backup...";
+
+        const response = await apiRequest(
+          `/auth/backup-operational-data?${query}`,
+        );
+        const backup = response.data;
+        const dateStamp = new Date()
+          .toISOString()
+          .replace(/[:.]/g, "-");
+        const scope = backup?.scope?.type === "system" ? "system" : "admin";
+        const blob = new Blob(
+          [JSON.stringify(backup, null, 2)],
+          { type: "application/json" },
+        );
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `scriber-${scope}-backup-${dateStamp}.json`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+        showDashboardToast("Backup downloaded successfully.", "success");
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Unable to create backup.";
+        setMessage("profileMessage", message, "error");
+        showDashboardToast(message, "error");
+      } finally {
+        backupButton.disabled = false;
+        backupButton.textContent = "Download backup";
+      }
+    });
+  }
+
+  if (restoreButton && restoreInput) {
+    restoreButton.addEventListener("click", () => {
+      restoreInput.click();
+    });
+
+    restoreInput.addEventListener("change", async () => {
+      const file = restoreInput.files?.[0];
+      restoreInput.value = "";
+
+      if (!file) {
+        return;
+      }
+
+      let backup;
+      try {
+        backup = JSON.parse(await file.text());
+      } catch {
+        const message = "The selected file is not valid JSON.";
+        setMessage("profileMessage", message, "error");
+        showDashboardToast(message, "error");
+        return;
+      }
+
+      const isSuperAdmin = state.user?.role === "super_admin";
+      const confirmed = await showDashboardConfirm({
+        title: isSuperAdmin
+          ? "Restore system backup?"
+          : "Restore admin backup?",
+        message:
+          "Restore requires an empty operational scope. The backup will restore incidents, victim records, related entries, and stored photos. Accounts will remain unchanged.",
+        confirmLabel: "Continue",
+        cancelLabel: "Cancel",
+        danger: true,
+        requireText: "RESTORE BACKUP",
+        inputLabel: "Type RESTORE BACKUP to confirm",
+      });
+
+      if (!confirmed) {
+        return;
+      }
+
+      const currentPassword = await showDashboardTextPrompt({
+        title: "Confirm password",
+        message:
+          "Enter your current account password before restoring operational data.",
+        label: "Current password",
+        placeholder: "Current password",
+        confirmLabel: "Restore backup",
+        cancelLabel: "Cancel restore",
+        required: true,
+        requiredMessage: "Current password is required.",
+        multiline: false,
+        inputType: "password",
+      });
+
+      if (!currentPassword) {
+        return;
+      }
+
+      try {
+        restoreButton.disabled = true;
+        restoreButton.textContent = "Restoring...";
+
+        const response = await apiRequest("/auth/restore-operational-data", {
+          method: "POST",
+          body: JSON.stringify({
+            confirmation: "RESTORE BACKUP",
+            currentPassword,
+            backup,
+          }),
+        });
+
+        await loadSharedData();
+        closeRecordModal();
+        renderDashboardShellIntoExisting();
+        showDashboardToast(
+          response.message || "Backup restored successfully.",
+          "success",
+        );
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Unable to restore backup.";
+        setMessage("profileMessage", message, "error");
+        showDashboardToast(message, "error");
+      } finally {
+        restoreButton.disabled = false;
+        restoreButton.textContent = "Restore backup";
+      }
+    });
+  }
+
   if (resetButton) {
     resetButton.addEventListener("click", async () => {
       const isSuperAdmin = state.user?.role === "super_admin";
+      const selection = getOperationalSelection();
+      const query = getOperationalScopeQuery(selection);
+      if (!query) {
+        const message = isSuperAdmin
+          ? "Select an admin account before resetting records."
+          : "Select at least one incident before resetting records.";
+        setMessage("profileMessage", message, "error");
+        showDashboardToast(message, "error");
+        return;
+      }
       let previewData = null;
 
       try {
         resetButton.disabled = true;
         resetButton.textContent = "Checking records...";
 
-        const preview = await apiRequest("/auth/reset-operational-data/preview");
+        const preview = await apiRequest(
+          `/auth/reset-operational-data/preview?${query}`,
+        );
         previewData = preview.data || {};
       } catch (error) {
         resetButton.disabled = false;
@@ -3242,6 +3510,7 @@ function bindProfileModalActions() {
           body: JSON.stringify({
             confirmation: "RESET RECORDS",
             currentPassword,
+            ...selection,
           }),
         });
 
@@ -7206,7 +7475,7 @@ function renderAdminCasualtyRecords(compact = false) {
                                         .map(
                                           (item) => `
                                             <tr
-                                              class="clickable-row"
+                                              class="clickable-row victim-record-row"
                                               data-open-casualty="${escapeHtml(
                                                 item.id,
                                               )}"
