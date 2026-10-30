@@ -256,7 +256,7 @@ function getAuthenticationFailureMessage(message?: string): string {
   }
 
   if (normalizedMessage.includes("invalid login credentials")) {
-    return "Invalid login credentials. Please reset the password in Supabase Authentication and try again.";
+    return "Wrong password. Please check your password and try again.";
   }
 
   if (message) {

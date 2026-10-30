@@ -697,6 +697,10 @@ function formatSafetyStatus(
       return "No";
     case "unknown":
       return "Unknown";
+    case "seeking_medical_care":
+      return "Seeking medical care";
+    case "deceased":
+      return "Deceased";
     default:
       return "Not recorded";
   }

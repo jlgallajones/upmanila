@@ -258,8 +258,44 @@ const casualtyAdminScopeRoles = new Set([
   "administrator",
 ]);
 
+const mobileRecordRoles = new Set([
+  ...casualtyDataEntryRoles,
+  "responsible_officer",
+]);
+
 function shouldScopeToOwnCasualties(role: string): boolean {
   return casualtyDataEntryRoles.has(role);
+}
+
+function shouldHideClosedIncidentsFromMobile(role: string): boolean {
+  return mobileRecordRoles.has(role);
+}
+
+async function getMobileVisibleIncidentIds(
+  role: string,
+): Promise<string[] | null> {
+  if (!shouldHideClosedIncidentsFromMobile(role)) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("incidents")
+    .select("id")
+    .eq("status", "active")
+    .is("ended_at", null);
+
+  if (error) {
+    throw new Error(
+      `Unable to retrieve mobile incident visibility: ${error.message}`,
+    );
+  }
+
+  return (data ?? [])
+    .map((incident) => incident.id)
+    .filter(
+      (id): id is string =>
+        typeof id === "string" && id.trim().length > 0,
+    );
 }
 
 function getCaseMatchRoleBucket(
@@ -454,7 +490,7 @@ async function canAccessCasualtyRecord(
 
   const { data, error } = await supabase
     .from("casualty_incidents")
-    .select("id")
+    .select("id, incident_id")
     .eq("id", casualtyIncidentId)
     .in("encoded_by", scopedEncoderIds)
     .is("deleted_at", null)
@@ -464,7 +500,18 @@ async function canAccessCasualtyRecord(
     throw new Error(`Unable to verify casualty access: ${error.message}`);
   }
 
-  return Boolean(data);
+  if (!data) {
+    return false;
+  }
+
+  if (!shouldHideClosedIncidentsFromMobile(userRole)) {
+    return true;
+  }
+
+  const visibleIncidentIds = await getMobileVisibleIncidentIds(userRole);
+  return Boolean(
+    data.incident_id && visibleIncidentIds?.includes(data.incident_id),
+  );
 }
 
 type UpdateCasualtyVerificationRequest = {
@@ -2274,6 +2321,22 @@ export async function getCasualties(
       query = query.in("encoded_by", scopedEncoderIds);
     }
 
+    const mobileVisibleIncidentIds = await getMobileVisibleIncidentIds(
+      user.role,
+    );
+    if (mobileVisibleIncidentIds) {
+      if (mobileVisibleIncidentIds.length === 0) {
+        response.status(200).json({
+          success: true,
+          count: 0,
+          data: [],
+        });
+        return;
+      }
+
+      query = query.in("incident_id", mobileVisibleIncidentIds);
+    }
+
     const { data, error } = await query;
 
     if (error) {
@@ -2332,11 +2395,24 @@ async function getAccessibleCasualtyIncidentIds(user: {
     return null;
   }
 
-  const { data, error } = await supabase
+  const mobileVisibleIncidentIds = await getMobileVisibleIncidentIds(
+    user.role,
+  );
+  if (mobileVisibleIncidentIds && mobileVisibleIncidentIds.length === 0) {
+    return [];
+  }
+
+  let query = supabase
     .from("casualty_incidents")
     .select("id")
     .in("encoded_by", scopedEncoderIds)
     .is("deleted_at", null);
+
+  if (mobileVisibleIncidentIds) {
+    query = query.in("incident_id", mobileVisibleIncidentIds);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     throw new Error(

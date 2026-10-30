@@ -1269,7 +1269,9 @@ async function apiRequest(path, options = {}, hasRetried = false) {
       }
     }
 
-    if (response.status === 401) expireWebSession();
+    // A failed login also returns 401, but it is not an expired session.
+    // Only expire an existing web session after an authenticated request fails.
+    if (response.status === 401 && path !== "/auth/login") expireWebSession();
 
     throw new Error(getUserFriendlyMessage(message));
   }
@@ -5256,13 +5258,42 @@ function renderAnalyticsGraphGrid(analytics, incidentId) {
   `;
 }
 
+function responderSafetyStatusLabel(status) {
+  switch (status) {
+    case "yes":
+      return "Safe";
+    case "no":
+      return "Unsafe";
+    case "seeking_medical_care":
+      return "Seeking medical care";
+    case "deceased":
+      return "Deceased";
+    default:
+      return "Not recorded";
+  }
+}
+
+function responderSafetyStatusPillClass(status) {
+  switch (status) {
+    case "yes":
+      return "green";
+    case "no":
+      return "red";
+    case "seeking_medical_care":
+      return "orange";
+    default:
+      return "blue";
+  }
+}
+
 function renderResponderSafetyRow(item) {
   const responder = item.responder || {};
   const name = responder.full_name || "Unknown responder";
   const roleAndFunction = [roleLabel(item.responder_role), roleLabel(item.responder_function)]
     .filter(Boolean)
     .join(" - ");
-  const isSafe = item.safety_status === "yes";
+  const status = item.safety_status || "unknown";
+  const statusLabel = responderSafetyStatusLabel(status);
 
   return `
     <tr>
@@ -5272,13 +5303,16 @@ function renderResponderSafetyRow(item) {
       </td>
       <td>${escapeHtml(roleAndFunction || "Not recorded")}</td>
       <td>
-        <span class="pill ${isSafe ? "green" : "red"}">${isSafe ? "Safe" : "Unsafe"}</span>
+        <span class="pill ${responderSafetyStatusPillClass(status)}">${escapeHtml(statusLabel)}</span>
       </td>
       <td>${escapeHtml(formatDate(item.recorded_at))}</td>
       <td>
         <select data-responder-safety-select="${escapeHtml(item.id)}">
-          <option value="yes" ${isSafe ? "selected" : ""}>Safe</option>
-          <option value="no" ${!isSafe ? "selected" : ""}>Unsafe</option>
+          <option value="unknown" ${status === "unknown" ? "selected" : ""}>Not recorded</option>
+          <option value="yes" ${status === "yes" ? "selected" : ""}>Safe</option>
+          <option value="no" ${status === "no" ? "selected" : ""}>Unsafe</option>
+          <option value="seeking_medical_care" ${status === "seeking_medical_care" ? "selected" : ""}>Seeking medical care</option>
+          <option value="deceased" ${status === "deceased" ? "selected" : ""}>Deceased</option>
         </select>
       </td>
     </tr>
@@ -5395,10 +5429,13 @@ function bindResponderSafetySelects(incidentId) {
         if (row) {
           const statusPill = row.querySelector(".pill");
           if (statusPill) {
-            const isSafe = safetyStatus === "yes";
-            statusPill.textContent = isSafe ? "Safe" : "Unsafe";
-            statusPill.classList.toggle("green", isSafe);
-            statusPill.classList.toggle("red", !isSafe);
+            statusPill.textContent = responderSafetyStatusLabel(safetyStatus);
+            ["green", "red", "orange", "blue"].forEach((className) =>
+              statusPill.classList.remove(className),
+            );
+            statusPill.classList.add(
+              responderSafetyStatusPillClass(safetyStatus),
+            );
           }
         }
 
@@ -12761,6 +12798,7 @@ function renderDmmpStaffView(staffRecords, summary) {
 function formatDmmpStaffStatus(status) {
   if (status === "safe") return "Safe";
   if (status === "unsafe") return "Unsafe";
+  if (status === "seeking_medical_care") return "Seeking medical care";
   if (status === "deceased") return "Deceased";
   return "Not recorded";
 }
@@ -13114,6 +13152,7 @@ function renderDmmpStaffStatusOptions(selected) {
     ["", "Not recorded"],
     ["safe", "Safe"],
     ["unsafe", "Unsafe"],
+    ["seeking_medical_care", "Seeking medical care"],
     ["deceased", "Deceased"],
   ];
 
@@ -13133,6 +13172,7 @@ function buildResponderSafetyStatusSummary(details) {
     unsafe: 0,
     ill: 0,
     injured: 0,
+    seekingMedicalCare: 0,
     deceased: 0,
     notRecorded: 0,
   };
@@ -13140,8 +13180,14 @@ function buildResponderSafetyStatusSummary(details) {
   rosterRows.forEach(({ record }) => {
     const status = record?.status;
 
-    if (status && Object.prototype.hasOwnProperty.call(statusCounts, status)) {
-      statusCounts[status] += 1;
+    const normalizedStatus =
+      status === "seeking_medical_care" ? "seekingMedicalCare" : status;
+
+    if (
+      normalizedStatus &&
+      Object.prototype.hasOwnProperty.call(statusCounts, normalizedStatus)
+    ) {
+      statusCounts[normalizedStatus] += 1;
     } else {
       statusCounts.notRecorded += 1;
     }
@@ -13172,6 +13218,7 @@ function renderResponderSafetySummaryView(details) {
     statusCounts.unsafe +
     statusCounts.ill +
     statusCounts.injured +
+    statusCounts.seekingMedicalCare +
     statusCounts.deceased;
 
   return `
@@ -13181,6 +13228,7 @@ function renderResponderSafetySummaryView(details) {
       ["Unsafe from Call Down", totalUnsafeStatus],
       ["Ill", statusCounts.ill],
       ["Injured", statusCounts.injured],
+      ["Seeking medical care", statusCounts.seekingMedicalCare],
       ["Deceased", statusCounts.deceased],
       ["Not recorded", statusCounts.notRecorded],
       ["Analytics safe responders", analyticsSafe],

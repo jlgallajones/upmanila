@@ -89,7 +89,12 @@ export type MedicalCoordinationAssessment = {
   assessed_at: string;
 };
 
-export type ResponderSafetyStatus = "yes" | "no" | "unknown";
+export type ResponderSafetyStatus =
+  | "yes"
+  | "no"
+  | "unknown"
+  | "seeking_medical_care"
+  | "deceased";
 
 export type ResponderSafetyReport = {
   id: string;

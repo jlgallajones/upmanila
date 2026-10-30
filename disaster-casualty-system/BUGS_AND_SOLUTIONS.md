@@ -1116,6 +1116,65 @@ The summary also keeps the total survivors, total facility arrivals, response in
 
 **Status:** Implemented.
 
+## 134. Operational Backup And Reset Needed Incident-Level Scope
+
+**Problem:** Backup and reset operations needed to support two different scopes. An administrator must manage selected incidents, while a Super Admin must manage an entire administrator account. The original workflow also allowed a combined multi-incident backup, making it impossible to restore only one incident cleanly.
+
+**Solution:** Added authenticated operational backup, restore, preview, and reset endpoints. Administrators can select incidents in their own scope, while Super Admins select an administrator account. Backups are generated as separate JSON files for each incident, including related victim records, assessments, operational records, notifications, audit data, and stored attachments. User accounts and login access remain outside operational backups and are preserved during reset and restore.
+
+**Status:** Implemented.
+
+## 135. Backup And Reset Needed Closed-Incident Protection
+
+**Problem:** Backup and reset should not run while an incident is still active because an active incident may still be receiving mobile submissions or require operational changes. Super Admin account-level operations must apply the same rule to every incident under the selected administrator.
+
+**Solution:** The API now verifies incident status before backup, reset preview, and reset execution. Administrators must select only closed incidents, and Super Admins can proceed only when all incidents belonging to the selected administrator are closed. Open incidents return a clear conflict response listing the incidents that must be closed first. Restored incidents retain their stored closed status and continue to use the existing reopen-request workflow.
+
+**Status:** Implemented.
+
+## 136. Backup File Naming And Individual Restore
+
+**Problem:** Backup downloads did not consistently identify the administrator and incident, and a multi-incident download could combine unrelated incident data into one file.
+
+**Solution:** Each generated file now uses the format `SCRIBER-[AdminAccountName]-[IncidentName]-[DateOfBackup].json`. The web profile panel downloads one file per selected incident. A Super Admin selecting an administrator account receives one file per incident under that account. Restoring one file replaces only that incident's operational scope and does not restore or remove other incidents or user accounts.
+
+**Status:** Implemented.
+
+## 137. Backup And Reset Selections Needed To Be Independent
+
+**Problem:** The Account Profile modal reused one incident or administrator selector for both backup and reset. A selection made for backup could therefore be mistaken for the reset target.
+
+**Solution:** Added separate selectors for **Incidents to back up** and **Incidents to reset** for administrators, plus separate **Admin account to back up** and **Admin account to reset** selectors for Super Admins. Each button now reads only its own selection, and the reset panel explains that its scope is independent from the backup scope.
+
+**Status:** Implemented.
+
+## 138. Backup And Reset Selectors Displayed Active Incidents
+
+**Problem:** The active-incident endpoint was being used to populate the Account Profile selectors, so closed incidents were not available for eligible backup or reset operations.
+
+**Solution:** The selectors now use the complete incident scope and filter the displayed options to closed incidents only. Active incidents are hidden from both selectors, while the API continues enforcing the same rule server-side.
+
+**Status:** Implemented.
+
+## 139. Mobile Users Could See Records From Closed Incidents
+
+**Problem:** Mobile incident lists already excluded closed incidents, but victim-record list requests and direct record/history requests could still return records linked to a closed incident.
+
+**Solution:** Mobile-facing victim queries now restrict visible records to incidents that are active and not ended. The same visibility rule applies to direct victim access, status/triage/transport/treatment histories, case-link access, and related mobile record actions. Administrator and Super Admin views remain unchanged. When an incident is reopened and becomes active again, its records become visible to mobile users without changing or deleting the stored data.
+
+**Status:** Implemented.
+
+## Additional Acceptance Tests
+
+54. As an administrator, close two incidents and confirm only those closed incidents appear in both the backup and reset selectors. Confirm active incidents do not appear.
+55. Select different incidents in the backup and reset selectors and confirm each action uses only its own selection.
+56. As an administrator, attempt backup and reset while an incident is active and confirm the API rejects the operation with the incident status message.
+57. As an administrator, select multiple closed incidents and confirm one `SCRIBER-[Admin]-[Incident]-[Date].json` file is downloaded per incident.
+58. As a Super Admin, select an administrator account with multiple incidents and confirm one backup file is created per closed incident. Confirm the operation is rejected if any incident under that administrator remains active.
+59. Reset one closed incident, restore only its backup file, and confirm that incident and its related records return while other incidents and user accounts remain unchanged.
+60. Sign in as a mobile responder and confirm a closed incident and its victim records do not appear. Confirm the same records become visible after the incident is reopened.
+61. Confirm an administrator and Super Admin can still view the closed incident and its victim records while mobile users cannot.
+
 ## Verification Instructions
 
 Run these commands from the repository root in PowerShell:

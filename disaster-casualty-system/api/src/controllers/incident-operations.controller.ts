@@ -154,10 +154,11 @@ function parseDmmpStaffStatus(
   if (
     value !== "deceased" &&
     value !== "safe" &&
-    value !== "unsafe"
+    value !== "unsafe" &&
+    value !== "seeking_medical_care"
   ) {
     throw new Error(
-      `${fieldName} must be safe, unsafe, deceased, or null.`,
+      `${fieldName} must be safe, unsafe, seeking_medical_care, deceased, or null.`,
     );
   }
 
@@ -175,18 +176,34 @@ function responderSafetyStatusToDmmpStatus(
     return "unsafe";
   }
 
+  if (value === "seeking_medical_care") {
+    return "seeking_medical_care";
+  }
+
+  if (value === "deceased") {
+    return "deceased";
+  }
+
   return null;
 }
 
 function dmmpStatusToResponderSafetyStatus(
   value: string | null | undefined,
-): "yes" | "no" | null {
+): "yes" | "no" | "seeking_medical_care" | "deceased" | null {
   if (value === "safe") {
     return "yes";
   }
 
   if (value === "unsafe") {
     return "no";
+  }
+
+  if (value === "seeking_medical_care") {
+    return "seeking_medical_care";
+  }
+
+  if (value === "deceased") {
+    return "deceased";
   }
 
   return null;

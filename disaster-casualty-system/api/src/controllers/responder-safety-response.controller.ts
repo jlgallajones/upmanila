@@ -3,7 +3,13 @@ import type { NextFunction, Request, Response } from "express";
 import { supabase } from "../config/supabase.js";
 import { getAuthenticatedUser } from "../middleware/auth.js";
 
-const responderSafetyStatuses = ["yes", "no"] as const;
+const responderSafetyStatuses = [
+  "yes",
+  "no",
+  "unknown",
+  "seeking_medical_care",
+  "deceased",
+] as const;
 type ResponderSafetyStatus = (typeof responderSafetyStatuses)[number];
 
 const unitScopedAdminRoles = new Set(["admin", "administrator"]);
@@ -157,7 +163,8 @@ export async function updateResponderSafetyResponseStatus(
     ) {
       response.status(400).json({
         success: false,
-        message: "safetyStatus must be 'yes' or 'no'.",
+        message:
+          "safetyStatus must be yes, no, seeking_medical_care, deceased, or unknown.",
       });
       return;
     }
