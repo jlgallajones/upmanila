@@ -1,0 +1,109 @@
+DCMS VERIFICATION RUN
+Started: 2026-10-30T14:40:44.7821536+08:00
+Root: C:\Users\jlgallajones\upmanila\disaster-casualty-system
+[RUN ] API TypeScript typecheck
+       Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\api
+       Command: npm.cmd run typecheck
+
+> disaster-casualty-api@1.0.0 typecheck
+> tsc --noEmit
+
+[PASS] API TypeScript typecheck (exit code 0)
+[RUN ] API production build
+       Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\api
+       Command: npm.cmd run build
+
+> disaster-casualty-api@1.0.0 build
+> tsc
+
+[PASS] API production build (exit code 0)
+[RUN ] Incident analytics tests
+       Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\api
+       Command: npm.cmd run test:analytics
+
+> disaster-casualty-api@1.0.0 test:analytics
+> tsc && node dist/services/analytics/incident-analytics.test.js
+
+Incident analytics calculation tests passed.
+[PASS] Incident analytics tests (exit code 0)
+[RUN ] Triage calculation and accuracy tests
+       Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\api
+       Command: npm.cmd run test:triage
+
+> disaster-casualty-api@1.0.0 test:triage
+> tsc && node dist/services/triage/calculate-triage.test.js && node dist/services/triage/triage-accuracy.test.js
+
+Triage calculation tests passed (43).
+Triage accuracy tests passed.
+[PASS] Triage calculation and accuracy tests (exit code 0)
+[RUN ] Mobile TypeScript typecheck
+       Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\mobile
+       Command: npm.cmd exec tsc -- --noEmit
+[PASS] Mobile TypeScript typecheck (exit code 0)
+[RUN ] Mobile/PWA web export
+       Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\mobile
+       Command: npm.cmd run build:web
+
+> mobile@1.0.0 build:web
+> expo export --platform web
+
+env: load .env
+env: export EXPO_PUBLIC_API_URL
+Using src/app as the root directory for Expo Router.
+React Compiler enabled
+Starting Metro Bundler
+
+Static rendering is enabled. Learn more: https://docs.expo.dev/router/web/static-rendering/
+? Bundled 987ms node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js (1424 modules)
+Web Bundled 1243ms node_modules\expo-router\entry.js (1395 modules)
+
+› web bundles (2):
+_expo/static/css/global-30c341199d6e65a2dfb94ff1ee1395d4.css (551B)
+_expo/static/js/web/entry-0f117b23a6729f97130a42717fe7d7c4.js (3.4MB)
+
+› Static routes (26):
+/home (39KB)
+/ (index) (35KB)
+/login (46KB)
+/drafts (39KB)
+/explore (35KB)
+/profile (39KB)
+/records (39KB)
+/about-us (32KB)
+/_sitemap (38KB)
+/incidents (34KB)
+/+not-found (38KB)
+/action-logs (31KB)
+/(tabs)/home (39KB)
+/add-casualty (39KB)
+/(tabs)/drafts (39KB)
+/notifications (39KB)
+/casualty/[id] (40KB)
+/privacy-policy (47KB)
+/reset-password (41KB)
+/(tabs)/profile (39KB)
+/(tabs)/records (39KB)
+/account-management (35KB)
+/verification-review (40KB)
+/(tabs)/add-casualty (39KB)
+/terms-and-conditions (48KB)
+/(tabs)/notifications (39KB)
+
+Exported: dist
+[PASS] Mobile/PWA web export (exit code 0)
+[RUN ] Web dashboard syntax check
+       Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\website
+       Command: node.exe --check app.js
+[PASS] Web dashboard syntax check (exit code 0)
+[RUN ] Web configuration syntax check
+       Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\website
+       Command: node.exe --check config.js
+[PASS] Web configuration syntax check (exit code 0)
+[RUN ] PWA service worker syntax check
+       Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\mobile
+       Command: node.exe --check public/sw.js
+[PASS] PWA service worker syntax check (exit code 0)
+[RUN ] Repository whitespace check
+       Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system
+       Command: git.exe diff --check
+[PASS] Repository whitespace check (exit code 0)

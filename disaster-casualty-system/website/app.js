@@ -3025,8 +3025,8 @@ function renderProfileModal() {
     ? "Admin-scoped selection"
     : "Incident selection";
   const dataManagementCopy = isSystemReset
-    ? "Select one admin account to back up or restore all of its incidents and related mobile and web submissions."
-    : "Select one or more incidents to back up or restore their related mobile and web submissions.";
+    ? "Select one admin account to back up or restore its incident records and related mobile and web submissions. One backup file is created per incident."
+    : "Select one or more incidents to back up or restore their related mobile and web submissions. One backup file is created per incident.";
   const operationalScopeSelector = isSystemReset
     ? `
         <label class="field">
@@ -3137,6 +3137,7 @@ function renderProfileModal() {
             <ul class="reset-safety-list">
               <li>Backups include the selected incident or admin scope, related assessments, and stored photos.</li>
               <li>Accounts and login access are kept separate from operational backups.</li>
+              <li>Every incident included in a backup or reset must already be closed.</li>
               <li>Restore replaces the selected scope with the backup while keeping accounts unchanged.</li>
             </ul>
             <div class="profile-data-actions">
@@ -3303,25 +3304,30 @@ function bindProfileModalActions() {
         const response = await apiRequest(
           `/auth/backup-operational-data?${query}`,
         );
-        const backup = response.data;
-        const dateStamp = new Date()
-          .toISOString()
-          .replace(/[:.]/g, "-");
-        const scope = backup?.scope?.type === "system" ? "system" : "admin";
-        const blob = new Blob(
-          [JSON.stringify(backup, null, 2)],
-          { type: "application/json" },
-        );
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `scriber-${scope}-backup-${dateStamp}.json`;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+        const backups = Array.isArray(response.data)
+          ? response.data
+          : [response.data];
 
-        showDashboardToast("Backup downloaded successfully.", "success");
+        backups.forEach((backup) => {
+          const blob = new Blob(
+            [JSON.stringify(backup, null, 2)],
+            { type: "application/json" },
+          );
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download =
+            backup?.fileName || "SCRIBER-operational-backup.json";
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+        });
+
+        showDashboardToast(
+          `${backups.length} backup file${backups.length === 1 ? "" : "s"} downloaded successfully.`,
+          "success",
+        );
       } catch (error) {
         const message =
           error instanceof Error
@@ -3469,8 +3475,8 @@ function bindProfileModalActions() {
 
       const confirmed = await showDashboardConfirm({
         title: isSuperAdmin
-          ? "Reset all system records?"
-          : "Reset your admin-unit records?",
+          ? "Reset the selected admin records?"
+          : "Reset the selected incident records?",
         message: getResetPreviewMessage(previewData, isSuperAdmin),
         confirmLabel: "Continue",
         cancelLabel: "Keep records",

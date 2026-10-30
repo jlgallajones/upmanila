@@ -90,7 +90,9 @@ type OperationalBackup = {
     type: "incident" | "admin";
     ownerId: string | null;
     incidentIds: string[];
+    includeAdminOwnedData?: boolean;
   };
+  fileName?: string;
   datasets: Record<string, unknown[]>;
   attachments: Array<{
     row: Record<string, unknown>;
@@ -1960,6 +1962,71 @@ async function getIncidentOperationalScope(
   };
 }
 
+async function getOpenIncidentRows(
+  incidentIds: string[],
+): Promise<
+  Array<{
+    id: string;
+    incident_name: string | null;
+    status: string | null;
+  }>
+> {
+  const uniqueIncidentIds = [...new Set(incidentIds)];
+  if (uniqueIncidentIds.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from("incidents")
+    .select("id, incident_name, status")
+    .in("id", uniqueIncidentIds);
+
+  if (error) {
+    throw new Error(`Unable to verify incident status: ${error.message}`);
+  }
+
+  return (data ?? [])
+    .filter(
+      (row) =>
+        typeof row.id === "string" &&
+        String(row.status ?? "").toLowerCase() !== "closed",
+    )
+    .map((row) => ({
+      id: row.id as string,
+      incident_name:
+        typeof row.incident_name === "string" ? row.incident_name : null,
+      status: typeof row.status === "string" ? row.status : null,
+    }));
+}
+
+async function getAccountDisplayName(userId: string): Promise<string> {
+  const { data, error } = await supabase
+    .from("users")
+    .select("full_name, email")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error || !data) {
+    throw new Error(
+      `Unable to retrieve backup account details: ${
+        error?.message ?? "Account not found."
+      }`,
+    );
+  }
+
+  return data.full_name?.trim() || data.email?.trim() || userId;
+}
+
+function sanitizeBackupFilePart(value: string): string {
+  return (
+    value
+      .trim()
+      .replace(/[^a-zA-Z0-9_-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80) || "unknown"
+  );
+}
+
 async function resolveOperationalScope(
   currentUser: { id?: string; role?: string },
   selection: OperationalScopeSelection,
@@ -2370,8 +2437,10 @@ async function buildOperationalBackup(
   scopeType: "incident" | "admin",
   ownerId: string | null,
   incidentIds: string[],
+  includeAdminOwnedData = false,
+  adminAccountName = "admin",
 ): Promise<OperationalBackup> {
-  const userIds = scopeType === "admin" && ownerId
+  const userIds = includeAdminOwnedData && scopeType === "admin" && ownerId
     ? await getScopedUserIds(ownerId, false)
     : [];
   const datasets: Record<string, unknown[]> = {};
@@ -2473,7 +2542,7 @@ async function buildOperationalBackup(
     notificationsByUser,
   );
   datasets.audit_logs =
-    scopeType === "incident"
+    scopeType === "incident" || !includeAdminOwnedData
       ? await getRowsByColumn("audit_logs", "entity_id", [
           ...scope.incidentIds,
           ...scope.casualtyIncidentIds,
@@ -2521,14 +2590,23 @@ async function buildOperationalBackup(
     }),
   );
 
+  const createdAt = new Date().toISOString();
+  const incidentRows = datasets.incidents as Record<string, unknown>[];
+  const incidentName =
+    typeof incidentRows[0]?.incident_name === "string"
+      ? incidentRows[0].incident_name
+      : incidentIds[0] ?? "incident";
+
   return {
     format: "SCRIBER_OPERATIONAL_BACKUP",
     version: 1,
-    createdAt: new Date().toISOString(),
+    createdAt,
+    fileName: `SCRIBER-${sanitizeBackupFilePart(adminAccountName)}-${sanitizeBackupFilePart(incidentName)}-${createdAt.slice(0, 10).replace(/-/g, "")}.json`,
     scope: {
       type: scopeType,
       ownerId,
       incidentIds,
+      includeAdminOwnedData,
     },
     datasets,
     attachments: attachmentFiles,
@@ -2696,6 +2774,18 @@ export async function resetOperationalData(
       incidentIds: request.body.incidentIds,
       adminId: request.body.adminId,
     });
+    const openIncidents = await getOpenIncidentRows(
+      resolved.scope.incidentIds,
+    );
+    if (openIncidents.length > 0) {
+      response.status(409).json({
+        success: false,
+        message:
+          "All selected incidents must be closed before records can be reset.",
+        data: { openIncidents },
+      });
+      return;
+    }
     const counts = await clearOperationalData(
       resolved.scope,
       resolved.userIds,
@@ -2770,6 +2860,18 @@ export async function previewOperationalDataReset(
           ? request.query.adminId
           : undefined,
     });
+    const openIncidents = await getOpenIncidentRows(
+      resolved.scope.incidentIds,
+    );
+    if (openIncidents.length > 0) {
+      response.status(409).json({
+        success: false,
+        message:
+          "All selected incidents must be closed before records can be reset.",
+        data: { openIncidents },
+      });
+      return;
+    }
     const counts = await countOperationalData(
       resolved.scope,
       resolved.userIds,
@@ -2820,47 +2922,78 @@ export async function backupOperationalData(
           ? request.query.adminId
           : undefined,
     });
-    const backup = await buildOperationalBackup(
-      resolved.scope,
-      resolved.scopeType,
-      resolved.ownerId,
+    if (resolved.scope.incidentIds.length === 0) {
+      response.status(409).json({
+        success: false,
+        message: "The selected admin account has no incidents to back up.",
+      });
+      return;
+    }
+
+    const openIncidents = await getOpenIncidentRows(
       resolved.scope.incidentIds,
     );
+    if (openIncidents.length > 0) {
+      response.status(409).json({
+        success: false,
+        message:
+          "All selected incidents must be closed before a backup can be created.",
+        data: { openIncidents },
+      });
+      return;
+    }
 
-    await recordAuditLog({
-      actor: {
-        id: currentUser.id,
-        role: currentUser.role,
-      },
-      action: "operational_data.backup_created",
-      entityType: resolved.scopeType === "admin" ? "admin" : "incident",
-      entityId:
-        resolved.scopeType === "admin"
-          ? resolved.ownerId
-          : resolved.scope.incidentIds[0] ?? resolved.ownerId,
-      entityLabel:
-        resolved.scopeType === "admin"
-          ? "Admin operational backup"
-          : "Incident operational backup",
-      metadata: {
-        scope: resolved.scopeType,
-        ownerId: resolved.ownerId,
-        incidentIds: resolved.scope.incidentIds,
-        datasetCounts: Object.fromEntries(
-          Object.entries(backup.datasets).map(([tableName, rows]) => [
-            tableName,
-            rows.length,
-          ]),
-        ),
-        attachmentFiles: backup.attachments.length,
-      },
-      scopeAdminId: resolved.ownerId,
-    });
+    const adminAccountName = await getAccountDisplayName(resolved.ownerId);
+    const backups = await Promise.all(
+      resolved.scope.incidentIds.map(async (incidentId) => {
+        const incidentScope = await getIncidentOperationalScope(
+          resolved.ownerId,
+          [incidentId],
+        );
+        return buildOperationalBackup(
+          incidentScope,
+          resolved.scopeType,
+          resolved.ownerId,
+          [incidentId],
+          false,
+          adminAccountName,
+        );
+      }),
+    );
+
+    for (const backup of backups) {
+      await recordAuditLog({
+        actor: {
+          id: currentUser.id,
+          role: currentUser.role,
+        },
+        action: "operational_data.backup_created",
+        entityType: "incident",
+        entityId: backup.scope.incidentIds[0] ?? resolved.ownerId,
+        entityLabel: "Incident operational backup",
+        metadata: {
+          scope: resolved.scopeType,
+          ownerId: resolved.ownerId,
+          incidentIds: backup.scope.incidentIds,
+          fileName: backup.fileName,
+          datasetCounts: Object.fromEntries(
+            Object.entries(backup.datasets).map(([tableName, rows]) => [
+              tableName,
+              rows.length,
+            ]),
+          ),
+          attachmentFiles: backup.attachments.length,
+        },
+        scopeAdminId: resolved.ownerId,
+      });
+    }
 
     response.status(200).json({
       success: true,
-      message: "Operational backup created successfully.",
-      data: backup,
+      message: `${backups.length} incident backup file${
+        backups.length === 1 ? "" : "s"
+      } created successfully.`,
+      data: backups,
     });
   } catch (error) {
     next(error);
@@ -2958,7 +3091,9 @@ export async function restoreOperationalData(
     };
     const restoreOwnerId = backup.scope.ownerId;
     const restoreUserIds =
-      backup.scope.type === "admin" && restoreOwnerId
+      backup.scope.type === "admin" &&
+      restoreOwnerId &&
+      backup.scope.includeAdminOwnedData !== false
         ? await getScopedUserIds(restoreOwnerId, false)
         : [];
     const resolved = {
