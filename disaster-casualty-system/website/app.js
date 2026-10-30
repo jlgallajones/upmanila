@@ -3137,7 +3137,7 @@ function renderProfileModal() {
             <ul class="reset-safety-list">
               <li>Backups include the selected incident or admin scope, related assessments, and stored photos.</li>
               <li>Accounts and login access are kept separate from operational backups.</li>
-              <li>Restore requires a backup created for this same scope and an empty operational scope.</li>
+              <li>Restore replaces the selected scope with the backup while keeping accounts unchanged.</li>
             </ul>
             <div class="profile-data-actions">
               <button class="secondary-button" type="button" id="createOperationalBackupButton">
@@ -3365,7 +3365,7 @@ function bindProfileModalActions() {
           ? "Restore system backup?"
           : "Restore admin backup?",
         message:
-          "Restore requires an empty operational scope. The backup will restore incidents, victim records, related entries, and stored photos. Accounts will remain unchanged.",
+          "The selected scope will be replaced by this backup. Incidents, victim records, related entries, and stored photos will be restored. Accounts will remain unchanged.",
         confirmLabel: "Continue",
         cancelLabel: "Cancel",
         danger: true,

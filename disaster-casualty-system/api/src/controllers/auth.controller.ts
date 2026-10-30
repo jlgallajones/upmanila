@@ -3013,14 +3013,12 @@ export async function restoreOperationalData(
       0,
     );
 
+    let replacedCounts: Record<string, number> = {};
     if (currentRecordCount > 0) {
-      response.status(409).json({
-        success: false,
-        message:
-          "Restore requires an empty operational scope. Reset the current records first, then upload the backup again.",
-        data: { counts: currentCounts },
-      });
-      return;
+      replacedCounts = await clearOperationalData(
+        resolved.scope,
+        resolved.userIds,
+      );
     }
 
     const counts = await restoreOperationalBackup(backup);
@@ -3044,6 +3042,7 @@ export async function restoreOperationalData(
         scope: resolved.scopeType,
         ownerId: resolved.ownerId,
         incidentIds: resolved.scope.incidentIds,
+        replacedCounts,
         counts,
         backupCreatedAt: backup.createdAt,
       },
@@ -3060,6 +3059,7 @@ export async function restoreOperationalData(
         scope: resolved.scopeType,
         ownerId: resolved.ownerId,
         incidentIds: resolved.scope.incidentIds,
+        replacedCounts,
         counts,
       },
     });
