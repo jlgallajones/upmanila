@@ -89,7 +89,7 @@ export async function recordAuditLog({
   const { error } = await supabase.from("audit_logs").insert({
     action,
     entity_type: entityType,
-    entity_id: entityId,
+    entity_id: entityId ?? actor.id,
     entity_label: entityLabel,
     actor_id: actor.id,
     actor_full_name: profile?.full_name ?? actor.fullName ?? null,

@@ -2707,7 +2707,11 @@ export async function resetOperationalData(
         role: currentUser.role,
       },
       action: "operational_data.reset",
-      entityType: "system",
+      entityType: resolved.scopeType === "admin" ? "admin" : "incident",
+      entityId:
+        resolved.scopeType === "admin"
+          ? resolved.ownerId
+          : resolved.scope.incidentIds[0] ?? resolved.ownerId,
       entityLabel: isSuperAdmin
         ? "Admin operational data"
         : "Incident operational data",
@@ -2829,7 +2833,11 @@ export async function backupOperationalData(
         role: currentUser.role,
       },
       action: "operational_data.backup_created",
-      entityType: "system",
+      entityType: resolved.scopeType === "admin" ? "admin" : "incident",
+      entityId:
+        resolved.scopeType === "admin"
+          ? resolved.ownerId
+          : resolved.scope.incidentIds[0] ?? resolved.ownerId,
       entityLabel:
         resolved.scopeType === "admin"
           ? "Admin operational backup"
@@ -2979,7 +2987,11 @@ export async function restoreOperationalData(
         role: currentUser.role,
       },
       action: "operational_data.restored",
-      entityType: "system",
+      entityType: resolved.scopeType === "admin" ? "admin" : "incident",
+      entityId:
+        resolved.scopeType === "admin"
+          ? resolved.ownerId
+          : resolved.scope.incidentIds[0] ?? resolved.ownerId,
       entityLabel:
         resolved.scopeType === "admin"
           ? "Admin operational backup restored"
