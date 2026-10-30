@@ -3027,48 +3027,57 @@ function renderProfileModal() {
   const dataManagementCopy = isSystemReset
     ? "Select one admin account to back up or restore its incident records and related mobile and web submissions. One backup file is created per incident."
     : "Select one or more incidents to back up or restore their related mobile and web submissions. One backup file is created per incident.";
-  const operationalScopeSelector = isSystemReset
-    ? `
-        <label class="field">
-          <span>Admin account to manage</span>
-          <select id="operationalAdminSelector" class="profile-scope-select">
-            <option value="">Select an admin account</option>
-            ${state.adminAccounts
-              .filter((account) =>
-                ["admin", "administrator"].includes(account.role),
-              )
-              .map(
-                (account) => `
-                  <option value="${escapeHtml(account.id)}">
-                    ${escapeHtml(account.full_name || account.email)} - ${escapeHtml(roleLabel(account.role))}
-                  </option>
-                `,
-              )
-              .join("")}
-          </select>
-        </label>
-      `
-    : `
-        <label class="field">
-          <span>Incidents to manage</span>
-          <select id="operationalIncidentSelector" class="profile-scope-select" multiple size="5">
-            ${state.incidents
-              .map(
-                (incident) => `
-                  <option value="${escapeHtml(incident.id)}">
-                    ${escapeHtml(incident.incident_name)} - ${escapeHtml(roleLabel(incident.status))}
-                  </option>
-                `,
-              )
-              .join("")}
-          </select>
-          ${
-            state.incidents.length === 0
-              ? `<small class="field-hint">No incidents are available in your admin scope.</small>`
-              : `<small class="field-hint">Hold Ctrl or Command to select more than one incident.</small>`
-          }
-        </label>
-      `;
+  const renderOperationalScopeSelector = (selectorId, actionLabel) =>
+    isSystemReset
+      ? `
+          <label class="field">
+            <span>Admin account to ${actionLabel}</span>
+            <select id="${selectorId}" class="profile-scope-select">
+              <option value="">Select an admin account</option>
+              ${state.adminAccounts
+                .filter((account) =>
+                  ["admin", "administrator"].includes(account.role),
+                )
+                .map(
+                  (account) => `
+                    <option value="${escapeHtml(account.id)}">
+                      ${escapeHtml(account.full_name || account.email)} - ${escapeHtml(roleLabel(account.role))}
+                    </option>
+                  `,
+                )
+                .join("")}
+            </select>
+          </label>
+        `
+      : `
+          <label class="field">
+            <span>Incidents to ${actionLabel}</span>
+            <select id="${selectorId}" class="profile-scope-select" multiple size="5">
+              ${state.incidents
+                .map(
+                  (incident) => `
+                    <option value="${escapeHtml(incident.id)}">
+                      ${escapeHtml(incident.incident_name)} - ${escapeHtml(roleLabel(incident.status))}
+                    </option>
+                  `,
+                )
+                .join("")}
+            </select>
+            ${
+              state.incidents.length === 0
+                ? `<small class="field-hint">No incidents are available in your admin scope.</small>`
+                : `<small class="field-hint">Hold Ctrl or Command to select more than one incident.</small>`
+            }
+          </label>
+        `;
+  const backupScopeSelector = renderOperationalScopeSelector(
+    isSystemReset ? "backupOperationalAdminSelector" : "backupOperationalIncidentSelector",
+    "back up",
+  );
+  const resetScopeSelector = renderOperationalScopeSelector(
+    isSystemReset ? "resetOperationalAdminSelector" : "resetOperationalIncidentSelector",
+    "reset",
+  );
 
   return `
     <div class="modal-backdrop" data-close-modal>
@@ -3132,7 +3141,7 @@ function renderProfileModal() {
             </div>
             <p class="panel-subtitle">${escapeHtml(dataManagementCopy)}</p>
             <div class="profile-scope-selector">
-              ${operationalScopeSelector}
+              ${backupScopeSelector}
             </div>
             <ul class="reset-safety-list">
               <li>Backups include the selected incident or admin scope, related assessments, and stored photos.</li>
@@ -3157,11 +3166,15 @@ function renderProfileModal() {
               <span class="reset-scope-badge">${escapeHtml(resetScopeLabel)}</span>
             </div>
             <p class="panel-subtitle">${escapeHtml(resetCopy)}</p>
+            <div class="profile-scope-selector">
+              ${resetScopeSelector}
+            </div>
             <ul class="reset-safety-list">
               <li>Accounts and login access are kept.</li>
               <li>Record counts are shown before reset.</li>
               <li>Attachment records and stored files are removed with related victim records.</li>
               <li>Typed confirmation and current password are required.</li>
+              <li>This reset selection is separate from the backup selection above.</li>
             </ul>
             <button class="danger-button" type="button" id="resetOperationalDataButton">
               Reset records and incidents
@@ -3208,21 +3221,28 @@ function bindProfileModalActions() {
   const restoreButton = qs("#restoreOperationalDataButton");
   const restoreInput = qs("#restoreOperationalDataFile");
   const resetButton = qs("#resetOperationalDataButton");
-  const operationalAdminSelector = qs("#operationalAdminSelector");
-  const operationalIncidentSelector = qs("#operationalIncidentSelector");
+  const backupAdminSelector = qs("#backupOperationalAdminSelector");
+  const backupIncidentSelector = qs("#backupOperationalIncidentSelector");
+  const resetAdminSelector = qs("#resetOperationalAdminSelector");
+  const resetIncidentSelector = qs("#resetOperationalIncidentSelector");
 
-  function getOperationalSelection() {
+  function getOperationalSelection(scope) {
     if (state.user?.role === "super_admin") {
       return {
-        adminId: operationalAdminSelector?.value || "",
+        adminId:
+          (scope === "backup"
+            ? backupAdminSelector?.value
+            : resetAdminSelector?.value) || "",
         incidentIds: [],
       };
     }
 
+    const incidentSelector =
+      scope === "backup" ? backupIncidentSelector : resetIncidentSelector;
     return {
       adminId: "",
       incidentIds: Array.from(
-        operationalIncidentSelector?.selectedOptions || [],
+        incidentSelector?.selectedOptions || [],
       ).map((option) => option.value),
     };
   }
@@ -3287,7 +3307,7 @@ function bindProfileModalActions() {
   if (backupButton) {
     backupButton.addEventListener("click", async () => {
       try {
-        const selection = getOperationalSelection();
+        const selection = getOperationalSelection("backup");
         const query = getOperationalScopeQuery(selection);
         if (!query) {
           const message = state.user?.role === "super_admin"
@@ -3438,7 +3458,7 @@ function bindProfileModalActions() {
   if (resetButton) {
     resetButton.addEventListener("click", async () => {
       const isSuperAdmin = state.user?.role === "super_admin";
-      const selection = getOperationalSelection();
+      const selection = getOperationalSelection("reset");
       const query = getOperationalScopeQuery(selection);
       if (!query) {
         const message = isSuperAdmin
