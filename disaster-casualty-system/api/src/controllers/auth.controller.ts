@@ -2921,7 +2921,8 @@ export async function restoreOperationalData(
     const isSuperAdmin = currentUser.role === "super_admin";
 
     if (
-      (isSuperAdmin && backup.scope.type !== "admin") ||
+      (isSuperAdmin &&
+        (backup.scope.type !== "admin" || !backup.scope.ownerId)) ||
       (!isSuperAdmin &&
         (backup.scope.type !== "incident" ||
           backup.scope.ownerId !== currentUser.id))
@@ -2935,16 +2936,59 @@ export async function restoreOperationalData(
       return;
     }
 
-    const resolved = await resolveOperationalScope(currentUser, {
-      incidentIds:
-        backup.scope.type === "incident"
-          ? backup.scope.incidentIds
-          : [],
-      adminId:
-        backup.scope.type === "admin"
-          ? backup.scope.ownerId ?? undefined
-          : undefined,
-    });
+    const backupCasualtyIncidentRows =
+      (backup.datasets.casualty_incidents ?? []) as Record<
+        string,
+        unknown
+      >[];
+    const backupScope: OperationalScope = {
+      incidentIds: backup.scope.incidentIds,
+      casualtyIncidentIds: backupCasualtyIncidentRows
+        .map((row) => row.id)
+        .filter(
+          (id): id is string =>
+            typeof id === "string" && id.trim().length > 0,
+        ),
+      casualtyIds: backupCasualtyIncidentRows
+        .map((row) => row.casualty_id)
+        .filter(
+          (id): id is string =>
+            typeof id === "string" && id.trim().length > 0,
+        ),
+    };
+    const restoreOwnerId = backup.scope.ownerId;
+    const restoreUserIds =
+      backup.scope.type === "admin" && restoreOwnerId
+        ? await getScopedUserIds(restoreOwnerId, false)
+        : [];
+    const resolved = {
+      scope: backupScope,
+      scopeType: backup.scope.type,
+      ownerId: restoreOwnerId ?? currentUser.id,
+      userIds: restoreUserIds,
+    } as const;
+
+    if (backup.scope.type === "admin" && restoreOwnerId) {
+      const { data: targetAdmin, error: targetAdminError } =
+        await supabase
+          .from("users")
+          .select("id, role")
+          .eq("id", restoreOwnerId)
+          .maybeSingle();
+
+      if (
+        targetAdminError ||
+        !targetAdmin ||
+        !["admin", "administrator"].includes(targetAdmin.role)
+      ) {
+        response.status(409).json({
+          success: false,
+          message:
+            "The admin account associated with this backup is no longer available.",
+        });
+        return;
+      }
+    }
 
     const { error: passwordError } =
       await supabaseAuth.auth.signInWithPassword({
