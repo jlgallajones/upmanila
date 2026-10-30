@@ -8,4 +8,4 @@ ALTER TABLE public.incidents
 
 ALTER TABLE public.incidents
   ADD CONSTRAINT incidents_triage_mode_check
-  CHECK (triage_mode IN ('assisted', 'unassisted'));
+  CHECK (triage_mode IN ('assisted', 'unassisted', 'both'));

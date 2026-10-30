@@ -6,6 +6,12 @@ import { getAuthenticatedUser } from "../middleware/auth.js";
 import { recordAuditLog } from "../services/audit-log.service.js";
 import { calculateTriageCategory } from "../services/triage/calculate-triage.js";
 import { compareTriageCategories } from "../services/triage/compare-triage.js";
+import {
+  isSubmittedTriageModeAllowed,
+  normalizeIncidentTriageMode,
+  type IncidentTriageMode,
+  type SubmittedTriageMode,
+} from "../services/triage/incident-triage-mode.js";
 import type {
   CasualtyTreatmentRecordRequest,
   CasualtyTransportRecordRequest,
@@ -166,19 +172,9 @@ function isObject(
   );
 }
 
-type IncidentTriageMode = "assisted" | "unassisted";
-
-function normalizeIncidentTriageMode(
-  value: unknown,
-): IncidentTriageMode {
-  return value === "unassisted"
-    ? "unassisted"
-    : "assisted";
-}
-
 function getSubmittedTriageMode(
   triageAssessment: CasualtyTriageAssessmentRequest | undefined,
-): IncidentTriageMode | null {
+): SubmittedTriageMode | null {
   const value = triageAssessment?.assessmentAnswers?.[
     "triageAssistanceMode"
   ];
@@ -199,7 +195,7 @@ function validateIncidentTriageMode(
 
   const submittedMode = getSubmittedTriageMode(triageAssessment);
 
-  if (submittedMode !== incidentTriageMode) {
+  if (!isSubmittedTriageModeAllowed(incidentTriageMode, submittedMode)) {
     response.status(400).json({
       success: false,
       message:

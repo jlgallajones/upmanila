@@ -12312,11 +12312,17 @@ function renderIncidentSectionViewContent(incident, details, sectionId) {
 }
 
 function renderIncidentEditView(incident) {
+  const triageModeLabel = incident.triage_mode === "both"
+    ? "Both"
+    : incident.triage_mode === "unassisted"
+      ? "Unassisted"
+      : "Assisted";
+
   return renderKeyValueSection([
     ["Incident code", incident.incident_code],
     ["Incident name", incident.incident_name],
     ["Type of hazard", incident.disaster_type],
-    ["Triage mode", incident.triage_mode === "unassisted" ? "Unassisted" : "Assisted"],
+    ["Triage mode", triageModeLabel],
     ["Incident exact location", incident.description || "Not recorded"],
     ["Barangay", incident.barangay || "Not recorded"],
     ["Municipality / City", incident.municipality || "Not recorded"],
@@ -12357,6 +12363,22 @@ function renderIncidentEditForm(incident) {
           </select>
         </label>
       </div>
+      <label class="field">
+        <span>Triage mode</span>
+        <select name="triageMode" required>
+          ${[
+            ["assisted", "Assisted"],
+            ["unassisted", "Unassisted"],
+            ["both", "Both"],
+          ]
+            .map(
+              ([value, label]) =>
+                `<option value="${value}" ${value === (incident.triage_mode || "assisted") ? "selected" : ""}>${label}</option>`,
+            )
+            .join("")}
+        </select>
+        <small class="field-hint">Controls which triage workflows responders can use for this incident.</small>
+      </label>
       <label class="field">
         <span>Incident exact location</span>
         <input name="description" value="${escapeHtml(incident.description || "")}" placeholder="Street, landmark, building, purok, or coordinates" />
@@ -14827,6 +14849,7 @@ async function saveIncidentDetailsSection(incidentId, form) {
     body: JSON.stringify({
       incidentName: formValue(form, "incidentName"),
       disasterType: formValue(form, "disasterType"),
+      triageMode: formValue(form, "triageMode"),
       description: formValue(form, "description"),
       barangay: formValue(form, "barangay"),
       municipality: formValue(form, "municipality"),
@@ -15436,6 +15459,7 @@ function renderIncidentCreator(compact = false) {
           <select name="triageMode" required>
             <option value="assisted">Assisted</option>
             <option value="unassisted">Unassisted</option>
+            <option value="both">Both</option>
           </select>
           <small class="field-hint">This setting is applied to all mobile victim records under this incident.</small>
         </label>

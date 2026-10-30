@@ -13,6 +13,10 @@ import {
   buildFacilityTriageAccuracyTotals,
   buildTriageAccuracySummary,
 } from "../services/triage/accuracy-summary.js";
+import {
+  incidentTriageModes,
+  type IncidentTriageMode,
+} from "../services/triage/incident-triage-mode.js";
 
 const responderIncidentViewerRoles = new Set([
   "responder",
@@ -40,7 +44,7 @@ type CreateIncidentRequest = {
   municipality?: string;
   barangay?: string;
   startedAt?: string;
-  triageMode?: "assisted" | "unassisted";
+  triageMode?: IncidentTriageMode;
 };
 
 type UpdateIncidentRequest = Partial<CreateIncidentRequest> & {
@@ -197,7 +201,7 @@ type IncidentRow = {
   started_at: string;
   ended_at: string | null;
   status: string;
-  triage_mode: "assisted" | "unassisted";
+  triage_mode: IncidentTriageMode;
 };
 
 type CasualtyIncidentRow = {
@@ -515,8 +519,6 @@ const incidentStatuses = new Set([
   "closed",
   "archived",
 ]);
-
-const incidentTriageModes = new Set(["assisted", "unassisted"]);
 
 const responderFunctionFilters = new Set<ResponderFunctionFilter>([
   "field_responder",
@@ -2313,11 +2315,11 @@ export async function createIncident(
     const normalizedTriageMode =
       triageMode ?? "assisted";
 
-    if (!incidentTriageModes.has(normalizedTriageMode)) {
+    if (!incidentTriageModes.includes(normalizedTriageMode)) {
       response.status(400).json({
         success: false,
         message:
-          "triageMode must be either assisted or unassisted.",
+          "triageMode must be assisted, unassisted, or both.",
       });
       return;
     }
@@ -2498,6 +2500,7 @@ export async function updateIncident(
       startedAt,
       endedAt,
       status,
+      triageMode,
     } = request.body;
 
     const { data: incident, error: incidentError } = await supabase
@@ -2594,6 +2597,19 @@ export async function updateIncident(
 
     if (endedAt !== undefined) {
       updates.ended_at = endedAt || null;
+    }
+
+    if (triageMode !== undefined) {
+      if (!incidentTriageModes.includes(triageMode)) {
+        response.status(400).json({
+          success: false,
+          message:
+            "triageMode must be assisted, unassisted, or both.",
+        });
+        return;
+      }
+
+      updates.triage_mode = triageMode;
     }
 
     if (status !== undefined) {

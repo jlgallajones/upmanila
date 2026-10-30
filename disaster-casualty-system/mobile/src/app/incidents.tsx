@@ -1318,7 +1318,7 @@ export default function IncidentsPage() {
   const [newIncidentName, setNewIncidentName] = useState("");
   const [newDisasterType, setNewDisasterType] = useState("");
   const [newTriageMode, setNewTriageMode] = useState<
-    "assisted" | "unassisted"
+    "assisted" | "unassisted" | "both"
   >("assisted");
   const [newIncidentStartedAt, setNewIncidentStartedAt] =
     useState("");
@@ -4537,7 +4537,7 @@ export default function IncidentsPage() {
 
               <Text style={styles.fieldLabel}>TRIAGE MODE FOR THIS INCIDENT</Text>
               <View style={styles.triageModePicker}>
-                {(["assisted", "unassisted"] as const).map((mode) => (
+                {(["assisted", "unassisted", "both"] as const).map((mode) => (
                   <Pressable
                     key={mode}
                     onPress={() => setNewTriageMode(mode)}
@@ -4557,7 +4557,9 @@ export default function IncidentsPage() {
                     >
                       {mode === "assisted"
                         ? "Assisted"
-                        : "Unassisted"}
+                        : mode === "unassisted"
+                          ? "Unassisted"
+                          : "Both"}
                     </Text>
                   </Pressable>
                 ))}

@@ -1,5 +1,5 @@
 DCMS VERIFICATION RUN
-Started: 2026-10-30T23:57:47.1520786+08:00
+Started: 2026-10-31T00:12:27.7678004+08:00
 Root: C:\Users\jlgallajones\upmanila\disaster-casualty-system
 [RUN ] API TypeScript typecheck
        Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\api
@@ -31,10 +31,11 @@ Incident analytics calculation tests passed.
        Command: npm.cmd run test:triage
 
 > disaster-casualty-api@1.0.0 test:triage
-> tsc && node dist/services/triage/calculate-triage.test.js && node dist/services/triage/triage-accuracy.test.js
+> tsc && node dist/services/triage/calculate-triage.test.js && node dist/services/triage/triage-accuracy.test.js && node dist/services/triage/incident-triage-mode.test.js
 
 Triage calculation tests passed (43).
 Triage accuracy tests passed.
+Incident triage mode tests passed.
 [PASS] Triage calculation and accuracy tests (exit code 0)
 [RUN ] Mobile TypeScript typecheck
        Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\mobile
@@ -54,12 +55,32 @@ React Compiler enabled
 Starting Metro Bundler
 
 Static rendering is enabled. Learn more: https://docs.expo.dev/router/web/static-rendering/
-? Bundled 977ms node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js (1288 modules)
-Web Bundled 1219ms node_modules\expo-router\entry.js (1382 modules)
+| (node:28996) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:28996) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:28996) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:28996) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:28996) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:28996) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:28996) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:28996) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:28996) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:28996) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+? Bundled 23989ms node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js (1514 modules)
+Web Bundled 24363ms node_modules\expo-router\entry.js (1395 modules)
 
 › web bundles (2):
 _expo/static/css/global-30c341199d6e65a2dfb94ff1ee1395d4.css (551B)
-_expo/static/js/web/entry-a41d1ef92d154212ad40d0d1a7b54e55.js (3.4MB)
+_expo/static/js/web/entry-3f0dc9a2cba3b3423b40c4dfb0d0c314.js (3.4MB)
 
 › Static routes (26):
 /home (39KB)
@@ -106,6 +127,7 @@ Exported: dist
 [RUN ] Repository whitespace check
        Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system
        Command: git.exe diff --check
-warning: in the working copy of 'disaster-casualty-system/api/src/controllers/incident-operations.controller.ts', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'disaster-casualty-system/api/src/controllers/responder-safety-response.controller.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/api/sql/add-incident-triage-mode.sql', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/mobile/src/api/casualties.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/mobile/src/app/(tabs)/add-casualty.tsx', LF will be replaced by CRLF the next time Git touches it
 [PASS] Repository whitespace check (exit code 0)

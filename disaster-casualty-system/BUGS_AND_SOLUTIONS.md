@@ -1175,6 +1175,16 @@ The summary also keeps the total survivors, total facility arrivals, response in
 60. Sign in as a mobile responder and confirm a closed incident and its victim records do not appear. Confirm the same records become visible after the incident is reopened.
 61. Confirm an administrator and Super Admin can still view the closed incident and its victim records while mobile users cannot.
 
+## 140. Incident Triage Mode Can Support Assisted And Unassisted Workflows
+
+**Problem:** Official incidents previously supported only one triage mode. Administrators could not change the mode from **Incident Management > Edit Incident**, and responders could not use either workflow for incidents that needed both assisted and unassisted triage.
+
+**Solution:** Added **Both** as an incident triage mode and added the mode selector to the web **Edit Incident** form. The API now accepts and validates `assisted`, `unassisted`, and `both`; incidents configured as **Both** accept either submitted workflow. Mobile incident creation exposes the same three choices. For a **Both** incident, the responder can switch between Assisted and Unassisted until the first Assisted answer is entered. After that first Assisted answer, the selected mode is locked. Unassisted answers may be cleared when switching to Assisted, preserving the existing confirmation behavior. Fixed-mode incidents retain their previous locked behavior, and manual-only triage systems remain unassisted.
+
+**Database:** Apply `api/sql/add-incident-triage-mode.sql` so the incident constraint permits `both`.
+
+**Status:** Implemented.
+
 ## Verification Instructions
 
 Run these commands from the repository root in PowerShell:
@@ -1246,5 +1256,11 @@ Manual Acting IC acceptance test:
 51. Edit the Responsible Officer name/email or password, then suspend and reactivate the account. Confirm the account status changes and a suspended account cannot sign in.
 52. Sign in as the Responsible Officer and confirm only **Incident Management** and **Incident Analytics** are available, with no Acting IC delegation required.
 53. Confirm the Responsible Officer can view incidents and analytics in the creating admin's unit but cannot edit incidents, delegate Acting IC control, or access other admin modules.
+54. Create an official incident with **Assisted**, **Unassisted**, and **Both**, and confirm each mode is saved and displayed correctly in web and mobile incident views.
+55. In **Incident Management > Edit Incident**, change an active incident between all three triage modes and confirm the selected mode is saved and controls the mobile workflow.
+56. For a **Both** incident, start Assisted triage, answer one assisted question, and confirm the mode selector becomes locked.
+57. For a **Both** incident, start Unassisted triage, answer questions, switch to Assisted, confirm the existing confirmation appears and answers are cleared, then answer one Assisted question and confirm the mode locks.
+58. Confirm Assisted-only incidents reject Unassisted submissions, Unassisted-only incidents reject Assisted submissions, and Both incidents accept either submission.
+59. Confirm manual-only triage systems remain unassisted and do not expose an Assisted workflow.
 
 Latest full verification run: **10 / 10 checks passed**.

@@ -1319,6 +1319,7 @@ const TRIAGE_STAGE_OPTIONS = [
 ] as const;
 
 type TriageStageOption = (typeof TRIAGE_STAGE_OPTIONS)[number];
+type IncidentTriageMode = "assisted" | "unassisted" | "both";
 type TriageAssistanceMode =
   | "assisted"
   | "unassisted";
@@ -1326,13 +1327,15 @@ type TriageAssistanceMode =
 function getIncidentTriageMode(
   incident:
     | Pick<Incident, "triage_mode">
-    | { triage_mode?: "assisted" | "unassisted" }
+    | { triage_mode?: IncidentTriageMode }
     | null
     | undefined,
-): TriageAssistanceMode {
-  return incident?.triage_mode === "unassisted"
-    ? "unassisted"
-    : "assisted";
+): IncidentTriageMode {
+  if (incident?.triage_mode === "both") {
+    return "both";
+  }
+
+  return incident?.triage_mode === "unassisted" ? "unassisted" : "assisted";
 }
 
 const TRIAGE_STAGE_OPTIONS_BY_ROLE: Record<string, TriageStageOption[]> = {
@@ -4496,7 +4499,8 @@ function mapRecordToForm(
     triageAssessmentAnswers: assessmentAnswers,
 
     triageAssistanceMode:
-      record.incident.triage_mode === "unassisted"
+      record.incident.triage_mode === "unassisted" ||
+      latestTriage?.assessment_answers?.triageAssistanceMode === "unassisted"
         ? "unassisted"
         : "assisted",
 
@@ -6830,19 +6834,27 @@ const victimCodeAlreadyExists = useMemo(() => {
     const incidentMode = getIncidentTriageMode(selectedIncident);
 
     setForm((current) => {
+      const isManualOnly = isManualOnlyTriageSystem(current.triageSystem);
+      const nextMode: TriageAssistanceMode =
+        incidentMode === "unassisted" ||
+        (incidentMode === "both" && isManualOnly)
+          ? "unassisted"
+          : "assisted";
+      const nextLocked = incidentMode !== "both" || isManualOnly;
+
       if (
-        current.triageAssistanceLocked &&
-        current.triageAssistanceMode === incidentMode
+        current.triageAssistanceLocked === nextLocked &&
+        current.triageAssistanceMode === nextMode
       ) {
         return current;
       }
 
       return {
         ...current,
-        triageAssistanceMode: incidentMode,
-        triageAssistanceLocked: true,
+        triageAssistanceMode: nextMode,
+        triageAssistanceLocked: nextLocked,
         triageAssessmentAnswers:
-          current.triageAssistanceMode === incidentMode
+          current.triageAssistanceMode === nextMode
             ? current.triageAssessmentAnswers
             : {},
       };
@@ -7680,29 +7692,22 @@ const victimCodeAlreadyExists = useMemo(() => {
   }
 
   function changeTriageAssistanceMode(
-  nextMode: TriageAssistanceMode,
-) {
-if (form.triageAssistanceLocked) {
-  return;
-}
+    nextMode: TriageAssistanceMode,
+  ) {
+    if (form.triageAssistanceLocked) {
+      return;
+    }
 
-if (
-  nextMode === "assisted" &&
-  isManualOnlyTriageSystem(form.triageSystem)
-) {
-  Alert.alert(
-    "Manual triage only",
-    "No assisted assessment is available for this triage system. Select the final triage manually.",
-  );
-  return;
-}
-
-if (
-  nextMode === "unassisted" &&
-  form.triageAssistanceLocked
-) {
-  return;
-}
+    if (
+      nextMode === "assisted" &&
+      isManualOnlyTriageSystem(form.triageSystem)
+    ) {
+      Alert.alert(
+        "Manual triage only",
+        "No assisted assessment is available for this triage system. Select the final triage manually.",
+      );
+      return;
+    }
 
   if (nextMode === form.triageAssistanceMode) {
     return;
@@ -7712,79 +7717,74 @@ if (
     form.triageAssessmentAnswers,
   ).some(Boolean);
 
-  if (
-  form.triageAssistanceMode === "unassisted" &&
-  nextMode === "assisted" &&
-  hasExistingAnswers
-) {
-  if (Platform.OS === "web") {
-    const confirmed = window.confirm(
-      "Switch to Assisted Triage?\n\n" +
-        "Your current assessment answers will be cleared before switching to Assisted mode.",
-    );
+    if (
+      form.triageAssistanceMode === "unassisted" &&
+      nextMode === "assisted" &&
+      hasExistingAnswers
+    ) {
+      if (Platform.OS === "web") {
+        const confirmed = window.confirm(
+          "Switch to Assisted Triage?\n\n" +
+            "Your current assessment answers will be cleared before switching to Assisted mode.",
+        );
 
-    if (!confirmed) {
+        if (!confirmed) {
+          return;
+        }
+
+        setForm((current) => ({
+          ...current,
+          triageAssistanceMode: "assisted",
+          triageAssistanceLocked: false,
+          triageAssessmentAnswers: {},
+        }));
+
+        return;
+      }
+
+      Alert.alert(
+        "Switch to Assisted Triage?",
+        "Your current assessment answers will be cleared before switching to Assisted mode.",
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
+          },
+          {
+            text: "Switch & Reset",
+            style: "destructive",
+            onPress: () => {
+              setForm((current) => ({
+                ...current,
+                triageAssistanceMode: "assisted",
+                triageAssistanceLocked: false,
+                triageAssessmentAnswers: {},
+              }));
+            },
+          },
+        ],
+      );
+
       return;
     }
 
-    setForm((current) => ({
-  ...current,
-  triageAssistanceMode: "assisted",
-  triageAssistanceLocked: true,
-  triageAssessmentAnswers: {},
-}));
+    setForm((current) => {
+      const nextAnswers = {
+        ...current.triageAssessmentAnswers,
+      };
 
-    return;
+      if (nextMode === "unassisted") {
+        delete nextAnswers.finalTriage;
+      }
+
+      return {
+        ...current,
+        triageAssistanceMode: nextMode,
+        triageAssistanceLocked: current.triageAssistanceLocked,
+        triageAssessmentAnswers: nextAnswers,
+      };
+    });
   }
-
-  Alert.alert(
-    "Switch to Assisted Triage?",
-    "Your current assessment answers will be cleared before switching to Assisted mode.",
-    [
-      {
-        text: "Cancel",
-        style: "cancel",
-      },
-      {
-        text: "Switch & Reset",
-        style: "destructive",
-        onPress: () => {
-          setForm((current) => ({
-  ...current,
-  triageAssistanceMode: "assisted",
-  triageAssistanceLocked: true,
-  triageAssessmentAnswers: {},
-}));
-        },
-      },
-    ],
-  );
-
-  return;
-}
-
-  setForm((current) => {
-    const nextAnswers = {
-      ...current.triageAssessmentAnswers,
-    };
-
-    if (nextMode === "unassisted") {
-      delete nextAnswers.finalTriage;
-    }
-
-    return {
-  ...current,
-  triageAssistanceMode: nextMode,
-
-  triageAssistanceLocked:
-    nextMode === "assisted"
-      ? true
-      : current.triageAssistanceLocked,
-
-  triageAssessmentAnswers: nextAnswers,
-};
-  });
-}
 
 function handleTriageAssessmentDone() {
   if (
@@ -8146,9 +8146,7 @@ function handleTriageAssessmentDone() {
       triageAssessmentAnswers: currentTriageSystemIsSecondary
         ? current.triageAssessmentAnswers
       : {},
-      triageAssistanceMode: getIncidentTriageMode(
-        record.incident,
-      ),
+      triageAssistanceMode: mappedForm.triageAssistanceMode,
       triageAssistanceLocked: true,
     }));
   }
@@ -13982,6 +13980,16 @@ if (
 
   function renderTriageAssessmentSheet() {
     const questions = getAppendixQuestionsForSystem(form.triageSystem);
+    const selectedIncident = incidents.find(
+      (incident) => incident.id === form.incidentId,
+    );
+    const configuredTriageMode = selectedIncident
+      ? getIncidentTriageMode(selectedIncident)
+      : null;
+    const canChooseTriageMode =
+      configuredTriageMode === "both" &&
+      !form.triageAssistanceLocked &&
+      !isManualOnlyTriageSystem(form.triageSystem);
 
     return (
       <Modal
@@ -14029,7 +14037,38 @@ if (
                 TRIAGE MODE
               </Text>
 
-              <View style={styles.triageModeLockedCard}>
+              {canChooseTriageMode ? (
+                <>
+                  <View style={styles.triageModeToggle}>
+                    {(["assisted", "unassisted"] as const).map((mode) => (
+                      <Pressable
+                        key={mode}
+                        onPress={() => changeTriageAssistanceMode(mode)}
+                        style={({ pressed }) => [
+                          styles.triageModeOption,
+                          form.triageAssistanceMode === mode &&
+                            styles.triageModeOptionSelected,
+                          pressed && styles.pressed,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.triageModeOptionText,
+                            form.triageAssistanceMode === mode &&
+                              styles.triageModeOptionTextSelected,
+                          ]}
+                        >
+                          {mode === "assisted" ? "Assisted" : "Unassisted"}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <Text style={styles.triageModeLockedHint}>
+                    You can switch until the first Assisted answer is entered.
+                  </Text>
+                </>
+              ) : (
+                <View style={styles.triageModeLockedCard}>
                   <Ionicons
                     name={
                       form.triageAssistanceMode === "assisted"
@@ -14046,9 +14085,13 @@ if (
                         : "Unassisted"}
                     </Text>
                     <Text style={styles.triageModeLockedHint}>
-                      {form.incidentId
-                        ? "Set by the incident administrator"
-                        : "Select an official incident first"}
+                      {form.triageAssistanceLocked
+                        ? "Locked after the first Assisted answer"
+                        : form.incidentId
+                          ? isManualOnlyTriageSystem(form.triageSystem)
+                            ? "Manual triage is available for this system"
+                            : "Set by the incident administrator"
+                          : "Select an official incident first"}
                     </Text>
                   </View>
                   <Ionicons
@@ -14056,7 +14099,8 @@ if (
                     size={16}
                     color={COLORS.secondaryText}
                   />
-              </View>
+                </View>
+              )}
 </View>
             <ScrollView
               contentContainerStyle={styles.assessmentList}

@@ -16,7 +16,7 @@ export type Incident = {
   started_at: string;
   ended_at: string | null;
   status: "draft" | "active" | "closed" | "archived";
-  triage_mode: "assisted" | "unassisted";
+  triage_mode: "assisted" | "unassisted" | "both";
   created_by?: string | null;
   created_at?: string;
   updated_at?: string;
@@ -807,7 +807,7 @@ export type CreateIncidentPayload = {
   municipality?: string;
   barangay?: string;
   startedAt?: string;
-  triageMode?: "assisted" | "unassisted";
+  triageMode?: "assisted" | "unassisted" | "both";
 };
 
 export type UpdateIncidentTimelinePayload = {
