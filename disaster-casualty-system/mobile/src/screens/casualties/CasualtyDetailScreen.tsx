@@ -112,6 +112,16 @@ function isSaResponderView(
   );
 }
 
+function isAmpResponderView(
+  role: string | null,
+  assignment: ResponderAssignment | null,
+): boolean {
+  return (
+    role === "sa_responder" ||
+    (role === "responder" && assignment === "sa_responder")
+  );
+}
+
 function isHealthcareDocumenterView(role: string | null): boolean {
   return role === "documenter" || role === "medical_personnel";
 }
@@ -1020,9 +1030,6 @@ export default function CasualtyDetailScreen() {
     canEditCurrentRecord &&
     !isResponderCurrentUser &&
     !showHealthcareDocumenterDetails;
-  const canEditTransportCard =
-    canEditCurrentRecord ||
-    (isResponderCurrentUser && isOwnRecord);
   const requiresLogin =
     errorMessage?.toLowerCase().includes("sign in") ?? false;
 
@@ -1097,6 +1104,20 @@ export default function CasualtyDetailScreen() {
   const triageNotes = casualty.latestTriage?.notes ?? null;
   const treatmentNotes = casualty.latestTreatment?.notes ?? null;
   const transportNotes = casualty.latestTransport?.notes ?? null;
+  const patientFor = extractRecordSectionValue(
+    transportNotes,
+    "SA Transport / Release",
+    "Patient for",
+  );
+  const isPendingDeparture =
+    patientFor?.trim().toLowerCase() === "pending departure";
+  const canEditTransportCard = isAmpResponderView(
+    currentUserRole,
+    currentResponderAssignment,
+  )
+    ? Boolean(isOwnRecord && isPendingDeparture)
+    : canEditCurrentRecord ||
+      (isResponderCurrentUser && isOwnRecord);
   const facilityEncounter = record?.latest_facility_encounter ?? null;
   const treatmentDetails =
     casualty.latestTreatment?.treatment_details ?? {};

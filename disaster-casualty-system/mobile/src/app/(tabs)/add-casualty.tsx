@@ -1386,9 +1386,9 @@ const EMS_UNIT_TYPE_OPTIONS = [
 ] as const;
 
 const TREATMENT_STRATEGY_OPTIONS = [
-  "No (Scoop and Run/Load and Go)",
+  "Scoop and Run/Load and Go",
   "Scooter",
-  "Yes (Stay and Play)",
+  "Stay and Play",
   "Unknown",
 ] as const;
 
@@ -3735,11 +3735,11 @@ function formatTreatmentStrategy(
 ): string {
   switch (value) {
     case "scoop_and_run":
-      return "No (Scoop and Run/Load and Go)";
+      return "Scoop and Run/Load and Go";
     case "scooter":
       return "Scooter";
     case "stay_and_play":
-      return "Yes (Stay and Play)";
+      return "Stay and Play";
     case "unknown":
       return "Unknown";
     default:

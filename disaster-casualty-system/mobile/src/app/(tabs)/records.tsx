@@ -530,6 +530,16 @@ function isSaResponderView(
   );
 }
 
+function isAmpResponderView(
+  role: string | null,
+  assignment: ResponderAssignment | null,
+): boolean {
+  return (
+    role === "sa_responder" ||
+    (role === "responder" && assignment === "sa_responder")
+  );
+}
+
 function isHealthcareDocumenterView(
   role: string | null,
 ): boolean {
@@ -792,6 +802,13 @@ function getRecordTransportDispositionFilter(
   return null;
 }
 
+function isPendingDepartureRecord(record: CasualtyRecord): boolean {
+  const notes =
+    record.latest_transport_record?.notes?.toLowerCase() ?? "";
+
+  return notes.includes("patient for: pending departure");
+}
+
 function getRecordTriageFilter(
   record: CasualtyRecord,
 ): FieldResponderTriageFilter | null {
@@ -817,8 +834,10 @@ function getRecordTriageFilter(
 
 function CasualtyCard({
   item,
+  canEditPendingDeparture,
 }: {
   item: CasualtyRecord;
+  canEditPendingDeparture: boolean;
 }) {
   const fullName = getFullName(item);
   const location = getLocation(item);
@@ -826,17 +845,20 @@ function CasualtyCard({
   const statusLabel = formatStatus(item.current_status);
   const statusStyle = getStatusStyle(item.current_status);
   const synced = isRecordSynced(item);
+  const showEditButton =
+    canEditPendingDeparture && isPendingDepartureRecord(item);
 
   return (
-    <Pressable
-      onPress={() =>
-        router.push(`/casualty/${encodeURIComponent(item.id)}` as never)
-      }
-      style={({ pressed }) => [
-        styles.recordCard,
-        pressed && styles.recordCardPressed,
-      ]}
-    >
+    <View style={styles.recordCard}>
+      <Pressable
+        onPress={() =>
+          router.push(`/casualty/${encodeURIComponent(item.id)}` as never)
+        }
+        style={({ pressed }) => [
+          styles.recordCardContent,
+          pressed && styles.recordCardPressed,
+        ]}
+      >
       <View style={styles.recordTopRow}>
         <View
           style={[
@@ -930,7 +952,37 @@ function CasualtyCard({
           </Text>
         </View>
       </View>
-    </Pressable>
+      </Pressable>
+
+      {showEditButton ? (
+        <Pressable
+          onPress={() =>
+            router.push({
+              pathname: "/add-casualty",
+              params: {
+                editId: item.id,
+                focusStep: "Transport",
+              },
+            } as never)
+          }
+          style={({ pressed }) => [
+            styles.recordEditButton,
+            pressed && styles.pressed,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Edit pending departure record"
+        >
+          <Ionicons
+            name="create-outline"
+            size={16}
+            color={COLORS.text}
+          />
+          <Text style={styles.recordEditButtonText}>
+            Edit record
+          </Text>
+        </Pressable>
+      ) : null}
+    </View>
   );
 }
 
@@ -3373,7 +3425,13 @@ function toggleHealthcareLocationFilter(
         data={filteredRecords}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <CasualtyCard item={item} />
+          <CasualtyCard
+            item={item}
+            canEditPendingDeparture={isAmpResponderView(
+              currentUserRole,
+              currentResponderAssignment,
+            )}
+          />
         )}
         style={styles.list}
         contentContainerStyle={styles.listContent}
@@ -4077,6 +4135,30 @@ const styles = StyleSheet.create({
       width: 0,
       height: 4,
     },
+  },
+
+  recordCardContent: {
+    flex: 1,
+  },
+
+  recordEditButton: {
+    minHeight: 40,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    marginTop: 10,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.fieldBackground,
+    paddingHorizontal: 12,
+  },
+
+  recordEditButtonText: {
+    color: COLORS.text,
+    fontSize: 11,
+    fontWeight: "900",
   },
 
   incidentRecordCard: {

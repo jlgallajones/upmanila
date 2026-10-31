@@ -1225,6 +1225,20 @@ Additional acceptance tests:
 69. Sign in as an AMP, Field Responder, and HCFD account created by the same admin and confirm their incident lists remain unchanged and scoped to that admin.
 70. Load the Minor Incident Documenter incident list, go offline, and confirm the cached list contains only the incidents previously returned for that signed-in account.
 
+## 144. AMP Records Need Conditional Editing For Pending Departure
+
+**Problem:** AMP users had no direct edit action from the mobile Records list for victims whose transport status was still **Pending Departure**. Records that had already been released or referred should remain non-editable from that list.
+
+**Solution:** Added an **Edit record** action inside each victim record card and an **Edit** action in the individual record's **Transport** section for AMP accounts only. Both actions appear only when the saved transport notes identify **Patient for: Pending Departure** and open the existing Transport-focused edit workflow. Other roles and non-pending records do not receive the conditional button.
+
+Additional acceptance tests:
+
+71. Sign in as AMP and confirm a Pending Departure record shows **Edit record** in its card.
+72. Open the button and confirm the existing victim editor opens at the Transport step.
+73. Open a pending-departure victim record and confirm its Transport section shows the per-record **Edit** action.
+74. Confirm records marked Release, Referral/Transfer, or any non-pending status do not show either conditional edit action.
+75. Sign in as Field Responder, Minor Incident Documenter, or HCFD and confirm the conditional AMP edit actions are not shown.
+
 ## Verification Instructions
 
 Run these commands from the repository root in PowerShell:
