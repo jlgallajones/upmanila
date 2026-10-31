@@ -1185,6 +1185,46 @@ The summary also keeps the total survivors, total facility arrivals, response in
 
 **Status:** Implemented.
 
+## 141. Deactivation And Continuity Must Respect Admin Hospital Scope
+
+**Problem:** The facility operational summary used by **Deactivation & Continuity** loaded every active healthcare facility across all administrator accounts. This caused hospitals created by another admin to appear in the current incident's summary.
+
+**Solution:** The API now loads the incident owner before building the summary. Non-Super Admin users receive only active hospitals whose `created_by` matches the incident's owning admin account. Facility IDs from encounters, resource snapshots, and operation notes are also checked against that scoped facility set so unrelated hospitals cannot re-enter the response as unspecified facilities. Super Admin retains global visibility.
+
+**Status:** Implemented.
+
+## 142. Treatment Must Be Assigned From Field Responder Triage
+
+**Problem:** AMP responders could manually enter the on-site treatment strategy, while Field Responders did not have the transferred treatment step. This allowed treatment data to diverge from the triage system used.
+
+**Solution:** Removed the Treatment step from the AMP workflow and added it to the Field Responder workflow. Field Responders now see a read-only treatment assignment derived from the selected triage system. The API applies the same mapping when saving or synchronizing records so the assignment cannot be changed by a client payload.
+
+Current mapping:
+
+- STIEVE and SALT -> Stay and Play
+- START, SIEVE, SIEVE/SORT, PTT, MPTT, mSTART, JumpSTART, and MITT -> Scooter (the existing merged Play and Run strategy)
+- CareFlight and Homebush -> Scoop and Run/Load and Go
+
+Additional acceptance tests:
+
+63. Sign in as an AMP Responder and confirm the Treatment step is not shown.
+64. Sign in as a Field Responder, select each supported triage system, and confirm the treatment assignment updates automatically without a treatment selector.
+65. Submit a Field Responder record and confirm the saved treatment strategy matches the triage-system mapping.
+66. Alter the treatment strategy in a submitted client payload and confirm the API stores the mapped strategy instead.
+67. Confirm AMP records no longer create manual treatment records through the removed Treatment step.
+
+## 143. Minor Incident Documenter Incident List Must Be Admin-Scoped
+
+**Problem:** Minor Incident Documenter accounts were not included in the API's responder incident-viewer scope, so their incident selector could display incidents created by every admin account.
+
+**Solution:** Added `minor_incident_documenter` to the same admin-owner incident scope used by Field Responder, AMP, and HCFD accounts. Mobile incident caches are also now keyed by signed-in user ID, preventing an older cached list from exposing another account's incident options while offline.
+
+Additional acceptance tests:
+
+68. Create incidents under two administrator accounts and sign in as a Minor Incident Documenter created by the first admin. Confirm the incident selector shows only the first admin's active incidents.
+69. Sign in as an AMP, Field Responder, and HCFD account created by the same admin and confirm their incident lists remain unchanged and scoped to that admin.
+70. Load the Minor Incident Documenter incident list, go offline, and confirm the cached list contains only the incidents previously returned for that signed-in account.
+
 ## Verification Instructions
 
 Run these commands from the repository root in PowerShell:
@@ -1262,5 +1302,8 @@ Manual Acting IC acceptance test:
 57. For a **Both** incident, start Unassisted triage, answer questions, switch to Assisted, confirm the existing confirmation appears and answers are cleared, then answer one Assisted question and confirm the mode locks.
 58. Confirm Assisted-only incidents reject Unassisted submissions, Unassisted-only incidents reject Assisted submissions, and Both incidents accept either submission.
 59. Confirm manual-only triage systems remain unassisted and do not expose an Assisted workflow.
+60. Create hospitals under two different administrator accounts, then open **Deactivation & Continuity** for an incident owned by the first admin and confirm only the first admin's hospitals appear.
+61. Add a facility encounter or resource snapshot referencing a hospital owned by another admin and confirm it does not appear in the first admin's facility operational summary.
+62. Sign in as Super Admin and confirm the facility operational summary can still show hospitals across administrator accounts.
 
 Latest full verification run: **10 / 10 checks passed**.

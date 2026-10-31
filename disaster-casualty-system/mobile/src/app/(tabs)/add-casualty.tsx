@@ -133,7 +133,12 @@ const DEFAULT_STEPS = [
   "Remarks",
 ] as const;
 
-const FIELD_RESPONDER_STEPS = ["Safety", "Triage", "Status"] as const;
+const FIELD_RESPONDER_STEPS = [
+  "Safety",
+  "Triage",
+  "Treatment",
+  "Status",
+] as const;
 
 const MINOR_INCIDENT_DOCUMENTER_STEPS = [
   "Safety",
@@ -149,7 +154,6 @@ const MINOR_INCIDENT_DOCUMENTER_STEPS = [
 const SA_RESPONDER_STEPS = [
   "Safety",
   "Triage",
-  "Treatment",
   "Transport",
   "Remarks",
 ] as const;
@@ -3595,12 +3599,25 @@ function getAutomaticTreatmentStrategyForTriageSystem(
     .toLowerCase()
     .replace(/[\s_-]+/g, "");
 
+  if (!normalized) {
+    return "";
+  }
+
   if (["stieve", "salt"].includes(normalized)) {
     return "Stay and Play";
   }
 
   if (
-    ["start", "ptt", "mptt", "mstart", "jumpstart", "mitt"].includes(
+    [
+      "start",
+      "sieve",
+      "sievesort",
+      "ptt",
+      "mptt",
+      "mstart",
+      "jumpstart",
+      "mitt",
+    ].includes(
       normalized,
     )
   ) {
@@ -3611,7 +3628,7 @@ function getAutomaticTreatmentStrategyForTriageSystem(
     return "Scoop and Run/Load and Go";
   }
 
-  return "";
+  return "Unknown";
 }
 
 function normalizeTransferredOut(
@@ -4384,9 +4401,16 @@ function generateUuid(): string {
   );
 }
 
-async function cacheIncidents(incidents: Incident[]): Promise<void> {
+function getIncidentCacheKey(userId: string): string {
+  return `${incidentCacheKey}.${userId}`;
+}
+
+async function cacheIncidents(
+  userId: string,
+  incidents: Incident[],
+): Promise<void> {
   await AsyncStorage.setItem(
-    incidentCacheKey,
+    getIncidentCacheKey(userId),
     JSON.stringify({
       cachedAt: new Date().toISOString(),
       incidents,
@@ -4394,8 +4418,12 @@ async function cacheIncidents(incidents: Incident[]): Promise<void> {
   );
 }
 
-async function readCachedIncidents(): Promise<Incident[]> {
-  const stored = await AsyncStorage.getItem(incidentCacheKey);
+async function readCachedIncidents(
+  userId: string,
+): Promise<Incident[]> {
+  const stored = await AsyncStorage.getItem(
+    getIncidentCacheKey(userId),
+  );
 
   if (!stored) {
     return [];
@@ -6907,11 +6935,11 @@ const victimCodeAlreadyExists = useMemo(() => {
           setIsUsingCachedIncidents(false);
         }
 
-        await cacheIncidents(data);
+        await cacheIncidents(user.id, data);
       } catch (error) {
         console.error("Failed to load incidents:", error);
 
-        const cachedIncidents = await readCachedIncidents();
+        const cachedIncidents = await readCachedIncidents(user.id);
 
         if (isMounted) {
           if (cachedIncidents.length > 0) {
@@ -8720,6 +8748,14 @@ if (
       }
 
       case "Treatment": {
+        if (isFieldResponderFlow) {
+          return validateOptionalDateTime(
+            form.stabilizedTime,
+            "Invalid stabilized time",
+            "stabilized time",
+          );
+        }
+
         if (!form.treatmentStrategy.trim()) {
           Alert.alert(
             "On-site stabilization required",
@@ -12158,6 +12194,12 @@ async function ensureResponderSafetyResponseSaved() {
       return null;
 
     case "Treatment":
+      if (isFieldResponderFlow) {
+        return form.treatmentStrategy.trim()
+          ? null
+          : "Select a triage system before continuing so treatment can be assigned automatically.";
+      }
+
       if (!form.treatmentStrategy.trim()) {
         return "On-site stabilization type is required.";
       }
@@ -14970,6 +15012,67 @@ if (
   );
 }
 
+  function renderFieldResponderTreatmentStep() {
+    const automaticTreatment =
+      formatTreatmentStrategy(
+        normalizeTreatmentStrategy(form.treatmentStrategy),
+      ) ||
+      form.treatmentStrategy ||
+      "Not assigned";
+
+    return (
+      <>
+        <SectionLabel title="Treatment assignment" />
+
+        <View style={styles.automaticTreatmentCard}>
+          <Ionicons
+            name="lock-closed-outline"
+            size={18}
+            color={COLORS.text}
+          />
+          <View style={styles.automaticTreatmentTextGroup}>
+            <Text style={styles.automaticTreatmentLabel}>
+              AUTOMATIC TREATMENT
+            </Text>
+            <Text style={styles.automaticTreatmentValue}>
+              {automaticTreatment}
+            </Text>
+            <Text style={styles.automaticTreatmentHint}>
+              Assigned automatically from {formatTriageSystem(form.triageSystem) || "the selected triage system"}.
+            </Text>
+          </View>
+        </View>
+
+        <CurrentTimeField
+          label="STABILIZED TIME"
+          value={form.stabilizedTime}
+          placeholder="mm/dd/yyyy hh:mm"
+          icon="checkmark-circle-outline"
+          buttonLabel="Use current stabilized time"
+          onChangeText={(value) =>
+            updateField("stabilizedTime", value)
+          }
+          onUseCurrent={() =>
+            updateField(
+              "stabilizedTime",
+              formatDateTimeForInput(new Date()),
+            )
+          }
+        />
+
+        <FormField
+          label="TREATMENT NOTES"
+          value={form.treatmentNotes}
+          placeholder="Treatment or stabilization observations"
+          multiline
+          onChangeText={(value) =>
+            updateField("treatmentNotes", value)
+          }
+        />
+      </>
+    );
+  }
+
   function renderHospitalCareStep() {
     const showDeathDetails = normalizeYesNoUnknown(form.died) === true;
 
@@ -15684,7 +15787,9 @@ if (
         return renderStatusStep();
 
       case "Treatment":
-        return renderSaTreatmentStep();
+        return isFieldResponderFlow
+          ? renderFieldResponderTreatmentStep()
+          : renderSaTreatmentStep();
 
       case "Management":
         return renderHealthcareDocumenterManagementStep();
@@ -17048,6 +17153,45 @@ triageModeLockedValue: {
   fontSize: 13,
   fontWeight: "900",
 },
+
+  automaticTreatmentCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    minHeight: 72,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.fieldBackground,
+    gap: 9,
+    marginBottom: 18,
+  },
+  automaticTreatmentTextGroup: {
+    flex: 1,
+    minWidth: 0,
+  },
+  automaticTreatmentLabel: {
+    color: COLORS.text,
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+    marginBottom: 3,
+  },
+  automaticTreatmentValue: {
+    color: COLORS.text,
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: "800",
+  },
+  automaticTreatmentHint: {
+    color: COLORS.secondaryText,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "600",
+    marginTop: 4,
+  },
 
 
   triageModeSection: {

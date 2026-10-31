@@ -1768,14 +1768,35 @@ export async function getFacilityOperationalSummary(
       return;
     }
 
-    const incidentExists = await verifyIncidentExists(incidentId);
+    const authenticatedUser = getAuthenticatedUser(request);
+    const { data: incident, error: incidentError } = await supabase
+      .from("incidents")
+      .select("id, created_by")
+      .eq("id", incidentId)
+      .maybeSingle();
 
-    if (!incidentExists) {
+    if (incidentError) {
+      throw new Error(`Unable to verify incident: ${incidentError.message}`);
+    }
+
+    if (!incident) {
       response.status(404).json({
         success: false,
         message: "Incident not found.",
       });
       return;
+    }
+
+    let facilitiesQuery = supabase
+      .from("healthcare_facilities")
+      .select(
+        "id, facility_name, facility_level, municipality, province, is_active",
+      )
+      .eq("is_active", true)
+      .order("facility_name", { ascending: true });
+
+    if (authenticatedUser.role !== "super_admin") {
+      facilitiesQuery = facilitiesQuery.eq("created_by", incident.created_by);
     }
 
     const [
@@ -1784,13 +1805,7 @@ export async function getFacilityOperationalSummary(
       continuityResult,
       resourceResult,
     ] = await Promise.all([
-      supabase
-        .from("healthcare_facilities")
-        .select(
-          "id, facility_name, facility_level, municipality, province, is_active",
-        )
-        .eq("is_active", true)
-        .order("facility_name", { ascending: true }),
+      facilitiesQuery,
       supabase
         .from("casualty_incidents")
         .select("id")
@@ -1865,19 +1880,19 @@ export async function getFacilityOperationalSummary(
     const facilityIds = new Set<string>();
 
     for (const encounter of encounters) {
-      if (encounter.facility_id) {
+      if (encounter.facility_id && facilities.has(encounter.facility_id)) {
         facilityIds.add(encounter.facility_id);
       }
     }
 
     for (const resource of resources) {
-      if (resource.facility_id) {
+      if (resource.facility_id && facilities.has(resource.facility_id)) {
         facilityIds.add(resource.facility_id);
       }
     }
 
     for (const event of noteEvents) {
-      if (event.facilityId) {
+      if (event.facilityId && facilities.has(event.facilityId)) {
         facilityIds.add(event.facilityId);
       }
     }

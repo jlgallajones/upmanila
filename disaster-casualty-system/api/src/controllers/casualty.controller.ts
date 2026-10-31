@@ -128,6 +128,74 @@ function normalizeTreatmentStrategy(
         | "unknown");
 }
 
+function getAutomaticTreatmentStrategyForTriageSystem(
+  triageSystem: string | undefined,
+):
+  | "scoop_and_run"
+  | "scooter"
+  | "stay_and_play"
+  | "unknown"
+  | null {
+  const normalized = (triageSystem ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "");
+
+  if (!normalized) {
+    return null;
+  }
+
+  if (["stieve", "salt"].includes(normalized)) {
+    return "stay_and_play";
+  }
+
+  // Play and Run was merged into the Scooter treatment strategy.
+  if (
+    [
+      "start",
+      "sieve",
+      "sievesort",
+      "ptt",
+      "mptt",
+      "mstart",
+      "jumpstart",
+      "mitt",
+    ].includes(normalized)
+  ) {
+    return "scooter";
+  }
+
+  if (["careflight", "homebush"].includes(normalized)) {
+    return "scoop_and_run";
+  }
+
+  return "unknown";
+}
+
+function getEffectiveTreatmentRecord(
+  userRole: string,
+  triageAssessment: CasualtyTriageAssessmentRequest | undefined,
+  treatmentRecord: CasualtyTreatmentRecordRequest | undefined,
+): CasualtyTreatmentRecordRequest | undefined {
+  if (userRole !== "field_responder" || !triageAssessment) {
+    return treatmentRecord;
+  }
+
+  const automaticStrategy =
+    getAutomaticTreatmentStrategyForTriageSystem(
+      triageAssessment.triageSystem,
+    );
+
+  if (!automaticStrategy) {
+    return treatmentRecord;
+  }
+
+  return {
+    ...(treatmentRecord ?? {}),
+    treatmentStrategy: automaticStrategy,
+  };
+}
+
 const facilityDispositions = [
   "active_care",
   "hospital_admission",
@@ -1809,6 +1877,12 @@ export async function createCasualty(
       casualtyOutcome,
     } = request.body;
     const user = getAuthenticatedUser(request);
+    const effectiveTreatmentRecord =
+      getEffectiveTreatmentRecord(
+        user.role,
+        triageAssessment,
+        treatmentRecord,
+      );
 
     if (!clientRecordId || !incidentId) {
       response.status(400).json({
@@ -1961,7 +2035,12 @@ export async function createCasualty(
       return;
     }
 
-    if (!validateTreatmentRecord(treatmentRecord, response)) {
+    if (
+      !validateTreatmentRecord(
+        effectiveTreatmentRecord,
+        response,
+      )
+    ) {
       return;
     }
 
@@ -2179,12 +2258,12 @@ export async function createCasualty(
       );
     }
 
-    if (treatmentRecord) {
+    if (effectiveTreatmentRecord) {
       followUpWrites.push(
         insertTreatmentRecord(
           transactionResult.casualtyIncident.id,
           user.id,
-          treatmentRecord,
+          effectiveTreatmentRecord,
         ),
       );
     }
@@ -4254,6 +4333,12 @@ export async function updateCasualty(
       casualtyOutcome,
     } = request.body;
     const user = getAuthenticatedUser(request);
+    const effectiveTreatmentRecord =
+      getEffectiveTreatmentRecord(
+        user.role,
+        triageAssessment,
+        treatmentRecord,
+      );
     const responderFunction =
       request.header("x-dcms-responder-function") ??
       request.header("X-DCMS-Responder-Function");
@@ -4268,7 +4353,7 @@ export async function updateCasualty(
       !incidentDetails &&
       !incidentId &&
       !triageAssessment &&
-      !treatmentRecord &&
+      !effectiveTreatmentRecord &&
       !facilityEncounter &&
       !casualtyOutcome &&
       ["responder", "field_responder", "sa_responder"].includes(
@@ -4281,7 +4366,7 @@ export async function updateCasualty(
       !incidentId &&
       !triageAssessment &&
       !transportRecord &&
-      !treatmentRecord &&
+      !effectiveTreatmentRecord &&
       !facilityEncounter &&
       !casualtyOutcome
     ) {
@@ -4300,7 +4385,12 @@ export async function updateCasualty(
       return;
     }
 
-    if (!validateTreatmentRecord(treatmentRecord, response)) {
+    if (
+      !validateTreatmentRecord(
+        effectiveTreatmentRecord,
+        response,
+      )
+    ) {
       return;
     }
 
@@ -4662,8 +4752,12 @@ export async function updateCasualty(
       await insertTransportRecord(id, user.id, transportRecord);
     }
 
-    if (treatmentRecord) {
-      await insertTreatmentRecord(id, user.id, treatmentRecord);
+    if (effectiveTreatmentRecord) {
+      await insertTreatmentRecord(
+        id,
+        user.id,
+        effectiveTreatmentRecord,
+      );
     }
 
     const encounterPayload = facilityEncounter ?? (
