@@ -1978,6 +1978,64 @@ function extractSaResponderVictimCode(
   return extractVictimCodeFromTriageNotes(remarks);
 }
 
+function extractLatestTransportSectionValue(
+  text: string | null | undefined,
+  label: string,
+): string {
+  if (!text) {
+    return "";
+  }
+
+  const targetLabel = `${label}:`.toLowerCase();
+  let insideTransportSection = false;
+  let value = "";
+
+  for (const rawLine of String(text).split(/\r?\n/)) {
+    const line = rawLine.trim();
+
+    if (!line) {
+      continue;
+    }
+
+    if (line.startsWith("[") && line.endsWith("]")) {
+      const sectionTitle = line.slice(1, -1).trim().toLowerCase();
+      insideTransportSection = sectionTitle.endsWith("transport / release");
+      continue;
+    }
+
+    if (
+      insideTransportSection &&
+      line.toLowerCase().startsWith(targetLabel)
+    ) {
+      value = line.slice(label.length + 1).trim();
+    }
+  }
+
+  return value;
+}
+
+function extractRecordBaseText(text: string | null | undefined): string {
+  if (!text) {
+    return "";
+  }
+
+  const baseLines: string[] = [];
+
+  for (const rawLine of String(text).split(/\r?\n/)) {
+    const line = rawLine.trim();
+
+    if (line.startsWith("[") && line.endsWith("]")) {
+      break;
+    }
+
+    if (line) {
+      baseLines.push(line);
+    }
+  }
+
+  return baseLines.join("\n").trim();
+}
+
 function formatLinkedCasualtyLabel(
   record: CasualtyRecord,
   victimCode: string,
@@ -4464,6 +4522,13 @@ function mapRecordToForm(
         typeof value === "boolean" ? (value ? "yes" : "no") : String(value),
       ]),
   );
+  const savedTransportNotes = valueOrEmpty(latestTransport?.notes);
+  const savedReceivingFacility =
+    latestTransport?.receiving_facility?.facility_name ??
+    extractLatestTransportSectionValue(
+      savedTransportNotes,
+      "Receiving facility",
+    );
 
   return {
     responderSafetyStatus: "",
@@ -4544,18 +4609,51 @@ function mapRecordToForm(
         : latestTransport?.transport_required === "no"
           ? "Release"
           : "",
-    conditionBeforeRelease: "",
-    releaseMedicalContact: "",
-    conditionBeforeTransfer: "",
-    transferMedicalContact: "",
-    usedEmsVehicle: "",
-    emsVehicleType: "",
-    transferPrecaution: "",
-    receivingFacilityText: "",
-    vehicleMakeModelPlate: "",
-    patientReceivedByPhysician: "",
-    patientReceivedByNurse: "",
-    releaseLiabilityAccepted: "",
+    conditionBeforeRelease: extractLatestTransportSectionValue(
+      savedTransportNotes,
+      "Condition before release",
+    ),
+    releaseMedicalContact: extractLatestTransportSectionValue(
+      savedTransportNotes,
+      "Medical contact if dead",
+    ),
+    conditionBeforeTransfer: extractLatestTransportSectionValue(
+      savedTransportNotes,
+      "Condition before transfer",
+    ),
+    transferMedicalContact: extractLatestTransportSectionValue(
+      savedTransportNotes,
+      "Medical contact if dead before transfer",
+    ),
+    usedEmsVehicle: extractLatestTransportSectionValue(
+      savedTransportNotes,
+      "Used EMS vehicle",
+    ),
+    emsVehicleType: extractLatestTransportSectionValue(
+      savedTransportNotes,
+      "Type of EMS vehicle",
+    ),
+    transferPrecaution: extractLatestTransportSectionValue(
+      savedTransportNotes,
+      "Precaution",
+    ),
+    receivingFacilityText: savedReceivingFacility,
+    vehicleMakeModelPlate: extractLatestTransportSectionValue(
+      savedTransportNotes,
+      "Vehicle make/model/plate",
+    ),
+    patientReceivedByPhysician: extractLatestTransportSectionValue(
+      savedTransportNotes,
+      "Patient received by physician",
+    ),
+    patientReceivedByNurse: extractLatestTransportSectionValue(
+      savedTransportNotes,
+      "Patient received by nurse",
+    ),
+    releaseLiabilityAccepted: extractLatestTransportSectionValue(
+      savedTransportNotes,
+      "Release of liability accepted",
+    ),
     transportMode: formatTransportMode(latestTransport?.transport_mode),
     emsUnitType: formatEmsUnitType(latestTransport?.ems_unit_type),
     arrivedSceneTime: latestTransport?.arrived_scene_at
@@ -4574,7 +4672,7 @@ function mapRecordToForm(
     preTransportTriageCategory: valueOrEmpty(
       record.latest_facility_encounter?.pre_transport_triage_category,
     ),
-    transportNotes: valueOrEmpty(latestTransport?.notes),
+    transportNotes: extractRecordBaseText(savedTransportNotes),
 
     treatmentStrategy: "",
     fillPatientCareReport: "",

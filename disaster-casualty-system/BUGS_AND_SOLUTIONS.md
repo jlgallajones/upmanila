@@ -1394,5 +1394,8 @@ Manual Acting IC acceptance test:
 60. Create hospitals under two different administrator accounts, then open **Deactivation & Continuity** for an incident owned by the first admin and confirm only the first admin's hospitals appear.
 61. Add a facility encounter or resource snapshot referencing a hospital owned by another admin and confirm it does not appear in the first admin's facility operational summary.
 62. Sign in as Super Admin and confirm the facility operational summary can still show hospitals across administrator accounts.
+63. Edit an AMP casualty transport record and change **Patient For** to **Release**. Confirm the saved **Condition Before Release**, **Release of Liability Accepted**, **Departed Scene**, and **Transport / Release Notes** values appear in the record detail.
+64. Edit an AMP casualty transport record and change **Patient For** to **Referral or Transfer to Health Facility**. Confirm **Condition Before Transfer**, **Receiving Facility**, **Departed Scene**, **Arrived Facility**, **Used EMS Vehicle**, and **Transport / Release Notes** appear after saving.
+65. Repeat the transport edit/detail check for every role that has an edit action. Confirm each role keeps its own edit fields and that saving one field does not replace previously saved transport values.
 
 Latest full verification run: **10 / 10 checks passed**.

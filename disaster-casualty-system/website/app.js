@@ -9026,6 +9026,39 @@ function extractRecordSectionValue(
   return null;
 }
 
+function extractLatestTransportSectionValue(text, label) {
+  if (!text) {
+    return null;
+  }
+
+  const targetLabel = `${label}:`.toLowerCase();
+  let insideTransportSection = false;
+  let value = null;
+
+  for (const rawLine of String(text).split(/\r?\n/)) {
+    const line = rawLine.trim();
+
+    if (!line) {
+      continue;
+    }
+
+    if (line.startsWith("[") && line.endsWith("]")) {
+      const sectionTitle = line.slice(1, -1).trim().toLowerCase();
+      insideTransportSection = sectionTitle.endsWith("transport / release");
+      continue;
+    }
+
+    if (
+      insideTransportSection &&
+      line.toLowerCase().startsWith(targetLabel)
+    ) {
+      value = line.slice(label.length + 1).trim() || null;
+    }
+  }
+
+  return value;
+}
+
 function extractRecordBaseText(text) {
   if (!text) {
     return null;
@@ -9491,20 +9524,16 @@ function renderFieldResponderTreatmentContent(records) {
 
 function renderSaTransportHistoryContent(records) {
   const saRecords = (records || []).filter((record) =>
-    String(record.notes || "")
-      .toLowerCase()
-      .includes("[sa transport / release]"),
+    /\[[^\]]+transport \/ release\]/i.test(
+      String(record.notes || ""),
+    ),
   );
 
   return saRecords.length
     ? saRecords
         .map((record, index) => {
           const patientFor =
-            extractRecordSectionValue(
-              record.notes,
-              "SA Transport / Release",
-              "Patient for",
-            );
+            extractLatestTransportSectionValue(record.notes, "Patient for");
 
           const normalizedPatientFor =
             String(patientFor || "").toLowerCase();
@@ -9517,23 +9546,20 @@ function renderSaTransportHistoryContent(records) {
             "referral or transfer to health facility";
 
           const conditionBeforeRelease =
-            extractRecordSectionValue(
+            extractLatestTransportSectionValue(
               record.notes,
-              "SA Transport / Release",
               "Condition before release",
             );
 
           const conditionBeforeTransfer =
-            extractRecordSectionValue(
+            extractLatestTransportSectionValue(
               record.notes,
-              "SA Transport / Release",
               "Condition before transfer",
             );
 
           const usedEmsVehicle =
-            extractRecordSectionValue(
+            extractLatestTransportSectionValue(
               record.notes,
-              "SA Transport / Release",
               "Used EMS vehicle",
             );
 
@@ -9578,9 +9604,8 @@ function renderSaTransportHistoryContent(records) {
                         ).toLowerCase() === "dead"
                           ? detailItem(
                               "Medical Contact",
-                              extractRecordSectionValue(
+                              extractLatestTransportSectionValue(
                                 record.notes,
-                                "SA Transport / Release",
                                 "Medical contact if dead",
                               ),
                             )
@@ -9596,9 +9621,8 @@ function renderSaTransportHistoryContent(records) {
 
                       ${detailItem(
                         "Release of Liability Accepted",
-                        extractRecordSectionValue(
+                        extractLatestTransportSectionValue(
                           record.notes,
-                          "SA Transport / Release",
                           "Release of liability accepted",
                         ),
                       )}
@@ -9620,9 +9644,8 @@ function renderSaTransportHistoryContent(records) {
                         ).toLowerCase() === "dead"
                           ? detailItem(
                               "Medical Contact",
-                              extractRecordSectionValue(
+                              extractLatestTransportSectionValue(
                                 record.notes,
-                                "SA Transport / Release",
                                 "Medical contact if dead before transfer",
                               ),
                             )
@@ -9631,9 +9654,8 @@ function renderSaTransportHistoryContent(records) {
 
                       ${detailItem(
                         "Precaution",
-                        extractRecordSectionValue(
+                        extractLatestTransportSectionValue(
                           record.notes,
-                          "SA Transport / Release",
                           "Precaution",
                         ),
                       )}
@@ -9642,9 +9664,8 @@ function renderSaTransportHistoryContent(records) {
                         "Receiving Facility",
                         record.receiving_facility
                           ?.facility_name ||
-                          extractRecordSectionValue(
+                          extractLatestTransportSectionValue(
                             record.notes,
-                            "SA Transport / Release",
                             "Receiving facility",
                           ),
                       )}
@@ -9661,18 +9682,16 @@ function renderSaTransportHistoryContent(records) {
                           ? `
                             ${detailItem(
                               "Type of EMS Vehicle",
-                              extractRecordSectionValue(
+                              extractLatestTransportSectionValue(
                                 record.notes,
-                                "SA Transport / Release",
                                 "Type of EMS vehicle",
                               ),
                             )}
 
                             ${detailItem(
                               "Vehicle Make / Model / Plate",
-                              extractRecordSectionValue(
+                              extractLatestTransportSectionValue(
                                 record.notes,
-                                "SA Transport / Release",
                                 "Vehicle make/model/plate",
                               ),
                             )}

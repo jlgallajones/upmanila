@@ -376,6 +376,42 @@ function extractRecordSectionValue(
   return null;
 }
 
+function extractLatestTransportSectionValue(
+  text: string | null | undefined,
+  label: string,
+): string | null {
+  if (!text) {
+    return null;
+  }
+
+  const targetLabel = `${label}:`.toLowerCase();
+  let insideTransportSection = false;
+  let value: string | null = null;
+
+  for (const rawLine of String(text).split(/\r?\n/)) {
+    const line = rawLine.trim();
+
+    if (!line) {
+      continue;
+    }
+
+    if (line.startsWith("[") && line.endsWith("]")) {
+      const sectionTitle = line.slice(1, -1).trim().toLowerCase();
+      insideTransportSection = sectionTitle.endsWith("transport / release");
+      continue;
+    }
+
+    if (
+      insideTransportSection &&
+      line.toLowerCase().startsWith(targetLabel)
+    ) {
+      value = line.slice(label.length + 1).trim() || null;
+    }
+  }
+
+  return value;
+}
+
 function extractRecordBaseText(text: string | null | undefined): string {
   if (!text) {
     return "Unavailable";
@@ -1120,9 +1156,8 @@ export default function CasualtyDetailScreen() {
       ? "Referral or Transfer to Health Facility"
       : casualty.latestTransport?.transport_required === "no"
         ? "Release"
-        : extractRecordSectionValue(
+        : extractLatestTransportSectionValue(
               transportNotes,
-              "SA Transport / Release",
               "Patient for",
             ) ??
             (casualty.latestTransport?.transport_required === "unknown"
@@ -1696,9 +1731,8 @@ export default function CasualtyDetailScreen() {
                   <DetailRow
                     label="Condition Before Release"
                     value={formatValue(
-                      extractRecordSectionValue(
+                      extractLatestTransportSectionValue(
                         transportNotes,
-                        "SA Transport / Release",
                         "Condition before release",
                       ),
                     )}
@@ -1707,9 +1741,8 @@ export default function CasualtyDetailScreen() {
                   <DetailRow
                     label="Condition Before Transfer"
                     value={formatValue(
-                      extractRecordSectionValue(
+                      extractLatestTransportSectionValue(
                         transportNotes,
-                        "SA Transport / Release",
                         "Condition before transfer",
                       ),
                     )}
@@ -1720,9 +1753,8 @@ export default function CasualtyDetailScreen() {
                     value={formatValue(
                       casualty.latestTransport.receiving_facility
                         ?.facility_name ??
-                        extractRecordSectionValue(
+                        extractLatestTransportSectionValue(
                           transportNotes,
-                          "SA Transport / Release",
                           "Receiving facility",
                         ),
                     )}
@@ -1739,12 +1771,33 @@ export default function CasualtyDetailScreen() {
                   <DetailRow
                     label="Used EMS Vehicle"
                     value={formatValue(
-                      extractRecordSectionValue(
+                      extractLatestTransportSectionValue(
                         transportNotes,
-                        "SA Transport / Release",
                         "Used EMS vehicle",
                       ),
                     )}
+                  />
+
+                  <DetailRow
+                    label="Arrived Facility"
+                    value={formatDateTime(
+                      casualty.latestTransport.arrived_facility_at,
+                    )}
+                  />
+
+                  <DetailRow
+                    label="Release of Liability Accepted"
+                    value={formatValue(
+                      extractLatestTransportSectionValue(
+                        transportNotes,
+                        "Release of liability accepted",
+                      ),
+                    )}
+                  />
+
+                  <DetailRow
+                    label="Transport / Release Notes"
+                    value={extractRecordBaseText(transportNotes)}
                   />
                 </>
               ) : (
