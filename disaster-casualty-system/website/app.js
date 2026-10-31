@@ -2953,6 +2953,7 @@ function renderDashboardShell() {
             type="button"
             aria-label="${state.sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}"
             title="${state.sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}"
+            aria-expanded="false"
           >
             ${state.sidebarCollapsed ? "&gt;" : "&lt;"}
           </button>
@@ -2986,7 +2987,31 @@ function renderDashboardShell() {
 }
 
 function bindShell() {
-  qs("#sidebarToggle").addEventListener("click", () => {
+  const sidebarToggle = qs("#sidebarToggle");
+
+  if (window.matchMedia("(max-width: 760px)").matches) {
+    sidebarToggle?.setAttribute("aria-label", "Open navigation");
+    sidebarToggle?.setAttribute("title", "Open navigation");
+  }
+
+  sidebarToggle.addEventListener("click", () => {
+    if (window.matchMedia("(max-width: 760px)").matches) {
+      const sidebar = qs(".sidebar");
+      const toggle = qs("#sidebarToggle");
+      const isOpen = sidebar?.classList.toggle("mobile-nav-open") ?? false;
+
+      toggle?.setAttribute("aria-expanded", String(isOpen));
+      toggle?.setAttribute(
+        "aria-label",
+        isOpen ? "Close navigation" : "Open navigation",
+      );
+      toggle?.setAttribute(
+        "title",
+        isOpen ? "Close navigation" : "Open navigation",
+      );
+      return;
+    }
+
     state.sidebarCollapsed = !state.sidebarCollapsed;
     localStorage.setItem(
       "dcms.admin.sidebarCollapsed",
@@ -2999,6 +3024,10 @@ function bindShell() {
     button.addEventListener("click", () => {
       setActiveView(button.dataset.view);
       updateSidebarActiveState();
+      if (window.matchMedia("(max-width: 760px)").matches) {
+        qs(".sidebar")?.classList.remove("mobile-nav-open");
+        qs("#sidebarToggle")?.setAttribute("aria-expanded", "false");
+      }
       renderCurrentView();
       bindView();
     });

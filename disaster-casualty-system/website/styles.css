@@ -5281,15 +5281,57 @@ tr[data-records-incident-details]:hover > td {
     padding: 12px 12px max(10px, env(safe-area-inset-top));
   }
 
+  .sidebar-toggle,
+  .sidebar-collapsed .sidebar-toggle {
+    display: grid;
+    position: relative;
+    width: 40px;
+    height: 40px;
+    margin-left: auto;
+    border-radius: 12px;
+    font-size: 0;
+  }
+
+  .sidebar-toggle::before {
+    content: "";
+    width: 17px;
+    height: 2px;
+    border-radius: 999px;
+    background: currentColor;
+    box-shadow: 0 5px 0 currentColor, 0 10px 0 currentColor;
+  }
+
+  .sidebar.mobile-nav-open .sidebar-toggle::before {
+    width: 17px;
+    height: 2px;
+    box-shadow: none;
+    transform: rotate(45deg);
+  }
+
+  .sidebar.mobile-nav-open .sidebar-toggle::after {
+    content: "";
+    position: absolute;
+    width: 17px;
+    height: 2px;
+    border-radius: 999px;
+    background: currentColor;
+    transform: rotate(-45deg);
+  }
+
   .nav-list,
   .sidebar-collapsed .nav-list {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
     align-items: start;
     gap: 8px;
-    overflow: visible;
+    overflow: hidden;
     padding: 1px 0 6px;
     margin: 0;
+  }
+
+  .sidebar:not(.mobile-nav-open) .nav-list,
+  .sidebar-collapsed:not(.mobile-nav-open) .nav-list {
+    display: none;
   }
 
   .nav-group,
@@ -5301,7 +5343,7 @@ tr[data-records-incident-details]:hover > td {
 
   .nav-group[open],
   .sidebar-collapsed .nav-group[open] {
-    grid-column: 1 / -1;
+    grid-column: auto;
   }
 
   .nav-group-summary,
@@ -5325,7 +5367,7 @@ tr[data-records-incident-details]:hover > td {
   .sidebar-collapsed .nav-group-items {
     width: 100%;
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
     gap: 6px;
     margin: 7px 0 0;
     padding: 7px 0 0;
