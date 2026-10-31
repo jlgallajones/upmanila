@@ -5292,6 +5292,20 @@ tr[data-records-incident-details]:hover > td {
     font-size: 0;
   }
 
+  .sidebar-title,
+  .sidebar-collapsed .sidebar-title {
+    position: relative;
+    padding-right: 102px;
+  }
+
+  .sidebar-toggle,
+  .sidebar-collapsed .sidebar-toggle {
+    position: absolute;
+    top: 0;
+    right: 0;
+    margin: 0;
+  }
+
   .sidebar-toggle::before {
     content: "";
     width: 17px;
@@ -5324,9 +5338,23 @@ tr[data-records-incident-details]:hover > td {
     grid-template-columns: 1fr;
     align-items: start;
     gap: 8px;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
+    max-height: calc(100svh - 190px);
     padding: 1px 0 6px;
     margin: 0;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 131, 143, 0.42) transparent;
+    overscroll-behavior: contain;
+  }
+
+  .nav-list::-webkit-scrollbar {
+    width: 5px;
+  }
+
+  .nav-list::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: rgba(0, 131, 143, 0.42);
   }
 
   .sidebar:not(.mobile-nav-open) .nav-list,
@@ -5394,7 +5422,49 @@ tr[data-records-incident-details]:hover > td {
 
   .sidebar-footer,
   .sidebar-collapsed .sidebar-footer {
+    position: static;
+    display: block;
     margin-top: 10px;
+  }
+
+  .sidebar-account-row,
+  .sidebar-collapsed .sidebar-account-row {
+    display: none;
+    width: 100%;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .sidebar.mobile-nav-open .sidebar-account-row,
+  .sidebar-collapsed.mobile-nav-open .sidebar-account-row {
+    display: flex;
+  }
+
+  .sidebar-footer .danger-button,
+  .sidebar-collapsed .sidebar-footer .danger-button {
+    position: absolute;
+    top: 12px;
+    right: 60px;
+    width: auto;
+    min-height: 42px;
+    padding: 0 14px;
+    border-radius: 12px;
+  }
+
+  .sidebar-footer .user-chip,
+  .sidebar-collapsed .sidebar-footer .user-chip {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .sidebar-footer .sidebar-theme-toggle,
+  .sidebar-collapsed .sidebar-footer .sidebar-theme-toggle {
+    flex: 0 0 42px;
+  }
+
+  .sidebar-footer .user-chip-text,
+  .sidebar-collapsed .sidebar-footer .user-chip-text {
+    max-width: none;
   }
 
   .main {

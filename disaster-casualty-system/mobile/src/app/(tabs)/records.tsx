@@ -440,6 +440,21 @@ function formatStatus(status: string): string {
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
+function formatRecordTriageCategory(record: CasualtyRecord): string {
+  const category =
+    record.latest_triage_assessment?.calculated_category ??
+    record.latest_triage_assessment?.triage_category ??
+    "";
+
+  switch (category.trim().toLowerCase()) {
+    case "minimal":
+    case "minor":
+      return "Minor";
+    default:
+      return formatStatus(category);
+  }
+}
+
 function getStatusStyle(status: string) {
   switch (status.toLowerCase()) {
     case "missing":
@@ -857,8 +872,11 @@ function CasualtyCard({
   const fullName = getFullName(item);
   const location = getLocation(item);
   const transportStatus = getRecordTransportStatusLabel(item);
-  const statusLabel = formatStatus(item.current_status);
-  const statusStyle = getStatusStyle(item.current_status);
+  const statusLabel = formatRecordTriageCategory(item);
+  const triageFilter = getRecordTriageFilter(item);
+  const statusStyle = triageFilter
+    ? getTriageFilterStyle(triageFilter) ?? getStatusStyle(item.current_status)
+    : getStatusStyle(item.current_status);
   const synced = isRecordSynced(item);
   const showEditButton =
     canEditPendingDeparture && isPendingDepartureRecord(item);

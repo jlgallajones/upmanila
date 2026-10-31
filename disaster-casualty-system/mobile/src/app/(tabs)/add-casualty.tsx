@@ -5018,6 +5018,7 @@ type SelectFieldProps = {
   label: string;
   value: string;
   placeholder: string;
+  helperText?: string;
   icon?: keyof typeof Ionicons.glyphMap;
   inputStyle?: StyleProp<ViewStyle>;
   textStyle?: StyleProp<TextStyle>;
@@ -5029,6 +5030,7 @@ function SelectField({
   label,
   value,
   placeholder,
+  helperText,
   icon = "chevron-down-outline",
   inputStyle,
   textStyle,
@@ -5038,6 +5040,10 @@ function SelectField({
   return (
     <View style={styles.fieldGroup}>
       <Text style={styles.label}>{label}</Text>
+
+      {helperText ? (
+        <Text style={styles.fieldHint}>{helperText}</Text>
+      ) : null}
 
       <Pressable
         onPress={onPress}
@@ -13183,6 +13189,7 @@ function confirmExitAddCasualty() {
           label="WITNESS PRESENT"
           value={form.witnessPresent}
           placeholder="Select witness"
+          helperText="Select all that apply."
           onPress={() => openChoiceSheet("witnessPresent")}
         />
 
@@ -17156,6 +17163,13 @@ victimUserCodeValue: {
     fontSize: 11,
     fontWeight: "700",
     letterSpacing: 0.3,
+    marginBottom: 8,
+  },
+  fieldHint: {
+    color: COLORS.secondaryText,
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: -3,
     marginBottom: 8,
   },
   input: {

@@ -1314,6 +1314,52 @@ Additional acceptance tests:
 95. Return to Records, open Add Victim, and confirm the form is blank and titled **Add Victim**, not **Edit Victim**.
 96. Confirm the new form can be completed and submitted as a new record without changing the previously edited record.
 
+## 151. HCFD Records Cards Showed Unknown Instead Of The Triage Category
+
+**Problem:** The HCFD mobile record detail displayed the correct triage category, but the corresponding Records card showed **Unknown**. The card was reading `current_status`, while the detail view used the latest calculated or selected triage assessment.
+
+**Solution:** The shared mobile Records card now reads `latest_triage_assessment.calculated_category` first and falls back to `triage_category`, matching the detail view. The displayed category normalizes **Minimal** to **Minor** and retains the existing unknown fallback when no triage assessment exists. Triage-specific badge colors are also applied when a category is available.
+
+Additional acceptance tests:
+
+97. Sign in as HCFD and open Records for a casualty with a saved triage assessment. Confirm the card badge matches the triage category shown inside the record.
+98. Verify that Immediate, Delayed, Minor, and Expectant categories use their corresponding badge colors.
+99. Open a record without a triage assessment and confirm the card still shows **Unknown** rather than displaying an unrelated value.
+
+## 152. Witness Selection Needed Multi-Selection Guidance
+
+**Problem:** The Minor Incident Documenter witness-present field allowed multiple selections, but the form did not tell the user that all applicable choices could be selected.
+
+**Solution:** Added the helper instruction **Select all that apply.** below the Witness Present selector. The selection behavior and stored values remain unchanged.
+
+Additional acceptance tests:
+
+100. Open the Minor Incident Documenter Add Victim flow and confirm the Witness Present field displays **Select all that apply.**
+101. Select more than one witness option and confirm all selected values remain selected and are saved with the record.
+
+## 153. Mobile Web Dashboard Needed A Usable Responsive Navigation Layout
+
+**Problem:** The web dashboard was difficult to use on phone-sized screens. Sidebar categories and account controls consumed too much vertical space, navigation content could be clipped, and the profile, theme, and logout controls were not arranged consistently for a compact viewport.
+
+**Solution:** Added a mobile navigation presentation with a hamburger control, scrollable navigation content, compact single-column category groups, and responsive account controls. Profile and theme controls remain inside the opened navigation menu, while Logout stays beside the hamburger control. Desktop navigation behavior remains unchanged.
+
+Additional acceptance tests:
+
+102. Open the web dashboard at a phone-sized viewport and confirm the hamburger control opens and closes the navigation menu.
+103. Open every navigation category and confirm the full list can scroll without clipping lower buttons.
+104. Confirm Profile, theme, and Logout controls remain reachable and do not overlap the page content on phone and tablet widths.
+105. Resize back to desktop width and confirm the existing sidebar layout and navigation behavior remain intact.
+
+## 154. Transport Status Badge Must Respect Role Sections
+
+**Problem:** The mobile Records card currently renders a transport line for every role. When a record has no transport row, the shared formatter displays **Transport: Pending**, including for HCFD and Field Responder accounts whose record detail workflow does not contain the Transport or Patient For section.
+
+**Analysis:** The AMP-only restriction currently controls transport editing, but the Records-card display is not role-aware. The API includes transport summaries in the shared record response, and the card renders that value independently of the role-specific detail sections.
+
+**Planned correction:** Reuse the detail-screen role/section visibility rules so the transport line is shown only for roles with the corresponding transport workflow. Roles without Transport or Patient For should show no transport badge or transport filter result.
+
+**Status:** Identified; implementation pending.
+
 ## Verification Instructions
 
 Run these commands from the repository root in PowerShell:
