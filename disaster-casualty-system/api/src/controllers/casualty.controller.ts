@@ -821,7 +821,8 @@ async function attachLatestSummaries<
       .in("casualty_incident_id", recordIds)
       .order("triaged_at", {
         ascending: false,
-      }),
+      })
+      .order("id", { ascending: false }),
 
     supabase
       .from("casualty_transport_records")
@@ -831,7 +832,8 @@ async function attachLatestSummaries<
       .in("casualty_incident_id", recordIds)
       .order("created_at", {
         ascending: false,
-      }),
+      })
+      .order("id", { ascending: false }),
 
     supabase
       .from("facility_encounters")
@@ -842,7 +844,8 @@ async function attachLatestSummaries<
       .in("casualty_incident_id", recordIds)
       .order("created_at", {
         ascending: false,
-      }),
+      })
+      .order("id", { ascending: false }),
   ]);
 
   if (triageResult.error) {
@@ -3129,7 +3132,8 @@ export async function getCasualtyStatusHistory(
         "id, casualty_incident_id, old_status, new_status, changed_by, change_reason, created_at",
       )
       .eq("casualty_incident_id", id)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false });
 
     if (error) {
       throw new Error(
@@ -4105,7 +4109,8 @@ export async function getCasualtyTransportHistory(
         "id, casualty_incident_id, transport_required, transport_mode, ems_unit_type, arrived_scene_at, departed_scene_at, arrived_facility_at, receiving_facility_id, recorded_by, notes, created_at",
       )
       .eq("casualty_incident_id", id)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false });
 
     if (error) {
       throw new Error(
@@ -4882,12 +4887,16 @@ export async function updateCasualty(
       },
     });
 
+    const [updatedRecordWithSummaries] = await attachLatestSummaries([
+      updatedRecord,
+    ]);
+
     response.status(200).json({
       success: true,
       message: shouldReturnRejectedRecordForReview
         ? "Casualty record updated and returned for admin review."
         : "Casualty record updated successfully.",
-      data: updatedRecord,
+      data: updatedRecordWithSummaries,
     });
   } catch (error) {
     next(error);

@@ -1239,6 +1239,56 @@ Additional acceptance tests:
 74. Confirm records marked Release, Referral/Transfer, or any non-pending status do not show either conditional edit action.
 75. Sign in as Field Responder, Minor Incident Documenter, or HCFD and confirm the conditional AMP edit actions are not shown.
 
+## 145. Transport Status Must Match Between Records List And Detail View
+
+**Problem:** The mobile Records list could show **Transport: Pending** from the saved transport record while the opened record displayed **Patient For: Unavailable** because the detail view only read the AMP transport notes. The per-record edit action also depended only on note text, so pending records without that note format could miss the action.
+
+**Solution:** The detail view now falls back to the saved transport status and displays **Pending Departure** for an unknown/pending transport state. The same transport status is used when deciding whether an AMP user may edit the record. The AMP Transport section now contains the per-record Edit action, while the existing Edit record action remains available on the Records list. The later generic Transport section does not duplicate the action for AMP records.
+
+Additional acceptance tests:
+
+76. Open a record whose list badge says **Transport: Pending** and confirm the Transport section displays **Patient For: Pending Departure** instead of **Unavailable**.
+77. As an AMP user, confirm a pending-departure record shows the per-record **Edit** action inside its Transport section and the existing list-level **Edit record** action.
+78. Confirm a released or referred record does not show either conditional edit action and its detail value remains consistent with its saved transport state.
+
+## 146. Edited Victim Records Must Refresh In Mobile And Web Cards
+
+**Problem:** Editing a victim record could leave the previous card summary visible. Transport edits were especially affected because each edit creates a new transport-history row, while latest-row selection used only the timestamp and the update response returned the base casualty row without refreshed summaries. The mobile detail screen also loaded only on initial mount, and the web dashboard depended on its cached state or Realtime refresh.
+
+**Solution:** Latest triage, transport, and facility rows now use a deterministic timestamp-and-ID order. The update endpoint returns the edited record with refreshed latest summaries. The mobile detail screen reloads whenever it receives focus, while the Records screen continues to reload on focus. The web dashboard remains subscribed to casualty and related history tables so its shared records state refreshes after edits.
+
+Additional acceptance tests:
+
+79. For each mobile role with an edit action—Administrator, Super Admin, AMP, Field Responder, HCFD, and Minor Incident Documenter—edit a permitted field, save, return to Records, and confirm the card reflects the new value.
+80. Change AMP **Patient For** from **Pending Departure** to **Release** and confirm the mobile card no longer says **Transport: Pending**.
+81. Open the edited record immediately after saving and confirm its detail sections show the same values as the card.
+82. With the web dashboard open, edit a mobile record and confirm the web victim record table and opened record reflect the updated data after the Realtime refresh. Refresh the page and confirm the same values remain.
+83. Confirm edits to triage, treatment, facility, status, personal, and transport sections use the newest saved history row in both mobile and web views.
+
+## 147. Saving A Record Must Not Duplicate Its Detail Screen
+
+**Problem:** When an edit was opened from an existing victim detail screen, saving used `router.replace()` to navigate to another copy of the same detail route. The first Back action returned to the old detail screen, and the next Back action could produce Expo Router's unhandled `GO_BACK` warning.
+
+**Solution:** Detail-origin edits now carry route context. After a successful save, the edit screen closes with `router.back()` so the existing detail screen is reused and refreshed. Edits opened directly from the Records list keep their direct route to the edited record detail. The navigation stack now has one detail screen per record visit.
+
+Additional acceptance tests:
+
+84. Open a victim detail screen, edit any permitted section, save, and confirm the updated detail screen appears.
+85. Press Back once and confirm the app returns to Records. Pressing Back is no longer required a second time and produces no unhandled navigator warning.
+86. Start an edit from the Records list's direct Edit action, save, confirm the edited record detail opens, and confirm one Back returns to Records.
+
+## 148. Completed Transport Must Not Retain The Pending Edit Action
+
+**Problem:** A transport edit appended new notes to the existing transport notes. After changing **Patient For** from **Pending Departure** to **Release**, the latest transport row correctly showed **Not required**, but the Records card still found the old pending text and incorrectly displayed **Edit record**.
+
+**Solution:** The latest transport status is now authoritative. Records marked `yes` or `no` cannot be treated as pending even if older notes contain **Pending Departure**. The detail view also displays **Release** or **Referral or Transfer to Health Facility** from the latest saved status instead of stale note text. Only an `unknown` transport state may show the pending edit action.
+
+Additional acceptance tests:
+
+87. Change an AMP record from **Pending Departure** to **Release** and confirm the card shows **Transport: Not required** with no **Edit record** button.
+88. Open the record and confirm **Patient For: Release** is displayed, even when older transport notes contain **Pending Departure**.
+89. Change a record to referral/transfer and confirm it also has no pending edit action.
+
 ## Verification Instructions
 
 Run these commands from the repository root in PowerShell:

@@ -803,10 +803,25 @@ function getRecordTransportDispositionFilter(
 }
 
 function isPendingDepartureRecord(record: CasualtyRecord): boolean {
-  const notes =
-    record.latest_transport_record?.notes?.toLowerCase() ?? "";
+  const transport = record.latest_transport_record;
 
-  return notes.includes("patient for: pending departure");
+  if (!transport) {
+    return false;
+  }
+
+  if (
+    transport.transport_required === "yes" ||
+    transport.transport_required === "no"
+  ) {
+    return false;
+  }
+
+  const notes = transport.notes?.toLowerCase() ?? "";
+
+  return (
+    notes.includes("patient for: pending departure") ||
+    transport.transport_required === "unknown"
+  );
 }
 
 function getRecordTriageFilter(

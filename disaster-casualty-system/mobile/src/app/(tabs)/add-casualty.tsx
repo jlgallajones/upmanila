@@ -1843,6 +1843,7 @@ type SubmissionFeedback = {
   message: string;
   tone?: "success" | "error";
   onCloseRoute?: string;
+  goBackOnClose?: boolean;
   resetOnClose?: boolean;
 };
 
@@ -5541,13 +5542,21 @@ function useVictimTerminology(value: string): string {
 }
 
 export default function AddCasualtyScreen() {
-  const { editId, incidentId, incidentName, focusStep, draftId } =
+  const {
+    editId,
+    incidentId,
+    incidentName,
+    focusStep,
+    draftId,
+    returnToDetail,
+  } =
     useLocalSearchParams<{
     editId?: string;
     incidentId?: string;
     incidentName?: string;
     focusStep?: string;
     draftId?: string;
+    returnToDetail?: string;
   }>();
 
   const casualtyId = Array.isArray(editId) ? editId[0] : editId;
@@ -5555,6 +5564,10 @@ export default function AddCasualtyScreen() {
   const requestedFocusStep = Array.isArray(focusStep)
     ? focusStep[0]
     : focusStep;
+  const shouldReturnToExistingDetail =
+    (Array.isArray(returnToDetail)
+      ? returnToDetail[0]
+      : returnToDetail) === "true";
   const presetIncidentId = Array.isArray(incidentId)
     ? incidentId[0]
     : incidentId;
@@ -8007,6 +8020,11 @@ function handleTriageAssessmentDone() {
     const feedback = submissionFeedback;
 
     setSubmissionFeedback(null);
+
+    if (feedback?.goBackOnClose) {
+      router.back();
+      return;
+    }
 
     if (feedback?.onCloseRoute) {
       router.replace(feedback.onCloseRoute as never);
@@ -12105,7 +12123,10 @@ async function ensureResponderSafetyResponseSaved() {
         message: photoUploadError
           ? `The victim record was saved, but the photo upload failed: ${photoUploadError}`
           : responseMessage,
-        onCloseRoute: `/casualty/${encodeURIComponent(casualtyId)}`,
+        onCloseRoute: shouldReturnToExistingDetail
+          ? undefined
+          : `/casualty/${encodeURIComponent(casualtyId)}`,
+        goBackOnClose: shouldReturnToExistingDetail,
         resetOnClose: false,
       });
     } catch (error) {

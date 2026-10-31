@@ -2702,6 +2702,16 @@ async function stopDashboardRealtime() {
   auditLogsLiveRefreshInFlight = false;
 }
 
+function bindDashboardDataRefreshOnFocus() {
+  window.addEventListener("focus", () => {
+    if (!state.accessToken) {
+      return;
+    }
+
+    void handleDashboardRealtimeChange();
+  });
+}
+
 function render() {
   applyTheme();
   const app = document.getElementById("app");
@@ -15903,4 +15913,5 @@ function incidentOptions() {
 
 scheduleWebSessionRefresh();
 bindSystemThemeListener();
+bindDashboardDataRefreshOnFocus();
 render();

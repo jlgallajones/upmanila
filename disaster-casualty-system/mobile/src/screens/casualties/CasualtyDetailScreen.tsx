@@ -1,7 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import { createThemePalette } from "@/constants/theme";
-import { router, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  router,
+  useFocusEffect,
+  useLocalSearchParams,
+} from "expo-router";
+import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -899,9 +903,13 @@ export default function CasualtyDetailScreen() {
     }
   }, [casualtyId]);
 
-  useEffect(() => {
-    void loadCasualty();
-  }, [loadCasualty]);
+  useFocusEffect(
+    useCallback(() => {
+      void loadCasualty();
+
+      return undefined;
+    }, [loadCasualty]),
+  );
 
   const casualty = useMemo(() => {
     if (!record) {
@@ -975,6 +983,7 @@ export default function CasualtyDetailScreen() {
       pathname: "/add-casualty",
       params: {
         editId: casualty.recordId,
+        returnToDetail: "true",
       },
     } as never);
   }
@@ -989,6 +998,7 @@ export default function CasualtyDetailScreen() {
       params: {
         editId: casualty.recordId,
         focusStep: "Transport",
+        returnToDetail: "true",
       },
     } as never);
   }
@@ -1005,6 +1015,7 @@ export default function CasualtyDetailScreen() {
       params: {
         editId: casualty.recordId,
         focusStep,
+        returnToDetail: "true",
       },
     } as never);
   }
@@ -1104,11 +1115,19 @@ export default function CasualtyDetailScreen() {
   const triageNotes = casualty.latestTriage?.notes ?? null;
   const treatmentNotes = casualty.latestTreatment?.notes ?? null;
   const transportNotes = casualty.latestTransport?.notes ?? null;
-  const patientFor = extractRecordSectionValue(
-    transportNotes,
-    "SA Transport / Release",
-    "Patient for",
-  );
+  const patientFor =
+    casualty.latestTransport?.transport_required === "yes"
+      ? "Referral or Transfer to Health Facility"
+      : casualty.latestTransport?.transport_required === "no"
+        ? "Release"
+        : extractRecordSectionValue(
+              transportNotes,
+              "SA Transport / Release",
+              "Patient for",
+            ) ??
+            (casualty.latestTransport?.transport_required === "unknown"
+              ? "Pending Departure"
+              : null);
   const isPendingDeparture =
     patientFor?.trim().toLowerCase() === "pending departure";
   const canEditTransportCard = isAmpResponderView(
@@ -1642,18 +1661,36 @@ export default function CasualtyDetailScreen() {
               />
             </SectionCard>
 
-            <SectionCard title="TRANSPORT">
+            <SectionCard
+              title="TRANSPORT"
+              action={
+                canEditTransportCard ? (
+                  <Pressable
+                    onPress={handleEditTransport}
+                    style={({ pressed }) => [
+                      styles.sectionEditButton,
+                      pressed && styles.pressed,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Edit transport"
+                  >
+                    <Ionicons
+                      name="create-outline"
+                      size={15}
+                      color={COLORS.text}
+                    />
+                    <Text style={styles.sectionEditButtonText}>
+                      Edit
+                    </Text>
+                  </Pressable>
+                ) : null
+              }
+            >
               {casualty.latestTransport ? (
                 <>
                   <DetailRow
                     label="Patient For"
-                    value={formatValue(
-                      extractRecordSectionValue(
-                        transportNotes,
-                        "SA Transport / Release",
-                        "Patient for",
-                      ),
-                    )}
+                    value={formatValue(patientFor)}
                   />
 
                   <DetailRow
@@ -2178,7 +2215,7 @@ export default function CasualtyDetailScreen() {
         <SectionCard
           title="TRANSPORT"
           action={
-            canEditTransportCard ? (
+            canEditTransportCard && !showSaResponderDetails ? (
               <Pressable
                 onPress={handleEditTransport}
                 style={({ pressed }) => [
