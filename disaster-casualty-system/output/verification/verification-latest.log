@@ -1,5 +1,5 @@
 DCMS VERIFICATION RUN
-Started: 2026-10-31T21:21:48.7894460+08:00
+Started: 2026-10-31T21:31:29.1870876+08:00
 Root: C:\Users\jlgallajones\upmanila\disaster-casualty-system
 [RUN ] API TypeScript typecheck
        Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\api
@@ -55,16 +55,14 @@ React Compiler enabled
 Starting Metro Bundler
 
 Static rendering is enabled. Learn more: https://docs.expo.dev/router/web/static-rendering/
-| (node:12452) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (node:21768) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
 | (Use `node --trace-warnings ...` to show where the warning was created)
-| (node:12452) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
-| (Use `node --trace-warnings ...` to show where the warning was created)
-Web Bundled 2086ms node_modules\expo-router\entry.js (1395 modules)
-? Bundled 2446ms node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js (1514 modules)
+Web Bundled 2751ms node_modules\expo-router\entry.js (1395 modules)
+? Bundled 3780ms node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js (1502 modules)
 
 › web bundles (2):
 _expo/static/css/global-30c341199d6e65a2dfb94ff1ee1395d4.css (551B)
-_expo/static/js/web/entry-0eb02a915edc71916b78b3aba1551d7a.js (3.4MB)
+_expo/static/js/web/entry-67fee7cd56be1be3f11fa7722e42783a.js (3.4MB)
 
 › Static routes (26):
 /home (39KB)
@@ -112,6 +110,4 @@ Exported: dist
        Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system
        Command: git.exe diff --check
 warning: in the working copy of 'disaster-casualty-system/mobile/src/app/(tabs)/add-casualty.tsx', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'disaster-casualty-system/mobile/src/app/(tabs)/records.tsx', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'disaster-casualty-system/mobile/src/screens/casualties/CasualtyDetailScreen.tsx', LF will be replaced by CRLF the next time Git touches it
 [PASS] Repository whitespace check (exit code 0)

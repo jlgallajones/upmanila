@@ -1289,6 +1289,31 @@ Additional acceptance tests:
 88. Open the record and confirm **Patient For: Release** is displayed, even when older transport notes contain **Pending Departure**.
 89. Change a record to referral/transfer and confirm it also has no pending edit action.
 
+## 149. Field Responder Status Must Show Automatic Interventions
+
+**Problem:** The Field Responder Status tab displayed an editable **NOTES** field instead of showing the intervention determined by the responder's selected triage system.
+
+**Solution:** Replaced the Field Responder Status-tab Notes field with a read-only **INTERVENTIONS DONE** panel. The panel displays the existing automatic treatment mapping and identifies the selected triage system as its source. Other roles and the existing triage-based assignment behavior remain unchanged.
+
+Additional acceptance tests:
+
+90. Open the Field Responder Status tab and confirm **INTERVENTIONS DONE** is shown instead of the editable Notes field.
+91. Confirm the displayed intervention is read-only and cannot be manually changed.
+92. Confirm STIEVE/SALT shows **Stay and Play**, START/SIEVE-family systems show **Scooter**, and CareFlight/Homebush shows **Scoop and Run/Load and Go**.
+93. Change the selected triage system and confirm the intervention updates automatically.
+
+## 150. Opening Add Victim After Editing Must Start A New Record
+
+**Problem:** After a successful edit, the cached Add Victim route could retain the previous `editId` and form state. Opening Add Victim again then displayed the record that had just been edited instead of a blank new-victim form.
+
+**Solution:** Successful detail-origin edits now reset the form and clear the edit route parameters before returning to the record detail. The current incident context may remain available, but the edited victim, attachments, and edit-only navigation state are removed from the next Add Victim session.
+
+Additional acceptance tests:
+
+94. Edit and save a record from each mobile role that has an edit action.
+95. Return to Records, open Add Victim, and confirm the form is blank and titled **Add Victim**, not **Edit Victim**.
+96. Confirm the new form can be completed and submitted as a new record without changing the previously edited record.
+
 ## Verification Instructions
 
 Run these commands from the repository root in PowerShell:

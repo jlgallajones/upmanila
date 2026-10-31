@@ -8022,6 +8022,12 @@ function handleTriageAssessmentDone() {
     setSubmissionFeedback(null);
 
     if (feedback?.goBackOnClose) {
+      resetForNextCasualty();
+      router.setParams({
+        editId: undefined,
+        focusStep: undefined,
+        returnToDetail: undefined,
+      });
       router.back();
       return;
     }
@@ -14795,17 +14801,31 @@ if (
 
   function renderStatusStep() {
     if (isFieldResponderFlow) {
+      const automaticTreatment =
+        getAutomaticTreatmentStrategyForTriageSystem(
+          form.triageSystem,
+        ) || "Not assigned";
+
       return (
         <>
-          <FormField
-            label="NOTES"
-            value={form.remarks}
-            placeholder="Add status notes"
-            multiline
-            onChangeText={(value) =>
-              updateField("remarks", value)
-            }
-          />
+          <View style={styles.automaticTreatmentCard}>
+            <Ionicons
+              name="lock-closed-outline"
+              size={18}
+              color={COLORS.text}
+            />
+            <View style={styles.automaticTreatmentTextGroup}>
+              <Text style={styles.automaticTreatmentLabel}>
+                INTERVENTIONS DONE
+              </Text>
+              <Text style={styles.automaticTreatmentValue}>
+                {automaticTreatment}
+              </Text>
+              <Text style={styles.automaticTreatmentHint}>
+                Assigned automatically from {formatTriageSystem(form.triageSystem) || "the selected triage system"}.
+              </Text>
+            </View>
+          </View>
 
           <Pressable
             onPress={() =>
