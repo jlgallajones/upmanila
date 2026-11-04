@@ -6,12 +6,6 @@ import { getAuthenticatedUser } from "../middleware/auth.js";
 import { recordAuditLog } from "../services/audit-log.service.js";
 import { calculateTriageCategory } from "../services/triage/calculate-triage.js";
 import { compareTriageCategories } from "../services/triage/compare-triage.js";
-import {
-  isSubmittedTriageModeAllowed,
-  normalizeIncidentTriageMode,
-  type IncidentTriageMode,
-  type SubmittedTriageMode,
-} from "../services/triage/incident-triage-mode.js";
 import type {
   CasualtyTreatmentRecordRequest,
   CasualtyTransportRecordRequest,
@@ -116,86 +110,6 @@ const treatmentStrategies = [
   "unknown",
 ];
 
-function normalizeTreatmentStrategy(
-  value: string,
-): "scoop_and_run" | "scooter" | "stay_and_play" | "unknown" {
-  return value === "play_and_run"
-    ? "scooter"
-    : (value as
-        | "scoop_and_run"
-        | "scooter"
-        | "stay_and_play"
-        | "unknown");
-}
-
-function getAutomaticTreatmentStrategyForTriageSystem(
-  triageSystem: string | undefined,
-):
-  | "scoop_and_run"
-  | "scooter"
-  | "stay_and_play"
-  | "unknown"
-  | null {
-  const normalized = (triageSystem ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/[\s_-]+/g, "");
-
-  if (!normalized) {
-    return null;
-  }
-
-  if (["stieve", "salt"].includes(normalized)) {
-    return "stay_and_play";
-  }
-
-  // Play and Run was merged into the Scooter treatment strategy.
-  if (
-    [
-      "start",
-      "sieve",
-      "sievesort",
-      "ptt",
-      "mptt",
-      "mstart",
-      "jumpstart",
-      "mitt",
-    ].includes(normalized)
-  ) {
-    return "scooter";
-  }
-
-  if (["careflight", "homebush"].includes(normalized)) {
-    return "scoop_and_run";
-  }
-
-  return "unknown";
-}
-
-function getEffectiveTreatmentRecord(
-  userRole: string,
-  triageAssessment: CasualtyTriageAssessmentRequest | undefined,
-  treatmentRecord: CasualtyTreatmentRecordRequest | undefined,
-): CasualtyTreatmentRecordRequest | undefined {
-  if (userRole !== "field_responder" || !triageAssessment) {
-    return treatmentRecord;
-  }
-
-  const automaticStrategy =
-    getAutomaticTreatmentStrategyForTriageSystem(
-      triageAssessment.triageSystem,
-    );
-
-  if (!automaticStrategy) {
-    return treatmentRecord;
-  }
-
-  return {
-    ...(treatmentRecord ?? {}),
-    treatmentStrategy: automaticStrategy,
-  };
-}
-
 const facilityDispositions = [
   "active_care",
   "hospital_admission",
@@ -207,13 +121,6 @@ const facilityDispositions = [
 ];
 
 const deathStages = ["impact", "prehospital", "in_hospital"];
-
-const facilityPreTransportTriageCategories = [
-  "immediate",
-  "delayed",
-  "minimal",
-  "expectant",
-];
 
 const finalDispositions = [
   "alive",
@@ -240,62 +147,6 @@ function isObject(
   );
 }
 
-function getSubmittedTriageMode(
-  triageAssessment: CasualtyTriageAssessmentRequest | undefined,
-): SubmittedTriageMode | null {
-  const value = triageAssessment?.assessmentAnswers?.[
-    "triageAssistanceMode"
-  ];
-
-  return value === "assisted" || value === "unassisted"
-    ? value
-    : null;
-}
-
-function validateIncidentTriageMode(
-  triageAssessment: CasualtyTriageAssessmentRequest | undefined,
-  incidentTriageMode: IncidentTriageMode,
-  response: Response,
-): boolean {
-  if (!triageAssessment) {
-    return true;
-  }
-
-  const submittedMode = getSubmittedTriageMode(triageAssessment);
-
-  if (!isSubmittedTriageModeAllowed(incidentTriageMode, submittedMode)) {
-    response.status(400).json({
-      success: false,
-      message:
-        "This incident is configured for " +
-        incidentTriageMode +
-        " triage. The submitted triage mode does not match the incident setting.",
-    });
-    return false;
-  }
-
-  return true;
-}
-
-async function getIncidentTriageMode(
-  incidentId: string,
-): Promise<IncidentTriageMode> {
-  const { data, error } = await supabase
-    .from("incidents")
-    .select("triage_mode")
-    .eq("id", incidentId)
-    .single();
-
-  if (error || !data) {
-    throw new Error(
-      "Unable to retrieve incident triage mode: " +
-        (error?.message ?? "Incident not found"),
-    );
-  }
-
-  return normalizeIncidentTriageMode(data.triage_mode);
-}
-
 type VerificationStatus = (typeof verificationStatuses)[number];
 
 const caseMatchRoleBuckets = [
@@ -311,7 +162,6 @@ const casualtyDataEntryRoles = new Set([
   "responder",
   "field_responder",
   "sa_responder",
-  "minor_incident_documenter",
   "documenter",
   "medical_personnel",
   "bystander",
@@ -322,44 +172,8 @@ const casualtyAdminScopeRoles = new Set([
   "administrator",
 ]);
 
-const mobileRecordRoles = new Set([
-  ...casualtyDataEntryRoles,
-  "responsible_officer",
-]);
-
 function shouldScopeToOwnCasualties(role: string): boolean {
   return casualtyDataEntryRoles.has(role);
-}
-
-function shouldHideClosedIncidentsFromMobile(role: string): boolean {
-  return mobileRecordRoles.has(role);
-}
-
-async function getMobileVisibleIncidentIds(
-  role: string,
-): Promise<string[] | null> {
-  if (!shouldHideClosedIncidentsFromMobile(role)) {
-    return null;
-  }
-
-  const { data, error } = await supabase
-    .from("incidents")
-    .select("id")
-    .eq("status", "active")
-    .is("ended_at", null);
-
-  if (error) {
-    throw new Error(
-      `Unable to retrieve mobile incident visibility: ${error.message}`,
-    );
-  }
-
-  return (data ?? [])
-    .map((incident) => incident.id)
-    .filter(
-      (id): id is string =>
-        typeof id === "string" && id.trim().length > 0,
-    );
 }
 
 function getCaseMatchRoleBucket(
@@ -369,7 +183,6 @@ function getCaseMatchRoleBucket(
     case "field_responder":
       return "field_responder";
     case "sa_responder":
-    case "minor_incident_documenter":
       return "sa_responder";
     case "documenter":
     case "medical_personnel":
@@ -554,7 +367,7 @@ async function canAccessCasualtyRecord(
 
   const { data, error } = await supabase
     .from("casualty_incidents")
-    .select("id, incident_id")
+    .select("id")
     .eq("id", casualtyIncidentId)
     .in("encoded_by", scopedEncoderIds)
     .is("deleted_at", null)
@@ -564,18 +377,7 @@ async function canAccessCasualtyRecord(
     throw new Error(`Unable to verify casualty access: ${error.message}`);
   }
 
-  if (!data) {
-    return false;
-  }
-
-  if (!shouldHideClosedIncidentsFromMobile(userRole)) {
-    return true;
-  }
-
-  const visibleIncidentIds = await getMobileVisibleIncidentIds(userRole);
-  return Boolean(
-    data.incident_id && visibleIncidentIds?.includes(data.incident_id),
-  );
+  return Boolean(data);
 }
 
 type UpdateCasualtyVerificationRequest = {
@@ -699,12 +501,6 @@ type LatestFacilityEncounterSummary = {
   alternative_icu_used: boolean | null;
 
   disposition: string;
-  pre_transport_triage_category:
-    | "immediate"
-    | "delayed"
-    | "minimal"
-    | "expectant"
-    | null;
   created_at: string;
 };
 
@@ -754,8 +550,7 @@ const casualtyRecordSelect = `
     incident_code,
     incident_name,
     disaster_type,
-    status,
-    triage_mode
+    status
   ),
   evacuation_center:evacuation_centers (
     id,
@@ -821,8 +616,7 @@ async function attachLatestSummaries<
       .in("casualty_incident_id", recordIds)
       .order("triaged_at", {
         ascending: false,
-      })
-      .order("id", { ascending: false }),
+      }),
 
     supabase
       .from("casualty_transport_records")
@@ -832,20 +626,18 @@ async function attachLatestSummaries<
       .in("casualty_incident_id", recordIds)
       .order("created_at", {
         ascending: false,
-      })
-      .order("id", { ascending: false }),
+      }),
 
     supabase
       .from("facility_encounters")
       .select(
-        "casualty_incident_id, facility_id, arrived_at, pre_transport_triage_category, ed_admitted_at, ed_departed_at, referred_or_transferred, sought_ed_care, admitted_to_hospital, discharged_home, ed_resuscitation_started_at, surgical_intervention_started_at, surgical_intervention_ended_at, operating_room_started_at, xray_required, xray_performed_at, ultrasound_required, ultrasound_performed_at, ct_required, ct_performed_at, hospital_admitted_at, hospital_discharged_at, icu_admitted_at, icu_discharged_at, mechanical_ventilation_required, ventilation_started_at, ventilation_ended_at, alternative_icu_used, disposition, created_at",
+        "casualty_incident_id, facility_id, arrived_at, ed_admitted_at, ed_departed_at, referred_or_transferred, sought_ed_care, admitted_to_hospital, discharged_home, ed_resuscitation_started_at, surgical_intervention_started_at, surgical_intervention_ended_at, operating_room_started_at, xray_required, xray_performed_at, ultrasound_required, ultrasound_performed_at, ct_required, ct_performed_at, hospital_admitted_at, hospital_discharged_at, icu_admitted_at, icu_discharged_at, mechanical_ventilation_required, ventilation_started_at, ventilation_ended_at, alternative_icu_used, disposition, created_at",
       )
       
       .in("casualty_incident_id", recordIds)
       .order("created_at", {
         ascending: false,
-      })
-      .order("id", { ascending: false }),
+      }),
   ]);
 
   if (triageResult.error) {
@@ -963,51 +755,26 @@ function trimmedOrNull(
 
 async function ensureUniqueIdNumber(
   idNumber: string | undefined,
-  incidentId: string | undefined,
   excludeCasualtyId?: string,
 ): Promise<string | null> {
   const normalizedIdNumber = idNumber?.trim();
 
-  if (!normalizedIdNumber || !incidentId) {
+  if (!normalizedIdNumber) {
     return null;
   }
 
-  let incidentQuery = supabase
-    .from("casualty_incidents")
-    .select("casualty_id")
-    .eq("incident_id", incidentId)
-    .is("deleted_at", null);
-
-  if (excludeCasualtyId) {
-    incidentQuery = incidentQuery.neq("casualty_id", excludeCasualtyId);
-  }
-
-  const { data: incidentRows, error: incidentError } = await incidentQuery;
-
-  if (incidentError) {
-    throw new Error(
-      `Unable to check duplicate ID number: ${incidentError.message}`,
-    );
-  }
-
-  const casualtyIds = (incidentRows ?? [])
-    .map((row) => row.casualty_id)
-    .filter(
-      (value): value is string =>
-        typeof value === "string" && value.trim().length > 0,
-    );
-
-  if (casualtyIds.length === 0) {
-    return null;
-  }
-
-  const { data, error } = await supabase
+  let query = supabase
     .from("casualties")
     .select("id")
-    .in("id", casualtyIds)
     .eq("id_number", normalizedIdNumber)
     .is("deleted_at", null)
     .limit(1);
+
+  if (excludeCasualtyId) {
+    query = query.neq("id", excludeCasualtyId);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     throw new Error(
@@ -1029,24 +796,6 @@ function getCasualtyIdSequenceFromNumber(
 ): number {
   const match = new RegExp(
     `^CAS:${dateCode}:${userCode}(\\d{3,})$`,
-    "i",
-  ).exec(idNumber ?? "");
-
-  if (!match) {
-    return 0;
-  }
-
-  const sequence = Number(match[1]);
-
-  return Number.isFinite(sequence) ? sequence : 0;
-}
-
-function getIncidentVictimCodeSequence(
-  idNumber: string | null | undefined,
-  userCode: string,
-): number {
-  const match = new RegExp(
-    `^${userCode}(\\d+)$`,
     "i",
   ).exec(idNumber ?? "");
 
@@ -1366,20 +1115,6 @@ function validateFacilityEncounter(
     response.status(400).json({
       success: false,
       message: "Invalid facility disposition.",
-    });
-    return false;
-  }
-
-  if (
-    facilityEncounter.preTransportTriageCategory !== undefined &&
-    facilityEncounter.preTransportTriageCategory !== null &&
-    !facilityPreTransportTriageCategories.includes(
-      facilityEncounter.preTransportTriageCategory,
-    )
-  ) {
-    response.status(400).json({
-      success: false,
-      message: "Invalid pre-transport triage category.",
     });
     return false;
   }
@@ -1737,9 +1472,7 @@ async function insertTreatmentRecord(
     .from("casualty_treatments")
     .insert({
       casualty_incident_id: casualtyIncidentId,
-      treatment_strategy: normalizeTreatmentStrategy(
-        treatmentRecord.treatmentStrategy,
-      ),
+      treatment_strategy: treatmentRecord.treatmentStrategy,
       treatment_area_name:
         treatmentRecord.treatmentAreaName?.trim() || null,
       stabilization_started_at:
@@ -1772,8 +1505,6 @@ async function insertFacilityEncounter(
       casualty_incident_id: casualtyIncidentId,
       facility_id: facilityEncounter.facilityId,
       arrived_at: facilityEncounter.arrivedAt ?? null,
-      pre_transport_triage_category:
-        facilityEncounter.preTransportTriageCategory ?? null,
       ed_admitted_at: facilityEncounter.edAdmittedAt ?? null,
       ed_departed_at: facilityEncounter.edDepartedAt ?? null,
       referred_or_transferred:
@@ -1880,12 +1611,6 @@ export async function createCasualty(
       casualtyOutcome,
     } = request.body;
     const user = getAuthenticatedUser(request);
-    const effectiveTreatmentRecord =
-      getEffectiveTreatmentRecord(
-        user.role,
-        triageAssessment,
-        treatmentRecord,
-      );
 
     if (!clientRecordId || !incidentId) {
       response.status(400).json({
@@ -2011,21 +1736,10 @@ export async function createCasualty(
     }
 
     if (existingSubmission) {
-      response.status(200).json({
-        success: true,
-        message: "Victim record was already submitted.",
-        data: {
-          casualty: {
-            id: existingSubmission.casualty_id,
-          },
-          casualtyIncident: {
-            id: existingSubmission.id,
-          },
-          incident: {
-            id: existingSubmission.incident_id,
-          },
-          encoder: null,
-        },
+      response.status(409).json({
+        success: false,
+        message: "This mobile record has already been synchronized.",
+        data: existingSubmission,
       });
       return;
     }
@@ -2038,12 +1752,7 @@ export async function createCasualty(
       return;
     }
 
-    if (
-      !validateTreatmentRecord(
-        effectiveTreatmentRecord,
-        response,
-      )
-    ) {
+    if (!validateTreatmentRecord(treatmentRecord, response)) {
       return;
     }
 
@@ -2055,13 +1764,26 @@ export async function createCasualty(
       return;
     }
 
+    const existingIdNumber = await ensureUniqueIdNumber(
+      person.idNumber,
+    );
+
+    if (existingIdNumber) {
+      response.status(409).json({
+        success: false,
+        message:
+          "A victim with this ID number already exists. Please generate a new record.",
+      });
+      return;
+    }
+
     /*
      * Confirm that the selected disaster exists and is active.
      */
     const { data: incident, error: incidentError } =
       await supabase
         .from("incidents")
-        .select("id, incident_code, incident_name, status, triage_mode")
+        .select("id, incident_code, incident_name, status")
         .eq("id", incidentId)
         .single();
 
@@ -2078,30 +1800,6 @@ export async function createCasualty(
         success: false,
         message:
           "Casualties can only be submitted to an active incident.",
-      });
-      return;
-    }
-
-    if (
-      !validateIncidentTriageMode(
-        triageAssessment,
-        normalizeIncidentTriageMode(incident.triage_mode),
-        response,
-      )
-    ) {
-      return;
-    }
-
-    const existingIdNumber = await ensureUniqueIdNumber(
-      person.idNumber,
-      incidentId,
-    );
-
-    if (existingIdNumber) {
-      response.status(409).json({
-        success: false,
-        message:
-          "A victim with this ID number already exists in this incident. Please generate a new record.",
       });
       return;
     }
@@ -2186,6 +1884,82 @@ export async function createCasualty(
       );
     }
 
+    if (triageAssessment) {
+  const assessmentAnswers =
+    triageAssessment.assessmentAnswers;
+
+  const hasAssessmentAnswers =
+    assessmentAnswers !== undefined &&
+    Object.keys(assessmentAnswers).length > 0;
+
+  const responderCategory =
+    triageAssessment.triageCategory as TriageCategory;
+
+  let calculatedCategory: TriageCategory | null =
+    null;
+
+  let algorithmVersion: string | null = null;
+  let isOverTriage = false;
+  let isUnderTriage = false;
+
+  if (hasAssessmentAnswers) {
+    calculatedCategory =
+      calculateTriageCategory(
+        triageAssessment.triageSystem as TriageSystem,
+        assessmentAnswers,
+      );
+
+    algorithmVersion =
+      `${triageAssessment.triageSystem}-v1`;
+
+    const comparison =
+      compareTriageCategories(
+        responderCategory,
+        calculatedCategory,
+      );
+
+    isOverTriage = comparison.isOverTriage;
+    isUnderTriage = comparison.isUnderTriage;
+  }
+
+  const { error: triageSyncError } =
+    await supabase
+      .from("casualty_triage_assessments")
+      .update({
+        responder_category: responderCategory,
+        calculated_category: calculatedCategory,
+        assessment_answers:
+          assessmentAnswers ?? null,
+        algorithm_version: algorithmVersion,
+        is_over_triage: isOverTriage,
+        is_under_triage: isUnderTriage,
+      })
+      .eq(
+        "casualty_incident_id",
+        transactionResult.casualtyIncident.id,
+      )
+      .eq("triaged_by", user.id)
+      .eq(
+        "triage_stage",
+        triageAssessment.triageStage ??
+          "on_site",
+      );
+
+  if (triageSyncError) {
+    throw new Error(
+      `Unable to synchronize triage assessment details: ${triageSyncError.message}`,
+    );
+  }
+}
+
+    if (treatmentRecord) {
+      await insertTreatmentRecord(
+        transactionResult.casualtyIncident.id,
+        user.id,
+        treatmentRecord,
+      );
+    }
+
     const encounterPayload = facilityEncounter ?? {
       facilityId:
         transportRecord?.receivingFacilityId ??
@@ -2200,99 +1974,22 @@ export async function createCasualty(
       disposition: "unknown",
     };
 
-    const followUpWrites: Promise<unknown>[] = [];
-
-    if (triageAssessment) {
-      followUpWrites.push(
-        (async () => {
-          const assessmentAnswers =
-            triageAssessment.assessmentAnswers;
-          const hasAssessmentAnswers =
-            assessmentAnswers !== undefined &&
-            Object.keys(assessmentAnswers).length > 0;
-          const responderCategory =
-            triageAssessment.triageCategory as TriageCategory;
-          let calculatedCategory: TriageCategory | null = null;
-          let algorithmVersion: string | null = null;
-          let isOverTriage = false;
-          let isUnderTriage = false;
-
-          if (hasAssessmentAnswers) {
-            calculatedCategory = calculateTriageCategory(
-              triageAssessment.triageSystem as TriageSystem,
-              assessmentAnswers,
-            );
-            algorithmVersion =
-              `${triageAssessment.triageSystem}-v1`;
-            const comparison = compareTriageCategories(
-              responderCategory,
-              calculatedCategory,
-            );
-            isOverTriage = comparison.isOverTriage;
-            isUnderTriage = comparison.isUnderTriage;
-          }
-
-          const { error: triageSyncError } = await supabase
-            .from("casualty_triage_assessments")
-            .update({
-              responder_category: responderCategory,
-              calculated_category: calculatedCategory,
-              assessment_answers: assessmentAnswers ?? null,
-              algorithm_version: algorithmVersion,
-              is_over_triage: isOverTriage,
-              is_under_triage: isUnderTriage,
-            })
-            .eq(
-              "casualty_incident_id",
-              transactionResult.casualtyIncident.id,
-            )
-            .eq("triaged_by", user.id)
-            .eq(
-              "triage_stage",
-              triageAssessment.triageStage ?? "on_site",
-            );
-
-          if (triageSyncError) {
-            throw new Error(
-              `Unable to synchronize triage assessment details: ${triageSyncError.message}`,
-            );
-          }
-        })(),
-      );
-    }
-
-    if (effectiveTreatmentRecord) {
-      followUpWrites.push(
-        insertTreatmentRecord(
-          transactionResult.casualtyIncident.id,
-          user.id,
-          effectiveTreatmentRecord,
-        ),
-      );
-    }
-
     if (encounterPayload.facilityId) {
-      followUpWrites.push(
-        insertFacilityEncounter(
-          transactionResult.casualtyIncident.id,
-          user.id,
-          encounterPayload,
-        ),
+      await insertFacilityEncounter(
+        transactionResult.casualtyIncident.id,
+        user.id,
+        encounterPayload,
       );
     }
 
     if (casualtyOutcome) {
-      followUpWrites.push(
-        upsertCasualtyOutcome(
-          transactionResult.casualtyIncident.id,
-          user.id,
-          casualtyOutcome,
-          incidentDetails.currentStatus,
-        ),
-      );
-    }
-
-    await Promise.all(followUpWrites);
+  await upsertCasualtyOutcome(
+    transactionResult.casualtyIncident.id,
+    user.id,
+    casualtyOutcome,
+    incidentDetails.currentStatus,
+  );
+}
 
 const casualtyNotificationLabel =
   person.idNumber?.trim() ||
@@ -2309,33 +2006,34 @@ const casualtyNotificationLabel =
     .join(" ") ||
   "the victim record";
 
-    await Promise.all([
-      createCasualtySubmissionNotification({
-        casualtyIncidentId:
-          transactionResult.casualtyIncident.id,
-        recipientUserId: user.id,
-        casualtyLabel: casualtyNotificationLabel,
-        incidentName:
-          transactionResult.incident?.incidentName ?? null,
-      }),
-      recordAuditLog({
-        actor: user,
-        action: "casualty.created",
-        entityType: "casualty_incident",
-        entityId: transactionResult.casualtyIncident.id,
-        entityLabel: casualtyNotificationLabel,
-        metadata: {
-          incidentId:
-            transactionResult.incident?.id ?? incidentId,
-          incidentCode:
-            transactionResult.incident?.incidentCode ?? null,
-          incidentName:
-            transactionResult.incident?.incidentName ?? null,
-          currentStatus: incidentDetails.currentStatus,
-          severity,
-        },
-      }),
-    ]);
+await createCasualtySubmissionNotification({
+  casualtyIncidentId:
+    transactionResult.casualtyIncident.id,
+
+  recipientUserId: user.id,
+
+  casualtyLabel:
+    casualtyNotificationLabel,
+
+  incidentName:
+    transactionResult.incident?.incidentName ??
+    null,
+});
+
+await recordAuditLog({
+  actor: user,
+  action: "casualty.created",
+  entityType: "casualty_incident",
+  entityId: transactionResult.casualtyIncident.id,
+  entityLabel: casualtyNotificationLabel,
+  metadata: {
+    incidentId: transactionResult.incident?.id ?? incidentId,
+    incidentCode: transactionResult.incident?.incidentCode ?? null,
+    incidentName: transactionResult.incident?.incidentName ?? null,
+    currentStatus: incidentDetails.currentStatus,
+    severity,
+  },
+});
 
 response.status(201).json({
   success: true,
@@ -2367,7 +2065,7 @@ export async function getCasualties(
       request.query.fieldResponderLinks === "true";
     const canLoadFieldResponderLinks =
       fieldResponderLinks &&
-        ["responder", "field_responder", "sa_responder", "minor_incident_documenter"].includes(
+      ["responder", "field_responder", "sa_responder"].includes(
         user.role,
       );
     const scopedEncoderIds = await getCasualtyScopeEncoderIds(user);
@@ -2399,22 +2097,6 @@ export async function getCasualties(
       query = query.in("encoded_by", scopedEncoderIds);
     }
 
-    const mobileVisibleIncidentIds = await getMobileVisibleIncidentIds(
-      user.role,
-    );
-    if (mobileVisibleIncidentIds) {
-      if (mobileVisibleIncidentIds.length === 0) {
-        response.status(200).json({
-          success: true,
-          count: 0,
-          data: [],
-        });
-        return;
-      }
-
-      query = query.in("incident_id", mobileVisibleIncidentIds);
-    }
-
     const { data, error } = await query;
 
     if (error) {
@@ -2438,7 +2120,6 @@ export async function getCasualties(
 type CasualtyCaseLinkRow = {
   id: string;
   case_id: string;
-  case_name: string | null;
   casualty_incident_id: string;
   incident_id: string;
   role: CaseMatchRoleBucket;
@@ -2473,24 +2154,11 @@ async function getAccessibleCasualtyIncidentIds(user: {
     return null;
   }
 
-  const mobileVisibleIncidentIds = await getMobileVisibleIncidentIds(
-    user.role,
-  );
-  if (mobileVisibleIncidentIds && mobileVisibleIncidentIds.length === 0) {
-    return [];
-  }
-
-  let query = supabase
+  const { data, error } = await supabase
     .from("casualty_incidents")
     .select("id")
     .in("encoded_by", scopedEncoderIds)
     .is("deleted_at", null);
-
-  if (mobileVisibleIncidentIds) {
-    query = query.in("incident_id", mobileVisibleIncidentIds);
-  }
-
-  const { data, error } = await query;
 
   if (error) {
     throw new Error(
@@ -2519,7 +2187,7 @@ async function getCaseLinksForUser(user: {
   let query = supabase
     .from("casualty_case_links")
     .select(
-      "id, case_id, case_name, casualty_incident_id, incident_id, role, linked_by, notes, linked_at, created_at",
+      "id, case_id, casualty_incident_id, incident_id, role, linked_by, notes, linked_at, created_at",
     )
     .order("linked_at", { ascending: false });
 
@@ -2590,118 +2258,6 @@ export async function getCasualtyCaseLinks(
   }
 }
 
-export async function updateCasualtyCaseName(
-  request: Request<{ caseId: string }>,
-  response: Response,
-  next: NextFunction,
-): Promise<void> {
-  try {
-    const user = getAuthenticatedUser(request);
-    const caseId = request.params.caseId?.trim();
-    const body = request.body as { caseName?: unknown };
-    const caseName =
-      typeof body.caseName === "string" ? body.caseName.trim() : "";
-
-    if (!caseId) {
-      response.status(400).json({
-        success: false,
-        message: "Matched case ID is required.",
-      });
-      return;
-    }
-
-    if (!caseName) {
-      response.status(400).json({
-        success: false,
-        message: "Matched case name is required.",
-      });
-      return;
-    }
-
-    if (caseName.length > 120) {
-      response.status(400).json({
-        success: false,
-        message: "Matched case name must be 120 characters or fewer.",
-      });
-      return;
-    }
-
-    const accessibleIds = await getAccessibleCasualtyIncidentIds(user);
-    const { data: existingLinks, error: existingError } = await supabase
-      .from("casualty_case_links")
-      .select(
-        "id, case_id, case_name, casualty_incident_id, incident_id, role, linked_by, notes, linked_at, created_at",
-      )
-      .eq("case_id", caseId);
-
-    if (existingError) {
-      throw new Error(
-        `Unable to retrieve matched case: ${existingError.message}`,
-      );
-    }
-
-    const links = (existingLinks ?? []) as CasualtyCaseLinkRow[];
-    if (links.length === 0) {
-      response.status(404).json({
-        success: false,
-        message: "Matched case was not found.",
-      });
-      return;
-    }
-
-    if (
-      accessibleIds &&
-      links.some((link) => !accessibleIds.includes(link.casualty_incident_id))
-    ) {
-      response.status(403).json({
-        success: false,
-        message: "Matched case is outside your admin scope.",
-      });
-      return;
-    }
-
-    const { data: updatedLinks, error: updateError } = await supabase
-      .from("casualty_case_links")
-      .update({ case_name: caseName })
-      .eq("case_id", caseId)
-      .select(
-        "id, case_id, case_name, casualty_incident_id, incident_id, role, linked_by, notes, linked_at, created_at",
-      )
-      .order("linked_at", { ascending: true });
-
-    if (updateError) {
-      throw new Error(
-        `Unable to update matched case name: ${updateError.message}`,
-      );
-    }
-
-    await recordAuditLog({
-      actor: {
-        id: user.id,
-        fullName: user.fullName,
-        role: user.role,
-      },
-      action: "casualty.case_name_updated",
-      entityType: "casualty_case",
-      entityId: caseId,
-      entityLabel: caseName,
-      metadata: {
-        previousName: links[0]?.case_name ?? null,
-        linkedCasualtyIncidentIds: links.map(
-          (link) => link.casualty_incident_id,
-        ),
-      },
-    });
-
-    response.status(200).json({
-      success: true,
-      data: updatedLinks ?? [],
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
 export async function matchCasualtyCaseRecords(
   request: Request,
   response: Response,
@@ -2729,23 +2285,11 @@ export async function matchCasualtyCaseRecords(
         ? body.notes.trim()
         : null;
 
-    const requiredRoles: CaseMatchRoleBucket[] = [
-      "field_responder",
-      "sa_responder",
-    ];
-    const allowedRoles: CaseMatchRoleBucket[] = [
-      ...requiredRoles,
-      "documenter",
-    ];
-
-    if (
-      recordIds.length < requiredRoles.length ||
-      recordIds.length > allowedRoles.length
-    ) {
+    if (recordIds.length !== 3) {
       response.status(400).json({
         success: false,
         message:
-          "Select one Field Responder and one Advanced Medical Responder record to match. HCFD is optional.",
+          "Select one Field Responder, one Advanced Medical Responder, and one HCFD record to match.",
       });
       return;
     }
@@ -2786,15 +2330,11 @@ export async function matchCasualtyCaseRecords(
     const roleBuckets = records.map((record) =>
       getCaseMatchRoleBucket(record.encoder?.role),
     );
-
-    if (roleBuckets.some((role) => !allowedRoles.includes(role))) {
-      response.status(400).json({
-        success: false,
-        message:
-          "Only Field Responder, Advanced Medical Responder, and optional HCFD records can be matched.",
-      });
-      return;
-    }
+    const requiredRoles: CaseMatchRoleBucket[] = [
+      "field_responder",
+      "sa_responder",
+      "documenter",
+    ];
 
     if (new Set(roleBuckets).size !== roleBuckets.length) {
       response.status(400).json({
@@ -2820,7 +2360,7 @@ export async function matchCasualtyCaseRecords(
     const { data: existingLinks, error: existingError } = await supabase
       .from("casualty_case_links")
       .select(
-        "id, case_id, case_name, casualty_incident_id, incident_id, role, linked_by, notes, linked_at, created_at",
+        "id, case_id, casualty_incident_id, incident_id, role, linked_by, notes, linked_at, created_at",
       )
       .in("casualty_incident_id", recordIds);
 
@@ -2868,7 +2408,7 @@ export async function matchCasualtyCaseRecords(
     const { data: updatedLinks, error: updatedError } = await supabase
       .from("casualty_case_links")
       .select(
-        "id, case_id, case_name, casualty_incident_id, incident_id, role, linked_by, notes, linked_at, created_at",
+        "id, case_id, casualty_incident_id, incident_id, role, linked_by, notes, linked_at, created_at",
       )
       .eq("case_id", caseId)
       .order("linked_at", { ascending: true });
@@ -2950,10 +2490,6 @@ export async function getNextCasualtyIdSequence(
       typeof request.query.dateCode === "string"
         ? request.query.dateCode
         : "";
-    const incidentId =
-      typeof request.query.incidentId === "string"
-        ? request.query.incidentId.trim()
-        : "";
     const userCode = normalizeCasualtyIdUserCode(rawUserCode);
     const dateCode = rawDateCode.trim();
 
@@ -2961,53 +2497,6 @@ export async function getNextCasualtyIdSequence(
       response.status(400).json({
         success: false,
         message: "User code is required.",
-      });
-      return;
-    }
-
-    if (incidentId) {
-      const { data, error } = await supabase
-        .from("casualty_incidents")
-        .select(
-          `
-            casualty:casualties (
-              id_number
-            )
-          `,
-        )
-        .eq("incident_id", incidentId)
-        .is("deleted_at", null);
-
-      if (error) {
-        throw new Error(
-          `Unable to retrieve incident victim sequence: ${error.message}`,
-        );
-      }
-
-      const highestSequence = (data ?? []).reduce((highest, record) => {
-        const casualty = Array.isArray(record.casualty)
-          ? record.casualty[0]
-          : record.casualty;
-
-        return Math.max(
-          highest,
-          getIncidentVictimCodeSequence(
-            casualty?.id_number,
-            userCode,
-          ),
-        );
-      }, 0);
-      const nextSequence = highestSequence + 1;
-
-      response.status(200).json({
-        success: true,
-        data: {
-          dateCode,
-          incidentId,
-          userCode,
-          nextSequence,
-          formattedSequence: String(nextSequence),
-        },
       });
       return;
     }
@@ -3132,8 +2621,7 @@ export async function getCasualtyStatusHistory(
         "id, casualty_incident_id, old_status, new_status, changed_by, change_reason, created_at",
       )
       .eq("casualty_incident_id", id)
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: false });
+      .order("created_at", { ascending: false });
 
     if (error) {
       throw new Error(
@@ -3898,7 +3386,7 @@ export async function createCasualtyTriageAssessment(
       request.header("X-DCMS-Responder-Function");
     const isStabilizationResponderUpdate =
       responderFunction === "sa_responder" &&
-      ["responder", "field_responder", "sa_responder", "minor_incident_documenter"].includes(
+      ["responder", "field_responder", "sa_responder"].includes(
         user.role,
       );
 
@@ -3917,7 +3405,7 @@ export async function createCasualtyTriageAssessment(
     const { data: existingRecord, error: existingError } =
       await supabase
         .from("casualty_incidents")
-        .select("id, incident_id, encoded_by, verification_status")
+        .select("id, encoded_by, verification_status")
         .eq("id", id)
         .is("deleted_at", null)
         .maybeSingle();
@@ -3933,16 +3421,6 @@ export async function createCasualtyTriageAssessment(
         success: false,
         message: "Victim record not found.",
       });
-      return;
-    }
-
-    if (
-      !validateIncidentTriageMode(
-        request.body,
-        await getIncidentTriageMode(existingRecord.incident_id),
-        response,
-      )
-    ) {
       return;
     }
 
@@ -4000,7 +3478,7 @@ export async function getCasualtyTreatmentHistory(
     if (!hasAccess) {
       response.status(404).json({
         success: false,
-        message: "Vcitim record not found.",
+        message: "Victim record not found.",
       });
       return;
     }
@@ -4010,8 +3488,7 @@ export async function getCasualtyTreatmentHistory(
       .select(
         "id, casualty_incident_id, treatment_strategy, treatment_area_name, stabilization_started_at, stabilized_at, treatment_details, notes, performed_by",
       )
-      .eq("casualty_incident_id", id)
-      .order("created_at", { ascending: false });
+      .eq("casualty_incident_id", id);
 
     if (error) {
       throw new Error(
@@ -4061,9 +3538,6 @@ export async function getCasualtyTreatmentHistory(
 
     const history = (data ?? []).map((item) => ({
       ...item,
-      treatment_strategy: normalizeTreatmentStrategy(
-        item.treatment_strategy,
-      ),
 
       performed_by_user: item.performed_by
         ? usersById.get(item.performed_by) ?? null
@@ -4098,7 +3572,7 @@ export async function getCasualtyTransportHistory(
     if (!hasAccess) {
       response.status(404).json({
         success: false,
-        message: "Vcitim record not found.",
+        message: "Victim record not found.",
       });
       return;
     }
@@ -4109,8 +3583,7 @@ export async function getCasualtyTransportHistory(
         "id, casualty_incident_id, transport_required, transport_mode, ems_unit_type, arrived_scene_at, departed_scene_at, arrived_facility_at, receiving_facility_id, recorded_by, notes, created_at",
       )
       .eq("casualty_incident_id", id)
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: false });
+      .order("created_at", { ascending: false });
 
     if (error) {
       throw new Error(
@@ -4237,7 +3710,7 @@ export async function createCasualtyTransportRecord(
       request.header("X-DCMS-Responder-Function");
     const isStabilizationResponderUpdate =
       responderFunction === "sa_responder" &&
-      ["responder", "field_responder", "sa_responder", "minor_incident_documenter"].includes(
+      ["responder", "field_responder", "sa_responder"].includes(
         user.role,
       );
 
@@ -4272,14 +3745,14 @@ export async function createCasualtyTransportRecord(
 
     if (existingError) {
       throw new Error(
-        `Unable to retrieve casualty record: ${existingError.message}`,
+        `Unable to retrieve victim record: ${existingError.message}`,
       );
     }
 
     if (!existingRecord) {
       response.status(404).json({
         success: false,
-        message: "Casualty record not found.",
+        message: "Victim record not found.",
       });
       return;
     }
@@ -4291,7 +3764,7 @@ export async function createCasualtyTransportRecord(
       ) {
         response.status(404).json({
           success: false,
-          message: "Casualty record not found.",
+          message: "Victim record not found.",
         });
         return;
       }
@@ -4338,18 +3811,12 @@ export async function updateCasualty(
       casualtyOutcome,
     } = request.body;
     const user = getAuthenticatedUser(request);
-    const effectiveTreatmentRecord =
-      getEffectiveTreatmentRecord(
-        user.role,
-        triageAssessment,
-        treatmentRecord,
-      );
     const responderFunction =
       request.header("x-dcms-responder-function") ??
       request.header("X-DCMS-Responder-Function");
     const isStabilizationResponderUpdate =
       responderFunction === "sa_responder" &&
-      ["responder", "field_responder", "sa_responder", "minor_incident_documenter"].includes(
+      ["responder", "field_responder", "sa_responder"].includes(
         user.role,
       );
     const isResponderTransportOnlyUpdate =
@@ -4358,7 +3825,7 @@ export async function updateCasualty(
       !incidentDetails &&
       !incidentId &&
       !triageAssessment &&
-      !effectiveTreatmentRecord &&
+      !treatmentRecord &&
       !facilityEncounter &&
       !casualtyOutcome &&
       ["responder", "field_responder", "sa_responder"].includes(
@@ -4371,13 +3838,13 @@ export async function updateCasualty(
       !incidentId &&
       !triageAssessment &&
       !transportRecord &&
-      !effectiveTreatmentRecord &&
+      !treatmentRecord &&
       !facilityEncounter &&
       !casualtyOutcome
     ) {
       response.status(400).json({
         success: false,
-        message: "No casualty updates were provided.",
+        message: "No victim updates were provided.",
       });
       return;
     }
@@ -4390,12 +3857,7 @@ export async function updateCasualty(
       return;
     }
 
-    if (
-      !validateTreatmentRecord(
-        effectiveTreatmentRecord,
-        response,
-      )
-    ) {
+    if (!validateTreatmentRecord(treatmentRecord, response)) {
       return;
     }
 
@@ -4410,64 +3872,37 @@ export async function updateCasualty(
     const { data: existingRecord, error: existingError } =
       await supabase
         .from("casualty_incidents")
-        .select("id, casualty_id, incident_id, current_status, encoded_by, verification_status")
+        .select("id, casualty_id, current_status, encoded_by, verification_status")
         .eq("id", id)
         .is("deleted_at", null)
         .maybeSingle();
 
     if (existingError) {
       throw new Error(
-        `Unable to retrieve casualty record: ${existingError.message}`,
+        `Unable to retrieve victim record: ${existingError.message}`,
       );
     }
 
     if (!existingRecord) {
       response.status(404).json({
         success: false,
-        message: "Casualty record not found.",
+        message: "Victim record not found.",
       });
       return;
-    }
-
-    if (triageAssessment) {
-      const triageIncidentId =
-        incidentId ?? existingRecord.incident_id;
-
-      if (
-        !validateIncidentTriageMode(
-          triageAssessment,
-          await getIncidentTriageMode(triageIncidentId),
-          response,
-        )
-      ) {
-        return;
-      }
     }
 
     const canEditOwnTransport =
       isResponderTransportOnlyUpdate &&
       existingRecord.encoded_by === user.id;
-    const isHealthcareDocumenterSectionUpdate =
-      (user.role === "documenter" || user.role === "medical_personnel") &&
-      existingRecord.encoded_by === user.id &&
-      !person &&
-      !incidentDetails &&
-      !incidentId &&
-      !triageAssessment &&
-      !transportRecord &&
-      (Boolean(treatmentRecord) ||
-        Boolean(facilityEncounter) ||
-        Boolean(casualtyOutcome));
 
     if (shouldScopeToOwnCasualties(user.role)) {
       if (
         existingRecord.encoded_by !== user.id &&
-        !isStabilizationResponderUpdate &&
-        !isHealthcareDocumenterSectionUpdate
+        !isStabilizationResponderUpdate
       ) {
         response.status(404).json({
           success: false,
-          message: "Casualty record not found.",
+          message: "Victim record not found.",
         });
         return;
       }
@@ -4475,7 +3910,6 @@ export async function updateCasualty(
       if (
         !isStabilizationResponderUpdate &&
         !canEditOwnTransport &&
-        !isHealthcareDocumenterSectionUpdate &&
         existingRecord.verification_status !== "rejected"
       ) {
         response.status(403).json({
@@ -4523,7 +3957,7 @@ export async function updateCasualty(
     ) {
       response.status(400).json({
         success: false,
-        message: "Invalid casualty status.",
+        message: "Invalid victim status.",
       });
       return;
     }
@@ -4534,7 +3968,7 @@ export async function updateCasualty(
     ) {
       response.status(400).json({
         success: false,
-        message: "Invalid casualty severity.",
+        message: "Invalid victim severity.",
       });
       return;
     }
@@ -4623,7 +4057,6 @@ export async function updateCasualty(
     if (person) {
       const existingIdNumber = await ensureUniqueIdNumber(
         person.idNumber,
-        incidentId ?? existingRecord.incident_id,
         existingRecord.casualty_id,
       );
 
@@ -4631,7 +4064,7 @@ export async function updateCasualty(
         response.status(409).json({
           success: false,
           message:
-            "A casualty with this ID number already exists in this incident. Please generate a new record.",
+            "A victim with this ID number already exists. Please generate a new record.",
         });
         return;
       }
@@ -4670,7 +4103,7 @@ export async function updateCasualty(
 
       if (casualtyError) {
         throw new Error(
-          `Unable to update casualty: ${casualtyError.message}`,
+          `Unable to update victim: ${casualtyError.message}`,
         );
       }
     }
@@ -4724,7 +4157,7 @@ export async function updateCasualty(
 
       if (incidentError) {
         throw new Error(
-          `Unable to update casualty incident: ${incidentError.message}`,
+          `Unable to update victim incident: ${incidentError.message}`,
         );
       }
 
@@ -4757,12 +4190,8 @@ export async function updateCasualty(
       await insertTransportRecord(id, user.id, transportRecord);
     }
 
-    if (effectiveTreatmentRecord) {
-      await insertTreatmentRecord(
-        id,
-        user.id,
-        effectiveTreatmentRecord,
-      );
+    if (treatmentRecord) {
+      await insertTreatmentRecord(id, user.id, treatmentRecord);
     }
 
     const encounterPayload = facilityEncounter ?? (
@@ -4809,7 +4238,7 @@ export async function updateCasualty(
 
       if (verificationUpdateError) {
         throw new Error(
-          `Unable to return casualty for review: ${verificationUpdateError.message}`,
+          `Unable to return victim for review: ${verificationUpdateError.message}`,
         );
       }
 
@@ -4858,45 +4287,12 @@ export async function updateCasualty(
       );
     }
 
-    const updatedCasualty = getRelationRecord(updatedRecord.casualty);
-    const updatedIncident = getRelationRecord(updatedRecord.incident);
-    const updatedSections = [
-      person ? "personal details" : null,
-      incidentDetails || incidentId ? "incident details" : null,
-      triageAssessment ? "triage assessment" : null,
-      transportRecord ? "transport record" : null,
-      treatmentRecord ? "treatment record" : null,
-      facilityEncounter ? "facility encounter" : null,
-      casualtyOutcome ? "outcome" : null,
-    ].filter((section): section is string => Boolean(section));
-
-    await recordAuditLog({
-      actor: user,
-      action: "casualty.updated",
-      entityType: "casualty_incident",
-      entityId: id,
-      entityLabel: buildCasualtyNotificationLabel(updatedCasualty),
-      metadata: {
-        source:
-          request.header("x-dcms-client")?.toLowerCase() === "mobile"
-            ? "mobile"
-            : "web",
-        updatedSections,
-        incidentName: getTextField(updatedIncident, "incident_name"),
-        incidentCode: getTextField(updatedIncident, "incident_code"),
-      },
-    });
-
-    const [updatedRecordWithSummaries] = await attachLatestSummaries([
-      updatedRecord,
-    ]);
-
     response.status(200).json({
       success: true,
       message: shouldReturnRejectedRecordForReview
-        ? "Casualty record updated and returned for admin review."
-        : "Casualty record updated successfully.",
-      data: updatedRecordWithSummaries,
+        ? "Victim record updated and returned for admin review."
+        : "Victim record updated successfully.",
+      data: updatedRecord,
     });
   } catch (error) {
     next(error);

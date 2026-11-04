@@ -5,6 +5,7 @@ import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Modal,
   Pressable,
   RefreshControl,
@@ -1306,12 +1307,12 @@ export default function HomeDashboardScreen() {
         <View style={styles.header}>
           <View style={styles.headerTopRow}>
             <View style={styles.brandWelcomeRow}>
-              <View style={styles.brandMark}>
-                <View style={styles.brandLens} />
-                <View style={[styles.brandDot, styles.brandDotRed]} />
-                <View style={[styles.brandDot, styles.brandDotOrange]} />
-                <View style={[styles.brandDot, styles.brandDotGreen]} />
-              </View>
+              <Image
+                source={require("../../../assets/images/medsort.png")}
+                style={styles.brandMark}
+                resizeMode="cover"
+                accessibilityLabel="SCRIBER logo"
+              />
 
               <View style={styles.greetingWrapper}>
                 <Text style={styles.greeting}>
@@ -2079,7 +2080,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#DADADA",
     marginRight: 8,
-    position: "relative",
+    overflow: "hidden",
     shadowColor: "#6B6B6B",
     shadowOpacity: 0.08,
     shadowRadius: 6,
@@ -2088,43 +2089,6 @@ const styles = StyleSheet.create({
       height: 2,
     },
     elevation: 2,
-  },
-
-  brandLens: {
-    position: "absolute",
-    right: 2,
-    top: 2,
-    width: 17,
-    height: 17,
-    borderRadius: 5,
-    backgroundColor: "#6B6B6B",
-    borderWidth: 1,
-    borderColor: "#3A3A3A",
-  },
-
-  brandDot: {
-    position: "absolute",
-    width: 8,
-    height: 8,
-    borderRadius: 999,
-  },
-
-  brandDotRed: {
-    left: 4,
-    bottom: 4,
-    backgroundColor: COLORS.red,
-  },
-
-  brandDotOrange: {
-    left: 12,
-    bottom: 4,
-    backgroundColor: COLORS.orange,
-  },
-
-  brandDotGreen: {
-    left: 8,
-    bottom: 12,
-    backgroundColor: COLORS.green,
   },
 
   greetingWrapper: {

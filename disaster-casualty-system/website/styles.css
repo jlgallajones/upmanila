@@ -628,9 +628,11 @@ button {
 }
 
 .medsort-logo-ball {
+  left: 0;
+  top: 0;
   z-index: 3;
-  width: 25.2%;
-  height: 25.2%;
+  width: 19%;
+  height: 19%;
   border-radius: 999px;
   background-size: cover;
   background-repeat: no-repeat;
@@ -640,42 +642,134 @@ button {
 }
 
 .medsort-logo-ball-green {
-  left: 0;
-  bottom: 0;
   background-image: url("./assets/medsort-ball-green.png");
 }
 
 .medsort-logo-ball-yellow {
-  left: 0;
-  bottom: 25.2%;
   background-image: url("./assets/medsort-ball-yellow.png");
-  animation: medsortYellowBallBounce 1.4s ease-in-out infinite alternate;
+  animation: medsortLPathYellow 2.4s linear infinite alternate;
 }
 
 .medsort-logo-ball-red {
-  left: 25.2%;
-  bottom: 0;
   background-image: url("./assets/medsort-ball-red.png");
-  animation: medsortRedBallBounce 1.4s ease-in-out infinite alternate;
+  animation: medsortLPathRed 2.4s linear infinite alternate;
 }
 
-@keyframes medsortYellowBallBounce {
+.medsort-logo-ball-green {
+  animation: medsortLPathGreen 2.4s linear infinite alternate;
+}
+
+@keyframes medsortLPathYellow {
   0% {
-    transform: translateY(-64px);
+    left: 1%;
+    top: 20%;
+    transform: rotate(0deg);
+  }
+
+  40.4% {
+    left: 1%;
+    top: 39.61%;
+    transform: rotate(145deg);
+  }
+
+  49.2% {
+    left: 1%;
+    top: 43.88%;
+    transform: rotate(177deg);
+  }
+
+  58.8% {
+    left: 1%;
+    top: 48.54%;
+    transform: rotate(211deg);
+  }
+
+  68.4% {
+    left: 1%;
+    top: 53.2%;
+    transform: rotate(246deg);
   }
 
   100% {
-    transform: translateY(0);
+    left: 4.03%;
+    top: 67.77%;
+    transform: rotate(360deg);
   }
 }
 
-@keyframes medsortRedBallBounce {
+@keyframes medsortLPathGreen {
   0% {
-    transform: translateX(64px);
+    left: 1%;
+    top: 41.53%;
+    transform: rotate(0deg);
+  }
+
+  40.4% {
+    left: 1.51%;
+    top: 61.1%;
+    transform: rotate(145deg);
+  }
+
+  49.2% {
+    left: 2.21%;
+    top: 65.27%;
+    transform: rotate(177deg);
+  }
+
+  58.8% {
+    left: 4.91%;
+    top: 68.98%;
+    transform: rotate(211deg);
+  }
+
+  68.4% {
+    left: 7.96%;
+    top: 72.4%;
+    transform: rotate(246deg);
   }
 
   100% {
-    transform: translateX(0);
+    left: 22.47%;
+    top: 76%;
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes medsortLPathRed {
+  0% {
+    left: 1.75%;
+    top: 63.01%;
+    transform: rotate(0deg);
+  }
+
+  40.4% {
+    left: 15.06%;
+    top: 76%;
+    transform: rotate(145deg);
+  }
+
+  49.2% {
+    left: 19.34%;
+    top: 76%;
+    transform: rotate(177deg);
+  }
+
+  58.8% {
+    left: 24%;
+    top: 76%;
+    transform: rotate(211deg);
+  }
+
+  68.4% {
+    left: 28.66%;
+    top: 76%;
+    transform: rotate(246deg);
+  }
+
+  100% {
+    left: 65%;
+    top: 76%;
+    transform: rotate(360deg);
   }
 }
 

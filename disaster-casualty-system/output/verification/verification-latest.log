@@ -1,5 +1,5 @@
 DCMS VERIFICATION RUN
-Started: 2026-10-31T22:17:33.5035284+08:00
+Started: 2026-11-04T11:40:09.9660006+08:00
 Root: C:\Users\jlgallajones\upmanila\disaster-casualty-system
 [RUN ] API TypeScript typecheck
        Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system\api
@@ -55,16 +55,32 @@ React Compiler enabled
 Starting Metro Bundler
 
 Static rendering is enabled. Learn more: https://docs.expo.dev/router/web/static-rendering/
-| (node:30080) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (node:19660) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
 | (Use `node --trace-warnings ...` to show where the warning was created)
-| (node:30080) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (node:19660) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
 | (Use `node --trace-warnings ...` to show where the warning was created)
-Web Bundled 3749ms node_modules\expo-router\entry.js (1395 modules)
-? Bundled 4886ms node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js (1502 modules)
+| (node:19660) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:19660) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:19660) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:19660) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:19660) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:19660) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:19660) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:19660) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+? Bundled 46075ms node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js (1493 modules)
+Web Bundled 46981ms node_modules\expo-router\entry.js (1374 modules)
 
 › web bundles (2):
 _expo/static/css/global-30c341199d6e65a2dfb94ff1ee1395d4.css (551B)
-_expo/static/js/web/entry-69466c6f25f9056a388711c414bd21ba.js (3.4MB)
+_expo/static/js/web/entry-daee605b4190bf7109a1b964de7400f6.js (3.4MB)
 
 › Static routes (26):
 /home (39KB)
@@ -111,6 +127,6 @@ Exported: dist
 [RUN ] Repository whitespace check
        Directory: C:\Users\jlgallajones\upmanila\disaster-casualty-system
        Command: git.exe diff --check
-warning: in the working copy of 'disaster-casualty-system/mobile/src/app/(tabs)/add-casualty.tsx', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'disaster-casualty-system/mobile/src/app/(tabs)/records.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/mobile/src/screens/auth/LoginScreen.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'disaster-casualty-system/mobile/src/screens/dashboard/HomeDashboardScreen.tsx', LF will be replaced by CRLF the next time Git touches it
 [PASS] Repository whitespace check (exit code 0)

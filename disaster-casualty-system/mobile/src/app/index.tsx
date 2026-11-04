@@ -32,9 +32,14 @@ const dostPchrdLogo = require("../assets/DOST PCHRD Logo.png");
 const LOGO_SIZE = 148;
 const BALL_SIZE = LOGO_SIZE * 0.19;
 const RED_BALL_SIZE = BALL_SIZE - 2;
-const BALL_INSET = 10;
-const BALL_TRAVEL = 64;
-const RED_BALL_TRAVEL = 50;
+const LOGO_ROLL_DURATION = 850;
+const LOGO_PATH_INPUT = [0, 0.404, 0.492, 0.588, 0.684, 1];
+const LOGO_PATH_X_YELLOW = [1, 1, 1, 1, 1, 5.95];
+const LOGO_PATH_Y_YELLOW = [30, 58.95, 65.26, 72.13, 79.01, 100.63];
+const LOGO_PATH_X_GREEN = [1, 2.11, 3.46, 7.16, 11.46, 33.23];
+const LOGO_PATH_Y_GREEN = [61.77, 90.63, 96.73, 102.53, 107.61, 112];
+const LOGO_PATH_X_RED = [2.57, 22.29, 28.6, 35.48, 42.36, 65];
+const LOGO_PATH_Y_RED = [93.42, 112, 112, 112, 112, 112];
 
 const COLORS = createThemePalette({
   cyan: "#00838F",
@@ -47,8 +52,7 @@ const COLORS = createThemePalette({
 
 export default function LandingScreen() {
   const [isCheckingSession, setIsCheckingSession] = useState(true);
-  const yellowBounce = useRef(new Animated.Value(0)).current;
-  const redBounce = useRef(new Animated.Value(0)).current;
+  const logoPathMotion = useRef(new Animated.Value(0)).current;
   const { colors, isDark } = useThemeMode();
 
   useEffect(() => {
@@ -82,34 +86,18 @@ export default function LandingScreen() {
   useEffect(() => {
     const animation = Animated.loop(
       Animated.sequence([
-        Animated.parallel([
-          Animated.timing(yellowBounce, {
-            toValue: 1,
-            duration: 1400,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-          Animated.timing(redBounce, {
-            toValue: 1,
-            duration: 1400,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.parallel([
-          Animated.timing(yellowBounce, {
-            toValue: 0,
-            duration: 1400,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-          Animated.timing(redBounce, {
-            toValue: 0,
-            duration: 1400,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-        ]),
+        Animated.timing(logoPathMotion, {
+          toValue: 1,
+          duration: LOGO_ROLL_DURATION,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
+        Animated.timing(logoPathMotion, {
+          toValue: 0,
+          duration: LOGO_ROLL_DURATION,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
       ]),
     );
 
@@ -118,7 +106,7 @@ export default function LandingScreen() {
     return () => {
       animation.stop();
     };
-  }, [redBounce, yellowBounce]);
+  }, [logoPathMotion]);
 
   if (isCheckingSession) {
     return null;
@@ -175,16 +163,31 @@ export default function LandingScreen() {
             />
 
             <Animated.Image
-              source={medsortBallYellow}
+              source={medsortBallRed}
               style={[
                 styles.logoBall,
-                styles.logoBallYellow,
+                styles.logoBallRed,
                 {
                   transform: [
                     {
-                      translateY: yellowBounce.interpolate({
+                      translateX: logoPathMotion.interpolate({
+                        inputRange: LOGO_PATH_INPUT,
+                        outputRange: LOGO_PATH_X_RED,
+                        extrapolate: "clamp",
+                      }),
+                    },
+                    {
+                      translateY: logoPathMotion.interpolate({
+                        inputRange: LOGO_PATH_INPUT,
+                        outputRange: LOGO_PATH_Y_RED,
+                        extrapolate: "clamp",
+                      }),
+                    },
+                    {
+                      rotate: logoPathMotion.interpolate({
                         inputRange: [0, 1],
-                        outputRange: [-BALL_TRAVEL, 0],
+                        outputRange: ["0deg", "360deg"],
+                        extrapolate: "clamp",
                       }),
                     },
                   ],
@@ -195,21 +198,63 @@ export default function LandingScreen() {
 
             <Animated.Image
               source={medsortBallGreen}
-              style={[styles.logoBall, styles.logoBallGreen]}
+              style={[
+                styles.logoBall,
+                styles.logoBallGreen,
+                {
+                  transform: [
+                    {
+                      translateX: logoPathMotion.interpolate({
+                        inputRange: LOGO_PATH_INPUT,
+                        outputRange: LOGO_PATH_X_GREEN,
+                        extrapolate: "clamp",
+                      }),
+                    },
+                    {
+                      translateY: logoPathMotion.interpolate({
+                        inputRange: LOGO_PATH_INPUT,
+                        outputRange: LOGO_PATH_Y_GREEN,
+                        extrapolate: "clamp",
+                      }),
+                    },
+                    {
+                      rotate: logoPathMotion.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ["0deg", "360deg"],
+                        extrapolate: "clamp",
+                      }),
+                    },
+                  ],
+                },
+              ]}
               resizeMode="cover"
             />
 
             <Animated.Image
-              source={medsortBallRed}
+              source={medsortBallYellow}
               style={[
                 styles.logoBall,
-                styles.logoBallRed,
+                styles.logoBallYellow,
                 {
                   transform: [
                     {
-                      translateX: redBounce.interpolate({
+                      translateX: logoPathMotion.interpolate({
+                        inputRange: LOGO_PATH_INPUT,
+                        outputRange: LOGO_PATH_X_YELLOW,
+                        extrapolate: "clamp",
+                      }),
+                    },
+                    {
+                      translateY: logoPathMotion.interpolate({
+                        inputRange: LOGO_PATH_INPUT,
+                        outputRange: LOGO_PATH_Y_YELLOW,
+                        extrapolate: "clamp",
+                      }),
+                    },
+                    {
+                      rotate: logoPathMotion.interpolate({
                         inputRange: [0, 1],
-                        outputRange: [RED_BALL_TRAVEL, 0],
+                        outputRange: ["0deg", "360deg"],
                       }),
                     },
                   ],
@@ -352,23 +397,19 @@ const styles = StyleSheet.create({
   },
   logoBall: {
     position: "absolute",
+    left: 0,
+    top: 0,
     width: BALL_SIZE,
     height: BALL_SIZE,
     borderRadius: 999,
     zIndex: 3,
   },
   logoBallGreen: {
-    left: BALL_INSET - 1,
-    bottom: BALL_INSET - 1,
     zIndex: 4,
   },
   logoBallYellow: {
-    left: BALL_INSET - 4,
-    bottom: BALL_INSET + BALL_SIZE + 5,
   },
   logoBallRed: {
-    left: BALL_INSET + BALL_SIZE + 8,
-    bottom: BALL_INSET - 9,
     width: RED_BALL_SIZE,
     height: RED_BALL_SIZE,
   },

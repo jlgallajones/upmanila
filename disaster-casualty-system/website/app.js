@@ -2752,9 +2752,9 @@ function renderAnimatedMedSortLogo() {
   return `
     <div class="medsort-logo-motion" aria-label="SCRIBER animated logo">
       <img class="login-medsort-logo" src="./assets/medsort-login-base.png" alt="" />
-      <span class="medsort-logo-ball medsort-logo-ball-yellow"></span>
-      <span class="medsort-logo-ball medsort-logo-ball-green"></span>
       <span class="medsort-logo-ball medsort-logo-ball-red"></span>
+      <span class="medsort-logo-ball medsort-logo-ball-green"></span>
+      <span class="medsort-logo-ball medsort-logo-ball-yellow"></span>
     </div>
   `;
 }

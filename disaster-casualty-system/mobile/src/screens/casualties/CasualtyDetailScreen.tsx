@@ -1,15 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
-import { createThemePalette } from "@/constants/theme";
-import {
-  router,
-  useFocusEffect,
-  useLocalSearchParams,
-} from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { router, useLocalSearchParams } from "expo-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Image,
-  Modal,
   Pressable,
   ScrollView,
   StatusBar,
@@ -45,8 +39,8 @@ import {
   type ResponderAssignment,
 } from "../../auth/responderAssignment";
 
-const COLORS = createThemePalette({
-  maroon: "#242424",
+const COLORS = {
+  maroon: "#7B1113",
   white: "#FFFFFF",
   background: "#F3F5F9",
   card: "#FFFFFF",
@@ -65,10 +59,10 @@ const COLORS = createThemePalette({
   blueBackground: "#E4F3FD",
 
   red: "#C92D32",
-  redBackground: "#FFF4F4",
+  redBackground: "#FCE6E7",
 
   grayBackground: "#F2F5F9",
-});
+};
 
 function canEditRecord(
   role: string | null,
@@ -90,8 +84,7 @@ function isResponderRole(role: string | null): boolean {
   return (
     role === "responder" ||
     role === "field_responder" ||
-  role === "sa_responder" ||
-  role === "minor_incident_documenter"
+    role === "sa_responder"
   );
 }
 
@@ -106,17 +99,6 @@ function isFieldResponderView(
 }
 
 function isSaResponderView(
-  role: string | null,
-  assignment: ResponderAssignment | null,
-): boolean {
-  return (
-    role === "sa_responder" ||
-  role === "minor_incident_documenter" ||
-    (role === "responder" && assignment === "sa_responder")
-  );
-}
-
-function isAmpResponderView(
   role: string | null,
   assignment: ResponderAssignment | null,
 ): boolean {
@@ -242,45 +224,23 @@ function TimelineItem({
   );
 }
 
-function isImageAttachment(item: Attachment): boolean {
+function AttachmentCard({ item }: { item: Attachment }) {
+  const isImage = item.mime_type?.startsWith("image/") ?? false;
+
   return (
-    item.mime_type?.startsWith("image/") === true ||
-    /\.(gif|jpe?g|png|webp|heic|heif)$/i.test(item.file_name)
-  );
-}
-
-function AttachmentCard({
-  item,
-  onPress,
-}: {
-  item: Attachment;
-  onPress?: () => void;
-}) {
-  const isImage = isImageAttachment(item) && Boolean(item.signed_url);
-
-  const card = (
     <View style={styles.attachmentCard}>
-      {isImage ? (
-        <View style={styles.attachmentImageFrame}>
-          <Image
-            source={{ uri: item.signed_url ?? undefined }}
-            style={styles.attachmentImage}
-            resizeMode="cover"
-          />
-          <View style={styles.attachmentImageHint}>
-            <Ionicons
-              name="expand-outline"
-              size={14}
-              color={COLORS.white}
-            />
-          </View>
-        </View>
+      {isImage && item.signed_url ? (
+        <Image
+          source={{ uri: item.signed_url }}
+          style={styles.attachmentImage}
+          resizeMode="cover"
+        />
       ) : (
         <View style={styles.attachmentIcon}>
           <Ionicons
             name="document-attach-outline"
             size={22}
-            color={COLORS.text}
+            color={COLORS.maroon}
           />
         </View>
       )}
@@ -290,23 +250,10 @@ function AttachmentCard({
           {item.file_name}
         </Text>
         <Text style={styles.attachmentMeta}>
-          {isImage ? "Tap to view photo" : "Attachment"} - {formatDateTime(item.created_at)}
+          {formatDateTime(item.created_at)}
         </Text>
       </View>
     </View>
-  );
-
-  return onPress ? (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [pressed && styles.pressed]}
-      accessibilityRole="button"
-      accessibilityLabel={`View ${item.file_name}`}
-    >
-      {card}
-    </Pressable>
-  ) : (
-    card
   );
 }
 
@@ -376,42 +323,6 @@ function extractRecordSectionValue(
   return null;
 }
 
-function extractLatestTransportSectionValue(
-  text: string | null | undefined,
-  label: string,
-): string | null {
-  if (!text) {
-    return null;
-  }
-
-  const targetLabel = `${label}:`.toLowerCase();
-  let insideTransportSection = false;
-  let value: string | null = null;
-
-  for (const rawLine of String(text).split(/\r?\n/)) {
-    const line = rawLine.trim();
-
-    if (!line) {
-      continue;
-    }
-
-    if (line.startsWith("[") && line.endsWith("]")) {
-      const sectionTitle = line.slice(1, -1).trim().toLowerCase();
-      insideTransportSection = sectionTitle.endsWith("transport / release");
-      continue;
-    }
-
-    if (
-      insideTransportSection &&
-      line.toLowerCase().startsWith(targetLabel)
-    ) {
-      value = line.slice(label.length + 1).trim() || null;
-    }
-  }
-
-  return value;
-}
-
 function extractRecordBaseText(text: string | null | undefined): string {
   if (!text) {
     return "Unavailable";
@@ -446,18 +357,6 @@ function formatStatus(status: string | null | undefined): string {
     .join(" ");
 }
 
-function formatTriageCategory(
-  category: string | null | undefined,
-): string {
-  switch (category?.trim().toLowerCase()) {
-    case "minimal":
-    case "minor":
-      return "Minor";
-    default:
-      return formatStatus(category);
-  }
-}
-
 function formatCasualtyDisplayId(
   idNumber: string | null | undefined,
   clientRecordId: string | null | undefined,
@@ -487,10 +386,8 @@ function formatCasualtyDisplayId(
 }
 
 function getVerificationPalette(status: string | null | undefined) {
-  switch (status?.trim().toLowerCase()) {
+  switch (status) {
     case "verified":
-    case "accepted":
-    case "approved":
       return {
         color: COLORS.green,
         backgroundColor: COLORS.greenBackground,
@@ -513,35 +410,8 @@ function getVerificationPalette(status: string | null | undefined) {
   }
 }
 
-function formatVerificationStatus(
-  status: string | null | undefined,
-): string {
-  switch (status?.trim().toLowerCase()) {
-    case "verified":
-    case "accepted":
-    case "approved":
-      return "Verified";
-
-    case "rejected":
-      return "Rejected";
-
-    case "under_review":
-    case "under review":
-      return "Under Review";
-
-    case "submitted":
-      return "Submitted";
-
-    case "draft":
-      return "Draft";
-
-    default:
-      return "Submitted";
-  }
-}
-
 function formatTriageSystem(value: string | null | undefined): string {
-  switch (value?.trim().toLowerCase()) {
+  switch (value) {
     case "urgent_non_urgent":
       return "Urgent/Non-urgent";
     case "stieve":
@@ -560,8 +430,6 @@ function formatTriageSystem(value: string | null | undefined): string {
       return "SIEVE";
     case "save":
       return "SAVE";
-    case "sort":
-      return "SORT";
     case "meta":
       return "META";
     case "swift":
@@ -596,19 +464,6 @@ function formatTriageSystem(value: string | null | undefined): string {
       return "Other";
     default:
       return "Unknown";
-  }
-}
-
-function formatTriageStage(value: string | null | undefined): string {
-  switch (value?.trim().toLowerCase()) {
-    case "on_site":
-      return "Primary Triage";
-    case "reassessment":
-      return "Secondary Triage";
-    case "facility_arrival":
-      return "Tertiary Triage";
-    default:
-      return formatStatus(value);
   }
 }
 
@@ -668,7 +523,7 @@ function getTriagePalette(category: string | null | undefined) {
       return {
         color: COLORS.red,
         backgroundColor: COLORS.redBackground,
-        borderColor: COLORS.warningBorder,
+        borderColor: "#F2B6B8",
       };
     case "delayed":
     case "yellow":
@@ -683,7 +538,7 @@ function getTriagePalette(category: string | null | undefined) {
       return {
         color: COLORS.green,
         backgroundColor: COLORS.greenBackground,
-        borderColor: COLORS.greenBackground,
+        borderColor: "#A9E7C2",
       };
     case "expectant":
     case "black":
@@ -704,13 +559,13 @@ function getTriagePalette(category: string | null | undefined) {
 function formatTreatmentStrategy(value: string | null | undefined): string {
   switch (value) {
     case "scoop_and_run":
-      return "Scoop and Run/Load and Go";
+      return "Scoop and Run";
     case "scooter":
-      return "Scooter";
+      return "SCOOTER";
     case "stay_and_play":
       return "Stay and Play";
     case "play_and_run":
-      return "Scooter";
+      return "Play and Run";
     case "unknown":
       return "Unknown";
     default:
@@ -730,7 +585,7 @@ function getFullName(record: CasualtyRecord): string {
 
   return parts.length > 0
     ? parts.join(" ")
-    : "Unidentified Victim";
+    : "Unidentified Casualty";
 }
 
 function getInitials(name: string): string {
@@ -816,7 +671,7 @@ function getStatusPalette(status: string) {
       return {
         color: COLORS.red,
         backgroundColor: COLORS.redBackground,
-        borderColor: COLORS.warningBorder,
+        borderColor: "#F2B6B8",
       };
     case "safe":
     case "rescued":
@@ -824,7 +679,7 @@ function getStatusPalette(status: string) {
       return {
         color: COLORS.green,
         backgroundColor: COLORS.greenBackground,
-        borderColor: COLORS.greenBackground,
+        borderColor: "#A9E7C2",
       };
     default:
       return {
@@ -868,12 +723,10 @@ export default function CasualtyDetailScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] =
     useState<string | null>(null);
-  const [selectedImageAttachment, setSelectedImageAttachment] =
-    useState<Attachment | null>(null);
 
   const loadCasualty = useCallback(async () => {
     if (!casualtyId) {
-      setErrorMessage("Victim record ID is missing.");
+      setErrorMessage("Victim record id is missing.");
       setIsLoading(false);
       return;
     }
@@ -895,7 +748,6 @@ export default function CasualtyDetailScreen() {
         setErrorMessage(
           "Your session has expired. Please sign in again before opening victim records.",
         );
-        router.replace("/login");
         return;
       }
 
@@ -921,16 +773,12 @@ export default function CasualtyDetailScreen() {
       setTransportHistory(transportData);
       setTreatmentHistory(treatmentData);
     } catch (error) {
-      console.error("Failed to load casualty detail:", error);
-
-      if (isAuthenticationTokenError(error)) {
-        setErrorMessage(null);
-        router.replace("/login");
-        return;
-      }
+      console.error("Failed to load victim detail:", error);
 
       setErrorMessage(
-        error instanceof Error
+        isAuthenticationTokenError(error)
+          ? "Your session has expired. Please sign in again before opening victim records."
+          : error instanceof Error
           ? error.message
           : "Unable to load victim details.",
       );
@@ -939,13 +787,9 @@ export default function CasualtyDetailScreen() {
     }
   }, [casualtyId]);
 
-  useFocusEffect(
-    useCallback(() => {
-      void loadCasualty();
-
-      return undefined;
-    }, [loadCasualty]),
-  );
+  useEffect(() => {
+    void loadCasualty();
+  }, [loadCasualty]);
 
   const casualty = useMemo(() => {
     if (!record) {
@@ -993,9 +837,7 @@ export default function CasualtyDetailScreen() {
       dateTime: formatDateTime(record.reported_at),
       status: formatStatus(record.current_status),
       severity: formatStatus(record.severity),
-      verificationStatus: formatVerificationStatus(
-        record.verification_status,
-      ),
+      verificationStatus: formatStatus(record.verification_status),
       verificationStatusRaw: record.verification_status,
       verifiedAt: formatDateTime(record.verified_at),
       notes:
@@ -1003,6 +845,7 @@ export default function CasualtyDetailScreen() {
           ? notes.join("\n")
           : "No medical notes recorded.",
       lastUpdated: formatDateTime(record.updated_at),
+      verified: record.verification_status === "verified",
       encoderName: record.encoder.full_name,
       latestTriage: triageHistory[0],
       latestTransport: transportHistory[0],
@@ -1019,7 +862,6 @@ export default function CasualtyDetailScreen() {
       pathname: "/add-casualty",
       params: {
         editId: casualty.recordId,
-        returnToDetail: "true",
       },
     } as never);
   }
@@ -1034,24 +876,6 @@ export default function CasualtyDetailScreen() {
       params: {
         editId: casualty.recordId,
         focusStep: "Transport",
-        returnToDetail: "true",
-      },
-    } as never);
-  }
-
-  function handleEditHealthcareStep(
-    focusStep: "Management" | "Disposition",
-  ) {
-    if (!casualty) {
-      return;
-    }
-
-    router.push({
-      pathname: "/add-casualty",
-      params: {
-        editId: casualty.recordId,
-        focusStep,
-        returnToDetail: "true",
       },
     } as never);
   }
@@ -1071,12 +895,11 @@ export default function CasualtyDetailScreen() {
   const showHealthcareDocumenterDetails =
     Boolean(isOwnRecord) &&
     isHealthcareDocumenterView(currentUserRole);
-  const canEditHealthcareDocumenterSections =
-    showHealthcareDocumenterDetails;
   const canShowHeaderEdit =
-    canEditCurrentRecord &&
-    !isResponderCurrentUser &&
-    !showHealthcareDocumenterDetails;
+    canEditCurrentRecord && !isResponderCurrentUser;
+  const canEditTransportCard =
+    canEditCurrentRecord ||
+    (isResponderCurrentUser && isOwnRecord);
   const requiresLogin =
     errorMessage?.toLowerCase().includes("sign in") ?? false;
 
@@ -1085,7 +908,7 @@ export default function CasualtyDetailScreen() {
       <View style={styles.centerState}>
         <ActivityIndicator
           size="large"
-          color={COLORS.text}
+          color={COLORS.maroon}
         />
 
         <Text style={styles.centerStateText}>
@@ -1101,7 +924,7 @@ export default function CasualtyDetailScreen() {
         <Ionicons
           name="alert-circle-outline"
           size={42}
-          color={COLORS.text}
+          color={COLORS.maroon}
         />
 
         <Text style={styles.centerStateTitle}>
@@ -1136,12 +959,10 @@ export default function CasualtyDetailScreen() {
   }
 
   const triageCategory =
-    casualty.latestTriage?.calculated_category ??
     casualty.latestTriage?.triage_category ??
-    record?.latest_triage_assessment?.calculated_category ??
     record?.latest_triage_assessment?.triage_category ??
     casualty.status;
-  const triageCategoryLabel = formatTriageCategory(triageCategory);
+  const triageCategoryLabel = formatStatus(triageCategory);
   const triagePalette = getTriagePalette(triageCategory);
   const statusPalette = getStatusPalette(casualty.status);
   const verificationPalette = getVerificationPalette(
@@ -1151,78 +972,15 @@ export default function CasualtyDetailScreen() {
   const triageNotes = casualty.latestTriage?.notes ?? null;
   const treatmentNotes = casualty.latestTreatment?.notes ?? null;
   const transportNotes = casualty.latestTransport?.notes ?? null;
-  const patientFor =
-    casualty.latestTransport?.transport_required === "yes"
-      ? "Referral or Transfer to Health Facility"
-      : casualty.latestTransport?.transport_required === "no"
-        ? "Release"
-        : extractLatestTransportSectionValue(
-              transportNotes,
-              "Patient for",
-            ) ??
-            (casualty.latestTransport?.transport_required === "unknown"
-              ? "Pending Departure"
-              : null);
-  const isPendingDeparture =
-    patientFor?.trim().toLowerCase() === "pending departure";
-  const canEditTransportCard = isAmpResponderView(
-    currentUserRole,
-    currentResponderAssignment,
-  )
-    ? Boolean(isOwnRecord && isPendingDeparture)
-    : canEditCurrentRecord ||
-      (isResponderCurrentUser && isOwnRecord);
   const facilityEncounter = record?.latest_facility_encounter ?? null;
   const treatmentDetails =
     casualty.latestTreatment?.treatment_details ?? {};
-  const admittedUnitFromFacility =
-    facilityEncounter?.icu_admitted_at
-      ? "ICU"
-      : facilityEncounter?.hospital_admitted_at ||
-          facilityEncounter?.admitted_to_hospital === true
-        ? "Ward"
-        : null;
-  const admittedUnit =
-    extractRecordSectionValue(
-      treatmentNotes,
-      "Management",
-      "Admitted to unit",
-    ) ??
-    (typeof treatmentDetails.admittedToUnit === "string"
-      ? treatmentDetails.admittedToUnit
-      : null) ??
-    admittedUnitFromFacility;
-
-  const imageAttachments = attachments.filter(
-    (attachment) =>
-      isImageAttachment(attachment) && Boolean(attachment.signed_url),
-  );
-  const selectedImageIndex = selectedImageAttachment
-    ? imageAttachments.findIndex(
-        (attachment) => attachment.id === selectedImageAttachment.id,
-      )
-    : -1;
-
-  function closeImageViewer() {
-    setSelectedImageAttachment(null);
-  }
-
-  function moveToImage(offset: number) {
-    if (imageAttachments.length === 0 || selectedImageIndex < 0) {
-      return;
-    }
-
-    const nextIndex =
-      (selectedImageIndex + offset + imageAttachments.length) %
-      imageAttachments.length;
-    setSelectedImageAttachment(imageAttachments[nextIndex] ?? null);
-  }
 
   return (
     <View style={styles.screen}>
       <StatusBar
         barStyle="light-content"
-        backgroundColor={COLORS.text}
+        backgroundColor={COLORS.maroon}
       />
 
       <SafeAreaView
@@ -1304,6 +1062,20 @@ export default function CasualtyDetailScreen() {
                 </Text>
               </View>
 
+              {casualty.verified ? (
+                <View style={styles.verifiedBadge}>
+                  <Ionicons
+                    name="checkmark"
+                    size={13}
+                    color={COLORS.green}
+                  />
+
+                  <Text style={styles.verifiedText}>
+                    Verified
+                  </Text>
+                </View>
+              ) : null}
+
               <View
                 style={[
                   styles.verificationBadge,
@@ -1335,12 +1107,12 @@ export default function CasualtyDetailScreen() {
                 pressed && styles.pressed,
               ]}
               accessibilityRole="button"
-              accessibilityLabel="Edit victim"
+              accessibilityLabel="Edit casualty"
             >
               <Ionicons
                 name="create-outline"
                 size={20}
-                color={COLORS.text}
+                color={COLORS.maroon}
               />
             </Pressable>
           ) : null}
@@ -1429,11 +1201,10 @@ export default function CasualtyDetailScreen() {
 
                   <DetailRow
                     label="Final Triage"
-                    value={formatTriageCategory(
-                      casualty.latestTriage.calculated_category ??
-                        casualty.latestTriage.triage_category,
+                    value={formatStatus(
+                      casualty.latestTriage.triage_category,
                     )}
-                    valueColor={COLORS.text}
+                    valueColor={COLORS.maroon}
                   />
 
                   <DetailRow
@@ -1610,56 +1381,6 @@ export default function CasualtyDetailScreen() {
               />
             </SectionCard>
 
-            <SectionCard title="TRIAGE">
-              {casualty.latestTriage ? (
-                <>
-                  <DetailRow
-                    label="System"
-                    value={formatTriageSystem(
-                      casualty.latestTriage.triage_system,
-                    )}
-                  />
-
-                  <DetailRow
-                    label="Final Triage"
-                    value={formatTriageCategory(
-                      casualty.latestTriage.calculated_category ??
-                        casualty.latestTriage.triage_category,
-                    )}
-                    valueColor={COLORS.text}
-                  />
-
-                  <DetailRow
-                    label="Stage"
-                    value={formatTriageStage(
-                      casualty.latestTriage.triage_stage,
-                    )}
-                  />
-
-                  <DetailRow
-                    label="Triage Time"
-                    value={formatDateTime(
-                      casualty.latestTriage.triaged_at,
-                    )}
-                  />
-
-                  <DetailRow
-                    label="Location"
-                    value={formatValue(casualty.latestTriage.location)}
-                  />
-
-                  <DetailRow
-                    label="Triage Notes"
-                    value={extractRecordBaseText(triageNotes)}
-                  />
-                </>
-              ) : (
-                <Text style={styles.emptyAttachmentText}>
-                  No AMP triage assessment recorded.
-                </Text>
-              )}
-            </SectionCard>
-
             <SectionCard title="CARE / TREATMENT">
               <DetailRow
                 label="Treatment Strategy"
@@ -1696,43 +1417,26 @@ export default function CasualtyDetailScreen() {
               />
             </SectionCard>
 
-            <SectionCard
-              title="TRANSPORT"
-              action={
-                canEditTransportCard ? (
-                  <Pressable
-                    onPress={handleEditTransport}
-                    style={({ pressed }) => [
-                      styles.sectionEditButton,
-                      pressed && styles.pressed,
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityLabel="Edit transport"
-                  >
-                    <Ionicons
-                      name="create-outline"
-                      size={15}
-                      color={COLORS.text}
-                    />
-                    <Text style={styles.sectionEditButtonText}>
-                      Edit
-                    </Text>
-                  </Pressable>
-                ) : null
-              }
-            >
+            <SectionCard title="TRANSPORT">
               {casualty.latestTransport ? (
                 <>
                   <DetailRow
                     label="Patient For"
-                    value={formatValue(patientFor)}
+                    value={formatValue(
+                      extractRecordSectionValue(
+                        transportNotes,
+                        "SA Transport / Release",
+                        "Patient for",
+                      ),
+                    )}
                   />
 
                   <DetailRow
                     label="Condition Before Release"
                     value={formatValue(
-                      extractLatestTransportSectionValue(
+                      extractRecordSectionValue(
                         transportNotes,
+                        "SA Transport / Release",
                         "Condition before release",
                       ),
                     )}
@@ -1741,8 +1445,9 @@ export default function CasualtyDetailScreen() {
                   <DetailRow
                     label="Condition Before Transfer"
                     value={formatValue(
-                      extractLatestTransportSectionValue(
+                      extractRecordSectionValue(
                         transportNotes,
+                        "SA Transport / Release",
                         "Condition before transfer",
                       ),
                     )}
@@ -1753,12 +1458,13 @@ export default function CasualtyDetailScreen() {
                     value={formatValue(
                       casualty.latestTransport.receiving_facility
                         ?.facility_name ??
-                        extractLatestTransportSectionValue(
+                        extractRecordSectionValue(
                           transportNotes,
+                          "SA Transport / Release",
                           "Receiving facility",
                         ),
                     )}
-                    valueColor={COLORS.text}
+                    valueColor={COLORS.maroon}
                   />
 
                   <DetailRow
@@ -1771,38 +1477,17 @@ export default function CasualtyDetailScreen() {
                   <DetailRow
                     label="Used EMS Vehicle"
                     value={formatValue(
-                      extractLatestTransportSectionValue(
+                      extractRecordSectionValue(
                         transportNotes,
+                        "SA Transport / Release",
                         "Used EMS vehicle",
                       ),
                     )}
                   />
-
-                  <DetailRow
-                    label="Arrived Facility"
-                    value={formatDateTime(
-                      casualty.latestTransport.arrived_facility_at,
-                    )}
-                  />
-
-                  <DetailRow
-                    label="Release of Liability Accepted"
-                    value={formatValue(
-                      extractLatestTransportSectionValue(
-                        transportNotes,
-                        "Release of liability accepted",
-                      ),
-                    )}
-                  />
-
-                  <DetailRow
-                    label="Transport / Release Notes"
-                    value={extractRecordBaseText(transportNotes)}
-                  />
                 </>
               ) : (
                 <Text style={styles.emptyAttachmentText}>
-                  No SAR transport record saved.
+                  No Advanced Medical Responder transport record saved.
                 </Text>
               )}
             </SectionCard>
@@ -1813,7 +1498,7 @@ export default function CasualtyDetailScreen() {
               <DetailRow
                 label="Receiving Facility"
                 value={casualty.receivingFacility}
-                valueColor={COLORS.text}
+                valueColor={COLORS.maroon}
               />
 
               <DetailRow
@@ -1828,7 +1513,7 @@ export default function CasualtyDetailScreen() {
               />
 
               <DetailRow
-                label="Time of Arrival of Victim"
+                label="Arrival Time"
                 value={formatDateTime(facilityEncounter?.arrived_at)}
               />
 
@@ -1876,11 +1561,10 @@ export default function CasualtyDetailScreen() {
 
                   <DetailRow
                     label="Triage Assessment"
-                    value={formatTriageCategory(
-                      casualty.latestTriage.calculated_category ??
-                        casualty.latestTriage.triage_category,
+                    value={formatStatus(
+                      casualty.latestTriage.triage_category,
                     )}
-                    valueColor={COLORS.text}
+                    valueColor={COLORS.maroon}
                   />
 
                   <DetailRow
@@ -1925,33 +1609,7 @@ export default function CasualtyDetailScreen() {
               )}
             </SectionCard>
 
-            <SectionCard
-              title="MANAGEMENT"
-              action={
-                canEditHealthcareDocumenterSections ? (
-                  <Pressable
-                    onPress={() =>
-                      handleEditHealthcareStep("Management")
-                    }
-                    style={({ pressed }) => [
-                      styles.sectionEditButton,
-                      pressed && styles.pressed,
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityLabel="Edit management"
-                  >
-                    <Ionicons
-                      name="create-outline"
-                      size={15}
-                      color={COLORS.text}
-                    />
-                    <Text style={styles.sectionEditButtonText}>
-                      Edit
-                    </Text>
-                  </Pressable>
-                ) : null
-              }
-            >
+            <SectionCard title="MANAGEMENT">
               <DetailRow
                 label="Resuscitation Room Used"
                 value={formatValue(
@@ -2019,7 +1677,13 @@ export default function CasualtyDetailScreen() {
 
               <DetailRow
                 label="Admitted to Unit"
-                value={formatDetailUnknown(admittedUnit)}
+                value={formatDetailUnknown(
+                  extractRecordSectionValue(
+                    treatmentNotes,
+                    "Management",
+                    "Admitted to unit",
+                  ) ?? treatmentDetails.admittedToUnit,
+                )}
               />
 
               <DetailRow
@@ -2030,42 +1694,42 @@ export default function CasualtyDetailScreen() {
               />
             </SectionCard>
 
-            <SectionCard
-              title="DISPOSITION"
-              action={
-                canEditHealthcareDocumenterSections ? (
-                  <Pressable
-                    onPress={() =>
-                      handleEditHealthcareStep("Disposition")
-                    }
-                    style={({ pressed }) => [
-                      styles.sectionEditButton,
-                      pressed && styles.pressed,
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityLabel="Edit disposition"
-                  >
-                    <Ionicons
-                      name="create-outline"
-                      size={15}
-                      color={COLORS.text}
-                    />
-                    <Text style={styles.sectionEditButtonText}>
-                      Edit
-                    </Text>
-                  </Pressable>
-                ) : null
-              }
-            >
+            <SectionCard title="DISPOSITION">
               <DetailRow
-                label="Discharged from Hospital"
+                label="Currently Admitted in ICU"
                 value={formatDetailUnknown(
-                  formatBooleanValue(facilityEncounter?.discharged_home),
+                  extractRecordSectionValue(
+                    treatmentNotes,
+                    "Management",
+                    "Currently admitted in ICU",
+                  ) ?? treatmentDetails.currentlyAdmittedInIcu,
                 )}
               />
 
               <DetailRow
-                label="Time of Discharge"
+                label="Transferred to Ward"
+                value={formatDetailUnknown(
+                  extractRecordSectionValue(
+                    treatmentNotes,
+                    "Management",
+                    "Transferred to ward",
+                  ) ?? treatmentDetails.transferredToWard,
+                )}
+              />
+
+              <DetailRow
+                label="In Active Care"
+                value={formatDetailUnknown(
+                  extractRecordSectionValue(
+                    treatmentNotes,
+                    "Management",
+                    "In active care",
+                  ) ?? treatmentDetails.inActiveCare,
+                )}
+              />
+
+              <DetailRow
+                label="Hospital Discharge Time"
                 value={formatDateTime(
                   facilityEncounter?.hospital_discharged_at,
                 )}
@@ -2142,7 +1806,7 @@ export default function CasualtyDetailScreen() {
           <DetailRow
             label="GPS Location"
             value={casualty.gpsLocation}
-            valueColor={COLORS.text}
+            valueColor={COLORS.maroon}
           />
 
           <DetailRow
@@ -2214,16 +1878,15 @@ export default function CasualtyDetailScreen() {
 
               <DetailRow
                 label="Category"
-                value={formatTriageCategory(
-                      casualty.latestTriage.calculated_category ??
-                        casualty.latestTriage.triage_category,
+                value={formatStatus(
+                  casualty.latestTriage.triage_category,
                 )}
-                valueColor={COLORS.text}
+                valueColor={COLORS.maroon}
               />
 
               <DetailRow
                 label="Stage"
-                value={formatTriageStage(
+                value={formatStatus(
                   casualty.latestTriage.triage_stage,
                 )}
               />
@@ -2251,7 +1914,7 @@ export default function CasualtyDetailScreen() {
               {triageHistory.map((triage, index) => (
                 <TimelineItem
                   key={triage.id}
-                  title={`${formatTriageCategory(triage.calculated_category ?? triage.triage_category)} - ${formatTriageSystem(triage.triage_system)}`}
+                  title={`${formatStatus(triage.triage_category)} - ${formatTriageSystem(triage.triage_system)}`}
                   time={formatDateTime(triage.triaged_at)}
                   user={
                     triage.triaged_by_user?.full_name ?? "System"
@@ -2268,7 +1931,7 @@ export default function CasualtyDetailScreen() {
         <SectionCard
           title="TRANSPORT"
           action={
-            canEditTransportCard && !showSaResponderDetails ? (
+            canEditTransportCard ? (
               <Pressable
                 onPress={handleEditTransport}
                 style={({ pressed }) => [
@@ -2281,7 +1944,7 @@ export default function CasualtyDetailScreen() {
                 <Ionicons
                   name="create-outline"
                   size={15}
-                  color={COLORS.text}
+                  color={COLORS.maroon}
                 />
                 <Text style={styles.sectionEditButtonText}>
                   Edit
@@ -2333,7 +1996,7 @@ export default function CasualtyDetailScreen() {
                   casualty.latestTransport.receiving_facility
                     ?.facility_name,
                 )}
-                valueColor={COLORS.text}
+                valueColor={COLORS.maroon}
               />
             </>
           ) : (
@@ -2371,11 +2034,6 @@ export default function CasualtyDetailScreen() {
                 <AttachmentCard
                   key={attachment.id}
                   item={attachment}
-                  onPress={
-                    isImageAttachment(attachment) && attachment.signed_url
-                      ? () => setSelectedImageAttachment(attachment)
-                      : undefined
-                  }
                 />
               ))}
             </View>
@@ -2398,106 +2056,6 @@ export default function CasualtyDetailScreen() {
 
         <View style={styles.bottomSpacing} />
       </ScrollView>
-
-      <Modal
-        visible={Boolean(selectedImageAttachment)}
-        transparent
-        animationType="fade"
-        statusBarTranslucent
-        onRequestClose={closeImageViewer}
-      >
-        <View style={styles.attachmentViewerBackdrop}>
-          <SafeAreaView style={styles.attachmentViewer}>
-            <View style={styles.attachmentViewerHeader}>
-              <View style={styles.attachmentViewerHeading}>
-                <Text style={styles.attachmentViewerTitle}>
-                  Attached photo
-                </Text>
-                <Text style={styles.attachmentViewerCount}>
-                  {selectedImageIndex >= 0
-                    ? `Photo ${selectedImageIndex + 1} of ${imageAttachments.length}`
-                    : ""}
-                </Text>
-              </View>
-
-              <Pressable
-                onPress={closeImageViewer}
-                style={({ pressed }) => [
-                  styles.attachmentViewerClose,
-                  pressed && styles.pressed,
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel="Close photo viewer"
-              >
-                <Ionicons
-                  name="close"
-                  size={24}
-                  color={COLORS.white}
-                />
-              </Pressable>
-            </View>
-
-            {selectedImageAttachment?.signed_url ? (
-              <View style={styles.attachmentViewerImageFrame}>
-                <Image
-                  source={{ uri: selectedImageAttachment.signed_url }}
-                  style={styles.attachmentViewerImage}
-                  resizeMode="contain"
-                />
-              </View>
-            ) : null}
-
-            <Text
-              style={styles.attachmentViewerFileName}
-              numberOfLines={2}
-            >
-              {selectedImageAttachment?.file_name ?? ""}
-            </Text>
-
-            {imageAttachments.length > 1 ? (
-              <View style={styles.attachmentViewerActions}>
-                <Pressable
-                  onPress={() => moveToImage(-1)}
-                  style={({ pressed }) => [
-                    styles.attachmentViewerNavButton,
-                    pressed && styles.pressed,
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Previous attached photo"
-                >
-                  <Ionicons
-                    name="chevron-back"
-                    size={22}
-                    color={COLORS.white}
-                  />
-                  <Text style={styles.attachmentViewerNavText}>
-                    Previous
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={() => moveToImage(1)}
-                  style={({ pressed }) => [
-                    styles.attachmentViewerNavButton,
-                    pressed && styles.pressed,
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Next attached photo"
-                >
-                  <Text style={styles.attachmentViewerNavText}>
-                    Next
-                  </Text>
-                  <Ionicons
-                    name="chevron-forward"
-                    size={22}
-                    color={COLORS.white}
-                  />
-                </Pressable>
-              </View>
-            ) : null}
-          </SafeAreaView>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -2612,7 +2170,7 @@ const styles = StyleSheet.create({
     height: 7,
     borderRadius: 4,
     marginRight: 6,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.white,
   },
 
   headerStatusText: {
@@ -2641,7 +2199,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 20,
     borderRadius: 20,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.card,
     elevation: 12,
     shadowColor: "#71809A",
     shadowOpacity: 0.13,
@@ -2705,6 +2263,22 @@ const styles = StyleSheet.create({
     fontSize: 9,
   },
 
+  verifiedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 7,
+    backgroundColor: COLORS.greenBackground,
+  },
+
+  verifiedText: {
+    color: COLORS.green,
+    fontSize: 9,
+    fontWeight: "800",
+    marginLeft: 3,
+  },
+
   verificationBadge: {
     paddingHorizontal: 8,
     paddingVertical: 5,
@@ -2724,7 +2298,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: COLORS.border,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.white,
   },
 
   scrollView: {
@@ -2743,7 +2317,7 @@ const styles = StyleSheet.create({
     paddingTop: 19,
     paddingBottom: 13,
     borderRadius: 18,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.card,
     elevation: 2,
     shadowColor: "#718099",
     shadowOpacity: 0.08,
@@ -2764,7 +2338,7 @@ const styles = StyleSheet.create({
   },
 
   sectionTitle: {
-    color: COLORS.text,
+    color: COLORS.maroon,
     fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.3,
@@ -2777,13 +2351,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 9,
     borderWidth: 1,
-    borderColor: COLORS.warningBorder,
-    backgroundColor: COLORS.warningBackground,
+    borderColor: "#E8D4D6",
+    backgroundColor: "#FFF6F6",
     gap: 5,
   },
 
   sectionEditButtonText: {
-    color: COLORS.text,
+    color: COLORS.maroon,
     fontSize: 11,
     fontWeight: "900",
   },
@@ -2866,12 +2440,12 @@ const styles = StyleSheet.create({
   },
 
   reviewActionApprove: {
-    borderColor: COLORS.greenBackground,
+    borderColor: "#A9E7C2",
     backgroundColor: COLORS.greenBackground,
   },
 
   reviewActionReject: {
-    borderColor: COLORS.warningBorder,
+    borderColor: "#F2B6B8",
     backgroundColor: COLORS.redBackground,
   },
 
@@ -2983,29 +2557,8 @@ const styles = StyleSheet.create({
     width: 58,
     height: 58,
     borderRadius: 11,
-    backgroundColor: COLORS.border,
-  },
-
-  attachmentImageFrame: {
-    width: 58,
-    height: 58,
-    position: "relative",
     marginRight: 11,
-    borderRadius: 11,
-    overflow: "hidden",
     backgroundColor: COLORS.border,
-  },
-
-  attachmentImageHint: {
-    position: "absolute",
-    right: 4,
-    bottom: 4,
-    width: 22,
-    height: 22,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 11,
-    backgroundColor: "rgba(23,33,58,0.78)",
   },
 
   attachmentIcon: {
@@ -3059,102 +2612,6 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
 
-  attachmentViewerBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(10,16,29,0.94)",
-  },
-
-  attachmentViewer: {
-    flex: 1,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-  },
-
-  attachmentViewerHeader: {
-    minHeight: 48,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-
-  attachmentViewerHeading: {
-    flex: 1,
-    minWidth: 0,
-    paddingRight: 12,
-  },
-
-  attachmentViewerTitle: {
-    color: COLORS.white,
-    fontSize: 16,
-    fontWeight: "900",
-  },
-
-  attachmentViewerCount: {
-    color: "#C7D0E0",
-    fontSize: 11,
-    marginTop: 3,
-  },
-
-  attachmentViewerClose: {
-    width: 42,
-    height: 42,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.35)",
-    backgroundColor: "rgba(255,255,255,0.12)",
-  },
-
-  attachmentViewerImageFrame: {
-    flex: 1,
-    minHeight: 0,
-    alignItems: "center",
-    justifyContent: "center",
-    marginVertical: 14,
-    borderRadius: 16,
-    backgroundColor: "rgba(0,0,0,0.24)",
-  },
-
-  attachmentViewerImage: {
-    width: "100%",
-    height: "100%",
-  },
-
-  attachmentViewerFileName: {
-    color: "#E8EDF6",
-    fontSize: 12,
-    lineHeight: 17,
-    textAlign: "center",
-  },
-
-  attachmentViewerActions: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 12,
-    marginTop: 14,
-  },
-
-  attachmentViewerNavButton: {
-    minWidth: 132,
-    minHeight: 44,
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 5,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.32)",
-    backgroundColor: "rgba(255,255,255,0.12)",
-  },
-
-  attachmentViewerNavText: {
-    color: COLORS.white,
-    fontSize: 12,
-    fontWeight: "800",
-  },
-
   modalBackdrop: {
     flex: 1,
     justifyContent: "flex-end",
@@ -3167,7 +2624,7 @@ const styles = StyleSheet.create({
     paddingBottom: 22,
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.white,
   },
 
   reviewModalHeader: {
@@ -3234,7 +2691,7 @@ const styles = StyleSheet.create({
     borderRadius: 13,
     borderWidth: 1,
     borderColor: COLORS.border,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.white,
   },
 
   reviewCancelText: {

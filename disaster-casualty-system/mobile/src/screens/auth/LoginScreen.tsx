@@ -5,6 +5,7 @@ import { router } from "expo-router";
 import { useState } from "react";
 import {
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -19,7 +20,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { login, requestPasswordReset } from "../../api/auth";
 import { saveSession } from "../../auth/session";
-import EmergencyShield from "../../components/common/EmergencyShield";
 import ThemeToggleButton from "../../components/theme-toggle-button";
 import { useThemeMode } from "../../theme/theme-mode";
 import {
@@ -232,7 +232,12 @@ export default function LoginScreen() {
 
           <View style={styles.headerContent}>
             <View style={styles.iconBox}>
-              <EmergencyShield size={44} />
+              <Image
+                source={require("../../../assets/images/medsort.png")}
+                style={styles.loginLogo}
+                resizeMode="contain"
+                accessibilityLabel="SCRIBER logo"
+              />
             </View>
 
             <View style={styles.headerTextWrapper}>
@@ -593,12 +598,12 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.maroon,
   },
   header: {
-    minHeight: 126,
+    minHeight: 104,
     overflow: "hidden",
     backgroundColor: COLORS.maroon,
     paddingHorizontal: 20,
     paddingTop: 8,
-    paddingBottom: 22,
+    paddingBottom: 12,
     justifyContent: "center",
   },
   themeToggleSlot: {
@@ -640,6 +645,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.28)",
     backgroundColor: "rgba(255, 255, 255, 0.10)",
+  },
+  loginLogo: {
+    width: 58,
+    height: 58,
+    borderRadius: 13,
   },
   headerTextWrapper: {
     flex: 1,
