@@ -51,6 +51,7 @@ const COLORS = createThemePalette({
 });
 
 const SCREEN_PADDING = 16;
+const LIGHT_PROFILE_HEADER_BACKGROUND = "#E6E6E6";
 const FLOATING_TAB_BAR_CLEARANCE =
   Platform.OS === "android" ? 86 : 98;
 
@@ -450,8 +451,10 @@ export default function ProfileScreen() {
       ]}
     >
       <StatusBar
-        barStyle="light-content"
-        backgroundColor={isDark ? colors.background : COLORS.maroon}
+        barStyle={isDark ? "light-content" : "dark-content"}
+        backgroundColor={
+          isDark ? colors.background : LIGHT_PROFILE_HEADER_BACKGROUND
+        }
       />
 
       <Modal
@@ -516,7 +519,9 @@ export default function ProfileScreen() {
         style={[
           styles.headerSafeArea,
           {
-            backgroundColor: isDark ? colors.background : COLORS.maroon,
+            backgroundColor: isDark
+              ? colors.background
+              : LIGHT_PROFILE_HEADER_BACKGROUND,
           },
         ]}
       >
@@ -524,18 +529,34 @@ export default function ProfileScreen() {
           style={[
             styles.header,
             {
-              backgroundColor: isDark ? colors.background : COLORS.maroon,
+            backgroundColor: isDark
+              ? colors.background
+              : LIGHT_PROFILE_HEADER_BACKGROUND,
             },
           ]}
         >
           <View style={styles.headerDecorationOne} />
           <View style={styles.headerDecorationTwo} />
 
-          <Text style={styles.headerTitle}>
+          <Text
+            style={[
+              styles.headerTitle,
+              { color: isDark ? colors.text : COLORS.text },
+            ]}
+          >
             My Profile
           </Text>
 
-          <Text style={styles.headerSubtitle}>
+          <Text
+            style={[
+              styles.headerSubtitle,
+              {
+                color: isDark
+                  ? colors.textSecondary
+                  : COLORS.secondaryText,
+              },
+            ]}
+          >
             {profileSubtitle}
           </Text>
 

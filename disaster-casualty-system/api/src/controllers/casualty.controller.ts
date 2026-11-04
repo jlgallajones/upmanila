@@ -2123,6 +2123,7 @@ type CasualtyCaseLinkRow = {
   casualty_incident_id: string;
   incident_id: string;
   role: CaseMatchRoleBucket;
+  case_name: string | null;
   linked_by: string | null;
   notes: string | null;
   linked_at: string;
@@ -2187,7 +2188,7 @@ async function getCaseLinksForUser(user: {
   let query = supabase
     .from("casualty_case_links")
     .select(
-      "id, case_id, casualty_incident_id, incident_id, role, linked_by, notes, linked_at, created_at",
+      "id, case_id, casualty_incident_id, incident_id, role, case_name, linked_by, notes, linked_at, created_at",
     )
     .order("linked_at", { ascending: false });
 
@@ -2204,6 +2205,114 @@ async function getCaseLinksForUser(user: {
   }
 
   return (data ?? []) as CasualtyCaseLinkRow[];
+}
+
+export async function updateCasualtyCaseName(
+  request: Request<{ caseId: string }>,
+  response: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const user = getAuthenticatedUser(request);
+    const caseId = request.params.caseId?.trim();
+    const body = request.body as { caseName?: unknown };
+    const caseName =
+      typeof body.caseName === "string" ? body.caseName.trim() : "";
+
+    if (!caseId) {
+      response.status(400).json({
+        success: false,
+        message: "Matched case ID is required.",
+      });
+      return;
+    }
+
+    if (!caseName) {
+      response.status(400).json({
+        success: false,
+        message: "Matched case name is required.",
+      });
+      return;
+    }
+
+    if (caseName.length > 200) {
+      response.status(400).json({
+        success: false,
+        message: "Matched case name must be 200 characters or fewer.",
+      });
+      return;
+    }
+
+    const { data: links, error: linksError } = await supabase
+      .from("casualty_case_links")
+      .select("id, case_id, casualty_incident_id, incident_id")
+      .eq("case_id", caseId);
+
+    if (linksError) {
+      throw new Error(
+        `Unable to retrieve matched case: ${linksError.message}`,
+      );
+    }
+
+    if (!links || links.length === 0) {
+      response.status(404).json({
+        success: false,
+        message: "Matched case was not found.",
+      });
+      return;
+    }
+
+    const accessibleIds = await getAccessibleCasualtyIncidentIds(user);
+
+    if (
+      accessibleIds &&
+      links.some((link) => !accessibleIds.includes(link.casualty_incident_id))
+    ) {
+      response.status(403).json({
+        success: false,
+        message: "This matched case is outside your admin scope.",
+      });
+      return;
+    }
+
+    const { data: updatedLinks, error: updateError } = await supabase
+      .from("casualty_case_links")
+      .update({ case_name: caseName })
+      .eq("case_id", caseId)
+      .select(
+        "id, case_id, casualty_incident_id, incident_id, role, case_name, linked_by, notes, linked_at, created_at",
+      )
+      .order("linked_at", { ascending: true });
+
+    if (updateError) {
+      throw new Error(
+        `Unable to update matched case name: ${updateError.message}`,
+      );
+    }
+
+    await recordAuditLog({
+      actor: {
+        id: user.id,
+        fullName: user.fullName,
+        role: user.role,
+      },
+      action: "casualty.case_name_updated",
+      entityType: "casualty_case",
+      entityId: caseId,
+      entityLabel: caseName,
+      metadata: {
+        caseName,
+        linkedRecordCount: links.length,
+      },
+    });
+
+    response.status(200).json({
+      success: true,
+      data: updatedLinks ?? [],
+    });
+  } catch (error) {
+    next(error);
+  }
 }
 
 async function getMatchRecordsById(

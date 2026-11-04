@@ -5731,7 +5731,7 @@ function renderAdminScopeCard() {
         <button class="scope-item" data-view-link="users"><strong>Accounts</strong><span>Register and manage FR, AMP, and HCFD accounts in this unit.</span></button>
         <button class="scope-item" data-view-link="incident-analytics"><strong>Reported incident history</strong><span>Review incident analytics for records created within this unit.</span></button>
         <button class="scope-item" data-view-link="records"><strong>Victim records</strong><span>See a summary of all victim entries.</span></button>
-        <button class="scope-item" data-view-link="match-casing"><strong>Match Casing</strong><span>Build FR and AMP matched cases, with HCFD optional.</span></button>
+        <button class="scope-item" data-view-link="match-casing"><strong>Case Matching</strong><span>Build FR and AMP matched cases, with HCFD optional.</span></button>
         <button class="scope-item" data-view-link="matched-cases"><strong>Matched Cases</strong><span>Review matched victim case records.</span></button>
         <button class="scope-item" data-view-link="logs"><strong>Action logs</strong><span>Audit actions by users this admin created.</span></button>
         <button class="scope-item" data-view-link="verification"><strong>Verification review</strong><span>Review victim entries from assigned responders.</span></button>
@@ -8288,7 +8288,7 @@ function renderMatchCasing() {
     <div class="topbar">
       <div>
         <span class="eyebrow">Admin Review</span>
-        <h1>Match Casing</h1>
+        <h1>Case Matching</h1>
         <p>Complete the Field Responder and Advanced Medical Responder slots before matching one victim case. HCFD can be added when available.</p>
       </div>
     </div>
@@ -9899,7 +9899,7 @@ function renderMatchedCaseSummary(recordDetails) {
       <div class="section-card-header">
         <div>
           <h3>Matched Case</h3>
-          <p class="panel-subtitle">These separate role records were linked by admin Match Casing.</p>
+          <p class="panel-subtitle">These separate role records were linked by admin Case Matching.</p>
         </div>
         <span class="pill green">${matchedRecords.length} linked records</span>
       </div>
