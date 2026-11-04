@@ -62,6 +62,7 @@ const COLORS = {
   redBackground: "#FCE6E7",
 
   grayBackground: "#F2F5F9",
+  headerBackground: "#6B6B6B",
 };
 
 function canEditRecord(
@@ -110,6 +111,46 @@ function isSaResponderView(
 
 function isHealthcareDocumenterView(role: string | null): boolean {
   return role === "documenter" || role === "medical_personnel";
+}
+
+function getRecordRoleBucket(
+  record: CasualtyRecord | null,
+): "field_responder" | "sa_responder" | "minor_incident_documenter" | "documenter" | null {
+  const role = record?.encoder?.role;
+
+  if (role === "field_responder") {
+    return "field_responder";
+  }
+
+  if (role === "sa_responder") {
+    return "sa_responder";
+  }
+
+  if (role === "minor_incident_documenter") {
+    return "minor_incident_documenter";
+  }
+
+  if (role === "documenter" || role === "medical_personnel") {
+    return "documenter";
+  }
+
+  if (role === "responder") {
+    const notes = record?.remarks?.toLowerCase() ?? "";
+    if (
+      notes.includes("advanced medical") ||
+      notes.includes("amp responder") ||
+      notes.includes("transport / release")
+    ) {
+      return "sa_responder";
+    }
+
+    return record?.latest_triage_assessment?.triage_stage ===
+      "reassessment"
+      ? "sa_responder"
+      : "field_responder";
+  }
+
+  return null;
 }
 
 type DetailRowProps = {
@@ -288,6 +329,18 @@ function formatDetailUnknown(value: unknown): string {
   return JSON.stringify(value);
 }
 
+function formatDetailDate(value: unknown): string {
+  if (value === null || value === undefined || value === "") {
+    return "Unavailable";
+  }
+
+  if (typeof value === "string" || typeof value === "number") {
+    return formatDateTime(String(value));
+  }
+
+  return formatDetailUnknown(value);
+}
+
 function extractRecordSectionValue(
   text: string | null | undefined,
   sectionTitle: string,
@@ -298,7 +351,13 @@ function extractRecordSectionValue(
   }
 
   const lines = String(text).split(/\r?\n/);
-  const targetSection = `[${sectionTitle}]`.toLowerCase();
+  const normalizeSectionTitle = (value: string) =>
+    value
+      .toLowerCase()
+      .replace(/\bpost\b/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  const targetSection = normalizeSectionTitle(sectionTitle);
   const targetLabel = `${label}:`.toLowerCase();
   let insideSection = false;
 
@@ -310,7 +369,8 @@ function extractRecordSectionValue(
     }
 
     if (line.startsWith("[") && line.endsWith("]")) {
-      insideSection = line.toLowerCase() === targetSection;
+      insideSection =
+        normalizeSectionTitle(line.slice(1, -1)) === targetSection;
       continue;
     }
 
@@ -559,7 +619,7 @@ function getTriagePalette(category: string | null | undefined) {
 function formatTreatmentStrategy(value: string | null | undefined): string {
   switch (value) {
     case "scoop_and_run":
-      return "Scoop and Run";
+      return "Scoop and Run/Load and Go";
     case "scooter":
       return "SCOOTER";
     case "stay_and_play":
@@ -585,7 +645,122 @@ function getFullName(record: CasualtyRecord): string {
 
   return parts.length > 0
     ? parts.join(" ")
-    : "Unidentified Casualty";
+    : "Unidentified Victim";
+}
+
+function getRecordVictimCode(record: CasualtyRecord | null): string {
+  if (!record) {
+    return "Unavailable";
+  }
+
+  const noteSources = [
+    record.remarks,
+    record.latest_triage_assessment?.notes,
+  ];
+
+  for (const notes of noteSources) {
+    const value =
+      extractRecordSectionValue(
+        notes,
+        "Field Responder Codes",
+        "Victim code",
+      ) ??
+      extractRecordSectionValue(
+        notes,
+        "Advanced Medical Responder Details",
+        "Victim code",
+      ) ??
+      extractRecordSectionValue(
+        notes,
+        "SA Responder Details",
+        "Victim code",
+      ) ??
+      extractRecordSectionValue(
+        notes,
+        "Minor Incident Documenter Details",
+        "Victim code",
+      );
+
+    if (value) {
+      return value;
+    }
+  }
+
+  return "Unavailable";
+}
+
+function extractResponderDetailsValue(
+  text: string | null | undefined,
+  label: string,
+): string | null {
+  return (
+    extractRecordSectionValue(
+      text,
+      "Advanced Medical Responder Details",
+      label,
+    ) ??
+    extractRecordSectionValue(text, "SA Responder Details", label) ??
+    extractRecordSectionValue(
+      text,
+      "Minor Incident Documenter Details",
+      label,
+    )
+  );
+}
+
+function extractRecordTransportValue(
+  text: string | null | undefined,
+  label: string,
+): string | null {
+  if (!text) {
+    return null;
+  }
+
+  const targetLabel = `${label}:`.toLowerCase();
+  let insideTransportSection = false;
+  let value: string | null = null;
+
+  for (const rawLine of String(text).split(/\r?\n/)) {
+    const line = rawLine.trim();
+
+    if (!line) {
+      continue;
+    }
+
+    if (line.startsWith("[") && line.endsWith("]")) {
+      insideTransportSection = line
+        .slice(1, -1)
+        .toLowerCase()
+        .includes("transport / release");
+      continue;
+    }
+
+    if (
+      insideTransportSection &&
+      line.toLowerCase().startsWith(targetLabel)
+    ) {
+      value = line.slice(label.length + 1).trim() || null;
+    }
+  }
+
+  return value;
+}
+
+function formatPatientFor(
+  transport: CasualtyTransportHistoryItem | null | undefined,
+  notes: string | null,
+): string {
+  const savedValue = extractRecordTransportValue(notes, "Patient for");
+
+  if (savedValue) {
+    return savedValue;
+  }
+
+  if (transport?.transport_required === "unknown") {
+    return "Pending Departure";
+  }
+
+  return formatTransportRequired(transport?.transport_required);
 }
 
 function getInitials(name: string): string {
@@ -886,15 +1061,6 @@ export default function CasualtyDetailScreen() {
   );
   const isResponderCurrentUser = isResponderRole(currentUserRole);
   const isOwnRecord = casualty?.encoderId === currentUserId;
-  const showFieldResponderDetails =
-    Boolean(isOwnRecord) &&
-    isFieldResponderView(currentUserRole, currentResponderAssignment);
-  const showSaResponderDetails =
-    Boolean(isOwnRecord) &&
-    isSaResponderView(currentUserRole, currentResponderAssignment);
-  const showHealthcareDocumenterDetails =
-    Boolean(isOwnRecord) &&
-    isHealthcareDocumenterView(currentUserRole);
   const canShowHeaderEdit =
     canEditCurrentRecord && !isResponderCurrentUser;
   const canEditTransportCard =
@@ -902,6 +1068,16 @@ export default function CasualtyDetailScreen() {
     (isResponderCurrentUser && isOwnRecord);
   const requiresLogin =
     errorMessage?.toLowerCase().includes("sign in") ?? false;
+  const recordRoleBucket = getRecordRoleBucket(record);
+  const showFieldResponderDetails =
+    recordRoleBucket === "field_responder";
+  const showSaResponderDetails =
+    recordRoleBucket === "sa_responder" ||
+    recordRoleBucket === "minor_incident_documenter";
+  const showMinorIncidentDocumenterDetails =
+    recordRoleBucket === "minor_incident_documenter";
+  const showHealthcareDocumenterDetails =
+    recordRoleBucket === "documenter";
 
   if (isLoading) {
     return (
@@ -975,12 +1151,33 @@ export default function CasualtyDetailScreen() {
   const facilityEncounter = record?.latest_facility_encounter ?? null;
   const treatmentDetails =
     casualty.latestTreatment?.treatment_details ?? {};
+  const healthcareTreatmentValue = (
+    label: string,
+    key: string,
+  ): unknown =>
+    extractRecordSectionValue(
+      treatmentNotes,
+      "Management",
+      label,
+    ) ?? treatmentDetails[key];
+  const healthcareDisasterPlanActivationTime =
+    extractRecordSectionValue(
+      remarks,
+      "Healthcare Facility Documenter",
+      "Disaster plan activation time",
+    ) ?? treatmentDetails.disasterPlanActivationTime;
+  const healthcareDispositionUponArrival =
+    extractRecordSectionValue(
+      remarks,
+      "Healthcare Facility Documenter",
+      "Disposition upon hospital arrival",
+    ) ?? treatmentDetails.dispositionUponHospitalArrival;
 
   return (
     <View style={styles.screen}>
       <StatusBar
         barStyle="light-content"
-        backgroundColor={COLORS.maroon}
+        backgroundColor={COLORS.headerBackground}
       />
 
       <SafeAreaView
@@ -1050,9 +1247,7 @@ export default function CasualtyDetailScreen() {
             </Text>
 
             <Text style={styles.identityDescription}>
-              {showFieldResponderDetails
-                ? `Triage Category: ${triageCategoryLabel}`
-                : `Sex: ${casualty.sex} - Age: ${casualty.age} - Date of Birth: ${casualty.dateOfBirth}`}
+              Triage Category: {triageCategoryLabel}
             </Text>
 
             <View style={styles.identityBadges}>
@@ -1213,16 +1408,6 @@ export default function CasualtyDetailScreen() {
                       casualty.latestTriage.triaged_at,
                     )}
                   />
-
-                  <DetailRow
-                    label="Location"
-                    value={formatValue(casualty.latestTriage.location)}
-                  />
-
-                  <DetailRow
-                    label="Triage Notes"
-                    value={extractRecordBaseText(triageNotes)}
-                  />
                 </>
               ) : (
                 <Text style={styles.emptyAttachmentText}>
@@ -1230,100 +1415,135 @@ export default function CasualtyDetailScreen() {
                 </Text>
               )}
             </SectionCard>
+
+            <SectionCard title="INTERVENTIONS DONE">
+              <DetailRow
+                label="On-site Action"
+                value={formatTreatmentStrategy(
+                  casualty.latestTreatment?.treatment_strategy,
+                )}
+              />
+
+              <DetailRow
+                label="Action Notes"
+                value={extractRecordBaseText(treatmentNotes)}
+              />
+            </SectionCard>
+
           </>
         ) : showSaResponderDetails ? (
           <>
-            <SectionCard title="INTRO">
+            <SectionCard title="RESPONDER SAFETY">
               <DetailRow
-                label="Victim Code"
+                label="Are You Safe?"
                 value={formatValue(
                   extractRecordSectionValue(
                     remarks,
-                    "Advanced Medical Responder Details",
-                    "Victim code",
-                  ) ||
-                    extractRecordSectionValue(
-                      remarks,
-                      "SA Responder Details",
-                      "Victim code",
-                    ),
+                    "Responder Safety",
+                    "Are you safe",
+                  ),
                 )}
+              />
+              <DetailRow
+                label="Time of PPE Use"
+                value={formatValue(
+                  extractRecordSectionValue(
+                    remarks,
+                    "Responder Safety",
+                    "Time of PPE Use",
+                  ),
+                )}
+              />
+            </SectionCard>
+
+            {showMinorIncidentDocumenterDetails ? (
+              <>
+            <SectionCard title="INTRO">
+              <DetailRow
+                label="Incident Name"
+                value={casualty.incident}
               />
 
               <DetailRow
                 label="Witness Present"
                 value={formatValue(
-                  extractRecordSectionValue(
+                  extractResponderDetailsValue(
                     remarks,
-                    "Advanced Medical Responder Details",
                     "Witness present",
-                  ) ||
-                    extractRecordSectionValue(
-                      remarks,
-                      "SA Responder Details",
-                      "Witness present",
-                    ),
+                  ),
                 )}
               />
 
               <DetailRow
                 label="Witness Response"
                 value={formatValue(
-                  extractRecordSectionValue(
+                  extractResponderDetailsValue(
                     remarks,
-                    "Advanced Medical Responder Details",
                     "Witness response",
-                  ) ||
-                    extractRecordSectionValue(
-                      remarks,
-                      "SA Responder Details",
-                      "Witness response",
-                    ),
+                  ),
+                )}
+              />
+
+              <DetailRow
+                label="Other Witness"
+                value={formatValue(
+                  extractResponderDetailsValue(
+                    remarks,
+                    "Witness other",
+                  ),
                 )}
               />
 
               <DetailRow
                 label="CPR Type"
                 value={formatValue(
-                  extractRecordSectionValue(
+                  extractResponderDetailsValue(
                     remarks,
-                    "Advanced Medical Responder Details",
                     "CPR type",
-                  ) ||
-                    extractRecordSectionValue(
-                      remarks,
-                      "SA Responder Details",
-                      "CPR type",
-                    ),
+                  ),
                 )}
               />
             </SectionCard>
 
             <SectionCard title="INFO">
               <DetailRow
+                label="Victim Code"
+                value={getRecordVictimCode(record)}
+              />
+
+              <DetailRow
+                label="ID Number"
+                value={formatValue(record?.casualty.id_number)}
+              />
+
+              <DetailRow
                 label="Patient Identified"
                 value={formatValue(
-                  extractRecordSectionValue(
+                  extractResponderDetailsValue(
                     remarks,
-                    "Advanced Medical Responder Details",
                     "Patient identified",
-                  ) ||
-                    extractRecordSectionValue(
-                      remarks,
-                      "SA Responder Details",
-                      "Patient identified",
-                    ),
+                  ),
                 )}
               />
 
               <DetailRow
-                label="Full Name"
-                value={casualty.fullName}
+                label="First Name"
+                value={formatValue(record?.casualty.first_name)}
+              />
+
+              <DetailRow
+                label="Middle Name"
+                value={formatValue(record?.casualty.middle_name)}
+              />
+
+              <DetailRow
+                label="Last Name"
+                value={formatValue(record?.casualty.last_name)}
               />
 
               <DetailRow
                 label="Age"
-                value={`${casualty.age} years old`}
+                value={casualty.age}
               />
 
               <DetailRow label="Sex" value={casualty.sex} />
@@ -1335,55 +1555,123 @@ export default function CasualtyDetailScreen() {
               <DetailRow
                 label="Newborn"
                 value={formatValue(
-                  extractRecordSectionValue(
+                  extractResponderDetailsValue(
                     remarks,
-                    "Advanced Medical Responder Details",
                     "Newborn",
-                  ) ||
-                    extractRecordSectionValue(
-                      remarks,
-                      "SA Responder Details",
-                      "Newborn",
-                    ),
+                  ),
                 )}
               />
 
               <DetailRow
                 label="Pregnant"
                 value={formatValue(
-                  extractRecordSectionValue(
+                  extractResponderDetailsValue(
                     remarks,
-                    "Advanced Medical Responder Details",
                     "Pregnant",
-                  ) ||
-                    extractRecordSectionValue(
-                      remarks,
-                      "SA Responder Details",
-                      "Pregnant",
-                    ),
+                  ),
                 )}
               />
 
               <DetailRow
                 label="Religion"
                 value={formatValue(
-                  extractRecordSectionValue(
+                  extractResponderDetailsValue(
                     remarks,
-                    "Advanced Medical Responder Details",
                     "Religion",
-                  ) ||
-                    extractRecordSectionValue(
-                      remarks,
-                      "SA Responder Details",
-                      "Religion",
-                    ),
+                  ),
                 )}
               />
+
+              <DetailRow
+                label="Contact Number"
+                value={formatValue(record?.casualty.contact_number)}
+              />
+            </SectionCard>
+              </>
+            ) : null}
+
+            {showMinorIncidentDocumenterDetails ? (
+              <SectionCard title="ADDRESS">
+                <DetailRow
+                  label="House / Street"
+                  value={formatValue(record?.casualty.house_street)}
+                />
+                <DetailRow
+                  label="Barangay"
+                  value={formatValue(record?.casualty.barangay)}
+                />
+                <DetailRow
+                  label="Municipality / City"
+                  value={formatValue(record?.casualty.municipality)}
+                />
+                <DetailRow
+                  label="Province"
+                  value={formatValue(record?.casualty.province)}
+                />
+                <DetailRow
+                  label="Region"
+                  value={formatValue(record?.casualty.region)}
+                />
+              </SectionCard>
+            ) : null}
+
+            <SectionCard title="TRIAGE">
+              {casualty.latestTriage ? (
+                <>
+                  {!showMinorIncidentDocumenterDetails ? (
+                    <>
+                      <DetailRow
+                        label="Victim Code"
+                        value={getRecordVictimCode(record)}
+                      />
+                      <DetailRow
+                        label="ID Number"
+                        value={formatValue(record?.casualty.id_number)}
+                      />
+                    </>
+                  ) : null}
+
+                  <DetailRow
+                    label="Triage System"
+                    value={formatTriageSystem(
+                      casualty.latestTriage.triage_system,
+                    )}
+                  />
+                  <DetailRow
+                    label="Triage Assessment"
+                    value={formatStatus(
+                      casualty.latestTriage.triage_category,
+                    )}
+                    valueColor={COLORS.maroon}
+                  />
+                  <DetailRow
+                    label="Triage Time"
+                    value={formatDateTime(
+                      casualty.latestTriage.triaged_at,
+                    )}
+                  />
+                  <DetailRow
+                    label="Stabilized Time"
+                    value={formatDateTime(
+                      casualty.latestTreatment?.stabilized_at,
+                    )}
+                  />
+                  <DetailRow
+                    label="Triage Notes"
+                    value={extractRecordBaseText(triageNotes)}
+                  />
+                </>
+              ) : (
+                <Text style={styles.emptyAttachmentText}>
+                  No AMP triage assessment recorded.
+                </Text>
+              )}
             </SectionCard>
 
-            <SectionCard title="CARE / TREATMENT">
+            {showMinorIncidentDocumenterDetails ? (
+            <SectionCard title="ON-SITE STABILIZATION">
               <DetailRow
-                label="Treatment Strategy"
+                label="On-site Stabilization"
                 value={formatTreatmentStrategy(
                   casualty.latestTreatment?.treatment_strategy,
                 )}
@@ -1401,12 +1689,12 @@ export default function CasualtyDetailScreen() {
               />
 
               <DetailRow
-                label="Fill in Patient Care Report"
+                label="Patient Care Report Photo"
                 value={formatValue(
                   extractRecordSectionValue(
                     treatmentNotes,
                     "Patient Care Report",
-                    "Fill in Patient Care Report",
+                    "Patient Care Report (PCR) photo attached",
                   ),
                 )}
               />
@@ -1415,28 +1703,25 @@ export default function CasualtyDetailScreen() {
                 label="Notes"
                 value={extractRecordBaseText(treatmentNotes)}
               />
-            </SectionCard>
+              </SectionCard>
+            ) : null}
 
             <SectionCard title="TRANSPORT">
               {casualty.latestTransport ? (
                 <>
                   <DetailRow
                     label="Patient For"
-                    value={formatValue(
-                      extractRecordSectionValue(
-                        transportNotes,
-                        "SA Transport / Release",
-                        "Patient for",
-                      ),
+                    value={formatPatientFor(
+                      casualty.latestTransport,
+                      transportNotes,
                     )}
                   />
 
                   <DetailRow
                     label="Condition Before Release"
                     value={formatValue(
-                      extractRecordSectionValue(
+                      extractRecordTransportValue(
                         transportNotes,
-                        "SA Transport / Release",
                         "Condition before release",
                       ),
                     )}
@@ -1445,9 +1730,8 @@ export default function CasualtyDetailScreen() {
                   <DetailRow
                     label="Condition Before Transfer"
                     value={formatValue(
-                      extractRecordSectionValue(
+                      extractRecordTransportValue(
                         transportNotes,
-                        "SA Transport / Release",
                         "Condition before transfer",
                       ),
                     )}
@@ -1458,9 +1742,8 @@ export default function CasualtyDetailScreen() {
                     value={formatValue(
                       casualty.latestTransport.receiving_facility
                         ?.facility_name ??
-                        extractRecordSectionValue(
+                        extractRecordTransportValue(
                           transportNotes,
-                          "SA Transport / Release",
                           "Receiving facility",
                         ),
                     )}
@@ -1475,11 +1758,17 @@ export default function CasualtyDetailScreen() {
                   />
 
                   <DetailRow
+                    label="Arrived Facility"
+                    value={formatDateTime(
+                      casualty.latestTransport.arrived_facility_at,
+                    )}
+                  />
+
+                  <DetailRow
                     label="Used EMS Vehicle"
                     value={formatValue(
-                      extractRecordSectionValue(
+                      extractRecordTransportValue(
                         transportNotes,
-                        "SA Transport / Release",
                         "Used EMS vehicle",
                       ),
                     )}
@@ -1490,6 +1779,13 @@ export default function CasualtyDetailScreen() {
                   No Advanced Medical Responder transport record saved.
                 </Text>
               )}
+            </SectionCard>
+
+            <SectionCard title="REMARKS">
+              <DetailRow
+                label="Remarks"
+                value={extractRecordBaseText(remarks)}
+              />
             </SectionCard>
           </>
         ) : showHealthcareDocumenterDetails ? (
@@ -1502,29 +1798,34 @@ export default function CasualtyDetailScreen() {
               />
 
               <DetailRow
-                label="Disaster Plan Activation Time"
-                value={formatValue(
-                  extractRecordSectionValue(
-                    remarks,
-                    "Healthcare Facility Documenter",
-                    "Disaster plan activation time",
-                  ),
-                )}
+                label="Incident Name"
+                value={casualty.incident}
               />
 
               <DetailRow
-                label="Arrival Time"
+                label="Time of Arrival of Victim"
                 value={formatDateTime(facilityEncounter?.arrived_at)}
               />
 
               <DetailRow
+                label="Triage Before Transport to Healthcare Facility"
+                value={formatStatus(
+                  facilityEncounter?.pre_transport_triage_category,
+                )}
+              />
+
+              <DetailRow
+                label="Disaster Plan Activation Time"
+                value={formatDetailDate(
+                  healthcareDisasterPlanActivationTime,
+                )}
+              />
+
+              <DetailRow
                 label="Disposition Upon Hospital Arrival"
-                value={formatValue(
-                  extractRecordSectionValue(
-                    remarks,
-                    "Healthcare Facility Documenter",
-                    "Disposition upon hospital arrival",
-                  ) ?? facilityEncounter?.disposition,
+                value={formatDetailUnknown(
+                  healthcareDispositionUponArrival ??
+                    facilityEncounter?.disposition,
                 )}
               />
             </SectionCard>
@@ -1546,6 +1847,14 @@ export default function CasualtyDetailScreen() {
               <DetailRow
                 label="Date of Birth"
                 value={casualty.dateOfBirth}
+              />
+              <DetailRow
+                label="Age"
+                value={formatValue(record?.casualty.estimated_age)}
+              />
+              <DetailRow
+                label="Contact Number"
+                value={formatValue(record?.casualty.contact_number)}
               />
             </SectionCard>
 
@@ -1575,32 +1884,28 @@ export default function CasualtyDetailScreen() {
                   />
 
                   <DetailRow
-                    label="Admitted to Hospital"
+                    label="Triage Location"
                     value={formatValue(
-                      extractRecordSectionValue(
-                        triageNotes,
-                        "Healthcare Facility Triage",
-                        "Admitted to hospital",
-                      ) ??
-                        formatBooleanValue(
-                          facilityEncounter?.admitted_to_hospital,
-                        ),
+                      casualty.latestTriage.location,
                     )}
                   />
 
                   <DetailRow
-                    label="Discharged from Hospital"
+                    label="Other Triage System"
                     value={formatValue(
                       extractRecordSectionValue(
                         triageNotes,
                         "Healthcare Facility Triage",
-                        "Discharged from hospital",
-                      ) ??
-                        formatBooleanValue(
-                          facilityEncounter?.discharged_home,
-                        ),
+                        "Other triage system",
+                      ),
                     )}
                   />
+
+                  <DetailRow
+                    label="Triage Notes"
+                    value={extractRecordBaseText(triageNotes)}
+                  />
+
                 </>
               ) : (
                 <Text style={styles.emptyAttachmentText}>
@@ -1612,33 +1917,51 @@ export default function CasualtyDetailScreen() {
             <SectionCard title="MANAGEMENT">
               <DetailRow
                 label="Resuscitation Room Used"
-                value={formatValue(
-                  extractRecordSectionValue(
-                    treatmentNotes,
-                    "Management",
+                value={formatDetailUnknown(
+                  healthcareTreatmentValue(
                     "Resuscitation room used",
+                    "resuscitationRoomUsed",
                   ),
+                )}
+              />
+
+              <DetailRow
+                label="Time of Resuscitation Room Use"
+                value={formatDetailDate(
+                  facilityEncounter?.ed_resuscitation_started_at,
                 )}
               />
 
               <DetailRow
                 label="Surgical Intervention"
-                value={formatValue(
-                  extractRecordSectionValue(
-                    treatmentNotes,
-                    "Management",
+                value={formatDetailUnknown(
+                  healthcareTreatmentValue(
                     "Surgical intervention",
+                    "surgicalInterventionRequired",
                   ),
                 )}
               />
 
               <DetailRow
+                label="Surgical Intervention Start"
+                value={formatDetailDate(
+                  facilityEncounter?.surgical_intervention_started_at,
+                )}
+              />
+
+              <DetailRow
+                label="Surgical Intervention End"
+                value={formatDetailDate(
+                  facilityEncounter?.surgical_intervention_ended_at,
+                )}
+              />
+
+              <DetailRow
                 label="Operating Room Used"
-                value={formatValue(
-                  extractRecordSectionValue(
-                    treatmentNotes,
-                    "Management",
+                value={formatDetailUnknown(
+                  healthcareTreatmentValue(
                     "Operating room used",
+                    "operatingRoomUsed",
                   ),
                 )}
               />
@@ -1646,11 +1969,17 @@ export default function CasualtyDetailScreen() {
               <DetailRow
                 label="Number of Operating Rooms"
                 value={formatDetailUnknown(
-                  extractRecordSectionValue(
-                    treatmentNotes,
-                    "Management",
+                  healthcareTreatmentValue(
                     "Number of operating rooms",
-                  ) ?? treatmentDetails.numberOfOperatingRooms,
+                    "numberOfOperatingRooms",
+                  ),
+                )}
+              />
+
+              <DetailRow
+                label="Operating Room Use Time"
+                value={formatDetailDate(
+                  facilityEncounter?.operating_room_started_at,
                 )}
               />
 
@@ -1662,9 +1991,23 @@ export default function CasualtyDetailScreen() {
               />
 
               <DetailRow
+                label="Time of X-Ray Use"
+                value={formatDetailDate(
+                  facilityEncounter?.xray_performed_at,
+                )}
+              />
+
+              <DetailRow
                 label="Ultrasound Used"
                 value={formatBooleanValue(
                   facilityEncounter?.ultrasound_required,
+                )}
+              />
+
+              <DetailRow
+                label="Time of Ultrasound Use"
+                value={formatDetailDate(
+                  facilityEncounter?.ultrasound_performed_at,
                 )}
               />
 
@@ -1676,13 +2019,53 @@ export default function CasualtyDetailScreen() {
               />
 
               <DetailRow
+                label="Time of CT Scan Use"
+                value={formatDetailDate(
+                  facilityEncounter?.ct_performed_at,
+                )}
+              />
+
+              <DetailRow
                 label="Admitted to Unit"
                 value={formatDetailUnknown(
-                  extractRecordSectionValue(
-                    treatmentNotes,
-                    "Management",
+                  healthcareTreatmentValue(
                     "Admitted to unit",
-                  ) ?? treatmentDetails.admittedToUnit,
+                    "admittedToUnit",
+                  ),
+                )}
+              />
+
+              <DetailRow
+                label="Other Unit"
+                value={formatDetailUnknown(
+                  healthcareTreatmentValue(
+                    "Other admitted unit",
+                    "otherAdmittedUnit",
+                  ),
+                )}
+              />
+
+              <DetailRow
+                label="Unit Admission Time"
+                value={formatDetailDate(
+                  healthcareTreatmentValue(
+                    "Unit admission time",
+                    "unitAdmissionTime",
+                  ),
+                )}
+              />
+
+              <DetailRow
+                label="ED Admission Time"
+                value={formatDetailDate(
+                  facilityEncounter?.ed_admitted_at,
+                )}
+              />
+
+              <DetailRow
+                label="ED Departure Time"
+                value={formatDetailDate(
+                  facilityEncounter?.ed_departed_at,
                 )}
               />
 
@@ -1690,6 +2073,34 @@ export default function CasualtyDetailScreen() {
                 label="Mechanical Ventilation Used"
                 value={formatBooleanValue(
                   facilityEncounter?.mechanical_ventilation_required,
+                )}
+              />
+
+              <DetailRow
+                label="Ventilation Start Time"
+                value={formatDetailDate(
+                  facilityEncounter?.ventilation_started_at,
+                )}
+              />
+
+              <DetailRow
+                label="Ventilation End Time"
+                value={formatDetailDate(
+                  facilityEncounter?.ventilation_ended_at,
+                )}
+              />
+
+              <DetailRow
+                label="ICU Admission Time"
+                value={formatDetailDate(
+                  facilityEncounter?.icu_admitted_at,
+                )}
+              />
+
+              <DetailRow
+                label="Alternative ICU Used"
+                value={formatBooleanValue(
+                  facilityEncounter?.alternative_icu_used,
                 )}
               />
             </SectionCard>
@@ -1732,6 +2143,20 @@ export default function CasualtyDetailScreen() {
                 label="Hospital Discharge Time"
                 value={formatDateTime(
                   facilityEncounter?.hospital_discharged_at,
+                )}
+              />
+
+              <DetailRow
+                label="Hospital Admission Time"
+                value={formatDetailDate(
+                  facilityEncounter?.hospital_admitted_at,
+                )}
+              />
+
+              <DetailRow
+                label="ICU Discharge Time"
+                value={formatDetailDate(
+                  facilityEncounter?.icu_discharged_at,
                 )}
               />
             </SectionCard>
@@ -2106,7 +2531,7 @@ const styles = StyleSheet.create({
   },
 
   headerSafeArea: {
-    backgroundColor: COLORS.maroon,
+    backgroundColor: COLORS.headerBackground,
   },
 
   header: {
@@ -2114,7 +2539,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     paddingHorizontal: 12,
     paddingTop: 8,
-    backgroundColor: COLORS.maroon,
+    backgroundColor: COLORS.headerBackground,
   },
 
   headerDecoration: {
@@ -2217,7 +2642,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginRight: 15,
-    backgroundColor: COLORS.maroon,
+    backgroundColor: COLORS.headerBackground,
   },
 
   avatarText: {
@@ -2338,7 +2763,7 @@ const styles = StyleSheet.create({
   },
 
   sectionTitle: {
-    color: COLORS.maroon,
+    color: COLORS.text,
     fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.3,

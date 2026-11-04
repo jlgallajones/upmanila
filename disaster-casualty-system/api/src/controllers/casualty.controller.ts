@@ -462,6 +462,12 @@ type LatestFacilityEncounterSummary = {
   facility_id: string;
 
   arrived_at: string | null;
+  pre_transport_triage_category:
+    | "immediate"
+    | "delayed"
+    | "minimal"
+    | "expectant"
+    | null;
 
   ed_admitted_at: string | null;
   ed_departed_at: string | null;
@@ -631,7 +637,7 @@ async function attachLatestSummaries<
     supabase
       .from("facility_encounters")
       .select(
-        "casualty_incident_id, facility_id, arrived_at, ed_admitted_at, ed_departed_at, referred_or_transferred, sought_ed_care, admitted_to_hospital, discharged_home, ed_resuscitation_started_at, surgical_intervention_started_at, surgical_intervention_ended_at, operating_room_started_at, xray_required, xray_performed_at, ultrasound_required, ultrasound_performed_at, ct_required, ct_performed_at, hospital_admitted_at, hospital_discharged_at, icu_admitted_at, icu_discharged_at, mechanical_ventilation_required, ventilation_started_at, ventilation_ended_at, alternative_icu_used, disposition, created_at",
+        "casualty_incident_id, facility_id, arrived_at, pre_transport_triage_category, ed_admitted_at, ed_departed_at, referred_or_transferred, sought_ed_care, admitted_to_hospital, discharged_home, ed_resuscitation_started_at, surgical_intervention_started_at, surgical_intervention_ended_at, operating_room_started_at, xray_required, xray_performed_at, ultrasound_required, ultrasound_performed_at, ct_required, ct_performed_at, hospital_admitted_at, hospital_discharged_at, icu_admitted_at, icu_discharged_at, mechanical_ventilation_required, ventilation_started_at, ventilation_ended_at, alternative_icu_used, disposition, created_at",
       )
       
       .in("casualty_incident_id", recordIds)
@@ -1505,6 +1511,8 @@ async function insertFacilityEncounter(
       casualty_incident_id: casualtyIncidentId,
       facility_id: facilityEncounter.facilityId,
       arrived_at: facilityEncounter.arrivedAt ?? null,
+      pre_transport_triage_category:
+        facilityEncounter.preTransportTriageCategory ?? null,
       ed_admitted_at: facilityEncounter.edAdmittedAt ?? null,
       ed_departed_at: facilityEncounter.edDepartedAt ?? null,
       referred_or_transferred:
@@ -3595,9 +3603,10 @@ export async function getCasualtyTreatmentHistory(
     const { data, error } = await supabase
       .from("casualty_treatments")
       .select(
-        "id, casualty_incident_id, treatment_strategy, treatment_area_name, stabilization_started_at, stabilized_at, treatment_details, notes, performed_by",
+        "id, casualty_incident_id, treatment_strategy, treatment_area_name, stabilization_started_at, stabilized_at, treatment_details, notes, performed_by, created_at",
       )
-      .eq("casualty_incident_id", id);
+      .eq("casualty_incident_id", id)
+      .order("created_at", { ascending: false });
 
     if (error) {
       throw new Error(

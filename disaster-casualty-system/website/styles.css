@@ -3413,6 +3413,10 @@ tr[data-records-incident-details]:hover > td {
   align-items: center;
 }
 
+.modal-inline-message[hidden] {
+  display: none;
+}
+
 .incident-section-card {
   min-width: 0;
   display: grid;
@@ -5751,4 +5755,532 @@ tr[data-records-incident-details]:hover > td {
 :root[data-theme="dark"] .analytics-incident-info-list div,
 :root[data-theme="dark"] .analytics-incident-metrics div {
   border-right-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Collapsed sidebar footer */
+.sidebar-collapsed .sidebar-footer {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Profile + theme become vertical when collapsed */
+.sidebar-collapsed .sidebar-account-row {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Give all footer controls the same footprint */
+.sidebar-collapsed .user-chip,
+.sidebar-collapsed .sidebar-theme-toggle,
+.sidebar-collapsed .logout-button {
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+}
+
+/* Hide profile text cleanly */
+.sidebar-collapsed .user-chip {
+  gap: 0;
+}
+
+.sidebar-collapsed .user-chip-text {
+  display: none;
+}
+
+/* Keep avatar centered */
+.sidebar-collapsed .user-avatar {
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+
+
+/* =========================================================
+   COLLAPSED SIDEBAR - HIDE EXPANDED SUBMENUS
+   ========================================================= */
+
+.sidebar-collapsed .nav-group-items {
+  display: none !important;
+}
+
+.sidebar-collapsed .nav-group {
+  width: 56px;
+}
+
+.sidebar-collapsed .nav-group-summary {
+  width: 56px;
+  min-height: 48px;
+  padding: 0;
+  justify-content: center;
+  gap: 0;
+}
+
+.sidebar-collapsed .nav-group-label,
+.sidebar-collapsed .nav-group-count,
+.sidebar-collapsed .nav-group-chevron {
+  display: none;
+}
+
+/* Logout icon button */
+.logout-icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.logout-icon-button svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Collapsed sidebar logout button */
+.sidebar-collapsed #logoutButton {
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.logout-icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.logout-label {
+  display: inline;
+}
+
+/* Collapsed sidebar: icon only */
+.sidebar-collapsed .logout-label {
+  display: none;
+}
+
+.sidebar-collapsed .logout-icon-button {
+  gap: 0;
+}
+
+/* =========================================================
+   COLLAPSED PROFILE BUTTON
+   ========================================================= */
+
+.sidebar-collapsed .user-chip {
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  padding: 0;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Simple avatar */
+.sidebar-collapsed .user-avatar {
+  width: 34px;
+  height: 34px;
+  margin: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #ffffff;
+  border: 1px solid rgba(0, 140, 150, 0.35);
+  box-shadow: none;
+}
+
+/* Show account initial */
+.sidebar-collapsed .user-avatar-initial {
+  display: block;
+  color: #008b95;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+/* Remove the current person/profile drawing */
+.sidebar-collapsed .user-avatar-profile-icon {
+  display: none;
+}
+
+/* =========================================================
+   SIDEBAR HAMBURGER TOGGLE
+   ========================================================= */
+
+.sidebar-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hamburger-icon {
+  width: 17px;
+  height: 13px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.hamburger-icon span {
+  display: block;
+  width: 100%;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+/* Sidebar hamburger - cyan accent */
+.sidebar-toggle {
+  color: #008b95;
+  border-color: rgba(0, 139, 149, 0.35);
+  background: #ffffff;
+}
+
+.sidebar-toggle:hover {
+  color: #007780;
+  border-color: #008b95;
+  background: #f0fbfc;
+}
+
+/* Keep collapsed state cyan too */
+.sidebar-collapsed .sidebar-toggle {
+  color: #008b95;
+  border-color: rgba(0, 139, 149, 0.35);
+  background: #ffffff;
+}
+
+.sidebar-collapsed .sidebar-toggle:hover {
+  color: #007780;
+  border-color: #008b95;
+  background: #f0fbfc;
+}
+
+.hamburger-icon span {
+  display: block;
+  width: 100%;
+  height: 2px;
+  border-radius: 999px;
+  background-color: #008b95;
+}
+
+/* =========================================================
+   SIDEBAR SVG ICONS
+   ========================================================= */
+
+.nav-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nav-icon svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Default icon */
+.nav-group-summary .nav-icon {
+  color: #008b95;
+}
+
+/* Active category */
+.nav-group-summary.active .nav-icon,
+.nav-direct-link.active .nav-icon {
+  color: #008b95;
+}
+
+/* Submenu no longer needs letter icons */
+.nav-group-items .nav-button {
+  min-height: 42px;
+  padding-left: 24px;
+}
+
+.nav-submenu-label {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* Collapsed main icons */
+.sidebar-collapsed .nav-icon {
+  width: 34px;
+  height: 34px;
+}
+
+.sidebar-collapsed .nav-icon svg {
+  width: 19px;
+  height: 19px;
+}
+
+/* Remove rounded square around sidebar icons */
+.nav-glyph,
+.nav-icon {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+
+/* Keep icon container centered */
+.nav-group-summary .nav-glyph,
+.nav-direct-link .nav-glyph {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  min-height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+/* Collapsed sidebar icon sizing */
+.sidebar-collapsed .nav-glyph,
+.sidebar-collapsed .nav-icon {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  min-height: 22px;
+  padding: 0;
+}
+
+/* =========================================================
+   SIDEBAR BUTTON BORDER FIX
+   ========================================================= */
+
+/* Main sidebar buttons */
+.nav-group-summary,
+.nav-direct-link {
+  border: 1px solid #008b95 !important;
+  background: #ffffff;
+}
+
+/* Main sidebar hover */
+.nav-group-summary:hover,
+.nav-direct-link:hover {
+  border-color: #007780 !important;
+  background: #f0fbfc;
+}
+
+/* Main active button */
+.nav-group-summary.active,
+.nav-direct-link.active {
+  border-color: #008b95 !important;
+  background: #dff7f8;
+}
+
+/* Submenu buttons */
+.nav-group-items .nav-button {
+  border: 1px solid #008b95 !important;
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 0 14px;
+  min-height: 38px;
+  margin-bottom: 6px;
+}
+
+/* Submenu hover */
+.nav-group-items .nav-button:hover {
+  border-color: #007780 !important;
+  background: #f0fbfc;
+}
+
+/* Active submenu */
+.nav-group-items .nav-button.active {
+  border-color: #008b95 !important;
+  background: #dff7f8;
+  color: #2f2f2f;
+}
+
+/* =========================================================
+   COLLAPSED PROFILE BUTTON FIX
+   ========================================================= */
+
+/* Outer profile button = cyan border */
+.sidebar-collapsed .user-chip {
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
+
+  padding: 0;
+  border: 1.5px solid #008b95 !important;
+  border-radius: 14px;
+
+  background: #ffffff !important;
+  box-shadow: none !important;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Remove the INNER circle completely */
+.sidebar-collapsed .user-avatar {
+  width: auto;
+  height: auto;
+
+  margin: 0;
+  padding: 0;
+
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Keep just the user's initial */
+.sidebar-collapsed .user-avatar-initial {
+  color: #008b95 !important;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+/* Make sure the old profile drawing stays hidden */
+.sidebar-collapsed .user-avatar-profile-icon {
+  display: none !important;
+}
+
+/* =========================================================
+   ACTIVE METRIC CARD - CURVED CYAN LEFT ACCENT
+   ========================================================= */
+
+.dashboard-metrics .metric.emphasis {
+  background: #ffffff !important;
+  color: #333333 !important;
+
+  border: 1.5px solid #008b95 !important;
+  border-radius: 16px;
+
+  /* Thin cyan accent that follows the rounded card */
+  box-shadow:
+    inset 15px 0 0 #008b95,
+    0 18px 44px rgba(33, 43, 64, 0.07) !important;
+}
+
+/* Remove any old thick left bar */
+.dashboard-metrics .metric.emphasis::before {
+  display: none !important;
+}
+
+/* Keep text dark */
+.dashboard-metrics .metric.emphasis span,
+.dashboard-metrics .metric.emphasis small {
+  color: #3f3f3f !important;
+}
+
+/* =========================================================
+   NORMAL METRIC CARDS - CURVED LIGHT CYAN ACCENT
+   ========================================================= */
+
+.dashboard-metrics .metric:not(.emphasis) {
+  background: #ffffff !important;
+
+  /* No full outline */
+  border: none !important;
+
+  /* Curved light-cyan accent on the left */
+  box-shadow:
+    inset 15px 0 0 #d9f5f7,
+    0 18px 44px rgba(33, 43, 64, 0.07) !important;
+
+  border-radius: 16px;
+}
+
+/* Remove any old separate left-side bar */
+.dashboard-metrics .metric:not(.emphasis)::before {
+  display: none !important;
+}
+
+/* =========================================================
+   ONGOING INCIDENT CARD - CURVED LIGHT CYAN ACCENT
+   ========================================================= */
+
+.incident-info-card {
+  border: none !important;
+  border-radius: 14px !important;
+
+  background: #ffffff !important;
+
+  box-shadow:
+    inset 15px 0 0 #d9f5f7,
+    0 10px 28px rgba(33, 43, 64, 0.06) !important;
+}
+
+/* Remove an old separate left bar if one exists */
+.incident-info-card::before {
+  display: none !important;
+}
+
+/* =========================================================
+   INCIDENT MANAGEMENT CARD - CURVED LIGHT CYAN ACCENT
+   ========================================================= */
+
+.incident-management-item {
+  border: none !important;
+  border-radius: 16px !important;
+  overflow: hidden;
+
+  background: #ffffff !important;
+
+  box-shadow:
+    inset 15px 0 0 #d9f5f7,
+    0 10px 28px rgba(33, 43, 64, 0.06) !important;
+}
+
+.incident-management-toggle {
+  background: transparent !important;
+}
+
+/* Superadmin approval metric cards */
+.approvals-metrics .metric {
+  border: none !important;
+  border-radius: 16px !important;
+  background: #ffffff !important;
+
+  box-shadow:
+    inset 15px 0 0 #d9f5f7,
+    0 18px 44px rgba(33, 43, 64, 0.07) !important;
+
+  color: #333333 !important;
+}
+
+/* Remove any old separate accent bar */
+.approvals-metrics .metric::before {
+  display: none !important;
+}
+
+/* Keep text dark even if the card receives "emphasis" */
+.approvals-metrics .metric.emphasis span,
+.approvals-metrics .metric.emphasis small {
+  color: #3f3f3f !important;
 }

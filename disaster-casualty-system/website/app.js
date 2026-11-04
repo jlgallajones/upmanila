@@ -361,7 +361,7 @@ const superAdminViews = [
   ["users", "Accounts"],
   ["records", "Victim Records"],
   ["approvals", "Approvals"],
-  ["match-casing", "Match Casing"],
+  ["match-casing", "Case Matching"],
   ["matched-cases", "Matched Cases"],
   ["registration", "Account Registration"],
   ["drafts", "Drafts"],
@@ -378,7 +378,7 @@ const adminViews = [
   ["facilities", "Healthcare Facilities"],
   ["users", "Accounts"],
   ["records", "Victim Records"],
-  ["match-casing", "Match Casing"],
+  ["match-casing", "Case Matching"],
   ["matched-cases", "Matched Cases"],
   ["drafts", "Drafts"],
   ["verification", "Verification Review"],
@@ -409,13 +409,13 @@ const superAdminNavGroups = [
   {
     id: "overview",
     label: "Overview",
-    icon: "O",
+    icon: "home",
     views: [["home", "Homepage"]],
   },
   {
     id: "incidents",
     label: "Incidents",
-    icon: "IN",
+    icon: "incidents",
     views: [
       ["incidents", "Official Incidents"],
       ["incident-management", "Incident Management"],
@@ -427,24 +427,24 @@ const superAdminNavGroups = [
   {
     id: "casualties",
     label: "Victims",
-    icon: "CA",
+    icon: "victims",
     views: [
       ["records", "Victim Records"],
       ["approvals", "Approvals"],
-      ["match-casing", "Match Casing"],
+      ["match-casing", "Case Matching"],
       ["matched-cases", "Matched Cases"],
     ],
   },
   {
     id: "resources",
     label: "Resources",
-    icon: "RS",
+    icon: "hospital",
     views: [["facilities", "Healthcare Facilities"]],
   },
   {
     id: "administration",
     label: "Administration",
-    icon: "AD",
+    icon: "administration",
     views: [
       ["users", "Accounts"],
       ["registration", "Account Registration"],
@@ -454,7 +454,7 @@ const superAdminNavGroups = [
   {
     id: "reports",
     label: "Reports & Logs",
-    icon: "RL",
+    icon: "logs",
     views: [["logs", "Action Logs"]],
   },
 ];
@@ -463,13 +463,13 @@ const adminNavGroups = [
   {
     id: "overview",
     label: "Overview",
-    icon: "O",
+    icon: "home",
     views: [["home", "Homepage"]],
   },
   {
     id: "incidents",
     label: "Incidents",
-    icon: "IN",
+    icon: "incidents",
     views: [
       ["incidents", "Official Incidents"],
       ["incident-management", "Incident Management"],
@@ -480,24 +480,24 @@ const adminNavGroups = [
   {
     id: "casualties",
     label: "Victims",
-    icon: "CA",
+    icon: "victims",
     views: [
       ["records", "Victim Records"],
       ["verification", "Verification Review"],
-      ["match-casing", "Match Casing"],
+      ["match-casing", "Case Matching"],
       ["matched-cases", "Matched Cases"],
     ],
   },
   {
     id: "resources",
     label: "Resources",
-    icon: "RS",
+    icon: "hospital",
     views: [["facilities", "Healthcare Facilities"]],
   },
   {
     id: "administration",
     label: "Administration",
-    icon: "AD",
+    icon: "administration",
     views: [
       ["users", "Accounts"],
       ["drafts", "Drafts"],
@@ -506,7 +506,7 @@ const adminNavGroups = [
   {
     id: "reports",
     label: "Reports & Logs",
-    icon: "RL",
+    icon: "logs",
     views: [["logs", "Action Logs"]],
   },
 ];
@@ -1460,14 +1460,73 @@ function compareCasualtyRecordsByLatest(first, second) {
   return casualtyRecordTimestamp(second) - casualtyRecordTimestamp(first);
 }
 
+function renderNavIcon(icon) {
+  const icons = {
+    home: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3 11.5 12 4l9 7.5" />
+        <path d="M5 10.5V20h14v-9.5" />
+        <path d="M9 20v-6h6v6" />
+      </svg>
+    `,
+
+    incidents: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 3 2.5 20h19L12 3Z" />
+        <path d="M12 9v4" />
+        <path d="M12 17h.01" />
+      </svg>
+    `,
+
+    victims: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="9" cy="8" r="3" />
+        <path d="M3.5 19c.5-4 2.5-6 5.5-6s5 2 5.5 6" />
+        <circle cx="17" cy="9" r="2.5" />
+        <path d="M15 14c3.5-.5 5.5 1.5 6 5" />
+      </svg>
+    `,
+
+    hospital: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M5 21V4h14v17" />
+        <path d="M9 8h6" />
+        <path d="M12 5v6" />
+        <path d="M8 15h2" />
+        <path d="M14 15h2" />
+        <path d="M10 21v-3h4v3" />
+      </svg>
+    `,
+
+    administration: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="8" r="3" />
+        <path d="M6 20c.5-4 2.5-6 6-6s5.5 2 6 6" />
+        <path d="M18.5 6.5 20 8l2-2" />
+      </svg>
+    `,
+
+    logs: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M6 3h12v18H6z" />
+        <path d="M9 8h6" />
+        <path d="M9 12h6" />
+        <path d="M9 16h4" />
+      </svg>
+    `,
+  };
+
+  return icons[icon] || icons.home;
+}
+
 function renderSidebarNavButton([id, label]) {
   return `
-    <button class="nav-button ${state.activeView === id ? "active" : ""}" data-view="${id}" title="${escapeHtml(label)}">
-      <span class="nav-glyph">
-        ${escapeHtml(getNavInitials(label))}
-      </span>
-
-      <span>
+    <button
+      class="nav-button ${state.activeView === id ? "active" : ""}"
+      data-view="${id}"
+      title="${escapeHtml(label)}"
+    >
+      <span class="nav-submenu-label">
         ${escapeHtml(label)}
       </span>
     </button>
@@ -1486,21 +1545,46 @@ function renderSidebarNavGroup(group) {
         type="button"
         title="${escapeHtml(label)}"
       >
-        <span class="nav-glyph">${escapeHtml(getNavInitials(label))}</span>
-        <span class="nav-group-label">${escapeHtml(label)}</span>
+        <span class="nav-glyph nav-icon">
+          ${renderNavIcon(group.icon)}
+        </span>
+
+        <span class="nav-group-label">
+          ${escapeHtml(label)}
+        </span>
       </button>
     `;
   }
 
-  const isActiveGroup = group.views.some(([id]) => id === state.activeView);
-  const viewCountLabel = `${group.views.length} ${group.views.length === 1 ? "menu" : "menus"}`;
+  const isActiveGroup = group.views.some(
+    ([id]) => id === state.activeView,
+  );
+
+  const viewCountLabel =
+    `${group.views.length} ${group.views.length === 1 ? "menu" : "menus"}`;
 
   return `
-    <details class="nav-group ${isActiveGroup ? "active" : ""}" data-nav-group="${escapeHtml(group.id)}" ${isActiveGroup ? "open" : ""}>
-      <summary class="nav-group-summary ${isActiveGroup ? "active" : ""}" title="${escapeHtml(group.label)}">
-        <span class="nav-glyph">${escapeHtml(group.icon || getNavInitials(group.label))}</span>
-        <span class="nav-group-label">${escapeHtml(group.label)}</span>
-        <span class="nav-group-count">${escapeHtml(viewCountLabel)}</span>
+    <details
+      class="nav-group ${isActiveGroup ? "active" : ""}"
+      data-nav-group="${escapeHtml(group.id)}"
+      ${isActiveGroup ? "open" : ""}
+    >
+      <summary
+        class="nav-group-summary ${isActiveGroup ? "active" : ""}"
+        title="${escapeHtml(group.label)}"
+      >
+        <span class="nav-glyph nav-icon">
+          ${renderNavIcon(group.icon)}
+        </span>
+
+        <span class="nav-group-label">
+          ${escapeHtml(group.label)}
+        </span>
+
+        <span class="nav-group-count">
+          ${escapeHtml(viewCountLabel)}
+        </span>
+
         <span class="nav-group-chevron">&rsaquo;</span>
       </summary>
 
@@ -1510,6 +1594,8 @@ function renderSidebarNavGroup(group) {
     </details>
   `;
 }
+
+
 
 function renderSidebarNavigation() {
   return getNavGroupsForRole(state.user?.role)
@@ -2955,7 +3041,11 @@ function renderDashboardShell() {
             title="${state.sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}"
             aria-expanded="false"
           >
-            ${state.sidebarCollapsed ? "&gt;" : "&lt;"}
+            <span class="hamburger-icon" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </span>
           </button>
         </div>
 
@@ -2978,7 +3068,30 @@ function renderDashboardShell() {
             </button>
             ${renderThemeToggle("sidebar-theme-toggle")}
           </div>
-          <button id="logoutButton" class="danger-button">Logout</button>
+          <button
+            id="logoutButton"
+            class="danger-button logout-icon-button"
+            title="Logout"
+            aria-label="Logout"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="20"
+              height="20"
+              aria-hidden="true"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5" />
+              <path d="M10 17l5-5-5-5" />
+              <path d="M15 12H3" />
+            </svg>
+
+            <span class="logout-label">Log out</span>
+          </button>
         </div>
       </aside>
 
@@ -3626,10 +3739,19 @@ function applySidebarCollapsedState() {
   if (!shell || !toggle) return;
 
   shell.classList.toggle("sidebar-collapsed", state.sidebarCollapsed);
-  const label = state.sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar";
+
+  if (state.sidebarCollapsed) {
+    document.querySelectorAll(".nav-group").forEach((group) => {
+      group.open = false;
+    });
+  }
+
+  const label = state.sidebarCollapsed
+    ? "Expand sidebar"
+    : "Collapse sidebar";
+
   toggle.setAttribute("aria-label", label);
   toggle.setAttribute("title", label);
-  toggle.innerHTML = state.sidebarCollapsed ? "&gt;" : "&lt;";
 }
 
 function renderCurrentView(errorMessage = "") {
@@ -3644,7 +3766,7 @@ function renderCurrentView(errorMessage = "") {
         users: "Accounts",
         records: "Victim Records",
         approvals: "Approvals",
-        "match-casing": "Match Casing",
+        "match-casing": "Case Matching",
         "matched-cases": "Matched Cases",
         incidents: "Official Incidents",
         facilities: "Healthcare Facilities",
@@ -3665,7 +3787,7 @@ function renderCurrentView(errorMessage = "") {
         facilities: "Healthcare Facilities",
         users: "Accounts",
         records: "Victim Records",
-        "match-casing": "Match Casing",
+        "match-casing": "Case Matching",
         "matched-cases": "Matched Cases",
         drafts: "Drafts",
         verification: "Verification Review",
@@ -7571,7 +7693,7 @@ function renderAdminCasualtyRecords(compact = false) {
                                     <thead>
                                       <tr>
                                         <th>Victim</th>
-                                        <th>ID Number</th>
+                                        <th>Victim Code / ID Number</th>
                                         <th>Status</th>
                                         <th>Verification</th>
                                         <th>Encoded By</th>
@@ -7604,9 +7726,9 @@ function renderAdminCasualtyRecords(compact = false) {
 
                                               <td>
                                                 ${escapeHtml(
-                                                  item.casualty
-                                                    ?.id_number ||
-                                                    "No ID number",
+                                                  getCasualtyRecordIdentifier(
+                                                    item,
+                                                  ),
                                                 )}
                                               </td>
 
@@ -7751,7 +7873,9 @@ function matchCasingRoleBucket(record) {
     return "documenter";
   }
 
-  return "responder";
+  if (role === "responder") return "field_responder";
+
+  return null;
 }
 
 function matchCasingRoleLabel(role) {
@@ -8795,7 +8919,7 @@ function renderSuperAdminApprovals() {
     );
 
   return `
-    <div class="grid two">
+    <div class="grid two approvals-metrics">
       ${renderMetric("Incident reopen requests", pendingReopenIncidents.length, pendingReopenIncidents.length ? "emphasis" : "")}
       ${renderMetric("Superadmin approvals", pendingReopenIncidents.length)}
     </div>
@@ -8850,10 +8974,17 @@ function renderSuperAdminApprovals() {
 }
 
 function detailItem(label, value) {
+  const displayValue =
+    value === null ||
+    value === undefined ||
+    (typeof value === "string" && value.trim() === "")
+      ? "Not recorded"
+      : value;
+
   return `
     <div>
       <span>${escapeHtml(label)}</span>
-      <strong>${escapeHtml(value ?? "Not recorded")}</strong>
+      <strong>${escapeHtml(displayValue)}</strong>
     </div>
   `;
 }
@@ -9018,8 +9149,14 @@ function extractRecordSectionValue(
 
   const lines = String(text).split(/\r?\n/);
 
-  const targetSection =
-    `[${sectionTitle}]`.toLowerCase();
+  const normalizeSectionTitle = (value) =>
+    String(value || "")
+      .toLowerCase()
+      .replace(/\bpost\b/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const targetSection = normalizeSectionTitle(sectionTitle);
 
   const targetLabel =
     `${label}:`.toLowerCase();
@@ -9038,7 +9175,7 @@ function extractRecordSectionValue(
       line.endsWith("]")
     ) {
       insideSection =
-        line.toLowerCase() === targetSection;
+        normalizeSectionTitle(line.slice(1, -1)) === targetSection;
 
       continue;
     }
@@ -9056,6 +9193,22 @@ function extractRecordSectionValue(
   }
 
   return null;
+}
+
+function extractResponderDetailsValue(text, label) {
+  return (
+    extractRecordSectionValue(
+      text,
+      "Advanced Medical Responder Details",
+      label,
+    ) ||
+    extractRecordSectionValue(text, "SA Responder Details", label) ||
+    extractRecordSectionValue(
+      text,
+      "Minor Incident Documenter Details",
+      label,
+    )
+  );
 }
 
 function extractLatestTransportSectionValue(text, label) {
@@ -9130,16 +9283,7 @@ function getCasualtyVictimCode(
 
   for (const text of possibleNotes) {
     const saVictimCode =
-      extractRecordSectionValue(
-        text,
-        "Advanced Medical Responder Details",
-        "Victim code",
-      ) ||
-      extractRecordSectionValue(
-        text,
-        "SA Responder Details",
-        "Victim code",
-      );
+      extractResponderDetailsValue(text, "Victim code");
 
     if (saVictimCode) {
       return saVictimCode;
@@ -9158,6 +9302,14 @@ function getCasualtyVictimCode(
   }
 
   return null;
+}
+
+function getCasualtyRecordIdentifier(item) {
+  return (
+    getCasualtyVictimCode(item) ||
+    item?.casualty?.id_number ||
+    "No ID number"
+  );
 }
 
 function formatPatientIdentified(casualty) {
@@ -9451,11 +9603,6 @@ function renderFieldResponderTriageContent(records) {
                 )}
 
                 ${detailItem(
-                  "Location",
-                  record.location,
-                )}
-
-                ${detailItem(
                   "Performed By",
                   record.triaged_by_user?.full_name,
                 )}
@@ -9467,10 +9614,6 @@ function renderFieldResponderTriageContent(records) {
                   ),
                 )}
 
-                ${detailItem(
-                  "Triage Notes",
-                  triageNotes || "No notes",
-                )}
               </div>
 
               <div style="margin-top:14px">
@@ -9536,17 +9679,11 @@ function renderFieldResponderTreatmentContent(records) {
     >
       <div class="casualty-detail-grid">
         ${detailItem(
-          "Treatment Strategy",
+          "On-site Stabilization",
           formatTreatmentStrategy(treatment.treatment_strategy),
         )}
         ${detailItem(
-          "Stabilized Time",
-          treatment.stabilized_at
-            ? formatDate(treatment.stabilized_at)
-            : "Not recorded",
-        )}
-        ${detailItem(
-          "Treatment Notes",
+          "Action Notes",
           extractRecordBaseText(treatment.notes) || "No notes",
         )}
       </div>
@@ -9964,25 +10101,36 @@ function renderCasualtyRecordModal(
     recordDetails?.matchedRecordDetails?.length
       ? recordDetails.matchedRecordDetails
       : [recordDetails].filter(Boolean);
+  const currentRecordRole =
+    matchCasingRoleBucket(item) ||
+    matchCasingRoleBucket(recordDetails?.casualty);
   const findMatchedDetails = (role) =>
     matchedRecordDetails.find(
       (details) => matchCasingRoleBucket(details?.casualty) === role,
     ) || null;
+  const currentRecordDetails = currentRecordRole
+    ? findMatchedDetails(currentRecordRole)
+    : recordDetails;
   const fieldRecordDetails =
-    findMatchedDetails("field_responder") ||
-    (matchCasingRoleBucket(item) === "responder"
-      ? recordDetails
-      : null);
+    currentRecordRole === "field_responder"
+      ? currentRecordDetails
+      : null;
   const saRecordDetails =
-    findMatchedDetails("sa_responder") || null;
+    currentRecordRole === "sa_responder"
+      ? currentRecordDetails
+      : null;
   const healthcareRecordDetails =
-    findMatchedDetails("documenter") || null;
+    currentRecordRole === "documenter"
+      ? currentRecordDetails
+      : null;
   const fieldItem = fieldRecordDetails?.casualty || {};
   const saItem = saRecordDetails?.casualty || {};
   const healthcareItem = healthcareRecordDetails?.casualty || {};
   const fieldCasualty = fieldItem.casualty || {};
   const saCasualty = saItem.casualty || {};
   const healthcareCasualty = healthcareItem.casualty || {};
+  const isMinorIncidentDocumenterRecord =
+    saItem.encoder?.role === "minor_incident_documenter";
 
   const fieldResponderTriage =
     (fieldRecordDetails?.triageHistory || []).filter(
@@ -10001,21 +10149,20 @@ function renderCasualtyRecordModal(
     );
 
     const healthcareDocumenterTreatment =
-  (healthcareRecordDetails?.treatmentHistory || []).find(
-    (record) => {
-      const details = record?.treatment_details;
+      (healthcareRecordDetails?.treatmentHistory || []).find(
+        (record) => {
+          const details = record?.treatment_details;
 
-      return (
-        details &&
-        typeof details === "object" &&
-        !Array.isArray(details) &&
-        Object.prototype.hasOwnProperty.call(
-          details,
-          "dispositionUponHospitalArrival",
-        )
-      );
-    },
-  ) || null;
+          return (
+            details &&
+            typeof details === "object" &&
+            !Array.isArray(details) &&
+            Object.keys(details).length > 0
+          );
+        },
+      ) ||
+      (healthcareRecordDetails?.treatmentHistory || [])[0] ||
+      null;
 
 const healthcareDocumenterDetails =
   healthcareDocumenterTreatment?.treatment_details ||
@@ -10043,40 +10190,13 @@ const healthcareIsOtherUnit =
   healthcareAdmittedUnit === "Other Unit";
 
 const newborn =
-  extractRecordSectionValue(
-    saItem.remarks,
-    "Advanced Medical Responder Details",
-    "Newborn",
-  ) ||
-  extractRecordSectionValue(
-    saItem.remarks,
-    "SA Responder Details",
-    "Newborn",
-  );
+  extractResponderDetailsValue(saItem.remarks, "Newborn");
 
 const pregnant =
-  extractRecordSectionValue(
-    saItem.remarks,
-    "Advanced Medical Responder Details",
-    "Pregnant",
-  ) ||
-  extractRecordSectionValue(
-    saItem.remarks,
-    "SA Responder Details",
-    "Pregnant",
-  );
+  extractResponderDetailsValue(saItem.remarks, "Pregnant");
 
 const religion =
-  extractRecordSectionValue(
-    saItem.remarks,
-    "Advanced Medical Responder Details",
-    "Religion",
-  ) ||
-  extractRecordSectionValue(
-    saItem.remarks,
-    "SA Responder Details",
-    "Religion",
-  );
+  extractResponderDetailsValue(saItem.remarks, "Religion");
 
   return `
     <div class="modal-backdrop" data-close-modal>
@@ -10100,7 +10220,10 @@ const religion =
 
           ${renderMatchedCaseSummary(recordDetails)}
 
-          <section class="record-section">
+          <section
+            class="record-section"
+            style="display:${fieldRecordDetails ? "block" : "none"}"
+          >
             <h3>Field Responder</h3>
 
             <p class="panel-subtitle">
@@ -10158,35 +10281,6 @@ const religion =
             </div>
 
 
-            <!-- STATUS -->
-            <div
-              style="
-                margin-top:20px;
-                padding-top:16px;
-                border-top:1px solid #e2e7ef;
-              "
-            >
-              <h4 style="margin:0 0 10px">
-                Status
-              </h4>
-
-              <div class="casualty-detail-grid">
-                ${detailItem(
-                  "Notes",
-                  extractRecordBaseText(fieldItem.remarks) ||
-                    "No notes",
-                )}
-
-                ${detailItem(
-                  "Victim Code Marking",
-                  fieldResponderTriage.length
-                    ? "Confirmed before submission"
-                    : "Not recorded",
-                )}
-              </div>
-            </div>
-
-
             <!-- CARE / TREATMENT -->
             <div
               style="
@@ -10196,11 +10290,11 @@ const religion =
               "
             >
               <h4 style="margin:0 0 4px">
-                Care / Treatment
+                Interventions Done
               </h4>
 
               <p class="panel-subtitle">
-                Automatically assigned from the selected triage system
+                Selected on-site action
               </p>
 
               ${renderFieldResponderTreatmentContent(
@@ -10209,11 +10303,16 @@ const religion =
             </div>
           </section>
 
-          <section class="record-section">
-            <h3>Advanced Medical Responder</h3>
+          <section
+            class="record-section"
+            style="display:${saRecordDetails ? "block" : "none"}"
+          >
+            <h3>${isMinorIncidentDocumenterRecord ? "Minor Incident Documenter" : "Advanced Medical Responder"}</h3>
 
             <p class="panel-subtitle">
-              Complete Advanced Medical Responder victim record
+              ${isMinorIncidentDocumenterRecord
+                ? "Complete Minor Incident Documenter victim record"
+                : "Complete Advanced Medical Responder victim record"}
             </p>
 
 
@@ -10248,6 +10347,7 @@ const religion =
             <!-- INTRODUCTION -->
             <div
               style="
+                display:${isMinorIncidentDocumenterRecord ? "block" : "none"};
                 margin-top:20px;
                 padding-top:16px;
                 border-top:1px solid #e2e7ef;
@@ -10259,60 +10359,40 @@ const religion =
 
               <div class="casualty-detail-grid">
                 ${detailItem(
+                  "Incident Name",
+                  incident.incident_name,
+                )}
+
+                ${detailItem(
                   "Witness Present",
-                  extractRecordSectionValue(
+                  extractResponderDetailsValue(
                     saItem.remarks,
-                    "Advanced Medical Responder Details",
                     "Witness present",
-                  ) ||
-                    extractRecordSectionValue(
-                      saItem.remarks,
-                      "SA Responder Details",
-                      "Witness present",
-                    ),
+                  ),
                 )}
 
                 ${detailItem(
                   "Other Witness",
-                  extractRecordSectionValue(
+                  extractResponderDetailsValue(
                     saItem.remarks,
-                    "Advanced Medical Responder Details",
                     "Witness other",
-                  ) ||
-                    extractRecordSectionValue(
-                      saItem.remarks,
-                      "SA Responder Details",
-                      "Witness other",
-                    ),
+                  ),
                 )}
 
                 ${detailItem(
                   "Witness Response",
-                  extractRecordSectionValue(
+                  extractResponderDetailsValue(
                     saItem.remarks,
-                    "Advanced Medical Responder Details",
                     "Witness response",
-                  ) ||
-                    extractRecordSectionValue(
-                      saItem.remarks,
-                      "SA Responder Details",
-                      "Witness response",
-                    ),
+                  ),
                 )}
 
                 ${detailItem(
                   "CPR Type",
-                  extractRecordSectionValue(
+                  extractResponderDetailsValue(
                     saItem.remarks,
-                    "Advanced Medical Responder Details",
                     "CPR type",
-                  ) ||
-                    extractRecordSectionValue(
-                      saItem.remarks,
-                      "SA Responder Details",
-                      "CPR type",
-                    ),
-                )}
+                  ),
                 )}
               </div>
             </div>
@@ -10321,18 +10401,17 @@ const religion =
             <!-- PERSONAL INFORMATION -->
             <div
               style="
+                display:${isMinorIncidentDocumenterRecord ? "block" : "none"};
                 margin-top:20px;
                 padding-top:16px;
                 border-top:1px solid #e2e7ef;
               "
             >
               <h4 style="margin:0 0 10px">
-                Personal Information
+                Info
               </h4>
 
               <div class="casualty-detail-grid">
-                ${detailItem("Victim Code", victimCode)}
-
                 ${detailItem(
                   "Patient Identified",
                   formatPatientIdentified(saCasualty),
@@ -10381,6 +10460,8 @@ const religion =
                   "Contact Number",
                   saCasualty.contact_number,
                 )}
+
+                ${detailItem("Victim Code", victimCode)}
               </div>
             </div>
 
@@ -10388,6 +10469,7 @@ const religion =
             <!-- ADDRESS -->
             <div
               style="
+                display:${isMinorIncidentDocumenterRecord ? "block" : "none"};
                 margin-top:20px;
                 padding-top:16px;
                 border-top:1px solid #e2e7ef;
@@ -10442,6 +10524,17 @@ const religion =
                 Secondary / reassessment triage
               </p>
 
+              ${
+                !isMinorIncidentDocumenterRecord
+                  ? `
+                    <div class="casualty-detail-grid">
+                      ${detailItem("Victim Code", victimCode)}
+                      ${detailItem("ID Number", saCasualty.id_number)}
+                    </div>
+                  `
+                  : ""
+              }
+
               ${renderTriageHistoryContent(
                 saResponderTriage,
               )}
@@ -10451,13 +10544,14 @@ const religion =
             <!-- TREATMENT -->
             <div
               style="
+                display:${isMinorIncidentDocumenterRecord ? "block" : "none"};
                 margin-top:20px;
                 padding-top:16px;
                 border-top:1px solid #e2e7ef;
               "
             >
-              <h4 style="margin:0 0 10px">
-                Treatment
+                <h4 style="margin:0 0 10px">
+                On-site Stabilization
               </h4>
 
               ${renderSaTreatmentHistoryContent(
@@ -10509,13 +10603,72 @@ const religion =
           </section>
 
 
-          <section class="record-section">
+          <section
+            class="record-section"
+            style="display:${healthcareRecordDetails ? "block" : "none"}"
+          >
             <h3>Healthcare Facility Documenter</h3>
 
             <p class="panel-subtitle">
               Complete healthcare facility victim documentation
             </p>
 
+
+            <!-- GENERAL INFORMATION -->
+            <div
+                style="
+                  margin-top:20px;
+                  padding-top:16px;
+                  border-top:1px solid #e2e7ef;
+                "
+              >
+                <h4 style="margin:0 0 10px">
+                  General Information
+                </h4>
+
+                <div class="casualty-detail-grid">
+                  ${detailItem(
+                    "Incident Name",
+                    incident.incident_name,
+                  )}
+
+                  ${detailItem(
+                    "Receiving Facility",
+                    healthcareFacility.facility_name ||
+                      healthcareCasualty.hospital_name,
+                  )}
+
+                  ${detailItem(
+                    "Time of Arrival of Victim",
+                    formatDate(
+                      healthcareFacilityEncounter.arrived_at,
+                    ),
+                  )}
+
+                  ${detailItem(
+                    "Disaster Plan Activation Time",
+                    formatDate(
+                      healthcareDocumenterDetails
+                        .disasterPlanActivationTime,
+                    ),
+                  )}
+
+                  ${detailItem(
+                    "Triage Before Transport to Healthcare Facility",
+                    formatTriageRecordValue(
+                      healthcareFacilityEncounter
+                        .pre_transport_triage_category,
+                    ),
+                  )}
+
+                  ${detailItem(
+                    "Disposition Upon Hospital Arrival",
+                    healthcareDocumenterDetails
+                      .dispositionUponHospitalArrival ||
+                      healthcareFacilityEncounter.disposition,
+                  )}
+                </div>
+              </div>
 
             <!-- PATIENT INFORMATION -->
             <div
@@ -10554,6 +10707,16 @@ const religion =
                   ${detailItem(
                     "Date of Birth",
                     healthcareCasualty.date_of_birth,
+                  )}
+
+                  ${detailItem(
+                    "Age",
+                    healthcareCasualty.estimated_age,
+                  )}
+
+                  ${detailItem(
+                    "Contact Number",
+                    healthcareCasualty.contact_number,
                   )}
 
                 </div>
@@ -13315,8 +13478,6 @@ function renderResponderSafetySummaryView(details) {
       ["Total responders / staff in call-down", totalResponders],
       ["Safe from Call Down", statusCounts.safe],
       ["Unsafe from Call Down", totalUnsafeStatus],
-      ["Ill", statusCounts.ill],
-      ["Injured", statusCounts.injured],
       ["Seeking medical care", statusCounts.seekingMedicalCare],
       ["Deceased", statusCounts.deceased],
       ["Not recorded", statusCounts.notRecorded],
@@ -15203,6 +15364,7 @@ function getIncidentDraftPayload(form) {
     barangay: formValue(form, "barangay"),
     municipality: formValue(form, "municipality"),
     province: formValue(form, "province"),
+    assignedAdminId: formValue(form, "assignedAdminId"),
     startedAt: formValue(form, "startedAt"),
     emsAlertedAt: formValue(form, "emsAlertedAt"),
     emsDeployedAt: formValue(form, "emsDeployedAt"),
@@ -15214,6 +15376,7 @@ function getHealthcareFacilityDraftPayload(form) {
   return {
     facilityName: formValue(form, "facilityName"),
     facilityLevel: formValue(form, "facilityLevel"),
+    assignedAdminId: formValue(form, "assignedAdminId"),
     address: formValue(form, "address"),
     barangay: formValue(form, "barangay"),
     municipality: formValue(form, "municipality"),
@@ -15507,6 +15670,10 @@ function bindDraftActions() {
 }
 
 function renderIncidentCreator(compact = false) {
+  const adminAccounts = isSuperAdmin()
+    ? getAdminAccountUsers()
+    : [];
+
   return `
     <section class="panel">
       <div class="panel-header">
@@ -15530,6 +15697,28 @@ function renderIncidentCreator(compact = false) {
           </select>
           <small class="field-hint">This setting is applied to all mobile victim records under this incident.</small>
         </label>
+        ${
+          isSuperAdmin()
+            ? `
+              <label class="field">
+                <span>Assign Incident to</span>
+                <select name="assignedAdminId" required>
+                  <option value="">Select an admin account</option>
+                  ${adminAccounts
+                    .map(
+                      (admin) => `
+                        <option value="${escapeHtml(admin.id)}">
+                          ${escapeHtml(adminOrganizationLabel(admin))}
+                        </option>
+                      `,
+                    )
+                    .join("")}
+                </select>
+                <small class="field-hint">Uses the admin office or organization; if none is set, the admin group name is shown.</small>
+              </label>
+            `
+            : ""
+        }
         <label class="field"><span>Incident exact location</span><input name="description" placeholder="Street, landmark, building, purok, or coordinates" /></label>
         <div class="form-grid three">
           <label class="field"><span>Barangay</span><input name="barangay" /></label>
@@ -15593,6 +15782,7 @@ function bindCreateIncidentForm() {
           incidentName: formValue(form, "incidentName"),
           disasterType: formValue(form, "disasterType"),
           triageMode: formValue(form, "triageMode"),
+          assignedAdminId: formValue(form, "assignedAdminId") || undefined,
           description: formValue(form, "description"),
           barangay: formValue(form, "barangay"),
           municipality: formValue(form, "municipality"),
@@ -15657,6 +15847,10 @@ function bindCreateEvacuationForm() {
 }
 
 function renderFacilityCreator() {
+  const adminAccounts = isSuperAdmin()
+    ? getAdminAccountUsers()
+    : [];
+
   return `
     <section class="panel">
       <div class="panel-header">
@@ -15679,6 +15873,28 @@ function renderFacilityCreator() {
           <label class="field"><span>Facility name</span><input name="facilityName" required /></label>
           <label class="field"><span>Facility level</span><select name="facilityLevel">${facilityLevels.map((level) => `<option value="${level}">${roleLabel(level)}</option>`).join("")}</select></label>
         </div>
+        ${
+          isSuperAdmin()
+            ? `
+              <label class="field">
+                <span>Assign healthcare facility to</span>
+                <select name="assignedAdminId" required>
+                  <option value="">Select an admin account</option>
+                  ${adminAccounts
+                    .map(
+                      (admin) => `
+                        <option value="${escapeHtml(admin.id)}">
+                          ${escapeHtml(adminOrganizationLabel(admin))}
+                        </option>
+                      `,
+                    )
+                    .join("")}
+                </select>
+                <small class="field-hint">Uses the admin office or organization; if none is set, the admin group name is shown.</small>
+              </label>
+            `
+            : ""
+        }
         <label class="field"><span>Street</span><input name="address" /></label>
         <div class="form-grid three">
           <label class="field"><span>Barangay</span><input name="barangay" /></label>
@@ -15937,6 +16153,7 @@ function bindCreateFacilityForm() {
         body: JSON.stringify({
           facilityName: formValue(form, "facilityName"),
           facilityLevel: formValue(form, "facilityLevel"),
+          assignedAdminId: formValue(form, "assignedAdminId") || undefined,
           address: formValue(form, "address"),
           barangay: formValue(form, "barangay"),
           municipality: formValue(form, "municipality"),

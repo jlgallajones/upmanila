@@ -166,6 +166,91 @@ function getFullName(record: CasualtyRecord): string {
     : "Unidentified Victim";
 }
 
+function extractRecordSectionValue(
+  text: string | null | undefined,
+  sectionTitle: string,
+  label: string,
+): string | null {
+  if (!text) {
+    return null;
+  }
+
+  const normalizeSectionTitle = (value: string) =>
+    value
+      .toLowerCase()
+      .replace(/\bpost\b/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  const targetSection = normalizeSectionTitle(sectionTitle);
+  const targetLabel = `${label}:`.toLowerCase();
+  let insideSection = false;
+
+  for (const rawLine of String(text).split(/\r?\n/)) {
+    const line = rawLine.trim();
+
+    if (!line) {
+      continue;
+    }
+
+    if (line.startsWith("[") && line.endsWith("]")) {
+      insideSection =
+        normalizeSectionTitle(line.slice(1, -1)) === targetSection;
+      continue;
+    }
+
+    if (insideSection && line.toLowerCase().startsWith(targetLabel)) {
+      return line.slice(label.length + 1).trim() || null;
+    }
+  }
+
+  return null;
+}
+
+function getRecordVictimCode(record: CasualtyRecord): string | null {
+  const notes = [
+    record.remarks,
+    record.latest_triage_assessment?.notes,
+  ];
+  const sections = [
+    "Field Responder Codes",
+    "Advanced Medical Responder Details",
+    "SA Responder Details",
+    "Minor Incident Documenter Details",
+  ];
+
+  for (const text of notes) {
+    for (const section of sections) {
+      const value = extractRecordSectionValue(
+        text,
+        section,
+        "Victim code",
+      );
+
+      if (value) {
+        return value;
+      }
+    }
+  }
+
+  return null;
+}
+
+function getRecordIdentifier(record: CasualtyRecord): {
+  label: "Victim Code" | "ID Number";
+  value: string;
+} {
+  const victimCode = getRecordVictimCode(record);
+
+  if (victimCode) {
+    return { label: "Victim Code", value: victimCode };
+  }
+
+  return {
+    label: "ID Number",
+    value: record.casualty.id_number?.trim() || "Unavailable",
+  };
+}
+
 function getQueuedCasualtyName(
   item: QueuedCasualtySubmission,
 ): string {
@@ -358,6 +443,16 @@ function getRecordTransportStatusLabel(record: CasualtyRecord): string {
   return "Transport: Pending";
 }
 
+function recordHasTransportSection(record: CasualtyRecord): boolean {
+  const role = record.encoder?.role;
+
+  return (
+    role === "sa_responder" ||
+    role === "minor_incident_documenter" ||
+    (role === "responder" && Boolean(record.latest_transport_record))
+  );
+}
+
 function getIncidentLocation(incident: Incident): string {
   const parts = [
     incident.barangay,
@@ -444,6 +539,8 @@ function formatRecordTriageCategory(record: CasualtyRecord): string {
   const category =
     record.latest_triage_assessment?.calculated_category ??
     record.latest_triage_assessment?.triage_category ??
+    record.latest_triage_assessment?.responder_category ??
+    record.latest_facility_encounter?.pre_transport_triage_category ??
     "";
 
   switch (category.trim().toLowerCase()) {
@@ -845,6 +942,8 @@ function getRecordTriageFilter(
   const category =
     record.latest_triage_assessment?.calculated_category ??
     record.latest_triage_assessment?.triage_category ??
+    record.latest_triage_assessment?.responder_category ??
+    record.latest_facility_encounter?.pre_transport_triage_category ??
     "";
 
   switch (category.toLowerCase()) {
@@ -870,8 +969,9 @@ function CasualtyCard({
   canEditPendingDeparture: boolean;
 }) {
   const fullName = getFullName(item);
-  const location = getLocation(item);
+  const identifier = getRecordIdentifier(item);
   const transportStatus = getRecordTransportStatusLabel(item);
+  const showTransportStatus = recordHasTransportSection(item);
   const statusLabel = formatRecordTriageCategory(item);
   const triageFilter = getRecordTriageFilter(item);
   const statusStyle = triageFilter
@@ -919,7 +1019,7 @@ function CasualtyCard({
           </Text>
 
           <Text style={styles.recordMeta} numberOfLines={1}>
-            ID Number: {item.casualty.id_number ?? "Unavailable"}
+            {identifier.label}: {identifier.value}
             {" · "}
             Age: {item.casualty.estimated_age ?? "Unavailable"}
           </Text>
@@ -949,20 +1049,24 @@ function CasualtyCard({
       <View style={styles.divider} />
 
       <View style={styles.recordBottomRow}>
-        <View style={styles.locationRow}>
-          <Ionicons
-            name="car-outline"
-            size={14}
-            color={COLORS.secondaryText}
-          />
+        {showTransportStatus ? (
+          <View style={styles.locationRow}>
+            <Ionicons
+              name="car-outline"
+              size={14}
+              color={COLORS.secondaryText}
+            />
 
-          <Text
-            style={styles.locationText}
-            numberOfLines={1}
-          >
-            {transportStatus}
-          </Text>
-        </View>
+            <Text
+              style={styles.locationText}
+              numberOfLines={1}
+            >
+              {transportStatus}
+            </Text>
+          </View>
+        ) : (
+          <View />
+        )}
 
         <View style={styles.syncRow}>
           <View

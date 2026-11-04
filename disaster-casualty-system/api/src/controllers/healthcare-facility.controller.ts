@@ -22,6 +22,7 @@ type CreateHealthcareFacilityRequest = {
   contactNumber?: string;
   latitude?: number;
   longitude?: number;
+  assignedAdminId?: string;
 };
 
 type UpdateHealthcareFacilityRequest = Partial<CreateHealthcareFacilityRequest> & {
@@ -210,6 +211,7 @@ export async function createHealthcareFacility(
       contactNumber,
       latitude,
       longitude,
+      assignedAdminId,
     } = request.body;
     const user = getAuthenticatedUser(request);
 
@@ -284,6 +286,59 @@ export async function createHealthcareFacility(
       return;
     }
 
+    const normalizedAssignedAdminId =
+      assignedAdminId?.trim() || null;
+
+    if (
+      normalizedAssignedAdminId &&
+      creator.role !== "super_admin"
+    ) {
+      response.status(403).json({
+        success: false,
+        message:
+          "Only super admin accounts can assign a healthcare facility to another admin account.",
+      });
+      return;
+    }
+
+    let facilityOwnerId = user.id;
+
+    if (normalizedAssignedAdminId) {
+      const { data: assignedAdmin, error: assignedAdminError } =
+        await supabase
+          .from("users")
+          .select("id, role, is_active")
+          .eq("id", normalizedAssignedAdminId)
+          .maybeSingle();
+
+      if (assignedAdminError) {
+        throw new Error(
+          `Unable to retrieve assigned admin account: ${assignedAdminError.message}`,
+        );
+      }
+
+      if (
+        !assignedAdmin ||
+        !["admin", "administrator"].includes(assignedAdmin.role)
+      ) {
+        response.status(400).json({
+          success: false,
+          message: "Select an active admin account for this facility.",
+        });
+        return;
+      }
+
+      if (!assignedAdmin.is_active) {
+        response.status(400).json({
+          success: false,
+          message: "The selected admin account is inactive.",
+        });
+        return;
+      }
+
+      facilityOwnerId = assignedAdmin.id;
+    }
+
     let existingQuery = supabase
       .from("healthcare_facilities")
       .select(healthcareFacilitySelect)
@@ -291,8 +346,14 @@ export async function createHealthcareFacility(
       .eq("is_active", true)
       .limit(1);
 
-    if (creator.role !== "super_admin") {
-      existingQuery = existingQuery.eq("created_by", user.id);
+    if (
+      creator.role !== "super_admin" ||
+      normalizedAssignedAdminId
+    ) {
+      existingQuery = existingQuery.eq(
+        "created_by",
+        facilityOwnerId,
+      );
     }
 
     const normalizedMunicipality = municipality?.trim();
@@ -344,7 +405,7 @@ export async function createHealthcareFacility(
         latitude: latitude ?? null,
         longitude: longitude ?? null,
         is_active: true,
-        created_by: user.id,
+        created_by: facilityOwnerId,
       })
       .select(healthcareFacilitySelect)
       .single();

@@ -46,6 +46,7 @@ type CreateIncidentRequest = {
   barangay?: string;
   startedAt?: string;
   triageMode?: IncidentTriageMode;
+  assignedAdminId?: string;
 };
 
 type UpdateIncidentRequest = Partial<CreateIncidentRequest> & {
@@ -2299,6 +2300,7 @@ export async function createIncident(
       barangay,
       startedAt,
       triageMode,
+      assignedAdminId,
     } = request.body;
     const user = getAuthenticatedUser(request);
 
@@ -2348,6 +2350,59 @@ export async function createIncident(
       return;
     }
 
+    const normalizedAssignedAdminId =
+      assignedAdminId?.trim() || null;
+
+    if (
+      normalizedAssignedAdminId &&
+      creator.role !== "super_admin"
+    ) {
+      response.status(403).json({
+        success: false,
+        message:
+          "Only super admin accounts can assign incidents to another admin account.",
+      });
+      return;
+    }
+
+    let incidentOwnerId = user.id;
+
+    if (normalizedAssignedAdminId) {
+      const { data: assignedAdmin, error: assignedAdminError } =
+        await supabase
+          .from("users")
+          .select("id, role, is_active")
+          .eq("id", normalizedAssignedAdminId)
+          .maybeSingle();
+
+      if (assignedAdminError) {
+        throw new Error(
+          `Unable to retrieve assigned admin account: ${assignedAdminError.message}`,
+        );
+      }
+
+      if (
+        !assignedAdmin ||
+        !["admin", "administrator"].includes(assignedAdmin.role)
+      ) {
+        response.status(400).json({
+          success: false,
+          message: "Select an active admin account for this incident.",
+        });
+        return;
+      }
+
+      if (!assignedAdmin.is_active) {
+        response.status(400).json({
+          success: false,
+          message: "The selected admin account is inactive.",
+        });
+        return;
+      }
+
+      incidentOwnerId = assignedAdmin.id;
+    }
+
     if (!incidentManagerRoles.has(creator.role)) {
       response.status(403).json({
         success: false,
@@ -2386,10 +2441,13 @@ export async function createIncident(
       .order("started_at", { ascending: false })
       .limit(1);
 
-    if (creator.role !== "super_admin") {
+    if (
+      creator.role !== "super_admin" ||
+      normalizedAssignedAdminId
+    ) {
       existingIncidentQuery = existingIncidentQuery.eq(
         "created_by",
-        user.id,
+        incidentOwnerId,
       );
     }
 
@@ -2424,7 +2482,7 @@ export async function createIncident(
         started_at: startedAt ?? new Date().toISOString(),
         status: "active",
         triage_mode: normalizedTriageMode,
-        created_by: user.id,
+        created_by: incidentOwnerId,
       })
       .select(`
         id,
@@ -2471,7 +2529,9 @@ export async function createIncident(
         status: incident.status,
       },
       scopeAdminId:
-        user.role === "super_admin" ? null : incident.created_by,
+        user.role === "super_admin" && !normalizedAssignedAdminId
+          ? null
+          : incident.created_by,
     });
 
     response.status(201).json({

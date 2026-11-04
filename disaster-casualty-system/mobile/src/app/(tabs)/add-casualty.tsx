@@ -6883,7 +6883,13 @@ const victimCodeAlreadyExists = useMemo(() => {
       );
       const defaultTriageSystem =
         getDefaultTriageSystemForCurrentFlow();
-      const nextTriageSystem = currentSystemIsAllowed
+      // Replace the old START initializer when a role has an explicit default.
+      const shouldApplyRoleDefault =
+        current.triageSystem === "START" &&
+        (isFieldResponderFlow || isShortAmpResponderFlow);
+      const nextTriageSystem = shouldApplyRoleDefault
+        ? defaultTriageSystem
+        : currentSystemIsAllowed
         ? current.triageSystem
         : allowedSystems.includes(
               defaultTriageSystem as TriageSystemOption,
@@ -6892,7 +6898,8 @@ const victimCodeAlreadyExists = useMemo(() => {
           : allowedSystems[0] ?? "";
       if (
         triageStage === current.triageStage &&
-        currentSystemIsAllowed
+        currentSystemIsAllowed &&
+        !shouldApplyRoleDefault
       ) {
         return current;
       }
