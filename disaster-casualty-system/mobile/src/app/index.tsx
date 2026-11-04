@@ -32,14 +32,16 @@ const dostPchrdLogo = require("../assets/DOST PCHRD Logo.png");
 const LOGO_SIZE = 148;
 const BALL_SIZE = LOGO_SIZE * 0.19;
 const RED_BALL_SIZE = BALL_SIZE - 2;
-const LOGO_ROLL_DURATION = 850;
-const LOGO_PATH_INPUT = [0, 0.404, 0.492, 0.588, 0.684, 1];
-const LOGO_PATH_X_YELLOW = [1, 1, 1, 1, 1, 5.95];
-const LOGO_PATH_Y_YELLOW = [30, 58.95, 65.26, 72.13, 79.01, 100.63];
-const LOGO_PATH_X_GREEN = [1, 2.11, 3.46, 7.16, 11.46, 33.23];
-const LOGO_PATH_Y_GREEN = [61.77, 90.63, 96.73, 102.53, 107.61, 112];
-const LOGO_PATH_X_RED = [2.57, 22.29, 28.6, 35.48, 42.36, 65];
-const LOGO_PATH_Y_RED = [93.42, 112, 112, 112, 112, 112];
+const LOGO_ROLL_DURATION = 700;
+const LOGO_PATH_INPUT_YELLOW = [0, 0.714, 1];
+const LOGO_PATH_INPUT_GREEN = [0, 0.497, 1];
+const LOGO_PATH_INPUT_RED = [0, 0.279, 1];
+const LOGO_PATH_X_YELLOW = [1, 1, 42];
+const LOGO_PATH_Y_YELLOW = [7, 112, 112];
+const LOGO_PATH_X_GREEN = [1, 1, 74];
+const LOGO_PATH_Y_GREEN = [39, 112, 112];
+const LOGO_PATH_X_RED = [1, 1, 106];
+const LOGO_PATH_Y_RED = [71, 112, 112];
 
 const COLORS = createThemePalette({
   cyan: "#00838F",
@@ -171,14 +173,14 @@ export default function LandingScreen() {
                   transform: [
                     {
                       translateX: logoPathMotion.interpolate({
-                        inputRange: LOGO_PATH_INPUT,
+                        inputRange: LOGO_PATH_INPUT_RED,
                         outputRange: LOGO_PATH_X_RED,
                         extrapolate: "clamp",
                       }),
                     },
                     {
                       translateY: logoPathMotion.interpolate({
-                        inputRange: LOGO_PATH_INPUT,
+                        inputRange: LOGO_PATH_INPUT_RED,
                         outputRange: LOGO_PATH_Y_RED,
                         extrapolate: "clamp",
                       }),
@@ -205,14 +207,14 @@ export default function LandingScreen() {
                   transform: [
                     {
                       translateX: logoPathMotion.interpolate({
-                        inputRange: LOGO_PATH_INPUT,
+                        inputRange: LOGO_PATH_INPUT_GREEN,
                         outputRange: LOGO_PATH_X_GREEN,
                         extrapolate: "clamp",
                       }),
                     },
                     {
                       translateY: logoPathMotion.interpolate({
-                        inputRange: LOGO_PATH_INPUT,
+                        inputRange: LOGO_PATH_INPUT_GREEN,
                         outputRange: LOGO_PATH_Y_GREEN,
                         extrapolate: "clamp",
                       }),
@@ -239,14 +241,14 @@ export default function LandingScreen() {
                   transform: [
                     {
                       translateX: logoPathMotion.interpolate({
-                        inputRange: LOGO_PATH_INPUT,
+                        inputRange: LOGO_PATH_INPUT_YELLOW,
                         outputRange: LOGO_PATH_X_YELLOW,
                         extrapolate: "clamp",
                       }),
                     },
                     {
                       translateY: logoPathMotion.interpolate({
-                        inputRange: LOGO_PATH_INPUT,
+                        inputRange: LOGO_PATH_INPUT_YELLOW,
                         outputRange: LOGO_PATH_Y_YELLOW,
                         extrapolate: "clamp",
                       }),

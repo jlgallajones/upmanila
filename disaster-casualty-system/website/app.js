@@ -2839,8 +2839,8 @@ function renderLogin() {
           <div class="institution-row">
             <span></span>
             <div>
-              <strong>Republic of the Philippines</strong>
-              <small>University of the Philippines</small>
+              <strong>University of the Philippines Manila</strong>
+              <small>Disaster Risk Reduction and Management in Health</small>
             </div>
             <span></span>
           </div>

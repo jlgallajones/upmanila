@@ -647,52 +647,34 @@ button {
 
 .medsort-logo-ball-yellow {
   background-image: url("./assets/medsort-ball-yellow.png");
-  animation: medsortLPathYellow 2.4s linear infinite alternate;
+  animation: medsortLPathYellow 2s linear infinite alternate;
 }
 
 .medsort-logo-ball-red {
   background-image: url("./assets/medsort-ball-red.png");
-  animation: medsortLPathRed 2.4s linear infinite alternate;
+  animation: medsortLPathRed 2s linear infinite alternate;
 }
 
 .medsort-logo-ball-green {
-  animation: medsortLPathGreen 2.4s linear infinite alternate;
+  animation: medsortLPathGreen 2s linear infinite alternate;
 }
 
 @keyframes medsortLPathYellow {
   0% {
     left: 1%;
-    top: 20%;
+    top: 5%;
     transform: rotate(0deg);
   }
 
-  40.4% {
+  71.4% {
     left: 1%;
-    top: 39.61%;
-    transform: rotate(145deg);
-  }
-
-  49.2% {
-    left: 1%;
-    top: 43.88%;
-    transform: rotate(177deg);
-  }
-
-  58.8% {
-    left: 1%;
-    top: 48.54%;
-    transform: rotate(211deg);
-  }
-
-  68.4% {
-    left: 1%;
-    top: 53.2%;
-    transform: rotate(246deg);
+    top: 76%;
+    transform: rotate(300deg);
   }
 
   100% {
-    left: 4.03%;
-    top: 67.77%;
+    left: 28.38%;
+    top: 76%;
     transform: rotate(360deg);
   }
 }
@@ -700,36 +682,18 @@ button {
 @keyframes medsortLPathGreen {
   0% {
     left: 1%;
-    top: 41.53%;
+    top: 26.35%;
     transform: rotate(0deg);
   }
 
-  40.4% {
-    left: 1.51%;
-    top: 61.1%;
-    transform: rotate(145deg);
-  }
-
-  49.2% {
-    left: 2.21%;
-    top: 65.27%;
-    transform: rotate(177deg);
-  }
-
-  58.8% {
-    left: 4.91%;
-    top: 68.98%;
-    transform: rotate(211deg);
-  }
-
-  68.4% {
-    left: 7.96%;
-    top: 72.4%;
-    transform: rotate(246deg);
+  49.7% {
+    left: 1%;
+    top: 76%;
+    transform: rotate(220deg);
   }
 
   100% {
-    left: 22.47%;
+    left: 50%;
     top: 76%;
     transform: rotate(360deg);
   }
@@ -737,37 +701,19 @@ button {
 
 @keyframes medsortLPathRed {
   0% {
-    left: 1.75%;
-    top: 63.01%;
+    left: 1%;
+    top: 47.97%;
     transform: rotate(0deg);
   }
 
-  40.4% {
-    left: 15.06%;
+  27.9% {
+    left: 1%;
     top: 76%;
-    transform: rotate(145deg);
-  }
-
-  49.2% {
-    left: 19.34%;
-    top: 76%;
-    transform: rotate(177deg);
-  }
-
-  58.8% {
-    left: 24%;
-    top: 76%;
-    transform: rotate(211deg);
-  }
-
-  68.4% {
-    left: 28.66%;
-    top: 76%;
-    transform: rotate(246deg);
+    transform: rotate(140deg);
   }
 
   100% {
-    left: 65%;
+    left: 71.62%;
     top: 76%;
     transform: rotate(360deg);
   }
