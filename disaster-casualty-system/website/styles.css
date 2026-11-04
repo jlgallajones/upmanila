@@ -647,16 +647,16 @@ button {
 
 .medsort-logo-ball-yellow {
   background-image: url("./assets/medsort-ball-yellow.png");
-  animation: medsortLPathYellow 2s linear infinite alternate;
+  animation: medsortLPathYellow 1.8s linear infinite alternate;
 }
 
 .medsort-logo-ball-red {
   background-image: url("./assets/medsort-ball-red.png");
-  animation: medsortLPathRed 2s linear infinite alternate;
+  animation: medsortLPathRed 1.8s linear infinite alternate;
 }
 
 .medsort-logo-ball-green {
-  animation: medsortLPathGreen 2s linear infinite alternate;
+  animation: medsortLPathGreen 1.8s linear infinite alternate;
 }
 
 @keyframes medsortLPathYellow {
