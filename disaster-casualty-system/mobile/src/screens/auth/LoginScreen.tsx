@@ -65,6 +65,14 @@ export default function LoginScreen() {
       error instanceof Error ? error.message.trim() : "";
     const normalizedMessage = message.toLowerCase();
 
+    if (normalizedMessage.includes("user does not exist")) {
+      return "User does not exist.";
+    }
+
+    if (normalizedMessage.includes("wrong password")) {
+      return "Wrong password. Please check your password and try again.";
+    }
+
     if (
       normalizedMessage.includes("invalid email or password") ||
       normalizedMessage.includes("invalid login credentials")

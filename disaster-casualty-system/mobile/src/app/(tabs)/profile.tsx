@@ -921,11 +921,11 @@ export default function ProfileScreen() {
         </Pressable>
 
         <Text style={styles.footerText}>
-          SCRIBER
+          Standardized Victim Reporting for Incidents and Basic Emergency Response
         </Text>
 
         <Text style={styles.footerVersion}>
-          University of the Philippines
+          University of the Philippines Manila Disaster Risk Reduction and Management in Health Program
         </Text>
 
         <View style={styles.bottomSpacing} />

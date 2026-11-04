@@ -449,9 +449,18 @@ export async function login(
         reason: authError?.message ?? "No authenticated user returned.",
       });
 
+      const isEmailConfirmationFailure =
+        authError?.message?.toLowerCase().includes("email not confirmed");
+      const existingProfile = isEmailConfirmationFailure
+        ? null
+        : await findProfileByEmail(email);
+
       response.status(401).json({
         success: false,
-        message: getAuthenticationFailureMessage(authError?.message),
+        message:
+          !isEmailConfirmationFailure && !existingProfile
+            ? "User does not exist."
+            : getAuthenticationFailureMessage(authError?.message),
       });
       return;
     }

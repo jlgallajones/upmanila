@@ -1299,6 +1299,7 @@ function formatSitrepDate(value: string | null | undefined): string {
   }
 
   return date.toLocaleString("en-PH", {
+    timeZone: "Asia/Manila",
     year: "numeric",
     month: "short",
     day: "2-digit",

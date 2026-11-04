@@ -1664,6 +1664,11 @@ type SelectedPhoto = {
   base64Data?: string;
 };
 
+type PhotoPreview = {
+  uri: string;
+  fileName: string;
+};
+
 type PhotoTarget = "casualty" | "pcr";
 
 type EvacuationCenterLabelSource = Pick<
@@ -3648,46 +3653,6 @@ function normalizeTreatmentStrategy(
     default:
       return "unknown";
   }
-}
-
-function getAutomaticTreatmentStrategyForTriageSystem(
-  value: string,
-): string {
-  const normalized = value
-    .trim()
-    .toLowerCase()
-    .replace(/[\s_-]+/g, "");
-
-  if (!normalized) {
-    return "";
-  }
-
-  if (["stieve", "salt"].includes(normalized)) {
-    return "Stay and Play";
-  }
-
-  if (
-    [
-      "start",
-      "sieve",
-      "sievesort",
-      "ptt",
-      "mptt",
-      "mstart",
-      "jumpstart",
-      "mitt",
-    ].includes(
-      normalized,
-    )
-  ) {
-    return "Scooter";
-  }
-
-  if (["careflight", "homebush"].includes(normalized)) {
-    return "Scoop and Run/Load and Go";
-  }
-
-  return "Unknown";
 }
 
 function normalizeTransferredOut(
@@ -5867,6 +5832,8 @@ const [
     isExistingAttachmentsVisible,
     setIsExistingAttachmentsVisible,
   ] = useState(false);
+  const [photoPreview, setPhotoPreview] =
+    useState<PhotoPreview | null>(null);
 
   const [photoTarget, setPhotoTarget] =
   useState<PhotoTarget>("casualty");
@@ -6330,10 +6297,12 @@ const victimCodeAlreadyExists = useMemo(() => {
       treatmentAreaName: isSaResponderFlow
         ? undefined
         : form.treatmentAreaName || undefined,
-      stabilizationStartedAt: isSaResponderFlow
+      stabilizationStartedAt: isFieldResponderFlow || isSaResponderFlow
         ? undefined
         : parseDateTimeInput(form.stabilizationStartedTime),
-      stabilizedAt: parseDateTimeInput(form.stabilizedTime),
+      stabilizedAt: isFieldResponderFlow
+        ? undefined
+        : parseDateTimeInput(form.stabilizedTime),
       treatmentDetails: isHealthcareDocumenterFlow
         ? buildHealthcareDocumenterTreatmentDetails(form)
         : undefined,
@@ -6347,6 +6316,7 @@ const victimCodeAlreadyExists = useMemo(() => {
     form,
     initialTreatmentSignature,
     isEditing,
+    isFieldResponderFlow,
     isHealthcareDocumenterFlow,
     isSaResponderFlow,
   ]);
@@ -6911,17 +6881,18 @@ const victimCodeAlreadyExists = useMemo(() => {
       const currentSystemIsAllowed = allowedSystems.includes(
         current.triageSystem as TriageSystemOption,
       );
+      const defaultTriageSystem =
+        getDefaultTriageSystemForCurrentFlow();
       const nextTriageSystem = currentSystemIsAllowed
         ? current.triageSystem
-        : allowedSystems[0] ?? "";
-      const automaticTreatment = isFieldResponderFlow
-        ? getAutomaticTreatmentStrategyForTriageSystem(nextTriageSystem)
-        : current.treatmentStrategy;
-
+        : allowedSystems.includes(
+              defaultTriageSystem as TriageSystemOption,
+            )
+          ? defaultTriageSystem
+          : allowedSystems[0] ?? "";
       if (
         triageStage === current.triageStage &&
-        currentSystemIsAllowed &&
-        current.treatmentStrategy === automaticTreatment
+        currentSystemIsAllowed
       ) {
         return current;
       }
@@ -6933,7 +6904,7 @@ const victimCodeAlreadyExists = useMemo(() => {
         triageAssessmentAnswers: currentSystemIsAllowed
           ? current.triageAssessmentAnswers
           : {},
-        treatmentStrategy: automaticTreatment,
+        treatmentStrategy: current.treatmentStrategy,
       };
     });
   }, [
@@ -6941,6 +6912,7 @@ const victimCodeAlreadyExists = useMemo(() => {
     currentUserRole,
     isFieldResponderFlow,
     isEditing,
+    isShortAmpResponderFlow,
   ]);
 
   useEffect(() => {
@@ -7527,9 +7499,7 @@ const victimCodeAlreadyExists = useMemo(() => {
           triageAssessmentAnswers: {},
           triageAssistanceMode: nextTriageMode,
           triageAssistanceLocked: current.triageAssistanceLocked,
-          treatmentStrategy: isFieldResponderFlow
-            ? getAutomaticTreatmentStrategyForTriageSystem(nextSystem)
-            : current.treatmentStrategy,
+          treatmentStrategy: current.treatmentStrategy,
         };
       }
 
@@ -7555,13 +7525,7 @@ const victimCodeAlreadyExists = useMemo(() => {
             ? current.triageAssistanceMode
             : "assisted",
           triageAssistanceLocked: current.triageAssistanceLocked,
-          treatmentStrategy: isFieldResponderFlow
-            ? getAutomaticTreatmentStrategyForTriageSystem(
-                currentSystemIsAllowed
-                  ? current.triageSystem
-                  : allowedSystems[0] ?? "",
-              )
-            : current.treatmentStrategy,
+          treatmentStrategy: current.treatmentStrategy,
         };
       }
 
@@ -8025,6 +7989,14 @@ function handleTriageAssessmentDone() {
   }
 
   function getDefaultTriageSystemForCurrentFlow(): string {
+    if (isFieldResponderFlow) {
+      return "SIEVE";
+    }
+
+    if (isShortAmpResponderFlow) {
+      return "SORT";
+    }
+
     const defaultStage = getDefaultTriageStageForCurrentFlow();
     return getAllowedTriageSystemOptions(defaultStage)[0] ?? "START";
   }
@@ -8638,7 +8610,13 @@ if (
             form.triageTime,
             "Invalid triage time",
             "triage time",
-          )
+          ) &&
+          (!isShortAmpResponderFlow ||
+            validateOptionalDateTime(
+              form.stabilizedTime,
+              "Invalid stabilized time",
+              "stabilized time",
+            ))
         );
 
       case "Management": {
@@ -8877,11 +8855,15 @@ if (
 
       case "Treatment": {
         if (isFieldResponderFlow) {
-          return validateOptionalDateTime(
-            form.stabilizedTime,
-            "Invalid stabilized time",
-            "stabilized time",
-          );
+          if (!form.treatmentStrategy.trim()) {
+            Alert.alert(
+              "On-site action required",
+              "Select the on-site action performed for this victim.",
+            );
+            return false;
+          }
+
+          return true;
         }
 
         if (!form.treatmentStrategy.trim()) {
@@ -8934,6 +8916,10 @@ if (
             "Victim marking required",
             'Confirm "Did you mark your victims?" before submitting.',
           );
+        }
+
+        if (isFieldResponderFlow) {
+          return true;
         }
 
         return (
@@ -12328,7 +12314,7 @@ async function ensureResponderSafetyResponseSaved() {
       if (isFieldResponderFlow) {
         return form.treatmentStrategy.trim()
           ? null
-          : "Select a triage system before continuing so treatment can be assigned automatically.";
+          : "Select the on-site action performed for this victim.";
       }
 
       if (!form.treatmentStrategy.trim()) {
@@ -14465,6 +14451,25 @@ if (
               }
             />
 
+            {isShortAmpResponderFlow ? (
+              <CurrentTimeField
+                label="STABILIZED TIME"
+                value={form.stabilizedTime}
+                placeholder="mm/dd/yyyy hh:mm"
+                icon="checkmark-circle-outline"
+                buttonLabel="Use current stabilized time"
+                onChangeText={(value) =>
+                  updateField("stabilizedTime", value)
+                }
+                onUseCurrent={() =>
+                  updateField(
+                    "stabilizedTime",
+                    formatDateTimeForInput(new Date()),
+                  )
+                }
+              />
+            ) : null}
+
             <FormField
               label="TRIAGE NOTES"
               value={form.triageNotes}
@@ -14906,10 +14911,11 @@ if (
 
   function renderStatusStep() {
     if (isFieldResponderFlow) {
-      const automaticTreatment =
-        getAutomaticTreatmentStrategyForTriageSystem(
-          form.triageSystem,
-        ) || "Not assigned";
+      const selectedOnsiteAction = form.treatmentStrategy.trim()
+        ? formatTreatmentStrategy(
+            normalizeTreatmentStrategy(form.treatmentStrategy),
+          )
+        : "Not selected";
 
       return (
         <>
@@ -14924,10 +14930,10 @@ if (
                 INTERVENTIONS DONE
               </Text>
               <Text style={styles.automaticTreatmentValue}>
-                {automaticTreatment}
+                {selectedOnsiteAction}
               </Text>
               <Text style={styles.automaticTreatmentHint}>
-                Assigned automatically from {formatTriageSystem(form.triageSystem) || "the selected triage system"}.
+                Selected from the On-site Action step.
               </Text>
             </View>
           </View>
@@ -15159,57 +15165,21 @@ if (
 }
 
   function renderFieldResponderTreatmentStep() {
-    const automaticTreatment =
-      formatTreatmentStrategy(
-        normalizeTreatmentStrategy(form.treatmentStrategy),
-      ) ||
-      form.treatmentStrategy ||
-      "Not assigned";
-
     return (
       <>
-        <SectionLabel title="Treatment assignment" />
+        <SectionLabel title="On-site action" />
 
-        <View style={styles.automaticTreatmentCard}>
-          <Ionicons
-            name="lock-closed-outline"
-            size={18}
-            color={COLORS.text}
-          />
-          <View style={styles.automaticTreatmentTextGroup}>
-            <Text style={styles.automaticTreatmentLabel}>
-              AUTOMATIC TREATMENT
-            </Text>
-            <Text style={styles.automaticTreatmentValue}>
-              {automaticTreatment}
-            </Text>
-            <Text style={styles.automaticTreatmentHint}>
-              Assigned automatically from {formatTriageSystem(form.triageSystem) || "the selected triage system"}.
-            </Text>
-          </View>
-        </View>
-
-        <CurrentTimeField
-          label="STABILIZED TIME"
-          value={form.stabilizedTime}
-          placeholder="mm/dd/yyyy hh:mm"
-          icon="checkmark-circle-outline"
-          buttonLabel="Use current stabilized time"
-          onChangeText={(value) =>
-            updateField("stabilizedTime", value)
-          }
-          onUseCurrent={() =>
-            updateField(
-              "stabilizedTime",
-              formatDateTimeForInput(new Date()),
-            )
-          }
+        <SelectField
+          label="ONSITE ACTION"
+          value={form.treatmentStrategy}
+          placeholder="Select onsite action"
+          onPress={() => openChoiceSheet("treatmentStrategy")}
         />
 
         <FormField
-          label="TREATMENT NOTES"
+          label="ACTION NOTES"
           value={form.treatmentNotes}
-          placeholder="Treatment or stabilization observations"
+          placeholder="Onsite action observations"
           multiline
           onChangeText={(value) =>
             updateField("treatmentNotes", value)
@@ -15620,11 +15590,26 @@ if (
       >
         {photos.map((photo, index) => (
           <View key={`${photo.uri}-${index}`} style={styles.pendingPhotoTile}>
-            <Image
-              source={{ uri: photo.uri }}
-              style={styles.pendingPhotoThumb}
-              resizeMode="cover"
-            />
+            <Pressable
+              onPress={() =>
+                setPhotoPreview({
+                  uri: photo.uri,
+                  fileName: photo.fileName,
+                })
+              }
+              style={({ pressed }) => [
+                styles.pendingPhotoPreviewButton,
+                pressed && styles.pressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={`Preview photo ${index + 1}`}
+            >
+              <Image
+                source={{ uri: photo.uri }}
+                style={styles.pendingPhotoThumb}
+                resizeMode="cover"
+              />
+            </Pressable>
             <Pressable
               onPress={() => removePendingPhoto(target, index)}
               style={({ pressed }) => [
@@ -15680,7 +15665,7 @@ if (
             </Text>
             <Text style={styles.uploadDescription}>
               {photoCount > 0
-                ? "Tap to add more photos. Photos upload when you save."
+                ? "Tap a photo to preview it, or tap here to add more photos."
                 : "Select or capture one or more photos for this victim."}
             </Text>
           </View>
@@ -15728,7 +15713,7 @@ if (
 
             <Text style={styles.uploadDescription}>
               {photoCount > 0
-                ? "Tap to add more photos. Photos upload when you save."
+                ? "Tap a photo to preview it, or tap here to add more photos."
                 : "Capture or import one or more photos of the currently used Patient Care Report."}
             </Text>
           </View>
@@ -15848,11 +15833,26 @@ if (
                       style={styles.existingAttachmentRow}
                     >
                       {isImage && attachment.signed_url ? (
-                        <Image
-                          source={{ uri: attachment.signed_url }}
-                          style={styles.existingAttachmentImage}
-                          resizeMode="cover"
-                        />
+                        <Pressable
+                          onPress={() =>
+                            setPhotoPreview({
+                              uri: attachment.signed_url as string,
+                              fileName: attachment.file_name,
+                            })
+                          }
+                          style={({ pressed }) => [
+                            styles.existingAttachmentPreviewButton,
+                            pressed && styles.pressed,
+                          ]}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Preview ${attachment.file_name}`}
+                        >
+                          <Image
+                            source={{ uri: attachment.signed_url }}
+                            style={styles.existingAttachmentImage}
+                            resizeMode="cover"
+                          />
+                        </Pressable>
                       ) : (
                         <View style={styles.existingAttachmentIcon}>
                           <Ionicons
@@ -15891,6 +15891,62 @@ if (
                 Done
               </Text>
             </Pressable>
+          </View>
+        </View>
+      </Modal>
+    );
+  }
+
+  function renderPhotoPreviewModal() {
+    return (
+      <Modal
+        visible={photoPreview !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPhotoPreview(null)}
+      >
+        <View style={styles.photoPreviewBackdrop}>
+          <Pressable
+            onPress={() => setPhotoPreview(null)}
+            style={StyleSheet.absoluteFill}
+            accessibilityRole="button"
+            accessibilityLabel="Close photo preview"
+          />
+
+          <View style={styles.photoPreviewContent}>
+            {photoPreview ? (
+              <Image
+                source={{ uri: photoPreview.uri }}
+                style={styles.photoPreviewImage}
+                resizeMode="contain"
+                accessibilityLabel={photoPreview.fileName}
+              />
+            ) : null}
+
+            <View style={styles.photoPreviewToolbar}>
+              <Text
+                style={styles.photoPreviewFileName}
+                numberOfLines={1}
+              >
+                {photoPreview?.fileName}
+              </Text>
+
+              <Pressable
+                onPress={() => setPhotoPreview(null)}
+                style={({ pressed }) => [
+                  styles.photoPreviewCloseButton,
+                  pressed && styles.pressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Close photo preview"
+              >
+                <Ionicons
+                  name="close"
+                  size={22}
+                  color={COLORS.white}
+                />
+              </Pressable>
+            </View>
           </View>
         </View>
       </Modal>
@@ -16366,6 +16422,7 @@ if (
 </Modal>
 
       {renderExistingAttachmentsModal()}
+      {renderPhotoPreviewModal()}
 
       <ChoiceSheet
         visible={activeChoiceSheet !== null}
@@ -17400,7 +17457,7 @@ triageModeOptionTextSelected: {
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 12,
-    backgroundColor: COLORS.maroon,
+    backgroundColor: "#000000",
   },
   assessmentDoneButtonText: {
     color: COLORS.white,
@@ -17764,6 +17821,10 @@ triageModeOptionTextSelected: {
     width: 82,
     position: "relative",
   },
+  pendingPhotoPreviewButton: {
+    borderRadius: 10,
+    overflow: "hidden",
+  },
   pendingPhotoThumb: {
     width: 82,
     height: 70,
@@ -17859,6 +17920,10 @@ triageModeOptionTextSelected: {
     borderRadius: 9,
     backgroundColor: COLORS.surface,
   },
+  existingAttachmentPreviewButton: {
+    borderRadius: 9,
+    overflow: "hidden",
+  },
   existingAttachmentIcon: {
     width: 60,
     height: 60,
@@ -17914,6 +17979,51 @@ triageModeOptionTextSelected: {
     color: COLORS.white,
     fontSize: 13,
     fontWeight: "900",
+  },
+  photoPreviewBackdrop: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    backgroundColor: "rgba(0,0,0,0.88)",
+  },
+  photoPreviewContent: {
+    width: "100%",
+    height: "86%",
+    maxWidth: 720,
+    justifyContent: "center",
+  },
+  photoPreviewImage: {
+    width: "100%",
+    height: "100%",
+  },
+  photoPreviewToolbar: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    minHeight: 54,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: "rgba(0,0,0,0.68)",
+  },
+  photoPreviewFileName: {
+    flex: 1,
+    color: COLORS.white,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  photoPreviewCloseButton: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.16)",
   },
 
   reviewCard: {

@@ -2967,7 +2967,10 @@ function renderDashboardShell() {
         <div class="sidebar-footer">
           <div class="sidebar-account-row">
             <button class="user-chip" type="button" id="profileButton" title="Open profile">
-              <div class="user-avatar">${escapeHtml(state.user.full_name?.slice(0, 1) || "A")}</div>
+              <div class="user-avatar">
+                <span class="user-avatar-initial">${escapeHtml(state.user.full_name?.slice(0, 1) || "A")}</span>
+                <span class="user-avatar-profile-icon" aria-hidden="true"></span>
+              </div>
               <div class="user-chip-text">
               <strong>${escapeHtml(state.user.full_name)}</strong>
               <span>${roleLabel(state.user.role)}</span>
@@ -5266,8 +5269,8 @@ function renderAnalyticsGraphGrid(analytics, incidentId) {
       </div>`,
     )}
     ${renderAnalyticsSectionIfVisible(
-      "Treatment / Stabilization & Responder Safety",
-      "Stabilization strategies and responder safety responses for the selected incident.",
+      "Onsite Action and Responder Safety",
+      "Onsite Actions.",
       `<div class="analytics-graph-grid">
         ${renderAnalyticsGraphSection("On-site Action", graphs.stabilizationStrategies, { chart: "pie" })}
         ${renderAnalyticsGraphSection("Safe and Unsafe Responders", graphs.responderSafety, { chart: "pie", viewResponders: true, incidentId })}
@@ -11798,6 +11801,8 @@ const safetyOptions = ["yes", "no", "unknown"];
 
 const incidentManagementSections = [
   ["edit-incident", "Edit Incident", true, "accent"],
+  ["incident-control", "Incident Control", false],
+  ["sitrep-close", "SitRep & Close Incident", true, "accent"],
   ["timeline", "Response Timeline", true],
   ["dmmp-safety", "DMMP & Responder Safety", true],
   ["coordination", "Coordination Assessment", true],
@@ -11810,8 +11815,6 @@ const incidentManagementSections = [
   ["ed-resources", "ED Resources", false],
   ["hospital-resources", "Hospital Resources", false],
   ["morbidity-mortality", "Morbidity & Mortality", false],
-  ["sitrep-close", "SitRep & Close Incident", true, "accent"],
-  ["incident-control", "Incident Control", false],
 ];
 
 async function loadIncidentManagementDetails(incidentId, options = {}) {
@@ -11932,17 +11935,17 @@ function renderIncidentActingIcPanel(incident, details) {
               `,
             )
             .join("")}</div>`
-        : `<p class="incident-acting-ic-empty">No backup IC has been designated for this incident.</p>`}
+        : `<p class="incident-acting-ic-empty">No Acting IC has been designated for this incident.</p>`}
       ${canDesignate && !activeDelegation
         ? `<div class="incident-acting-ic-designation">
             <div class="incident-acting-ic-designation-copy">
-              <span class="eyebrow">Backup coverage</span>
-              <strong>Designate a backup Incident Commander</strong>
+              <span class="eyebrow">Acting IC coverage</span>
+              <strong>Designate an Acting Incident Commander</strong>
               <p>Select an active unit user who can take control when needed.</p>
             </div>
             <form class="incident-acting-ic-form" data-designate-acting-ic-form="${escapeHtml(incident.id)}">
             <label>
-              <span>Designate backup IC</span>
+              <span>Designate Acting IC</span>
               <div class="incident-acting-ic-picker" data-acting-ic-picker>
                 <input type="hidden" name="userId" data-acting-ic-value />
                 <button class="incident-acting-ic-picker-trigger" type="button" data-acting-ic-trigger aria-haspopup="listbox" aria-expanded="false" ${availableUsers.length ? "" : "disabled"}>
@@ -11966,7 +11969,7 @@ function renderIncidentActingIcPanel(incident, details) {
                 </div>
               </div>
             </label>
-            <button class="secondary-button" type="submit" ${availableUsers.length ? "" : "disabled"}>Save Backup IC</button>
+            <button class="secondary-button" type="submit" ${availableUsers.length ? "" : "disabled"}>Save Acting IC</button>
             </form>
           </div>`
         : ""}
@@ -12128,7 +12131,10 @@ function getIncidentSectionLauncherSubtitle(sectionId, canEdit, details) {
 
   if (sectionId === "dmmp-safety") {
     const accountNames = state.unitUsers
-      .filter((user) => user.is_active !== false)
+      .filter(
+        (user) =>
+          user.is_active !== false && user.role !== "responsible_officer",
+      )
       .map((user) => user.full_name || user.email)
       .filter(Boolean);
     const extraNames = state.callDownStaff
@@ -12177,8 +12183,8 @@ function renderIncidentManagementSections(incident, details) {
       <div class="section-launcher-grid">
         ${incidentManagementSections
           .map(
-            ([id, title, canEdit, tone]) => `
-              <button class="section-launcher ${tone === "accent" ? "section-launcher-accent" : ""}" type="button" data-open-incident-section="${id}" data-incident-id="${escapeHtml(incident.id)}">
+            ([id, title, canEdit]) => `
+              <button class="section-launcher ${["edit-incident", "incident-control", "sitrep-close"].includes(id) ? "section-launcher-control" : canEdit ? "section-launcher-editable" : ""}" type="button" data-open-incident-section="${id}" data-incident-id="${escapeHtml(incident.id)}">
                 <span>${escapeHtml(title)}</span>
                 <small>${escapeHtml(getIncidentSectionLauncherSubtitle(id, canEdit && getIncidentManagementPermission(incident, details), sectionDetails))}</small>
               </button>
@@ -12779,7 +12785,10 @@ function renderFacilityOperationalSummary(summary, mode = "continuity") {
 
 function getDmmpStaffRosterRows(staffRecords) {
   const accountStaff = state.unitUsers
-    .filter((user) => user.is_active !== false)
+    .filter(
+      (user) =>
+        user.is_active !== false && user.role !== "responsible_officer",
+    )
     .slice()
     .sort((first, second) => compareText(first.full_name, second.full_name));
   const extraStaff = state.callDownStaff

@@ -260,6 +260,33 @@ async function loadResponderSafetyByUserId(
   );
 }
 
+async function loadResponsibleOfficerUserIds(
+  userIds: Iterable<string>,
+): Promise<Set<string>> {
+  const uniqueUserIds = Array.from(new Set(userIds)).filter(Boolean);
+
+  if (uniqueUserIds.length === 0) {
+    return new Set();
+  }
+
+  const { data, error } = await supabase
+    .from("users")
+    .select("id, role")
+    .in("id", uniqueUserIds);
+
+  if (error) {
+    throw new Error(
+      `Unable to identify non-responder accounts: ${error.message}`,
+    );
+  }
+
+  return new Set(
+    (data ?? [])
+      .filter((user) => user.role === "responsible_officer")
+      .map((user) => user.id),
+  );
+}
+
 async function syncResponderSafetyFromDmmpStatus(
   incidentId: string,
   linkedUserId: string | null | undefined,
@@ -786,8 +813,25 @@ export async function getDmmpStaff(
       await loadResponderSafetyByUserId(incidentId);
 
     const records = data ?? [];
+    const responsibleOfficerUserIds = await loadResponsibleOfficerUserIds([
+      ...records
+        .map((record) => record.linked_user_id)
+        .filter(
+          (value): value is string =>
+            typeof value === "string" && value.length > 0,
+        ),
+      ...responderSafetyByUserId.keys(),
+    ]);
+    const responderRecords = records.filter(
+      (record) =>
+        !responsibleOfficerUserIds.has(
+          typeof record.linked_user_id === "string"
+            ? record.linked_user_id
+            : "",
+        ),
+    );
     const linkedUserIdsWithCallDown = new Set(
-      records
+      responderRecords
         .map((record) => record.linked_user_id)
         .filter(
           (value): value is string =>
@@ -797,7 +841,11 @@ export async function getDmmpStaff(
     const safetyOnlyRecords = Array.from(
       responderSafetyByUserId.entries(),
     )
-      .filter(([responderId]) => !linkedUserIdsWithCallDown.has(responderId))
+      .filter(
+        ([responderId]) =>
+          !responsibleOfficerUserIds.has(responderId) &&
+          !linkedUserIdsWithCallDown.has(responderId),
+      )
       .map(([responderId, responderSafety]) => ({
         id: null,
         incident_id: incidentId,
@@ -823,7 +871,7 @@ export async function getDmmpStaff(
     response.status(200).json({
       success: true,
       data: [
-        ...records.map((record) =>
+        ...responderRecords.map((record) =>
           mergeDmmpRecordWithResponderSafety(
             record,
             responderSafetyByUserId,
@@ -1354,6 +1402,7 @@ export async function getDmmpStaffSummary(
       .select(
         `
           id,
+          linked_user_id,
           was_contacted,
           has_arrived,
           arrived_at,
@@ -1368,7 +1417,23 @@ export async function getDmmpStaffSummary(
       );
     }
 
-    const records = data ?? [];
+    const rawRecords = data ?? [];
+    const responsibleOfficerUserIds = await loadResponsibleOfficerUserIds(
+      rawRecords
+        .map((record) => record.linked_user_id)
+        .filter(
+          (value): value is string =>
+            typeof value === "string" && value.length > 0,
+        ),
+    );
+    const records = rawRecords.filter(
+      (record) =>
+        !responsibleOfficerUserIds.has(
+          typeof record.linked_user_id === "string"
+            ? record.linked_user_id
+            : "",
+        ),
+    );
 
     const totalStaffRecords = records.length;
 
