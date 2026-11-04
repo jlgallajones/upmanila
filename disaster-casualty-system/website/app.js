@@ -2773,7 +2773,7 @@ function renderLoginLanding() {
         ${renderAnimatedMedSortLogo()}
         <span class="prelogin-kicker">Administrator Portal</span>
         <h1 id="preloginLandingTitle">SCRIBER</h1>
-        <p>Standardized Victim Reporting for Incidents and Basic Emergency Response.</p>
+        <p>Standardized Victim Reporting for Incidents and Basic Emergency Response</p>
         <button id="continueToLoginButton" class="prelogin-continue-button" type="button">
           Continue
         </button>

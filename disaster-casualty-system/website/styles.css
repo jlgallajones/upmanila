@@ -666,14 +666,14 @@ button {
     transform: rotate(0deg);
   }
 
-  71.4% {
+  74.5% {
     left: 1%;
     top: 76%;
     transform: rotate(300deg);
   }
 
   100% {
-    left: 28.38%;
+    left: 24.32%;
     top: 76%;
     transform: rotate(360deg);
   }
@@ -682,18 +682,18 @@ button {
 @keyframes medsortLPathGreen {
   0% {
     left: 1%;
-    top: 26.35%;
+    top: 31.76%;
     transform: rotate(0deg);
   }
 
-  49.7% {
+  46.1% {
     left: 1%;
     top: 76%;
     transform: rotate(220deg);
   }
 
   100% {
-    left: 50%;
+    left: 51.35%;
     top: 76%;
     transform: rotate(360deg);
   }
@@ -702,18 +702,18 @@ button {
 @keyframes medsortLPathRed {
   0% {
     left: 1%;
-    top: 47.97%;
+    top: 58.78%;
     transform: rotate(0deg);
   }
 
-  27.9% {
+  17.7% {
     left: 1%;
     top: 76%;
     transform: rotate(140deg);
   }
 
   100% {
-    left: 71.62%;
+    left: 78.38%;
     top: 76%;
     transform: rotate(360deg);
   }

@@ -33,15 +33,15 @@ const LOGO_SIZE = 148;
 const BALL_SIZE = LOGO_SIZE * 0.19;
 const RED_BALL_SIZE = BALL_SIZE - 2;
 const LOGO_ROLL_DURATION = 700;
-const LOGO_PATH_INPUT_YELLOW = [0, 0.714, 1];
-const LOGO_PATH_INPUT_GREEN = [0, 0.497, 1];
-const LOGO_PATH_INPUT_RED = [0, 0.279, 1];
-const LOGO_PATH_X_YELLOW = [1, 1, 42];
+const LOGO_PATH_INPUT_YELLOW = [0, 0.745, 1];
+const LOGO_PATH_INPUT_GREEN = [0, 0.461, 1];
+const LOGO_PATH_INPUT_RED = [0, 0.177, 1];
+const LOGO_PATH_X_YELLOW = [1, 1, 36];
 const LOGO_PATH_Y_YELLOW = [7, 112, 112];
-const LOGO_PATH_X_GREEN = [1, 1, 74];
-const LOGO_PATH_Y_GREEN = [39, 112, 112];
-const LOGO_PATH_X_RED = [1, 1, 106];
-const LOGO_PATH_Y_RED = [71, 112, 112];
+const LOGO_PATH_X_GREEN = [1, 1, 76];
+const LOGO_PATH_Y_GREEN = [47, 112, 112];
+const LOGO_PATH_X_RED = [1, 1, 116];
+const LOGO_PATH_Y_RED = [87, 112, 112];
 
 const COLORS = createThemePalette({
   cyan: "#00838F",
