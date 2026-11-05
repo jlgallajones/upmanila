@@ -193,20 +193,21 @@ function SummaryCard({
   );
 
   if (onPress) {
-    return (
-      <Pressable
-        onPress={onPress}
-        style={({ pressed }) => [
-          styles.summaryCard,
-          styles.summaryCardClickable,
-          pressed && styles.pressed,
-        ]}
-        accessibilityRole="button"
-      >
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.summaryCardClickable,
+        pressed && styles.pressed,
+      ]}
+      accessibilityRole="button"
+    >
+      <View style={styles.summaryCardInner}>
         {content}
-      </Pressable>
-    );
-  }
+      </View>
+    </Pressable>
+  );
+}
 
   return <View style={styles.summaryCard}>{content}</View>;
 }
@@ -2271,12 +2272,54 @@ const styles = StyleSheet.create({
     },
   },
 
-  summaryCardClickable: {
-    borderWidth: 2,
-    borderColor: COLORS.teal,
-    borderLeftWidth: 18,
-  },
+summaryCardClickable: {
+  width: "48.5%",
+  minHeight: 140,
 
+  borderRadius: 12,
+  backgroundColor: COLORS.teal,
+
+  borderWidth: 2,
+  borderColor: COLORS.teal,
+
+  overflow: "hidden",
+
+  elevation: 2,
+  shadowColor: "#6B6B6B",
+  shadowOpacity: 0.08,
+  shadowRadius: 12,
+  shadowOffset: {
+    width: 0,
+    height: 5,
+  },
+},
+summaryCardInner: {
+  flex: 1,
+
+  marginLeft: 16,
+
+  backgroundColor: COLORS.surface,
+
+  borderTopLeftRadius: 16,
+  borderBottomLeftRadius: 16,
+  borderTopRightRadius: 10,
+  borderBottomRightRadius: 10,
+
+  paddingHorizontal: 20,
+  paddingVertical: 15,
+},
+summaryCardAccent: {
+  position: "absolute",
+  top: 0,
+  bottom: 0,
+  left: 0,
+  width: 15,
+  backgroundColor: COLORS.teal,
+  borderTopLeftRadius: 12,
+  borderBottomLeftRadius: 12,
+  borderTopRightRadius: 12,
+  borderBottomRightRadius: 12,
+},
   summaryTopRow: {
     minHeight: 66,
     flexDirection: "row",

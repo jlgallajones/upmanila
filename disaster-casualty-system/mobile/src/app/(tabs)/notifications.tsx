@@ -30,8 +30,8 @@ const COLORS = createThemePalette({
   white: "#FFFFFF",
   background: "#F3F5F9",
   text: "#17213A",
-  secondaryText: "#66738B",
-  mutedText: "#8C98AE",
+  secondaryText: "#6B6B6B",
+  mutedText: "#6B6B6B",
   border: "#E2E7EF",
 
   red: "#D44B4F",

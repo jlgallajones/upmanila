@@ -36,7 +36,7 @@ const COLORS = createThemePalette({
   background: "#F3F5F9",
   card: "#FFFFFF",
   text: "#17213A",
-  secondaryText: "#7C88A0",
+  secondaryText: "#6B6B6B",
   border: "#E4E8EF",
   fieldBackground: "#F3F5F9",
   fieldBorder: "#D9E0EA",

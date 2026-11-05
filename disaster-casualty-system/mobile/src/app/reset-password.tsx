@@ -27,7 +27,7 @@ const COLORS = createThemePalette({
   card: "#FFFFFF",
   border: "#D7DFEB",
   text: "#15213A",
-  muted: "#667085",
+  muted: "#6B6B6B",
   danger: "#C92D32",
 });
 

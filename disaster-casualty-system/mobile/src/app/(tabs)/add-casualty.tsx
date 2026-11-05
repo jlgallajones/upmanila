@@ -95,6 +95,7 @@ import {
   getLocalFormDraft,
   saveLocalFormDraft,
 } from "../../offline/formDrafts";
+import { useThemeMode } from "../../theme/theme-mode";
 
 const COLORS = createThemePalette({
   maroon: "#242424",
@@ -104,8 +105,8 @@ const COLORS = createThemePalette({
   fieldBackground: "#F3F5F9",
   fieldBorder: "#D9E0EA",
   text: "#17213A",
-  secondaryText: "#7D889E",
-  muted: "#A5ADBB",
+  secondaryText: "#6B6B6B",
+  muted: "#6B6B6B",
   green: "#2E7D4F",
   primaryDark: "#005B63",
 });
@@ -5611,6 +5612,11 @@ function useVictimTerminology(value: string): string {
 }
 
 export default function AddCasualtyScreen() {
+  const { colors, isDark } = useThemeMode();
+  const headerBackground = isDark ? colors.background : "#F2F2F2";
+  const headerText = isDark ? colors.text : "#3A3A3A";
+  const headerMutedText = isDark ? colors.textSecondary : "#6B6B6B";
+
   const {
     editId,
     incidentId,
@@ -16067,36 +16073,39 @@ if (
   return (
     <View style={styles.screen}>
       <StatusBar
-        barStyle="light-content"
-        backgroundColor={COLORS.maroon}
+        barStyle={isDark ? "light-content" : "dark-content"}
+        backgroundColor={headerBackground}
       />
 
       <SafeAreaView
         edges={["top"]}
-        style={styles.headerSafeArea}
+        style={[styles.headerSafeArea, { backgroundColor: headerBackground }]}
       >
-        <View style={styles.header}>
+        <View style={[styles.header, { backgroundColor: headerBackground }]}>
           <View style={styles.headerTopRow}>
             <Pressable
               onPress={confirmExitAddCasualty}
               style={({ pressed }) => [
                 styles.backButton,
+                {
+                  backgroundColor: isDark ? "rgba(255,255,255,0.15)" : "#E6E6E6",
+                },
                 pressed && styles.pressed,
               ]}
             >
               <Ionicons
                 name="chevron-back"
                 size={23}
-                color={COLORS.white}
+                color={headerText}
               />
             </Pressable>
           </View>
 
           <View style={styles.headerTitleWrapper}>
-            <Text style={styles.headerTitle}>
+            <Text style={[styles.headerTitle, { color: headerText }]}>
               {screenTitle}
             </Text>
-            <Text style={styles.headerSubtitle}>
+            <Text style={[styles.headerSubtitle, { color: headerMutedText }]}>
               Step {currentStep + 1} of {activeSteps.length} -{" "}
               {stepDisplayName}
             </Text>
@@ -16112,6 +16121,11 @@ if (
                   <View
                     style={[
                       styles.progressLine,
+                      {
+                        backgroundColor: isDark
+                          ? "rgba(255,255,255,0.24)"
+                          : "#CCCCCC",
+                      },
                       (isActive || isCompleted) &&
                         styles.progressLineActive,
                     ]}
@@ -16122,6 +16136,7 @@ if (
                     adjustsFontSizeToFit
                     style={[
                       styles.progressLabel,
+                      { color: isDark ? "rgba(255,255,255,0.42)" : "#999999" },
                       isActive && styles.progressLabelActive,
                     ]}
                   >

@@ -266,11 +266,14 @@ export default function LandingScreen() {
             />
           </View>
 
-          <Text style={styles.kicker}>Emergency Response</Text>
+          <Text style={styles.kicker}>
+            UNIVERSITY OF THE PHILIPPINES MANILA{"\n"}
+            DISASTER RISK REDUCTION AND MANAGEMENT IN HEALTH
+          </Text>
           <Text style={styles.title}>SCRIBER</Text>
           <Text style={styles.subtitle}>
-            Disaster victim management and triage support for
-            authorized responders.
+            Standardized Victim Reporting for Incidents and Basic Emergency
+            Response.
           </Text>
         </View>
 
@@ -420,8 +423,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "800",
     letterSpacing: 0,
+    lineHeight: 18,
     marginBottom: 10,
+    textAlign: "center",
     textTransform: "uppercase",
+    width: "100%",
   },
   title: {
     color: COLORS.white,

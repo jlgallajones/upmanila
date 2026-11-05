@@ -17,11 +17,12 @@ import {
   getLocalFormDrafts,
   type LocalFormDraft,
 } from "../../offline/formDrafts";
+import { useThemeMode } from "../../theme/theme-mode";
 
 const COLORS = createThemePalette({
   maroon: "#242424",
   text: "#17213A",
-  muted: "#69758C",
+  muted: "#6B6B6B",
   border: "#DCE3EE",
   background: "#F3F5F9",
   white: "#FFFFFF",
@@ -44,6 +45,10 @@ function draftTypeLabel(formType: string): string {
 }
 
 export default function DraftsScreen() {
+  const { colors, isDark } = useThemeMode();
+  const headerBackground = isDark ? colors.background : "#F2F2F2";
+  const headerText = isDark ? colors.text : "#3A3A3A";
+  const headerMutedText = isDark ? colors.textSecondary : "#6B6B6B";
   const [drafts, setDrafts] = useState<LocalFormDraft[]>([]);
 
   const [draftToDelete, setDraftToDelete] =
@@ -85,11 +90,11 @@ async function confirmDeleteDraft() {
 }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.header}>
-        <Text style={styles.eyebrow}>Local Drafts</Text>
-        <Text style={styles.title}>Drafts</Text>
-        <Text style={styles.subtitle}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { backgroundColor: headerBackground }]}>
+        <Text style={[styles.eyebrow, { color: headerMutedText }]}>Local Drafts</Text>
+        <Text style={[styles.title, { color: headerText }]}>Drafts</Text>
+        <Text style={[styles.subtitle, { color: headerMutedText }]}>
           Drafts are unfinished forms saved on this device. They are not submitted or queued for sync, and only the creator account can see them.
         </Text>
       </View>

@@ -33,8 +33,8 @@ const COLORS = createThemePalette({
   background: "#F3F5F9",
   card: "#FFFFFF",
   text: "#17213A",
-  secondaryText: "#69758C",
-  mutedText: "#9AA6BA",
+  secondaryText: "#6B6B6B",
+  mutedText: "#6B6B6B",
   border: "#E5E9F0",
 
   green: "#28B463",
@@ -538,27 +538,29 @@ export default function ProfileScreen() {
           <View style={styles.headerDecorationOne} />
           <View style={styles.headerDecorationTwo} />
 
-          <Text
-            style={[
-              styles.headerTitle,
-              { color: isDark ? colors.text : COLORS.text },
-            ]}
-          >
-            My Profile
-          </Text>
+          <View style={styles.headerTitleGroup}>
+            <Text
+              style={[
+                styles.headerTitle,
+                { color: isDark ? colors.text : COLORS.text },
+              ]}
+            >
+              My Profile
+            </Text>
 
-          <Text
-            style={[
-              styles.headerSubtitle,
-              {
-                color: isDark
-                  ? colors.textSecondary
-                  : COLORS.secondaryText,
-              },
-            ]}
-          >
-            {profileSubtitle}
-          </Text>
+            <Text
+              style={[
+                styles.headerSubtitle,
+                {
+                  color: isDark
+                    ? colors.textSecondary
+                    : COLORS.secondaryText,
+                },
+              ]}
+            >
+              {profileSubtitle}
+            </Text>
+          </View>
 
           <View style={styles.themeToggleSlot}>
             <ThemeToggleButton compact inverted />
@@ -1071,10 +1073,17 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
+  headerTitleGroup: {
+    position: "absolute",
+    left: SCREEN_PADDING + 8,
+    right: SCREEN_PADDING,
+    bottom: 62,
+  },
+
   headerSubtitle: {
     color: "rgba(255,255,255,0.80)",
     fontSize: 12,
-    marginTop: 7,
+    marginTop: 3,
   },
 
   themeToggleSlot: {

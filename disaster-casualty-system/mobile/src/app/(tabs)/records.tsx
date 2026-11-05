@@ -47,13 +47,14 @@ import {
   updateQueuedCasualtyVictimCode,
   type QueuedCasualtySubmission,
 } from "../../offline/casualtyQueue";
+import { useThemeMode } from "../../theme/theme-mode";
 
 const COLORS = createThemePalette({
   maroon: "#242424",
   white: "#FFFFFF",
   background: "#F3F5F9",
   text: "#17213A",
-  secondaryText: "#7C88A0",
+  secondaryText: "#6B6B6B",
   border: "#E4E8EF",
 
   paleRed: "#FFF4F4",
@@ -1607,6 +1608,14 @@ function FilterCheckbox({
 }
 
 export default function RecordsScreen() {
+  const { colors, isDark } = useThemeMode();
+  const headerBackground = isDark ? colors.background : "#F2F2F2";
+  const headerText = isDark ? colors.text : "#3A3A3A";
+  const headerMutedText = isDark ? colors.textSecondary : "#6B6B6B";
+  const headerControlBackground = isDark
+    ? "rgba(255,255,255,0.16)"
+    : "#E6E6E6";
+
   const [records, setRecords] = useState<CasualtyRecord[]>([]);
   const [queuedSubmissions, setQueuedSubmissions] = useState<
     QueuedCasualtySubmission[]
@@ -2554,48 +2563,48 @@ function toggleHealthcareLocationFilter(
     return (
       <View style={styles.screen}>
         <StatusBar
-          barStyle="light-content"
-          backgroundColor={COLORS.text}
+          barStyle={isDark ? "light-content" : "dark-content"}
+          backgroundColor={headerBackground}
         />
 
         <SafeAreaView
           edges={["top"]}
-          style={styles.headerSafeArea}
+          style={[styles.headerSafeArea, { backgroundColor: headerBackground }]}
         >
-          <View style={styles.header}>
-            <Text style={styles.headerTitle}>
+          <View style={[styles.header, { backgroundColor: headerBackground }]}>
+            <Text style={[styles.headerTitle, { color: headerText }]}>
               Incident Records
             </Text>
 
-            <Text style={styles.headerSubtitle}>
+            <Text style={[styles.headerSubtitle, { color: headerMutedText }]}>
               {incidents.length} total {"\u00B7"} {activeIncidentCount} active {"\u00B7"}{" "}
               {closedIncidentCount} closed
             </Text>
 
-            <View style={styles.searchBar}>
+            <View style={[styles.searchBar, { backgroundColor: headerControlBackground }]}>
               <Ionicons
                 name="search-outline"
                 size={19}
-                color="rgba(255,255,255,0.72)"
+                color={headerMutedText}
               />
 
               <TextInput
                 value={searchQuery}
                 onChangeText={setSearchQuery}
-                style={styles.searchInput}
+                style={[styles.searchInput, { color: headerText }]}
                 placeholder="Search incident, unit, or hazard..."
-                placeholderTextColor="rgba(255,255,255,0.65)"
+                placeholderTextColor={headerMutedText}
                 autoCapitalize="none"
                 autoCorrect={false}
                 returnKeyType="search"
               />
             </View>
 
-            <View style={styles.searchBar}>
+            <View style={[styles.searchBar, { backgroundColor: headerControlBackground }]}>
               <Ionicons
                 name="calendar-outline"
                 size={19}
-                color="rgba(255,255,255,0.72)"
+                color={headerMutedText}
               />
 
               <Pressable
@@ -2607,7 +2616,8 @@ function toggleHealthcareLocationFilter(
               >
                 <Text
                   style={[
-                  styles.dateFilterButtonText,
+                    styles.dateFilterButtonText,
+                    { color: headerText },
                     !incidentDateRangeStart &&
                       !incidentDateRangeEnd &&
                       styles.dateFilterPlaceholderText,
@@ -2636,7 +2646,7 @@ function toggleHealthcareLocationFilter(
                   <Ionicons
                     name="close"
                     size={16}
-                    color={COLORS.white}
+                    color={headerText}
                   />
                 </Pressable>
               ) : null}
@@ -2945,20 +2955,20 @@ function toggleHealthcareLocationFilter(
   return (
     <View style={styles.screen}>
       <StatusBar
-        barStyle="light-content"
-        backgroundColor={COLORS.text}
+        barStyle={isDark ? "light-content" : "dark-content"}
+        backgroundColor={headerBackground}
       />
 
       <SafeAreaView
         edges={["top"]}
-        style={styles.headerSafeArea}
+        style={[styles.headerSafeArea, { backgroundColor: headerBackground }]}
       >
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>
+        <View style={[styles.header, { backgroundColor: headerBackground }]}>
+          <Text style={[styles.headerTitle, { color: headerText }]}>
             Victim Records
           </Text>
 
-          <Text style={styles.headerSubtitle}>
+          <Text style={[styles.headerSubtitle, { color: headerMutedText }]}>
             {records.length} synced
             {queuedSubmissions.length > 0
               ? ` \u00B7 ${queuedSubmissions.length} queued`
@@ -2966,19 +2976,19 @@ function toggleHealthcareLocationFilter(
             {"\u00B7"} {formattedDate}
           </Text>
 
-          <View style={styles.searchBar}>
+          <View style={[styles.searchBar, { backgroundColor: headerControlBackground }]}>
             <Ionicons
               name="search-outline"
               size={19}
-              color="rgba(255,255,255,0.72)"
+              color={headerMutedText}
             />
 
             <TextInput
               value={searchQuery}
               onChangeText={setSearchQuery}
-              style={styles.searchInput}
+              style={[styles.searchInput, { color: headerText }]}
               placeholder="Search name or ID..."
-              placeholderTextColor="rgba(255,255,255,0.65)"
+              placeholderTextColor={headerMutedText}
               autoCapitalize="none"
               autoCorrect={false}
               returnKeyType="search"
@@ -2999,7 +3009,7 @@ function toggleHealthcareLocationFilter(
               <Ionicons
                 name="options-outline"
                 size={18}
-                color={COLORS.white}
+                color={headerText}
               />
             </Pressable>
           </View>
