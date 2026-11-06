@@ -292,8 +292,7 @@ export default function LoginScreen() {
             ]}
           >
             Sign in with your official responder credentials to use SCRIBER,
-            the Standardized Victim Reporting for Incidents and Basic
-            Emergency Response platform.
+            the Standardized Casualty Reporting for Incidents and Basic Emergency Response platform.
           </Text>
 
           <View style={styles.formGroup}>

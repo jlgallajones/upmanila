@@ -2849,7 +2849,7 @@ function renderLoginLanding() {
         ${renderAnimatedMedSortLogo()}
         <span class="prelogin-kicker">Administrator Portal</span>
         <h1 id="preloginLandingTitle">SCRIBER</h1>
-        <p>Standardized Victim Reporting for Incidents and Basic Emergency Response</p>
+        <p>Standardized Casualty Reporting for Incidents and Basic Emergency Response</p>
         <button id="continueToLoginButton" class="prelogin-continue-button" type="button">
           Continue
         </button>
@@ -2929,7 +2929,7 @@ function renderLogin() {
 
           <div class="landing-title">
             <h1>SCRIBER</h1>
-            <p>Standardized Victim Reporting for Incidents and Basic Emergency Response</p>
+            <p>Standardized Casualty Reporting for Incidents and Basic Emergency Response</p>
           </div>
         </div>
       </section>

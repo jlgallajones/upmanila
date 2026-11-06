@@ -923,7 +923,7 @@ export default function ProfileScreen() {
         </Pressable>
 
         <Text style={styles.footerText}>
-          Standardized Victim Reporting for Incidents and Basic Emergency Response
+          Standardized Casualty Reporting for Incidents and Basic Emergency Response
         </Text>
 
         <Text style={styles.footerVersion}>
