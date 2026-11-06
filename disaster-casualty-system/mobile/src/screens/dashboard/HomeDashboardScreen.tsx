@@ -1435,17 +1435,30 @@ export default function HomeDashboardScreen() {
         ) : null}
 
         {queuedCasualtyCount > 0 ? (
-          <View style={styles.offlineBanner}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.offlineBanner,
+              pressed && styles.pressed,
+            ]}
+            onPress={() => router.push("/records")}
+            accessibilityRole="button"
+            accessibilityLabel="Open victim records waiting to sync"
+          >
             <Ionicons
               name="cloud-offline-outline"
               size={19}
-              color={COLORS.black}
+              color={COLORS.cyan}
             />
             <Text style={styles.offlineBannerText}>
               {queuedCasualtyCount} victim record
               {queuedCasualtyCount === 1 ? "" : "s"} waiting to sync.
             </Text>
-          </View>
+            <Ionicons
+              name="chevron-forward"
+              size={16}
+              color={COLORS.cyan}
+            />
+          </Pressable>
         ) : null}
 
         {isGuestMode ? (
@@ -2239,7 +2252,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: COLORS.gray,
+    borderColor: COLORS.cyan,
     borderRadius: 999,
     backgroundColor: COLORS.surface,
     paddingHorizontal: 12,

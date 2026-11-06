@@ -309,6 +309,40 @@ async function createCasualtySubmissionNotification({
   }
 }
 
+async function createCasualtyApprovalNotification({
+  casualtyIncidentId,
+  recipientUserId,
+  casualtyLabel,
+  incidentName,
+}: {
+  casualtyIncidentId: string;
+  recipientUserId: string;
+  casualtyLabel: string;
+  incidentName: string | null;
+}): Promise<void> {
+  const messageParts = [
+    `Your victim record ${casualtyLabel} was approved.`,
+    incidentName ? `Incident: ${incidentName}.` : null,
+  ].filter(Boolean);
+
+  const { error } = await supabase
+    .from("notifications")
+    .insert({
+      user_id: recipientUserId,
+      title: "Victim record approved",
+      message: messageParts.join(" "),
+      notification_type: "verification",
+      related_entity_type: "victim",
+      related_entity_id: casualtyIncidentId,
+    });
+
+  if (error) {
+    console.error(
+      `Unable to create victim approval notification: ${error.message}`,
+    );
+  }
+}
+
 async function getCasualtyScopeEncoderIds(user: {
   id: string;
   role: string;
@@ -3268,6 +3302,19 @@ export async function updateCasualtyVerification(
         casualtyLabel: casualtyAuditLabel,
         incidentName: getTextField(incidentForAudit, "incident_name"),
         reviewNotes: notes ?? null,
+      });
+    }
+
+    if (
+      status === "verified" &&
+      existingRecord.encoded_by &&
+      existingRecord.encoded_by !== user.id
+    ) {
+      await createCasualtyApprovalNotification({
+        casualtyIncidentId: id,
+        recipientUserId: existingRecord.encoded_by,
+        casualtyLabel: casualtyAuditLabel,
+        incidentName: getTextField(incidentForAudit, "incident_name"),
       });
     }
 

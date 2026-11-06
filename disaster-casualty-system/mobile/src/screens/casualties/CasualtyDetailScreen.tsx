@@ -1,6 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
-import { router, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { createThemePalette } from "@/constants/theme";
+import {
+  router,
+  useFocusEffect,
+  useLocalSearchParams,
+} from "expo-router";
+import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -38,8 +43,10 @@ import {
   getResponderAssignment,
   type ResponderAssignment,
 } from "../../auth/responderAssignment";
+import { getTriageDisplayLabel } from "../../utils/triageDisplay";
+import { useThemeMode } from "../../theme/theme-mode";
 
-const COLORS = {
+const COLORS = createThemePalette({
   maroon: "#7B1113",
   white: "#FFFFFF",
   background: "#F3F5F9",
@@ -62,8 +69,11 @@ const COLORS = {
   redBackground: "#FCE6E7",
 
   grayBackground: "#F2F5F9",
-  headerBackground: "#6B6B6B",
-};
+  headerBackground: "#F2F2F2",
+  headerMutedText: "#6B6B6B",
+  headerButtonBackground: "#E6E6E6",
+  avatarBackground: "#6B6B6B",
+});
 
 function canEditRecord(
   role: string | null,
@@ -162,17 +172,21 @@ type DetailRowProps = {
 function DetailRow({
   label,
   value,
-  valueColor = COLORS.text,
+  valueColor,
 }: DetailRowProps) {
+  const { colors } = useThemeMode();
+
   return (
     <View style={styles.detailRow}>
-      <Text style={styles.detailLabel}>{label}</Text>
+      <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+        {label}
+      </Text>
 
       <Text
         style={[
           styles.detailValue,
           {
-            color: valueColor,
+            color: valueColor ?? colors.text,
           },
         ]}
       >
@@ -193,10 +207,14 @@ function SectionCard({
   action,
   children,
 }: SectionCardProps) {
+  const { colors } = useThemeMode();
+
   return (
-    <View style={styles.sectionCard}>
+    <View style={[styles.sectionCard, { backgroundColor: colors.surface }]}>
       <View style={styles.sectionTitleRow}>
-        <Text style={styles.sectionTitle}>{title}</Text>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>
+          {title}
+        </Text>
         {action}
       </View>
       {children}
@@ -221,6 +239,8 @@ function TimelineItem({
   backgroundColor,
   isLast = false,
 }: TimelineItemProps) {
+  const { colors } = useThemeMode();
+
   return (
     <View style={styles.timelineItem}>
       <View style={styles.timelineIndicatorColumn}>
@@ -258,26 +278,47 @@ function TimelineItem({
           {title}
         </Text>
 
-        <Text style={styles.timelineTime}>{time}</Text>
-        <Text style={styles.timelineUser}>By: {user}</Text>
+        <Text style={[styles.timelineTime, { color: colors.textSecondary }]}>
+          {time}
+        </Text>
+        <Text style={[styles.timelineUser, { color: colors.text }]}>
+          By: {user}
+        </Text>
       </View>
     </View>
   );
 }
 
 function AttachmentCard({ item }: { item: Attachment }) {
+  const { colors } = useThemeMode();
   const isImage = item.mime_type?.startsWith("image/") ?? false;
 
   return (
-    <View style={styles.attachmentCard}>
+    <View
+      style={[
+        styles.attachmentCard,
+        {
+          backgroundColor: colors.backgroundElement,
+          borderColor: colors.border,
+        },
+      ]}
+    >
       {isImage && item.signed_url ? (
         <Image
           source={{ uri: item.signed_url }}
-          style={styles.attachmentImage}
+          style={[
+            styles.attachmentImage,
+            { backgroundColor: colors.border },
+          ]}
           resizeMode="cover"
         />
       ) : (
-        <View style={styles.attachmentIcon}>
+        <View
+          style={[
+            styles.attachmentIcon,
+            { backgroundColor: colors.warningBackground },
+          ]}
+        >
           <Ionicons
             name="document-attach-outline"
             size={22}
@@ -287,10 +328,13 @@ function AttachmentCard({ item }: { item: Attachment }) {
       )}
 
       <View style={styles.attachmentInfo}>
-        <Text style={styles.attachmentName} numberOfLines={1}>
+        <Text
+          style={[styles.attachmentName, { color: colors.text }]}
+          numberOfLines={1}
+        >
           {item.file_name}
         </Text>
-        <Text style={styles.attachmentMeta}>
+        <Text style={[styles.attachmentMeta, { color: colors.textSecondary }]}>
           {formatDateTime(item.created_at)}
         </Text>
       </View>
@@ -866,6 +910,15 @@ function getStatusPalette(status: string) {
 }
 
 export default function CasualtyDetailScreen() {
+  const { colors, isDark } = useThemeMode();
+  const headerBackground = isDark ? colors.background : "#F2F2F2";
+  const headerText = isDark ? colors.text : "#3A3A3A";
+  const headerMutedText = isDark ? colors.textSecondary : "#6B6B6B";
+  const headerButtonBackground = isDark
+    ? "rgba(255,255,255,0.16)"
+    : "#E6E6E6";
+  const avatarBackground = isDark ? colors.surfaceRaised : "#6B6B6B";
+
   const { id } = useLocalSearchParams<{
     id: string;
   }>();
@@ -962,9 +1015,11 @@ export default function CasualtyDetailScreen() {
     }
   }, [casualtyId]);
 
-  useEffect(() => {
-    void loadCasualty();
-  }, [loadCasualty]);
+  useFocusEffect(
+    useCallback(() => {
+      void loadCasualty();
+    }, [loadCasualty]),
+  );
 
   const casualty = useMemo(() => {
     if (!record) {
@@ -1037,6 +1092,7 @@ export default function CasualtyDetailScreen() {
       pathname: "/add-casualty",
       params: {
         editId: casualty.recordId,
+        returnToDetail: "true",
       },
     } as never);
   }
@@ -1051,6 +1107,7 @@ export default function CasualtyDetailScreen() {
       params: {
         editId: casualty.recordId,
         focusStep: "Transport",
+        returnToDetail: "true",
       },
     } as never);
   }
@@ -1138,7 +1195,18 @@ export default function CasualtyDetailScreen() {
     casualty.latestTriage?.triage_category ??
     record?.latest_triage_assessment?.triage_category ??
     casualty.status;
-  const triageCategoryLabel = formatStatus(triageCategory);
+  const triageAssessment =
+    casualty.latestTriage ??
+    record?.latest_triage_assessment ??
+    null;
+  const triageCategoryLabel = getTriageDisplayLabel(
+    triageAssessment,
+    {
+      preferFinalResult:
+        getRecordRoleBucket(record) === "documenter",
+      fallback: formatStatus(triageCategory),
+    },
+  );
   const triagePalette = getTriagePalette(triageCategory);
   const statusPalette = getStatusPalette(casualty.status);
   const verificationPalette = getVerificationPalette(
@@ -1174,38 +1242,48 @@ export default function CasualtyDetailScreen() {
     ) ?? treatmentDetails.dispositionUponHospitalArrival;
 
   return (
-    <View style={styles.screen}>
+    <View style={[styles.screen, { backgroundColor: colors.background }]}>
       <StatusBar
-        barStyle="light-content"
-        backgroundColor={COLORS.headerBackground}
+        barStyle={isDark ? "light-content" : "dark-content"}
+        backgroundColor={headerBackground}
       />
 
       <SafeAreaView
         edges={["top"]}
-        style={styles.headerSafeArea}
+        style={[styles.headerSafeArea, { backgroundColor: headerBackground }]}
       >
-        <View style={styles.header}>
-          <View style={styles.headerDecoration} />
+        <View style={[styles.header, { backgroundColor: headerBackground }]}>
+          <View
+            style={[
+              styles.headerDecoration,
+              {
+                backgroundColor: isDark
+                  ? "rgba(255,255,255,0.04)"
+                  : "rgba(0,0,0,0.04)",
+              },
+            ]}
+          />
 
           <Pressable
             onPress={() => router.back()}
             style={({ pressed }) => [
               styles.backButton,
+              { backgroundColor: headerButtonBackground },
               pressed && styles.pressed,
             ]}
           >
             <Ionicons
               name="chevron-back"
               size={23}
-              color={COLORS.white}
+              color={headerText}
             />
           </Pressable>
 
-          <Text style={styles.recordCode}>
+          <Text style={[styles.recordCode, { color: headerMutedText }]}>
             VICTIM RECORD - {casualty.id}
           </Text>
 
-          <Text style={styles.headerName}>
+          <Text style={[styles.headerName, { color: headerText }]}>
             {casualty.fullName}
           </Text>
 
@@ -1226,7 +1304,7 @@ export default function CasualtyDetailScreen() {
               </Text>
             </View>
 
-            <Text style={styles.lastUpdated}>
+            <Text style={[styles.lastUpdated, { color: headerMutedText }]}>
               Last updated: {casualty.lastUpdated}
             </Text>
           </View>
@@ -1234,42 +1312,43 @@ export default function CasualtyDetailScreen() {
       </SafeAreaView>
 
       <View style={styles.identityCardWrapper}>
-        <View style={styles.identityCard}>
-          <View style={styles.avatar}>
+        <View style={[styles.identityCard, { backgroundColor: colors.surface }]}>
+          <View style={[styles.avatar, { backgroundColor: avatarBackground }]}>
             <Text style={styles.avatarText}>
               {casualty.initials}
             </Text>
           </View>
 
           <View style={styles.identityInformation}>
-            <Text style={styles.identityName}>
+            <Text style={[styles.identityName, { color: colors.text }]}>
               {casualty.fullName}
             </Text>
 
-            <Text style={styles.identityDescription}>
+            <Text
+              style={[
+                styles.identityDescription,
+                { color: colors.textSecondary },
+              ]}
+            >
               Triage Category: {triageCategoryLabel}
             </Text>
 
             <View style={styles.identityBadges}>
-              <View style={styles.idBadge}>
-                <Text style={styles.idBadgeText}>
+              <View
+                style={[
+                  styles.idBadge,
+                  { backgroundColor: colors.backgroundElement },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.idBadgeText,
+                    { color: colors.textSecondary },
+                  ]}
+                >
                   ID: {casualty.id}
                 </Text>
               </View>
-
-              {casualty.verified ? (
-                <View style={styles.verifiedBadge}>
-                  <Ionicons
-                    name="checkmark"
-                    size={13}
-                    color={COLORS.green}
-                  />
-
-                  <Text style={styles.verifiedText}>
-                    Verified
-                  </Text>
-                </View>
-              ) : null}
 
               <View
                 style={[
@@ -2303,9 +2382,7 @@ export default function CasualtyDetailScreen() {
 
               <DetailRow
                 label="Category"
-                value={formatStatus(
-                  casualty.latestTriage.triage_category,
-                )}
+                value={triageCategoryLabel}
                 valueColor={COLORS.maroon}
               />
 
@@ -2549,7 +2626,7 @@ const styles = StyleSheet.create({
     borderRadius: 90,
     right: -55,
     top: -100,
-    backgroundColor: "rgba(255,255,255,0.04)",
+    backgroundColor: "rgba(0,0,0,0.04)",
   },
 
   backButton: {
@@ -2558,18 +2635,18 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.15)",
+    backgroundColor: COLORS.headerButtonBackground,
   },
 
   recordCode: {
-    color: "rgba(255,255,255,0.76)",
+    color: COLORS.headerMutedText,
     fontSize: 11,
     letterSpacing: 0.2,
     marginTop: 15,
   },
 
   headerName: {
-    color: COLORS.white,
+    color: COLORS.text,
     fontSize: 24,
     fontWeight: "900",
     marginTop: 10,
@@ -2605,7 +2682,7 @@ const styles = StyleSheet.create({
   },
 
   lastUpdated: {
-    color: "rgba(255,255,255,0.76)",
+    color: COLORS.headerMutedText,
     fontSize: 10,
     marginLeft: 11,
   },
@@ -2642,7 +2719,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginRight: 15,
-    backgroundColor: COLORS.headerBackground,
+    backgroundColor: COLORS.avatarBackground,
   },
 
   avatarText: {

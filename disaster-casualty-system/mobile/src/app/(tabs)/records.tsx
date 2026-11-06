@@ -39,6 +39,7 @@ import {
   getResponderAssignment,
   type ResponderAssignment,
 } from "../../auth/responderAssignment";
+import { getTriageDisplayLabel } from "../../utils/triageDisplay";
 import {
   assignQueuedCasualtyIncident,
   getQueuedCasualtySubmissions,
@@ -537,20 +538,22 @@ function formatStatus(status: string): string {
 }
 
 function formatRecordTriageCategory(record: CasualtyRecord): string {
-  const category =
-    record.latest_triage_assessment?.calculated_category ??
-    record.latest_triage_assessment?.triage_category ??
-    record.latest_triage_assessment?.responder_category ??
-    record.latest_facility_encounter?.pre_transport_triage_category ??
-    "";
+  const assessment = record.latest_triage_assessment;
+  const isHealthcareDocumenterRecord = [
+    "documenter",
+    "medical_personnel",
+  ].includes(record.encoder?.role ?? "");
 
-  switch (category.trim().toLowerCase()) {
-    case "minimal":
-    case "minor":
-      return "Minor";
-    default:
-      return formatStatus(category);
+  if (assessment) {
+    return getTriageDisplayLabel(assessment, {
+      preferFinalResult: isHealthcareDocumenterRecord,
+      fallback: "Unknown",
+    });
   }
+
+  return formatStatus(
+    record.latest_facility_encounter?.pre_transport_triage_category ?? "",
+  );
 }
 
 function getStatusStyle(status: string) {
@@ -941,9 +944,9 @@ function getRecordTriageFilter(
   record: CasualtyRecord,
 ): FieldResponderTriageFilter | null {
   const category =
-    record.latest_triage_assessment?.calculated_category ??
     record.latest_triage_assessment?.triage_category ??
     record.latest_triage_assessment?.responder_category ??
+    record.latest_triage_assessment?.calculated_category ??
     record.latest_facility_encounter?.pre_transport_triage_category ??
     "";
 

@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { createThemePalette } from "@/constants/theme";
 import { router, useFocusEffect } from "expo-router";
+import { useThemeMode } from "../theme/theme-mode";
 import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -87,6 +88,9 @@ const COLORS = createThemePalette({
   border: "#E5E9F0",
   fieldBackground: "#F3F5F9",
   fieldBorder: "#D9E0EA",
+  headerBackground: "#F2F2F2",
+  headerControlBackground: "#E6E6E6",
+  headerBorder: "#D3D8DE",
   green: "#2E7D4F",
   orange: "#D96D12",
   blue: "#267ABD",
@@ -1290,6 +1294,15 @@ function IncidentCard({
 }
 
 export default function IncidentsPage() {
+  const { colors, isDark } = useThemeMode();
+  const headerBackground = isDark ? colors.background : "#F2F2F2";
+  const headerText = isDark ? colors.text : "#3A3A3A";
+  const headerMutedText = isDark ? colors.textSecondary : "#6B6B6B";
+  const headerControlBackground = isDark
+    ? "rgba(255,255,255,0.16)"
+    : "#E6E6E6";
+  const headerBorder = isDark ? colors.border : "#D3D8DE";
+
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [query, setQuery] = useState("");
   const [incidentDateRangeStart, setIncidentDateRangeStart] =
@@ -4014,27 +4027,31 @@ export default function IncidentsPage() {
   return (
     <View style={styles.screen}>
       <StatusBar
-        barStyle="light-content"
-        backgroundColor={COLORS.text}
+        barStyle={isDark ? "light-content" : "dark-content"}
+        backgroundColor={headerBackground}
       />
 
       <SafeAreaView
         edges={["top"]}
-        style={styles.headerSafeArea}
+        style={[styles.headerSafeArea, { backgroundColor: headerBackground }]}
       >
-        <View style={styles.header}>
+        <View style={[styles.header, { backgroundColor: headerBackground }]}>
           <View style={styles.headerTopRow}>
             <Pressable
               onPress={() => router.back()}
               style={({ pressed }) => [
                 styles.backButton,
+                {
+                  backgroundColor: headerControlBackground,
+                  borderColor: headerBorder,
+                },
                 pressed && styles.pressed,
               ]}
             >
               <Ionicons
                 name="chevron-back"
                 size={22}
-                color={COLORS.white}
+                color={headerText}
               />
             </Pressable>
 
@@ -4043,47 +4060,67 @@ export default function IncidentsPage() {
                 onPress={() => setIsCreateModalVisible(true)}
                 style={({ pressed }) => [
                   styles.headerActionButton,
+                  {
+                    backgroundColor: headerControlBackground,
+                    borderColor: headerBorder,
+                  },
                   pressed && styles.pressed,
                 ]}
               >
                 <Ionicons
                   name="add"
                   size={22}
-                  color={COLORS.white}
+                  color={headerText}
                 />
               </Pressable>
             ) : null}
           </View>
 
-          <Text style={styles.headerTitle}>
+          <Text style={[styles.headerTitle, { color: headerText }]}>
             Incident Management
           </Text>
-          <Text style={styles.headerSubtitle}>
+          <Text style={[styles.headerSubtitle, { color: headerMutedText }]}>
             {incidents.length} active incidents
           </Text>
 
-          <View style={styles.searchBar}>
+          <View
+            style={[
+              styles.searchBar,
+              {
+                backgroundColor: headerControlBackground,
+                borderColor: headerBorder,
+              },
+            ]}
+          >
             <Ionicons
               name="search-outline"
               size={18}
-              color="rgba(255,255,255,0.72)"
+              color={headerMutedText}
             />
             <TextInput
               value={query}
               onChangeText={setQuery}
-              style={styles.searchInput}
+              style={[styles.searchInput, { color: headerText }]}
               placeholder="Search incident, type, or location"
-              placeholderTextColor="rgba(255,255,255,0.65)"
+              placeholderTextColor={headerMutedText}
               autoCapitalize="none"
               autoCorrect={false}
             />
           </View>
 
-          <View style={styles.searchBar}>
+          <View
+            style={[
+              styles.searchBar,
+              {
+                backgroundColor: headerControlBackground,
+                borderColor: headerBorder,
+              },
+            ]}
+          >
             <Ionicons
               name="calendar-outline"
               size={18}
-              color="rgba(255,255,255,0.72)"
+              color={headerMutedText}
             />
             <Pressable
               onPress={openDateFilterPicker}
@@ -4095,9 +4132,10 @@ export default function IncidentsPage() {
               <Text
                 style={[
                   styles.dateFilterButtonText,
+                  { color: headerText },
                   !incidentDateRangeStart &&
                     !incidentDateRangeEnd &&
-                    styles.dateFilterPlaceholderText,
+                    [styles.dateFilterPlaceholderText, { color: headerMutedText }],
                 ]}
               >
                 {incidentDateRangeStart && incidentDateRangeEnd
@@ -4116,14 +4154,15 @@ export default function IncidentsPage() {
                   setIncidentDateRangeEnd("");
                 }}
                 style={({ pressed }) => [
-                  styles.dateFilterClearButton,
+                    styles.dateFilterClearButton,
+                    { backgroundColor: headerControlBackground },
                   pressed && styles.pressed,
                 ]}
               >
                 <Ionicons
                   name="close"
                   size={16}
-                  color={COLORS.white}
+                  color={headerText}
                 />
               </Pressable>
             ) : null}
@@ -7464,13 +7503,13 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   headerSafeArea: {
-    backgroundColor: COLORS.maroon,
+    backgroundColor: COLORS.headerBackground,
   },
   header: {
     paddingHorizontal: SCREEN_PADDING,
     paddingTop: 8,
     paddingBottom: 18,
-    backgroundColor: COLORS.maroon,
+    backgroundColor: COLORS.headerBackground,
   },
   headerTopRow: {
     flexDirection: "row",
@@ -7484,7 +7523,9 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.15)",
+    backgroundColor: COLORS.headerControlBackground,
+    borderWidth: 1,
+    borderColor: COLORS.headerBorder,
   },
   headerActionButton: {
     width: 38,
@@ -7492,15 +7533,17 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.16)",
+    backgroundColor: COLORS.headerControlBackground,
+    borderWidth: 1,
+    borderColor: COLORS.headerBorder,
   },
   headerTitle: {
-    color: COLORS.white,
+    color: COLORS.text,
     fontSize: 22,
     fontWeight: "900",
   },
   headerSubtitle: {
-    color: "rgba(255,255,255,0.78)",
+    color: COLORS.secondaryText,
     fontSize: 12,
     marginTop: 6,
   },
@@ -7511,12 +7554,14 @@ const styles = StyleSheet.create({
     marginTop: 16,
     paddingHorizontal: 13,
     borderRadius: 13,
-    backgroundColor: "rgba(255,255,255,0.16)",
+    backgroundColor: COLORS.headerControlBackground,
+    borderWidth: 1,
+    borderColor: COLORS.headerBorder,
   },
   searchInput: {
     flex: 1,
     minHeight: 46,
-    color: COLORS.white,
+    color: COLORS.text,
     fontSize: 14,
     paddingLeft: 9,
   },
@@ -7527,12 +7572,12 @@ const styles = StyleSheet.create({
     paddingLeft: 9,
   },
   dateFilterButtonText: {
-    color: COLORS.white,
+    color: COLORS.text,
     fontSize: 14,
     fontWeight: "800",
   },
   dateFilterPlaceholderText: {
-    color: "rgba(255,255,255,0.65)",
+    color: COLORS.secondaryText,
     fontWeight: "600",
   },
   dateFilterClearButton: {

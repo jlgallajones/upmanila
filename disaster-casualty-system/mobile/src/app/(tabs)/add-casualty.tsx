@@ -6260,7 +6260,9 @@ const victimCodeAlreadyExists = useMemo(() => {
       transportMode:
         isSaResponderFlow && form.usedEmsVehicle === "Yes"
           ? "ems"
-          : normalizeTransportMode(form.transportMode),
+          : isShortAmpResponderFlow && form.usedEmsVehicle === "No"
+            ? "independent"
+            : normalizeTransportMode(form.transportMode),
       emsUnitType:
         isSaResponderFlow && form.usedEmsVehicle === "Yes"
           ? normalizeEmsUnitType(form.emsVehicleType)
@@ -6280,7 +6282,13 @@ const victimCodeAlreadyExists = useMemo(() => {
           )
         : form.transportNotes,
     };
-  }, [form, initialTransportSignature, isEditing, isSaResponderFlow]);
+  }, [
+    form,
+    initialTransportSignature,
+    isEditing,
+    isSaResponderFlow,
+    isShortAmpResponderFlow,
+  ]);
 
   const treatmentRecordPayload = useMemo<
     CreateCasualtyPayload["treatmentRecord"]
@@ -9708,6 +9716,17 @@ if (
             }
 
             if (
+              isShortAmpResponderFlow &&
+              !form.usedEmsVehicle.trim()
+            ) {
+              Alert.alert(
+                "EMS vehicle selection required",
+                "Select Yes or No for the EMS vehicle used.",
+              );
+              return false;
+            }
+
+            if (
               !isShortAmpResponderFlow &&
               form.usedEmsVehicle === "Yes" &&
               !form.emsVehicleType.trim()
@@ -12438,7 +12457,10 @@ async function ensureResponderSafetyResponseSaved() {
 }
 
   function goNext() {
-  if (!isResponderEditLockedStep) {
+  if (
+    !isResponderEditLockedStep &&
+    !isHealthcareDocumenterEditLockedStep
+  ) {
     setValidationWarning(null);
 
     const isValid = validateCurrentStep();
@@ -14605,6 +14627,15 @@ if (
                 </>
               ) : null}
 
+              {isShortAmpResponderFlow ? (
+                <SelectField
+                  label="USED EMS VEHICLE?"
+                  value={form.usedEmsVehicle}
+                  placeholder="Yes or No"
+                  onPress={() => openChoiceSheet("usedEmsVehicle")}
+                />
+              ) : null}
+
               <CurrentTimeField
                 label="DEPARTED SCENE TIME"
                 value={form.departedSceneTime}
@@ -16136,7 +16167,13 @@ if (
                     adjustsFontSizeToFit
                     style={[
                       styles.progressLabel,
-                      { color: isDark ? "rgba(255,255,255,0.42)" : "#999999" },
+                      {
+                        color: isActive
+                          ? colors.primary
+                          : isDark
+                            ? "rgba(255,255,255,0.42)"
+                            : "#999999",
+                      },
                       isActive && styles.progressLabelActive,
                     ]}
                   >
@@ -16537,7 +16574,7 @@ if (
                 pressed && styles.primaryButtonPressed,
               ]}
             >
-              <Text style={styles.feedbackButtonText}>OK</Text>
+              <Text style={styles.feedbackButtonText}>OKAY</Text>
             </Pressable>
           </View>
         </View>
@@ -16694,7 +16731,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 12,
-    backgroundColor: COLORS.maroon,
+    backgroundColor: COLORS.blackButton,
     marginTop: 20,
   },
   feedbackButtonText: {
@@ -16910,7 +16947,7 @@ exitButtonText: {
     borderRadius: 10,
     marginLeft: 3,
     paddingHorizontal: 9,
-    backgroundColor: COLORS.maroon,
+    backgroundColor: COLORS.blackButton,
   },
   applyDateButtonText: {
     color: COLORS.white,
@@ -16941,7 +16978,7 @@ exitButtonText: {
   },
   dayCellSelected: {
     borderRadius: 12,
-    backgroundColor: COLORS.maroon,
+    backgroundColor: COLORS.blackButton,
   },
   dayText: {
     color: COLORS.text,
@@ -17053,7 +17090,7 @@ exitButtonText: {
     marginTop: 6,
   },
   progressLabelActive: {
-    color: COLORS.white,
+    fontWeight: "800",
   },
 
   triageAssessmentColoredSelect: {

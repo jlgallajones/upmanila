@@ -22,6 +22,27 @@ export type Incident = {
   updated_at?: string;
 };
 
+export type CurrentActingIcAssignment = {
+  id: string;
+  incident_id: string;
+  primary_ic_user_id: string;
+  acting_ic_user_id: string;
+  delegated_by: string;
+  reason: string | null;
+  delegated_at: string;
+  resumed_at: string | null;
+  resumed_by: string | null;
+  resume_reason: string | null;
+  incident: Pick<
+    Incident,
+    | "id"
+    | "incident_code"
+    | "incident_name"
+    | "disaster_type"
+    | "status"
+  > | null;
+};
+
 export type IncidentResponseTimeline = {
   id: string;
   incident_id: string;
@@ -682,6 +703,12 @@ type IncidentResponse = {
   data: Incident[];
 };
 
+type CurrentActingIcAssignmentsResponse = {
+  success: boolean;
+  count: number;
+  data: CurrentActingIcAssignment[];
+};
+
 type SingleIncidentResponse = {
   success: boolean;
   message: string;
@@ -837,6 +864,16 @@ export async function getIncidents(options?: {
           }
         : undefined,
   });
+  return response.data.data;
+}
+
+export async function getCurrentActingIcAssignments(): Promise<
+  CurrentActingIcAssignment[]
+> {
+  const response = await api.get<CurrentActingIcAssignmentsResponse>(
+    "/incidents/acting-ic/current",
+  );
+
   return response.data.data;
 }
 

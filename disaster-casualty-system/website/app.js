@@ -436,12 +436,6 @@ const superAdminNavGroups = [
     ],
   },
   {
-    id: "resources",
-    label: "Resources",
-    icon: "hospital",
-    views: [["facilities", "Healthcare Facilities"]],
-  },
-  {
     id: "administration",
     label: "Administration",
     icon: "administration",
@@ -449,6 +443,7 @@ const superAdminNavGroups = [
       ["users", "Accounts"],
       ["registration", "Account Registration"],
       ["drafts", "Drafts"],
+      ["facilities", "Healthcare Facilities"],
     ],
   },
   {
@@ -489,18 +484,13 @@ const adminNavGroups = [
     ],
   },
   {
-    id: "resources",
-    label: "Resources",
-    icon: "hospital",
-    views: [["facilities", "Healthcare Facilities"]],
-  },
-  {
     id: "administration",
     label: "Administration",
     icon: "administration",
     views: [
       ["users", "Accounts"],
       ["drafts", "Drafts"],
+      ["facilities", "Healthcare Facilities"],
     ],
   },
   {
@@ -8144,11 +8134,14 @@ function renderMatchCasingRecordCard(record, options = {}) {
   const selected = state.selectedMatchCasingRecordIds.includes(record.id);
   const eligible = isMatchCasingRoleEligible(role);
   const incidentName = record?.incident?.incident_name || "Unknown incident";
-  const triage =
-    record?.latest_triage_assessment?.calculated_category ||
-    record?.latest_triage_assessment?.triage_category ||
-    record?.latest_triage_assessment?.responder_category ||
-    "unknown";
+  const triage = getTriageDisplayLabel(
+    record?.latest_triage_assessment,
+    {
+      preferFinalResult: ["documenter", "medical_personnel"].includes(
+        record?.encoder?.role,
+      ),
+    },
+  );
   const facility =
     record?.healthcare_facility?.facility_name ||
     record?.hospital_name ||
@@ -8203,11 +8196,14 @@ function renderMatchCasingRecordCard(record, options = {}) {
 }
 
 function renderMatchCasingSelectedRecordSummary(record) {
-  const triage =
-    record?.latest_triage_assessment?.calculated_category ||
-    record?.latest_triage_assessment?.triage_category ||
-    record?.latest_triage_assessment?.responder_category ||
-    "unknown";
+  const triage = getTriageDisplayLabel(
+    record?.latest_triage_assessment,
+    {
+      preferFinalResult: ["documenter", "medical_personnel"].includes(
+        record?.encoder?.role,
+      ),
+    },
+  );
 
   return `
     <div class="match-casing-selected-record">
@@ -9345,6 +9341,85 @@ function formatTriageRecordValue(value) {
   return roleLabel(text);
 }
 
+function normalizeTriageDisplayValue(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function isMissingTriageDisplayValue(value) {
+  const normalized = normalizeTriageDisplayValue(value);
+
+  return !normalized || [
+    "unknown",
+    "unavailable",
+    "not_recorded",
+  ].includes(normalized);
+}
+
+function getTriageDisplayLabel(assessment, options = {}) {
+  const fallback = options.fallback || "Unknown";
+
+  if (!assessment) {
+    return fallback;
+  }
+
+  const triageSystem = normalizeTriageDisplayValue(
+    assessment.triage_system,
+  );
+  const answers = assessment.assessment_answers || {};
+
+  if (options.preferFinalResult) {
+    const finalResult = [
+      answers.finalTriage,
+      answers.final_triage,
+      answers.triageResult,
+      answers.triage_result,
+      answers.result,
+    ].find((value) => !isMissingTriageDisplayValue(value));
+
+    if (finalResult !== undefined) {
+      const normalized = normalizeTriageDisplayValue(finalResult);
+
+      if (/^esi_[1-5]$/.test(normalized)) {
+        return `ESI ${normalized.slice(-1)}`;
+      }
+
+      if (
+        ["esi", "ed_triage", "emergency_severity_index"].includes(
+          triageSystem,
+        ) &&
+        /^(?:1|2|3|4|5|level_[1-5])$/.test(normalized)
+      ) {
+        return `ESI ${normalized.slice(-1)}`;
+      }
+
+      return formatTriageRecordValue(finalResult);
+    }
+  }
+
+  const category = [
+    assessment.triage_category,
+    assessment.responder_category,
+    assessment.calculated_category,
+  ].find((value) => !isMissingTriageDisplayValue(value));
+
+  if (category !== undefined) {
+    const normalized = normalizeTriageDisplayValue(category);
+
+    if (["minimal", "minor"].includes(normalized)) return "Minor";
+    if (normalized === "immediate") return "Immediate";
+    if (normalized === "delayed") return "Delayed";
+    if (normalized === "expectant") return "Expectant";
+
+    return formatTriageRecordValue(category);
+  }
+
+  return fallback;
+}
+
 const assessmentAnswerLabels = {
   airwayrisk: "Actual or potential airway risk?",
   breathingafterairwaymanagement: "Breathing after airway management?",
@@ -10048,11 +10123,15 @@ function renderMatchedCaseSummary(recordDetails) {
         ${matchedRecords
           .map((record) => {
             const role = matchCasingRoleBucket(record);
-            const triage =
-              record?.latest_triage_assessment?.calculated_category ||
-              record?.latest_triage_assessment?.triage_category ||
-              record?.latest_triage_assessment?.responder_category ||
-              "unknown";
+            const triage = getTriageDisplayLabel(
+              record?.latest_triage_assessment,
+              {
+                preferFinalResult: [
+                  "documenter",
+                  "medical_personnel",
+                ].includes(record?.encoder?.role),
+              },
+            );
             const isCurrent = record.id === currentRecordId;
 
             return `

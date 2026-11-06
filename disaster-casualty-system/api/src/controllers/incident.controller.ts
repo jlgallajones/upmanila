@@ -9,6 +9,7 @@ import {
   buildCumulativeIntervalRows,
   dedupeEarliestEventRows,
 } from "../services/analytics/incident-analytics.js";
+import { classifyMortalityOutcome } from "../services/analytics/mortality.js";
 import {
   buildFacilityTriageAccuracyTotals,
   buildTriageAccuracySummary,
@@ -246,6 +247,8 @@ type TriageAssessmentRow = {
   triaged_at: string | null;
   triaged_by?: string | null;
   assessment_answers?: Record<string, unknown> | null;
+  is_over_triage?: boolean | null;
+  is_under_triage?: boolean | null;
 };
 
 type AnalyticsTriageCategory =
@@ -366,6 +369,107 @@ function getAnalyticsTriageCategory(
   return "unknown";
 }
 
+const analyticsTriagePriority: Record<
+  Exclude<AnalyticsTriageCategory, "unknown">,
+  number
+> = {
+  expectant: 0,
+  minimal: 1,
+  delayed: 2,
+  immediate: 3,
+};
+
+function getTriageComparison(row: TriageAssessmentRow): {
+  assigned: AnalyticsTriageCategory;
+  calculated: AnalyticsTriageCategory;
+  direction: "over" | "under" | "correct";
+} | null {
+  const assigned = getAnalyticsTriageCategory({
+    ...row,
+    triage_category: row.responder_category ?? row.triage_category,
+  });
+  const calculated = normalizeAnalyticsTriageCategory(
+    row.calculated_category,
+  );
+
+  if (assigned === "unknown" || calculated === "unknown") {
+    if (row.is_over_triage === true) {
+      return { assigned, calculated, direction: "over" };
+    }
+
+    if (row.is_under_triage === true) {
+      return { assigned, calculated, direction: "under" };
+    }
+
+    return null;
+  }
+
+  const assignedPriority = analyticsTriagePriority[assigned];
+  const calculatedPriority = analyticsTriagePriority[calculated];
+
+  return {
+    assigned,
+    calculated,
+    direction:
+      assignedPriority > calculatedPriority
+        ? "over"
+        : assignedPriority < calculatedPriority
+          ? "under"
+          : "correct",
+  };
+}
+
+function buildTriageComparisonDistribution(
+  rows: TriageAssessmentRow[],
+): CountMap {
+  const counts: CountMap = {};
+
+  for (const row of rows) {
+    const comparison = getTriageComparison(row);
+
+    if (!comparison) {
+      continue;
+    }
+
+    incrementCount(
+      counts,
+      comparison.direction === "over"
+        ? "Overtriaged"
+        : comparison.direction === "under"
+          ? "Undertriaged"
+          : "Correctly triaged",
+    );
+  }
+
+  return counts;
+}
+
+function formatAnalyticsTriageCategory(
+  category: AnalyticsTriageCategory,
+): string {
+  return category.charAt(0).toUpperCase() + category.slice(1);
+}
+
+function buildTriageTransitionDistribution(
+  rows: TriageAssessmentRow[],
+  direction: "over" | "under",
+): CountMap {
+  const counts: CountMap = {};
+
+  for (const row of rows) {
+    const comparison = getTriageComparison(row);
+
+    if (!comparison || comparison.direction !== direction) {
+      continue;
+    }
+
+    const transition = `${formatAnalyticsTriageCategory(comparison.calculated)} -> ${formatAnalyticsTriageCategory(comparison.assigned)}`;
+    incrementCount(counts, transition);
+  }
+
+  return counts;
+}
+
 type TransportRecordRow = {
   casualty_incident_id: string;
   transport_required: string | null;
@@ -375,6 +479,7 @@ type TransportRecordRow = {
   departed_scene_at: string | null;
   arrived_facility_at: string | null;
   receiving_facility_id: string | null;
+  notes?: string | null;
   recorded_by?: string | null;
 };
 
@@ -412,6 +517,7 @@ type FacilityEncounterRow = {
   casualty_incident_id: string;
   facility_id: string | null;
   arrived_at: string | null;
+  disposition?: string | null;
   pre_transport_triage_category?: string | null;
   ed_admitted_at?: string | null;
   ed_departed_at?: string | null;
@@ -3350,7 +3456,7 @@ export async function getIncidentOnsiteTriageSummary(
         ? await supabase
             .from("casualty_triage_assessments")
             .select(
-              "casualty_incident_id, triage_system, triage_category, responder_category, calculated_category, triage_stage, triaged_at, assessment_answers",
+              "casualty_incident_id, triage_system, triage_category, responder_category, calculated_category, triage_stage, triaged_at, assessment_answers, is_over_triage, is_under_triage",
             )
             .in("casualty_incident_id", casualtyIncidentIds)
             .eq("triage_stage", "on_site")
@@ -3696,7 +3802,7 @@ export async function getIncidentOnsiteCareSummary(
         ? await supabase
             .from("casualty_triage_assessments")
             .select(
-              "casualty_incident_id, triage_system, triage_category, responder_category, calculated_category, triage_stage, triaged_at, assessment_answers",
+              "casualty_incident_id, triage_system, triage_category, responder_category, calculated_category, triage_stage, triaged_at, assessment_answers, is_over_triage, is_under_triage",
             )
             .in("casualty_incident_id", casualtyIncidentIds)
             .eq("triage_stage", "facility_arrival")
@@ -4401,7 +4507,7 @@ export async function getIncidentSurvivorDistributionSummary(
         ? await supabase
             .from("casualty_transport_records")
             .select(
-              "casualty_incident_id, transport_mode, arrived_facility_at, receiving_facility_id",
+              "casualty_incident_id, transport_mode, arrived_facility_at, receiving_facility_id, notes",
             )
             .in("casualty_incident_id", casualtyIncidentIds)
             .not("receiving_facility_id", "is", null)
@@ -4414,7 +4520,7 @@ export async function getIncidentSurvivorDistributionSummary(
         ? await supabase
             .from("facility_encounters")
             .select(
-              "casualty_incident_id, facility_id, arrived_at, referred_or_transferred",
+              "casualty_incident_id, facility_id, arrived_at, referred_or_transferred, disposition",
             )
             .in("casualty_incident_id", casualtyIncidentIds)
             .order("arrived_at", { ascending: true })
@@ -4501,10 +4607,33 @@ export async function getIncidentSurvivorDistributionSummary(
       }
     }
 
-    const isNonEmsTransport = (transportMode: string | null) =>
-      ["private_vehicle", "independent", "walk_in", "other"].includes(
-        transportMode ?? "",
+    const getTransportUse = (row: TransportRecordRow): "ems" | "non_ems" | null => {
+      if (row.transport_mode === "ems") {
+        return "ems";
+      }
+
+      if (
+        ["private_vehicle", "independent", "walk_in", "other"].includes(
+          row.transport_mode ?? "",
+        )
+      ) {
+        return "non_ems";
+      }
+
+      const usedEmsMatch = row.notes?.match(
+        /used\s+ems\s+vehicle\s*:\s*(yes|no)/i,
       );
+
+      if (usedEmsMatch?.[1]?.toLowerCase() === "yes") {
+        return "ems";
+      }
+
+      if (usedEmsMatch?.[1]?.toLowerCase() === "no") {
+        return "non_ems";
+      }
+
+      return null;
+    };
 
     const primaryTriageTransport = (
       ["immediate", "delayed", "minimal", "expectant"] as const
@@ -4518,10 +4647,10 @@ export async function getIncidentSurvivorDistributionSummary(
         );
         const denominator = categoryRows.length;
         const emsNumerator = categoryRows.filter(
-          (row) => row.transport_mode === "ems",
+          (row) => getTransportUse(row) === "ems",
         ).length;
         const nonEmsNumerator = categoryRows.filter((row) =>
-          isNonEmsTransport(row.transport_mode),
+          getTransportUse(row) === "non_ems",
         ).length;
         const buildTransportMetric = (
           numerator: number,
@@ -4571,12 +4700,8 @@ export async function getIncidentSurvivorDistributionSummary(
 
         return facility?.facility_level === level;
       });
-      const numerator = levelRows.filter((row) =>
-        usesEms
-          ? row.transport_mode === "ems"
-          : ["private_vehicle", "independent", "walk_in", "other"].includes(
-              row.transport_mode ?? "",
-            ),
+      const numerator = levelRows.filter(
+        (row) => getTransportUse(row) === (usesEms ? "ems" : "non_ems"),
       ).length;
       const denominator = levelRows.length;
 
@@ -4603,7 +4728,9 @@ export async function getIncidentSurvivorDistributionSummary(
       Boolean(row.facility_id),
     ).length;
     const transferNumerator = encounterRows.filter(
-      (row) => row.referred_or_transferred === true,
+      (row) =>
+        row.referred_or_transferred === true ||
+        row.disposition === "transferred",
     ).length;
 
     const edArrivalsByInterval = intervalMinutes.map((minutes) => {
@@ -5437,7 +5564,7 @@ export async function getIncidentMorbidityMortalitySummary(
         ? await supabase
             .from("facility_encounters")
             .select(
-              "casualty_incident_id, arrived_at, ed_admitted_at, ed_departed_at, hospital_admitted_at, hospital_discharged_at, icu_admitted_at, icu_discharged_at, ventilation_started_at, ventilation_ended_at, created_at",
+              "casualty_incident_id, facility_id, arrived_at, ed_admitted_at, ed_departed_at, hospital_admitted_at, hospital_discharged_at, icu_admitted_at, icu_discharged_at, ventilation_started_at, ventilation_ended_at, disposition, created_at",
             )
             .in("casualty_incident_id", casualtyIncidentIds)
             .order("arrived_at", { ascending: true })
@@ -5501,6 +5628,23 @@ export async function getIncidentMorbidityMortalitySummary(
     }
 
     const encounterRows = Array.from(firstEncounterByCasualty.values());
+    const mortalityFacilityEncounterByCasualty = new Map<
+      string,
+      FacilityEncounterRow
+    >();
+
+    for (const row of (encounterResult.data ?? []) as FacilityEncounterRow[]) {
+      if (
+        row.disposition === "deceased" ||
+        Boolean(row.hospital_admitted_at)
+      ) {
+        mortalityFacilityEncounterByCasualty.set(
+          row.casualty_incident_id,
+          row,
+        );
+      }
+    }
+
     const getCategoryForCasualty = (casualtyIncidentId: string) =>
       getAnalyticsTriageCategory(
         latestTriageByCasualty.get(casualtyIncidentId),
@@ -5636,27 +5780,36 @@ export async function getIncidentMorbidityMortalitySummary(
           impactDeaths: buildMortalityMetric(
             mortalityRows.filter(
               (row) =>
-                row.outcome?.death_stage === "impact" ||
-                row.outcome?.medical_contact_before_death === false,
+                classifyMortalityOutcome(
+                  row.outcome,
+                  mortalityFacilityEncounterByCasualty.get(
+                    row.casualtyIncidentId,
+                  ),
+                ) === "impact",
             ).length,
             totalVictims,
           ),
           prehospitalDeaths: buildMortalityMetric(
             mortalityRows.filter(
               (row) =>
-                row.outcome?.death_stage === "prehospital" ||
-                (
-                  row.outcome?.medical_contact_before_death === true &&
-                  row.outcome?.reached_hospital === false
-                ),
+                classifyMortalityOutcome(
+                  row.outcome,
+                  mortalityFacilityEncounterByCasualty.get(
+                    row.casualtyIncidentId,
+                  ),
+                ) === "prehospital",
             ).length,
             totalVictims,
           ),
           inHospitalDeaths: buildMortalityMetric(
             mortalityRows.filter(
               (row) =>
-                row.outcome?.death_stage === "in_hospital" ||
-                row.outcome?.reached_hospital === true,
+                classifyMortalityOutcome(
+                  row.outcome,
+                  mortalityFacilityEncounterByCasualty.get(
+                    row.casualtyIncidentId,
+                  ),
+                ) === "in_hospital",
             ).length,
             totalVictims,
           ),
@@ -5932,10 +6085,14 @@ export async function getIncidentAnalyticsSummary(
     };
     const isPrimaryTriage = (row: TriageAssessmentRow) =>
       row.triage_stage === "on_site" ||
-      primaryTriageSystems.has(row.triage_system ?? "");
+      primaryTriageSystems.has(
+        normalizeAnalyticsTriageSystem(row.triage_system),
+      );
     const isSecondaryTriage = (row: TriageAssessmentRow) =>
       row.triage_stage === "reassessment" ||
-      secondaryTriageSystems.has(row.triage_system ?? "");
+      secondaryTriageSystems.has(
+        normalizeAnalyticsTriageSystem(row.triage_system),
+      );
     const isFacilityTriage = (row: TriageAssessmentRow) =>
       row.triage_stage === "facility_arrival" ||
       tertiaryTriageSystems.has(
@@ -6323,6 +6480,26 @@ const unsafeResponders = responderSafetyResponses.filter(
           secondaryTriageByCategory: countBy(
             secondaryTriageRows,
             (row) => getAnalyticsTriageCategory(row),
+          ),
+          primaryOverUnderTriageDistribution:
+            buildTriageComparisonDistribution(primaryTriageRows),
+          primaryOverTriageTransitions: buildTriageTransitionDistribution(
+            primaryTriageRows,
+            "over",
+          ),
+          primaryUnderTriageTransitions: buildTriageTransitionDistribution(
+            primaryTriageRows,
+            "under",
+          ),
+          secondaryOverUnderTriageDistribution:
+            buildTriageComparisonDistribution(secondaryTriageRows),
+          secondaryOverTriageTransitions: buildTriageTransitionDistribution(
+            secondaryTriageRows,
+            "over",
+          ),
+          secondaryUnderTriageTransitions: buildTriageTransitionDistribution(
+            secondaryTriageRows,
+            "under",
           ),
           tertiaryTriageBySystem: buildTertiaryTriageSystemCharts(),
           facilityTriageByCategory: countTriageRowsByCategory(

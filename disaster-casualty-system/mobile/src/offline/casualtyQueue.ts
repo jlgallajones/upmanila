@@ -26,6 +26,13 @@ export type QueuedCasualtyAttachment = {
   fileSizeBytes?: number;
 };
 
+export type QueuedResponderSafetyResponse = {
+  safetyStatus?: string;
+  responderArrivalAt?: string;
+  ppeUsedAt?: string;
+  responderFunction?: string;
+};
+
 export type QueuedCasualtySyncStatus =
   | "pending"
   | "syncing"
@@ -40,6 +47,8 @@ export type QueuedCasualtySubmission = {
   attempts: number;
   lastError?: string;
   attachments?: QueuedCasualtyAttachment[];
+  ownerUserId?: string | null;
+  responderSafetyResponse?: QueuedResponderSafetyResponse;
   syncedCasualtyIncidentId?: string;
 };
 
@@ -84,6 +93,8 @@ function normalizeQueueItem(
     attachments: Array.isArray(item.attachments)
       ? item.attachments
       : [],
+    ownerUserId: item.ownerUserId,
+    responderSafetyResponse: item.responderSafetyResponse,
     syncedCasualtyIncidentId: item.syncedCasualtyIncidentId,
   };
 }
@@ -169,7 +180,11 @@ function generateQueuedSyncIdNumber(): string {
 
 export async function queueCasualtySubmission(
   payload: QueuedCasualtyPayload,
-  options: { attachments?: QueuedCasualtyAttachment[] } = {},
+  options: {
+    attachments?: QueuedCasualtyAttachment[];
+    ownerUserId?: string | null;
+    responderSafetyResponse?: QueuedResponderSafetyResponse;
+  } = {},
 ): Promise<void> {
   const queue = await readQueue();
   const now = new Date().toISOString();
@@ -184,6 +199,8 @@ export async function queueCasualtySubmission(
       status: "pending",
       attempts: 0,
       attachments: options.attachments ?? [],
+      ownerUserId: options.ownerUserId,
+      responderSafetyResponse: options.responderSafetyResponse,
     },
   ]);
 }
@@ -222,6 +239,49 @@ export async function assignQueuedCasualtyIncident(
           }
         : item,
     ),
+  );
+}
+
+export async function updateQueuedCasualtyVictimCode(
+  queueId: string,
+  victimCode: string,
+  _userCode: string,
+): Promise<void> {
+  const queue = await readQueue();
+  const now = new Date().toISOString();
+
+  await writeQueue(
+    queue.map((item) => {
+      if (item.id !== queueId) {
+        return item;
+      }
+
+      const notes = item.payload.triageAssessment?.notes ?? "";
+      const victimCodeLine = /Victim code:\s*[^\r\n]*/i;
+      const nextNotes = victimCodeLine.test(notes)
+        ? notes.replace(victimCodeLine, `Victim code: ${victimCode}`)
+        : [notes.trim(), `Victim code: ${victimCode}`]
+            .filter(Boolean)
+            .join("\n");
+
+      return {
+        ...item,
+        payload: {
+          ...item.payload,
+          person: {
+            ...item.payload.person,
+            idNumber: victimCode,
+          },
+          triageAssessment: item.payload.triageAssessment
+            ? {
+                ...item.payload.triageAssessment,
+                notes: nextNotes,
+              }
+            : undefined,
+        },
+        updatedAt: now,
+      };
+    }),
   );
 }
 

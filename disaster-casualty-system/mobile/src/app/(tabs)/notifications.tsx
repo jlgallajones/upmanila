@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { createThemePalette } from "@/constants/theme";
 import { router, useFocusEffect } from "expo-router";
+import { useThemeMode } from "../../theme/theme-mode";
 import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -22,6 +23,7 @@ import {
   type NotificationRecord,
   type NotificationType,
 } from "../../api/notifications";
+import { getCurrentActingIcAssignments } from "../../api/incidents";
 import { getAccessToken } from "../../auth/session";
 import { getQueuedCasualtyCount } from "../../offline/casualtyQueue";
 
@@ -48,6 +50,9 @@ const COLORS = createThemePalette({
 
   gray: "#68758A",
   grayBackground: "#F3F5F9",
+  headerBackground: "#F2F2F2",
+  headerControlBackground: "#E6E6E6",
+  headerBorder: "#D3D8DE",
 });
 
 type NotificationKind =
@@ -351,6 +356,15 @@ function NotificationCard({
 }
 
 export default function NotificationsScreen() {
+  const { colors, isDark } = useThemeMode();
+  const headerBackground = isDark ? colors.background : "#F2F2F2";
+  const headerText = isDark ? colors.text : "#3A3A3A";
+  const headerMutedText = isDark ? colors.textSecondary : "#6B6B6B";
+  const headerControlBackground = isDark
+    ? "rgba(255,255,255,0.16)"
+    : "#E6E6E6";
+  const headerBorder = isDark ? colors.border : "#D3D8DE";
+
   const [serverNotifications, setServerNotifications] = useState<
     NotificationRecord[]
   >([]);
@@ -358,6 +372,7 @@ export default function NotificationsScreen() {
     () => new Set(),
   );
   const [queuedCasualtyCount, setQueuedCasualtyCount] = useState(0);
+  const [activeActingIcCount, setActiveActingIcCount] = useState(0);
   const [isGuestMode, setIsGuestMode] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -420,12 +435,21 @@ export default function NotificationsScreen() {
     const emergency = notifications.find(
       (notification) =>
         notification.unread &&
-        (notification.kind === "emergency" ||
-          notification.kind === "incident"),
+        notification.kind === "emergency",
+    );
+    const incident = notifications.find(
+      (notification) =>
+        notification.unread &&
+        notification.kind === "incident" &&
+        notification.title.trim().toLowerCase() !== "you are the acting ic",
     );
 
-    return emergency?.title ?? null;
-  }, [notifications]);
+    if (activeActingIcCount > 0) {
+      return "You are the Acting IC";
+    }
+
+    return emergency?.title ?? incident?.title ?? null;
+  }, [activeActingIcCount, notifications]);
 
   const loadNotifications = useCallback(async () => {
     try {
@@ -440,6 +464,7 @@ export default function NotificationsScreen() {
 
       if (!token) {
         setServerNotifications([]);
+        setActiveActingIcCount(0);
         setIsGuestMode(false);
         router.replace("/login");
         return;
@@ -447,8 +472,12 @@ export default function NotificationsScreen() {
 
       setIsGuestMode(false);
 
-      const response = await getNotifications();
+      const [response, actingIcAssignments] = await Promise.all([
+        getNotifications(),
+        getCurrentActingIcAssignments().catch(() => []),
+      ]);
       setServerNotifications(response.data);
+      setActiveActingIcCount(actingIcAssignments.length);
     } catch (error) {
       console.error("Failed to load notifications:", error);
 
@@ -457,6 +486,7 @@ export default function NotificationsScreen() {
 
       if (isAuthenticationTokenError(error)) {
         setServerNotifications([]);
+        setActiveActingIcCount(0);
         setIsGuestMode(false);
         setErrorMessage(null);
         router.replace("/login");
@@ -557,8 +587,11 @@ export default function NotificationsScreen() {
       }
     }
 
+    const relatedEntityType = item.relatedEntityType?.trim().toLowerCase();
+
     if (
-      item.relatedEntityType === "casualty" &&
+      (relatedEntityType === "casualty" ||
+        relatedEntityType === "victim") &&
       item.relatedEntityId
     ) {
       router.push(
@@ -587,23 +620,41 @@ export default function NotificationsScreen() {
   return (
     <View style={styles.screen}>
       <StatusBar
-        barStyle="light-content"
-        backgroundColor={COLORS.text}
+        barStyle={isDark ? "light-content" : "dark-content"}
+        backgroundColor={headerBackground}
       />
 
       <SafeAreaView
         edges={["top"]}
-        style={styles.headerSafeArea}
+        style={[styles.headerSafeArea, { backgroundColor: headerBackground }]}
       >
-        <View style={styles.header}>
-          <View style={styles.headerDecorOne} />
-          <View style={styles.headerDecorTwo} />
+        <View style={[styles.header, { backgroundColor: headerBackground }]}>
+          <View
+            style={[
+              styles.headerDecorOne,
+              {
+                backgroundColor: isDark
+                  ? "rgba(255,255,255,0.04)"
+                  : "rgba(0,0,0,0.035)",
+              },
+            ]}
+          />
+          <View
+            style={[
+              styles.headerDecorTwo,
+              {
+                backgroundColor: isDark
+                  ? "rgba(255,255,255,0.035)"
+                  : "rgba(0,0,0,0.025)",
+              },
+            ]}
+          />
 
           <View style={styles.headerTopRow}>
             <View style={styles.headerTextGroup}>
-              <Text style={styles.headerTitle}>Notifications</Text>
+              <Text style={[styles.headerTitle, { color: headerText }]}>Notifications</Text>
 
-              <Text style={styles.headerSubtitle}>
+              <Text style={[styles.headerSubtitle, { color: headerMutedText }]}>
                 {unreadCount} unread{" "}
                 {unreadCount === 1 ? "alert" : "alerts"}
               </Text>
@@ -614,11 +665,15 @@ export default function NotificationsScreen() {
               disabled={unreadCount === 0}
               style={({ pressed }) => [
                 styles.markReadButton,
+                {
+                  backgroundColor: headerControlBackground,
+                  borderColor: headerBorder,
+                },
                 unreadCount === 0 && styles.markReadButtonDisabled,
                 pressed && unreadCount > 0 && styles.pressed,
               ]}
             >
-              <Text style={styles.markReadText}>Mark all read</Text>
+              <Text style={[styles.markReadText, { color: headerText }]}>Mark all read</Text>
             </Pressable>
           </View>
 
@@ -632,10 +687,10 @@ export default function NotificationsScreen() {
                     : "notifications-outline"
               }
               size={16}
-              color={COLORS.white}
+              color={headerText}
             />
 
-            <Text style={styles.emergencyBannerText}>
+            <Text style={[styles.emergencyBannerText, { color: headerText }]}>
               {activeBanner
                 ? `ACTIVE NOTICE - ${activeBanner}`
                 : isGuestMode
@@ -758,7 +813,7 @@ const styles = StyleSheet.create({
   },
 
   headerSafeArea: {
-    backgroundColor: COLORS.maroon,
+    backgroundColor: COLORS.headerBackground,
   },
 
   header: {
@@ -766,7 +821,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 14,
     paddingBottom: 13,
-    backgroundColor: COLORS.maroon,
+    backgroundColor: COLORS.headerBackground,
   },
 
   headerDecorOne: {
@@ -776,7 +831,7 @@ const styles = StyleSheet.create({
     borderRadius: 90,
     right: -72,
     top: -125,
-    backgroundColor: "rgba(255,255,255,0.04)",
+    backgroundColor: "rgba(0,0,0,0.035)",
   },
 
   headerDecorTwo: {
@@ -786,7 +841,7 @@ const styles = StyleSheet.create({
     borderRadius: 44,
     right: 22,
     top: -22,
-    backgroundColor: "rgba(255,255,255,0.035)",
+    backgroundColor: "rgba(0,0,0,0.025)",
   },
 
   headerTopRow: {
@@ -801,13 +856,13 @@ const styles = StyleSheet.create({
   },
 
   headerTitle: {
-    color: COLORS.white,
+    color: COLORS.text,
     fontSize: 22,
     fontWeight: "800",
   },
 
   headerSubtitle: {
-    color: "rgba(255,255,255,0.80)",
+    color: COLORS.secondaryText,
     fontSize: 12,
     marginTop: 7,
   },
@@ -818,7 +873,9 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.15)",
+    backgroundColor: COLORS.headerControlBackground,
+    borderWidth: 1,
+    borderColor: COLORS.headerBorder,
   },
 
   markReadButtonDisabled: {
@@ -826,7 +883,7 @@ const styles = StyleSheet.create({
   },
 
   markReadText: {
-    color: COLORS.white,
+    color: COLORS.text,
     fontSize: 11,
     fontWeight: "600",
   },
@@ -838,14 +895,14 @@ const styles = StyleSheet.create({
     marginTop: 20,
     paddingHorizontal: 13,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.32)",
+    borderColor: COLORS.headerBorder,
     borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,0.10)",
+    backgroundColor: COLORS.headerControlBackground,
   },
 
   emergencyBannerText: {
     flex: 1,
-    color: COLORS.white,
+    color: COLORS.text,
     fontSize: 11,
     fontWeight: "800",
     marginLeft: 7,

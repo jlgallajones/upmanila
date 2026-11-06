@@ -1563,6 +1563,55 @@ Additional acceptance tests:
 **Status:** Identified; implementation pending.
 
 **If the issue happens again:** Verify the API base URL, authentication response, token, active profile, role guard, and browser/app network response. A missing account, expired session, CORS failure, or deployment mismatch should be corrected at the API/auth layer rather than hidden with a UI message.
+
+## 155. Mortality Categories Could Double-Count Deaths Without Medical Contact
+
+**Observed problem:** In Incident Management > Morbidity & Mortality, a deceased victim without medical contact could be counted under Impact Deaths and Pre-Hospital Deaths. The pre-hospital calculation accepted a stored `death_stage` value through an `OR` condition even when the explicit medical-contact value indicated that no medical contact occurred.
+
+**Implemented solution:** Added a shared mortality classifier in `api/src/services/analytics/mortality.ts`. Explicit medical-contact and hospital-arrival values now take precedence over legacy stage values, and each deceased victim is assigned to at most one category. A victim without medical contact is classified as an impact death only. Pre-hospital deaths require medical contact and no hospital arrival. Added regression tests and included them in `npm run test:analytics`.
+
+**If the issue happens again:** Check the saved `casualty_outcomes` values for `medical_contact_before_death`, `reached_hospital`, and `death_stage`, then run the mortality classification test. Correct contradictory source data only after preserving the original record and confirm that the three mortality categories remain mutually exclusive in both Admin and Super Admin views.
+
+## 156. HCFD Deaths Were Not Counted As In-Hospital Deaths
+
+**Observed problem:** An HCFD user could submit a deceased victim after the victim reached a healthcare facility, but Incident Management > Morbidity & Mortality could still show zero in-hospital deaths. The facility encounter stored the hospital context and `deceased` disposition separately from the casualty outcome row, while the summary classified mortality from the outcome row alone.
+
+**Implemented solution:** The morbidity and mortality endpoint now retrieves facility encounter disposition and hospital-admission evidence. The mortality classifier treats a facility encounter marked `deceased`, or a recorded hospital admission, as in-hospital mortality even when the separate outcome row is incomplete or contains stale legacy stage values. All matching facility encounters are checked, so a later HCFD encounter is not hidden by an earlier facility row. Added regression tests for a missing outcome row and contradictory legacy outcome values.
+
+**If the issue happens again:** Confirm the victim has `current_status = 'deceased'` and inspect its `facility_encounters` row for `disposition = 'deceased'`, `arrived_at`, or `hospital_admitted_at`. Check the API response for `mortality.inHospitalDeaths`, then run `npm.cmd run test:analytics` from `api`. If the facility row is missing, verify that the HCFD submission included a facility and arrival/disposition value before correcting the record.
+
+## 157. HCFD Hospital Transfers Were Missing From Survivor Distribution
+
+**Observed problem:** An HCFD user could record that a victim was transferred to another hospital, but Incident Management > Survivor Distribution still showed `0` interhospital transfers. The HCFD workflow stored the facility encounter disposition as `transferred`, while the summary counted only the legacy `referred_or_transferred` boolean.
+
+**Implemented solution:** Survivor Distribution now retrieves the facility encounter disposition and counts a record as an interhospital transfer when either `referred_or_transferred` is `true` or `disposition` is `transferred`. Existing AMP records continue to work, and HCFD transfer records are included without changing the submission workflow or database structure.
+
+**If the issue happens again:** Inspect the victim's `facility_encounters` row and confirm the facility is recorded with either `referred_or_transferred = true` or `disposition = 'transferred'`. Refresh the Survivor Distribution summary and verify that the numerator increases while the denominator remains the number of recorded facility arrivals.
+
+## 158. Active Add Victim Progress Label Was Invisible In Light Mode
+
+**Observed problem:** Across mobile responder roles, the active Add Victim progress step label was rendered in white against the light header. The active progress line was visible, but labels such as **SAFE** were difficult to read.
+
+**Implemented solution:** The active progress label now uses the current theme's cyan primary color. Inactive labels retain their muted color, and dark mode continues to use the appropriate light contrast for inactive steps.
+
+**If the issue happens again:** Open Add Victim for each mobile role, confirm the active step label is readable in light and dark mode, and check that only the active/completed line and active label use the accent treatment.
+
+## 159. Date Picker Actions Used A Gray Selection Color
+
+**Observed problem:** The Add Victim date picker displayed the **Use date** action and selected calendar date with a gray background, making the primary action less distinct from the surrounding controls.
+
+**Implemented solution:** The **Use date** button and selected date cell now use the shared black action color while preserving white text, rounded corners, and the existing date-selection behavior.
+
+**If the issue happens again:** Open a date field in Add Victim, confirm the **Use date** button and selected date are black in light and dark mode, and verify that selecting a date or entering a valid date still closes the picker and updates the field.
+
+## 160. Submission Confirmation Button Needed A Clearer Label And Action Color
+
+**Observed problem:** The Add Victim submission confirmation dialog used a gray action button labeled **OK**, which did not match the requested action wording or the mobile action-button treatment.
+
+**Implemented solution:** Changed the confirmation button label to **OKAY** and applied the shared black action color. The dialog still closes through the same existing handler.
+
+**If the issue happens again:** Submit a valid victim record, confirm the success dialog displays **OKAY** with a black button, and verify that pressing it closes the dialog and preserves the successful submission result.
+
 ## Verification Instructions
 
 Run these commands from the repository root in PowerShell:
@@ -1648,6 +1697,38 @@ Manual Acting IC acceptance test:
 65. Repeat the transport edit/detail check for every role that has an edit action. Confirm each role keeps its own edit fields and that saving one field does not replace previously saved transport values.
 
 Latest full verification run: **10 / 10 checks passed**.
+
+## 161. HCFD record badge displayed Unknown despite a saved triage result
+
+**Observed problem:** HCFD victim records could show an `Unknown` triage badge even when the user had completed an HCFD triage assessment, such as ESI, NATO, MASS, METTS, ED Triage, or Other. The generic category field can legitimately remain `unknown` for some facility triage systems, while the selected result is stored in the assessment answers.
+
+**Implemented solution:** Mobile and web record display logic now checks the saved final assessment result before falling back to the generic triage category for HCFD-encoded records. ESI values are rendered as `ESI 1` through `ESI 5`; other saved results are displayed as readable labels. Existing Field Responder, AMP, and MID category display behavior remains unchanged, and no triage workflow or database value was modified.
+
+**If the issue happens again:** Open the affected record, inspect the latest triage assessment response, and verify `assessment_answers.finalTriage` together with `triage_system`. If the answer is present, check that the deployed mobile/web build includes the shared triage display formatter. If it is absent, reproduce the HCFD assessment submission and inspect the API payload before changing any record data.
+
+## 162. HCFD edits blocked by incomplete locked triage assessment
+
+**Observed problem:** An older HCFD record could contain no triage assessment answer. During editing, the Triage section was correctly read-only, but the Continue action still validated it as a new submission and prevented the user from reaching editable Management or Disposition sections.
+
+**Implemented solution:** HCFD locked sections now bypass step-level required-field validation during edit mode. The existing triage data is preserved, no new triage answer is created, and Management/Disposition validation continues to run normally. New HCFD submissions still require the triage assessment.
+
+**If the issue happens again:** Confirm that the record is being opened through Edit Victim, verify that the Triage section is marked locked, and test navigation to Management and Disposition. If a new HCFD submission can proceed without triage answers, inspect the edit-mode condition because the exemption must apply only to locked HCFD edit steps.
+
+## 163. Victim notifications did not open the related record
+
+**Observed problem:** On mobile, tapping a notification for a submitted, rejected, or approved victim record did not open the record. The notification card was clickable, but the mobile navigation handler only recognized the related entity type `casualty`, while the API stores these notifications with `related_entity_type: victim`.
+
+**Implemented solution:** Mobile notification navigation now treats both `victim` and `casualty` as victim-record links and opens `/casualty/:related_entity_id`. The API also creates an approval notification when a reviewer verifies a record, using the same victim record identifier as submitted and rejected notifications. Notification read-state handling and all other notification destinations remain unchanged.
+
+**If the issue happens again:** Open the notification row in the API response and confirm that `related_entity_type` is `victim` or `casualty` and that `related_entity_id` is the corresponding `casualty_incidents.id`. Confirm the signed-in user can access that record, verify the mobile build contains the updated notification handler, and check the API logs for notification insert errors.
+
+## 164. Returning from an edited victim reopened a stale detail layer
+
+**Observed problem:** When a user opened Edit Victim from an existing victim detail screen, saved the changes, and then pressed Back from the refreshed record, the navigation stack returned to the older detail screen underneath the editor. That screen still held the pre-edit data and could produce a navigator `GO_BACK` warning after another Back press.
+
+**Implemented solution:** Detail-screen edit actions now pass `returnToDetail=true`. After a successful update, the editor closes back to the existing detail route instead of replacing itself with a second detail route. The detail screen reloads the victim record, histories, and attachments whenever it regains focus, so the returned view contains the saved values. Direct edits launched from the Records list continue to open the updated detail route normally.
+
+**If the issue happens again:** Reproduce from the victim detail screen, confirm the editor route contains `returnToDetail=true`, save the record, and verify that exactly one detail screen remains in the stack. Check that the detail screen reloads on focus and that Back then returns to Records without reopening the editor or showing a stale record.
 
 ## Recurrence Response Checklist
 
