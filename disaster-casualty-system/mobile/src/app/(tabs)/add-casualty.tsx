@@ -8072,6 +8072,8 @@ function handleTriageAssessmentDone() {
       incidentName: (current.incidentName || presetIncidentName) ?? "",
       triageStage: getDefaultTriageStageForCurrentFlow(),
       triageSystem: getDefaultTriageSystemForCurrentFlow(),
+      triageAssistanceMode: current.triageAssistanceMode,
+      triageAssistanceLocked: current.triageAssistanceLocked,
       triageTime: "",
       transportRequired: "Unknown",
       transportMode: "Unknown",
@@ -8803,6 +8805,7 @@ if (
 
         if (
           isSaResponderFlow &&
+          !isShortAmpResponderFlow &&
           form.usedEmsVehicle === "Yes" &&
           !form.emsVehicleType.trim()
         ) {

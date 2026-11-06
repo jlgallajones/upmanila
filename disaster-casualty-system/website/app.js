@@ -441,9 +441,9 @@ const superAdminNavGroups = [
     icon: "administration",
     views: [
       ["users", "Accounts"],
+      ["facilities", "Healthcare Facilities"],
       ["registration", "Account Registration"],
       ["drafts", "Drafts"],
-      ["facilities", "Healthcare Facilities"],
     ],
   },
   {
@@ -489,8 +489,8 @@ const adminNavGroups = [
     icon: "administration",
     views: [
       ["users", "Accounts"],
-      ["drafts", "Drafts"],
       ["facilities", "Healthcare Facilities"],
+      ["drafts", "Drafts"],
     ],
   },
   {
@@ -4250,8 +4250,33 @@ async function refreshActiveAnalytics() {
     await loadIncidentManagementDetails(incidentId, { renderLoading: false });
 
     if (isIncidentAnalyticsView()) {
+      const timelineScroll = document.getElementById(
+        "incidentTimelineScroll",
+      );
+      const timelineScrollPosition = timelineScroll
+        ? {
+            left: timelineScroll.scrollLeft,
+            top: timelineScroll.scrollTop,
+          }
+        : null;
+
       renderCurrentView();
       bindView();
+
+      if (timelineScrollPosition) {
+        window.requestAnimationFrame(() => {
+          const refreshedTimelineScroll = document.getElementById(
+            "incidentTimelineScroll",
+          );
+
+          if (!refreshedTimelineScroll) return;
+
+          refreshedTimelineScroll.scrollLeft =
+            timelineScrollPosition.left;
+          refreshedTimelineScroll.scrollTop =
+            timelineScrollPosition.top;
+        });
+      }
     }
   } catch (error) {
     console.error(

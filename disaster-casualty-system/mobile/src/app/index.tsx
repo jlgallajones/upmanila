@@ -273,7 +273,6 @@ export default function LandingScreen() {
           <Text style={styles.title}>SCRIBER</Text>
           <Text style={styles.subtitle}>
             Standardized Casualty Reporting for Incidents and Basic Emergency Response
-            Response.
           </Text>
         </View>
 
