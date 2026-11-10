@@ -8,6 +8,8 @@ const REFRESH_TOKEN_KEY = "dcms.admin.refreshToken";
 const SESSION_STARTED_AT_KEY = "dcms.admin.sessionStartedAt";
 const WEB_SESSION_DURATION_MS = 3 * 60 * 60 * 1000;
 const TOKEN_REFRESH_RETRY_MS = 30 * 1000;
+// Data views refresh only when the user requests it. Session renewal remains automatic.
+const ENABLE_WEB_DATA_AUTO_REFRESH = false;
 
 let realtimeClient = null;
 let dashboardRealtimeChannel = null;
@@ -221,6 +223,7 @@ const state = {
   analyticsAdminScopeFilter: "all",
   accountSortOrder: "newest",
   accountAdminFilter: "all",
+  accountRoleFilter: "all",
   incidentTimelineExpanded: false,
   matchCasingIncidentFilter: "all",
   selectedMatchCasingRecordIds: [],
@@ -1436,6 +1439,16 @@ function sortAccountsForList(accounts) {
   });
 }
 
+function filterAccountsByRole(accounts) {
+  if (state.accountRoleFilter === "all") {
+    return accounts;
+  }
+
+  return accounts.filter(
+    (user) => String(user.role || "") === state.accountRoleFilter,
+  );
+}
+
 function filterAccountsForSuperAdmin(accounts) {
   if (state.accountAdminFilter === "all") {
     return accounts;
@@ -1450,11 +1463,13 @@ function filterAccountsForSuperAdmin(accounts) {
   );
 }
 
-function renderAccountListControls({ includeAdminFilter = false } = {}) {
+function renderAccountListControls({ includeAdminFilter = false, includeRoleFilter = false } = {}) {
   const admins = getAdminAccountUsers();
+  const controlCount = 1 + Number(includeAdminFilter) + Number(includeRoleFilter);
+  const gridClass = controlCount > 1 ? (controlCount === 3 ? "three" : "two") : "";
 
   return `
-    <div class="form-grid ${includeAdminFilter ? "two" : ""} account-list-toolbar" aria-label="Account list controls">
+    <div class="form-grid ${gridClass} account-list-toolbar" aria-label="Account list controls">
       <label class="field">
         <span>Sort accounts</span>
         <select data-account-sort>
@@ -1475,6 +1490,18 @@ function renderAccountListControls({ includeAdminFilter = false } = {}) {
                     `<option value="${escapeHtml(admin.id)}" ${state.accountAdminFilter === admin.id ? "selected" : ""}>${escapeHtml(adminOrganizationLabel(admin))}</option>`,
                 )
                 .join("")}
+            </select>
+          </label>`
+        : ""}
+      ${includeRoleFilter
+        ? `<label class="field">
+            <span>Filter by role</span>
+            <select data-account-role-filter>
+              <option value="all" ${state.accountRoleFilter === "all" ? "selected" : ""}>All accounts</option>
+              <option value="field_responder" ${state.accountRoleFilter === "field_responder" ? "selected" : ""}>Field Responder Only</option>
+              <option value="sa_responder" ${state.accountRoleFilter === "sa_responder" ? "selected" : ""}>AMP Only</option>
+              <option value="minor_incident_documenter" ${state.accountRoleFilter === "minor_incident_documenter" ? "selected" : ""}>MID Only</option>
+              <option value="documenter" ${state.accountRoleFilter === "documenter" ? "selected" : ""}>HCFD Only</option>
             </select>
           </label>`
         : ""}
@@ -1889,6 +1916,14 @@ function toNullableIsoFromManualDateTime(value) {
   }
 
   return date.toISOString();
+}
+
+function toIsoFromStoredTimelineDate(value) {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return null;
+
+  const date = new Date(trimmed);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 
 function nullableFormText(form, name) {
@@ -2869,6 +2904,10 @@ async function stopDashboardRealtime() {
 }
 
 function bindDashboardDataRefreshOnFocus() {
+  if (!ENABLE_WEB_DATA_AUTO_REFRESH) {
+    return;
+  }
+
   window.addEventListener("focus", () => {
     if (!state.accessToken) {
       return;
@@ -2900,7 +2939,9 @@ function render() {
   bindShell();
   bindThemeToggles();
 
-  void startDashboardRealtime();
+  if (ENABLE_WEB_DATA_AUTO_REFRESH) {
+    void startDashboardRealtime();
+  }
   void loadSharedData()
     .then(() => {
       renderCurrentView();
@@ -3135,6 +3176,31 @@ function renderDashboardShell() {
         </nav>
 
         <div class="sidebar-footer">
+          <button
+            id="manualRefreshButton"
+            class="sidebar-refresh-button"
+            type="button"
+            title="Refresh dashboard data"
+            aria-label="Refresh dashboard data"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              aria-hidden="true"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M20 11a8.1 8.1 0 0 0-14.7-4.7L4 8" />
+              <path d="M4 4v4h4" />
+              <path d="M4 13a8.1 8.1 0 0 0 14.7 4.7L20 16" />
+              <path d="M20 20v-4h-4" />
+            </svg>
+            <span>Refresh data</span>
+          </button>
           <div class="sidebar-account-row">
             <button class="user-chip" type="button" id="profileButton" title="Open profile">
               <div class="user-avatar">
@@ -3214,6 +3280,37 @@ function bindShell() {
       String(state.sidebarCollapsed),
     );
     applySidebarCollapsedState();
+  });
+
+  qs("#manualRefreshButton")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    if (button.disabled) return;
+
+    button.disabled = true;
+    button.classList.add("is-loading");
+
+    try {
+      await loadSharedData();
+      renderCurrentView();
+      bindView();
+      showDashboardToast("Dashboard data refreshed.", "success");
+    } catch (error) {
+      const message = getErrorMessage(error, "Unable to refresh dashboard data.");
+      showDashboardToast(message, "error");
+    } finally {
+      button.disabled = false;
+      button.classList.remove("is-loading");
+    }
+  });
+
+  document.querySelectorAll(".nav-group").forEach((group) => {
+    group.addEventListener("toggle", () => {
+      if (!group.open || state.sidebarCollapsed) return;
+
+      document.querySelectorAll(".nav-group[open]").forEach((otherGroup) => {
+        if (otherGroup !== group) otherGroup.removeAttribute("open");
+      });
+    });
   });
 
   document.querySelectorAll(".nav-button, .nav-direct-link").forEach((button) => {
@@ -3917,9 +4014,17 @@ function bindView() {
   bindPasswordVisibilityToggles();
   bindBulkImportActions();
   bindExportDownloadActions();
-  syncAnalyticsLiveRefresh();
-  syncAuditLogsLiveRefresh();
-  syncAccountsLiveRefresh();
+  if (ENABLE_WEB_DATA_AUTO_REFRESH) {
+    syncAnalyticsLiveRefresh();
+    syncAuditLogsLiveRefresh();
+    syncAccountsLiveRefresh();
+  } else {
+    stopAnalyticsLiveRefresh();
+    window.clearInterval(auditLogsLiveRefreshTimer);
+    auditLogsLiveRefreshTimer = null;
+    window.clearInterval(accountsLiveRefreshTimer);
+    accountsLiveRefreshTimer = null;
+  }
 }
 
 function bindExportDownloadActions() {
@@ -4889,7 +4994,7 @@ function normalizeIntervalLabel(row) {
 }
 
 function analyticsBarClass(label, colorKey) {
-  const key = String(colorKey || label || "").toLowerCase();
+  const key = analyticsTriageColorKey(label, colorKey);
 
   if (["immediate", "red", "critical", "t1"].includes(key)) {
     return "triage-immediate";
@@ -4918,8 +5023,42 @@ function analyticsBarClass(label, colorKey) {
   return "default";
 }
 
+function analyticsTriageColorKey(label, colorKey) {
+  const sources = [colorKey, label]
+    .map((value) => String(value || "").trim().toLowerCase())
+    .filter(Boolean);
+  const categoryPatterns = [
+    ["immediate", ["immediate", "red", "critical", "t1"]],
+    ["delayed", ["delayed", "yellow", "urgent", "t2"]],
+    ["minor", ["minor", "minimal", "green", "non-urgent", "t3"]],
+    ["expectant", ["expectant", "black", "dead", "deceased", "t4"]],
+  ];
+
+  // Transition labels are formatted as `correct category -> recorded category`.
+  // Read the first side so under/over-triage charts use the correct category color.
+  for (const source of sources) {
+    const correctCategory = source.split(/\s*(?:->|=>)\s*/)[0];
+
+    for (const [category, terms] of categoryPatterns) {
+      if (
+        terms.some(
+          (term) =>
+            correctCategory === term ||
+            correctCategory.includes(` ${term} `) ||
+            correctCategory.startsWith(`${term} `) ||
+            correctCategory.endsWith(` ${term}`),
+        )
+      ) {
+        return category;
+      }
+    }
+  }
+
+  return String(colorKey || label || "").trim().toLowerCase();
+}
+
 function analyticsColorValue(label, colorKey, index = 0) {
-  const key = String(colorKey || label || "").toLowerCase();
+  const key = analyticsTriageColorKey(label, colorKey);
   const strategyColors = {
     "scoop and run": "#d32f2f",
     "scoop and run/load and go": "#d32f2f",
@@ -7273,7 +7412,9 @@ function renderAdminUnitRegistration() {
 }
 
 function renderAdminAccountList() {
-  const accounts = sortAccountsForList(filterLegacyAccounts(state.unitUsers));
+  const accounts = sortAccountsForList(
+    filterAccountsByRole(filterLegacyAccounts(state.unitUsers)),
+  );
 
   return `
     <section class="panel">
@@ -7283,7 +7424,7 @@ function renderAdminAccountList() {
           <p class="panel-subtitle">FR, AMP, MID, HCFD, and Responsible Officer accounts created by this admin.</p>
         </div>
       </div>
-      ${renderAccountListControls()}
+      ${renderAccountListControls({ includeRoleFilter: true })}
       <div class="table-wrap">
         <table>
           <thead>
@@ -7578,6 +7719,7 @@ function bindAccountActions() {
 function bindAccountListControls() {
   const sortControl = qs("[data-account-sort]");
   const adminFilterControl = qs("[data-account-admin-filter]");
+  const roleFilterControl = qs("[data-account-role-filter]");
 
   sortControl?.addEventListener("change", () => {
     state.accountSortOrder = sortControl.value;
@@ -7587,6 +7729,12 @@ function bindAccountListControls() {
 
   adminFilterControl?.addEventListener("change", () => {
     state.accountAdminFilter = adminFilterControl.value;
+    renderCurrentView();
+    bindView();
+  });
+
+  roleFilterControl?.addEventListener("change", () => {
+    state.accountRoleFilter = roleFilterControl.value;
     renderCurrentView();
     bindView();
   });
@@ -12739,7 +12887,7 @@ function renderIncidentSectionModal() {
           ${
             meta.canEdit && canManageIncident && !isLocked && meta.id !== "sitrep-close"
               ? isEditMode
-                ? `<button class="primary-button" type="submit" form="incidentSectionEditForm">Save</button>`
+                ? `<button class="primary-button" type="button" form="incidentSectionEditForm" data-save-incident-section>Save</button>`
                 : `<button class="primary-button" type="button" data-edit-incident-section>Edit</button>`
               : ""
           }
@@ -13574,7 +13722,7 @@ function renderTimelineManagementForm(incident, details, forModal = false) {
           <h3>Response Timeline</h3>
           <p class="panel-subtitle">Matches the mobile incident response timeline section.</p>
         </div>
-        ${forModal ? "" : `<button class="primary-button mini" type="submit">Save timeline</button>`}
+        ${forModal ? "" : `<button class="primary-button mini" type="button" data-save-incident-timeline>Save timeline</button>`}
       </div>
       <div class="form-grid two">
         <label class="field">
@@ -13618,7 +13766,7 @@ function renderTimelineManagementForm(incident, details, forModal = false) {
         </div>
         <div class="custom-timeline-actions">
           <button class="ghost-button mini" type="button" data-add-custom-timeline-event>Add another event</button>
-          ${forModal ? '<button class="primary-button mini" type="submit">Save timeline</button>' : ""}
+          ${forModal ? '<button class="primary-button mini" type="button" data-save-incident-timeline>Save timeline</button>' : ""}
         </div>
       </div>
       <section class="custom-timeline-saved-section">
@@ -14992,6 +15140,43 @@ function bindIncidentManagementActions() {
     });
   });
 
+  document.querySelectorAll("[data-save-incident-timeline]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.preventDefault();
+
+      const formId = button.getAttribute("form");
+      const form = formId
+        ? document.getElementById(formId)
+        : button.closest('[data-incident-section-form="timeline"]');
+
+      if (!form) return;
+
+      button.disabled = true;
+      try {
+        await handleIncidentSectionSubmit(form);
+      } finally {
+        button.disabled = false;
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-save-incident-section]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.preventDefault();
+
+      const formId = button.getAttribute("form");
+      const form = formId ? document.getElementById(formId) : null;
+      if (!form) return;
+
+      button.disabled = true;
+      try {
+        await handleIncidentSectionSubmit(form);
+      } finally {
+        button.disabled = false;
+      }
+    });
+  });
+
   document.querySelectorAll("[data-use-current-arrival-time]").forEach((button) => {
     button.addEventListener("click", () => {
       const row = button.closest("[data-dmmp-staff-row]");
@@ -15428,7 +15613,9 @@ async function handleIncidentSectionSubmit(form) {
       "hospital-resources": "hospitalResourcesMessage",
     }[section];
 
-    setMessage(messageId, error.message, "error");
+    const message = error instanceof Error ? error.message : "Unable to save the timeline.";
+    setMessage(messageId, message, "error");
+    showDashboardToast(message, "error");
     return false;
   }
 }
@@ -15514,7 +15701,9 @@ async function saveIncidentTimelineSection(incidentId, form) {
       throw new Error("Custom timeline event name is required.");
     }
 
-    const parsedAt = toNullableIsoFromManualDateTime(rawAt);
+    const parsedAt = row.matches("[data-custom-timeline-saved-row]")
+      ? toIsoFromStoredTimelineDate(rawAt)
+      : toNullableIsoFromManualDateTime(rawAt);
 
     if (!parsedAt) {
       throw new Error(`${label} must use MM/DD/YYYY HH:MM AM/PM.`);
@@ -15527,12 +15716,33 @@ async function saveIncidentTimelineSection(incidentId, form) {
     }];
   });
 
-  await apiRequest(`/incidents/${encodeURIComponent(incidentId)}/timeline`, {
+  const savedTimeline = await apiRequest(`/incidents/${encodeURIComponent(incidentId)}/timeline`, {
     method: "PUT",
     body: JSON.stringify(payload),
   });
+
   clearResponseTimelineSessionDraft(incidentId);
-  await reloadExpandedIncident("Response timeline saved.");
+
+  // Use the saved response immediately so the modal reflects newly added
+  // custom events without requiring a close/reopen cycle.
+  state.incidentManagementDetails[incidentId] = {
+    ...(state.incidentManagementDetails[incidentId] || {}),
+    timeline: savedTimeline,
+  };
+
+  if (state.activeIncidentSectionModal?.incidentId === incidentId) {
+    state.activeIncidentSectionModal = {
+      ...state.activeIncidentSectionModal,
+      editMode: false,
+    };
+  }
+
+  resetResponseTimelineFormSnapshot();
+  renderCurrentView();
+  bindView();
+  setMessage("incidentSectionModalMessage", "Response timeline saved.", "success");
+  setMessage("incidentManagementMessage", "Response timeline saved.", "success");
+  showDashboardToast("Response timeline saved.", "success");
 }
 
 async function saveDmmpStaffSection(incidentId, form) {
@@ -16057,7 +16267,7 @@ function renderIncidentCreator(compact = false) {
             <input
               name="disasterType"
               list="officialHazardTypes"
-              value="${escapeHtml(hazardTypes[0])}"
+              value=""
               autocomplete="off"
               placeholder="Search or select a hazard type"
               required
@@ -16139,11 +16349,15 @@ function bindCreateIncidentForm() {
   applyPendingDraftToForm(form, "incident", "incidentMessage");
 
   const hazardInput = form.elements.disasterType;
-  const otherHazardField = qs("#otherHazardField");
+  const otherHazardField = form.querySelector("#otherHazardField");
   const otherHazardInput = form.elements.otherHazard;
   const syncOtherHazardField = () => {
-    const isOther = hazardInput?.value.trim() === "Other";
-    if (otherHazardField) otherHazardField.hidden = !isOther;
+    const isOther = hazardInput?.value.trim().toLowerCase() === "other";
+    if (otherHazardField) {
+      otherHazardField.hidden = !isOther;
+      otherHazardField.style.display = isOther ? "" : "none";
+      otherHazardField.setAttribute("aria-hidden", String(!isOther));
+    }
     if (otherHazardInput) otherHazardInput.required = isOther;
   };
 

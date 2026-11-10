@@ -968,9 +968,13 @@ function getRecordTriageFilter(
 function CasualtyCard({
   item,
   canEditPendingDeparture,
+  currentUserId,
+  currentUserRole,
 }: {
   item: CasualtyRecord;
   canEditPendingDeparture: boolean;
+  currentUserId: string | null;
+  currentUserRole: string | null;
 }) {
   const fullName = getFullName(item);
   const identifier = getRecordIdentifier(item);
@@ -982,8 +986,13 @@ function CasualtyCard({
     ? getTriageFilterStyle(triageFilter) ?? getStatusStyle(item.current_status)
     : getStatusStyle(item.current_status);
   const synced = isRecordSynced(item);
+  const canEditRejectedRecord =
+    item.verification_status === "rejected" &&
+    !isAdminRecordsRole(currentUserRole) &&
+    item.encoder?.id === currentUserId;
   const showEditButton =
-    canEditPendingDeparture && isPendingDepartureRecord(item);
+    canEditRejectedRecord ||
+    (canEditPendingDeparture && isPendingDepartureRecord(item));
 
   return (
     <View style={styles.recordCard}>
@@ -1097,21 +1106,26 @@ function CasualtyCard({
 
       {showEditButton ? (
         <Pressable
-          onPress={() =>
+          onPress={() => {
+            const params = canEditRejectedRecord
+              ? { editId: item.id }
+              : { editId: item.id, focusStep: "Transport" };
+
             router.push({
               pathname: "/add-casualty",
-              params: {
-                editId: item.id,
-                focusStep: "Transport",
-              },
-            } as never)
-          }
+              params,
+            } as never);
+          }}
           style={({ pressed }) => [
             styles.recordEditButton,
             pressed && styles.pressed,
           ]}
           accessibilityRole="button"
-          accessibilityLabel="Edit pending departure record"
+          accessibilityLabel={
+            canEditRejectedRecord
+              ? "Edit rejected record"
+              : "Edit pending departure record"
+          }
         >
           <Ionicons
             name="create-outline"
@@ -1119,7 +1133,7 @@ function CasualtyCard({
             color={COLORS.text}
           />
           <Text style={styles.recordEditButtonText}>
-            Edit record
+            {canEditRejectedRecord ? "Edit rejected record" : "Edit record"}
           </Text>
         </Pressable>
       ) : null}
@@ -1676,6 +1690,9 @@ export default function RecordsScreen() {
     useState<string | null>(null);
   const [isGuestMode, setIsGuestMode] = useState(false);
   const [formattedDate, setFormattedDate] = useState("");
+  const [currentUserId, setCurrentUserId] = useState<string | null>(
+    null,
+  );
   const [currentUserRole, setCurrentUserRole] =
     useState<string | null>(null);
   const [
@@ -1737,6 +1754,7 @@ export default function RecordsScreen() {
         getCurrentUser(),
         getResponderAssignment(),
       ]);
+      setCurrentUserId(user?.id ?? null);
       setCurrentUserRole(user?.role ?? null);
       setCurrentResponderAssignment(responderAssignment);
 
@@ -1744,6 +1762,7 @@ export default function RecordsScreen() {
         setRecords([]);
         setIncidents([]);
         setIsGuestMode(false);
+        setCurrentUserId(null);
         setCurrentUserRole(null);
         setCurrentResponderAssignment(null);
         router.replace("/login");
@@ -1784,6 +1803,7 @@ export default function RecordsScreen() {
         setRecords([]);
         setIncidents([]);
         setIsGuestMode(false);
+        setCurrentUserId(null);
         setCurrentUserRole(null);
         setCurrentResponderAssignment(null);
         setErrorMessage(null);
@@ -3581,6 +3601,8 @@ function toggleHealthcareLocationFilter(
               currentUserRole,
               currentResponderAssignment,
             )}
+            currentUserId={currentUserId}
+            currentUserRole={currentUserRole}
           />
         )}
         style={styles.list}

@@ -1118,8 +1118,13 @@ export default function CasualtyDetailScreen() {
   );
   const isResponderCurrentUser = isResponderRole(currentUserRole);
   const isOwnRecord = casualty?.encoderId === currentUserId;
+  const canEditRejectedOwnRecord =
+    isResponderCurrentUser &&
+    isOwnRecord &&
+    casualty?.verificationStatusRaw === "rejected";
   const canShowHeaderEdit =
-    canEditCurrentRecord && !isResponderCurrentUser;
+    canEditCurrentRecord &&
+    (!isResponderCurrentUser || canEditRejectedOwnRecord);
   const canEditTransportCard =
     canEditCurrentRecord ||
     (isResponderCurrentUser && isOwnRecord);

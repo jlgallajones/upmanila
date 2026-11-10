@@ -51,7 +51,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS healthcare_facilities_active_name_location_uni
   ON public.healthcare_facilities(
     lower(facility_name),
     coalesce(lower(municipality), ''),
-    coalesce(lower(province), '')
+    coalesce(lower(province), ''),
+    coalesce(created_by, '00000000-0000-0000-0000-000000000000'::uuid)
   )
   WHERE is_active IS TRUE;
 

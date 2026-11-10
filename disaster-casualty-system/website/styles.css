@@ -6365,3 +6365,222 @@ tr[data-records-incident-details]:hover > td {
 .approvals-metrics .metric.emphasis small {
   color: #3f3f3f !important;
 }
+
+/* Manual data refresh and readable sidebar states */
+.sidebar-refresh-button {
+  width: 100%;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--ink);
+  background: var(--surface);
+  font-size: 12px;
+  font-weight: 850;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    opacity 160ms ease;
+}
+
+.sidebar-refresh-button:hover,
+.sidebar-refresh-button:focus-visible {
+  color: var(--cyan);
+  border-color: var(--cyan);
+  background: var(--selected-bg);
+  outline: none;
+}
+
+.sidebar-refresh-button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.sidebar-refresh-button.is-loading svg {
+  animation: sidebar-refresh-spin 800ms linear infinite;
+}
+
+@keyframes sidebar-refresh-spin {
+  to { transform: rotate(360deg); }
+}
+
+.sidebar-collapsed .sidebar-refresh-button {
+  width: 48px;
+  min-width: 48px;
+  height: 42px;
+  min-height: 42px;
+  padding: 0;
+  border-radius: 12px;
+}
+
+.sidebar-collapsed .sidebar-refresh-button span {
+  display: none;
+}
+
+:root[data-theme="dark"] .sidebar {
+  color: #f4f7f8;
+  background: #1f2528;
+  border-right-color: #465158;
+  box-shadow: 12px 0 28px rgba(0, 0, 0, 0.28);
+}
+
+:root[data-theme="dark"] .sidebar-title strong,
+:root[data-theme="dark"] .nav-group-label,
+:root[data-theme="dark"] .nav-direct-link,
+:root[data-theme="dark"] .nav-button,
+:root[data-theme="dark"] .user-chip strong {
+  color: #f4f7f8;
+}
+
+:root[data-theme="dark"] .sidebar-title span,
+:root[data-theme="dark"] .nav-section-label,
+:root[data-theme="dark"] .nav-group-count,
+:root[data-theme="dark"] .nav-group-chevron,
+:root[data-theme="dark"] .user-chip span {
+  color: #c2cbd0;
+}
+
+:root[data-theme="dark"] .nav-group-summary,
+:root[data-theme="dark"] .nav-direct-link {
+  color: #f4f7f8;
+  background: #293033;
+  border-color: #657178;
+}
+
+:root[data-theme="dark"] .nav-group-summary:hover,
+:root[data-theme="dark"] .nav-direct-link:hover {
+  color: #ffffff;
+  background: #343d41;
+  border-color: #67dbe3;
+}
+
+:root[data-theme="dark"] .nav-group-summary.active,
+:root[data-theme="dark"] .nav-direct-link.active {
+  color: #ffffff;
+  background: rgba(35, 200, 213, 0.2);
+  border-color: #67dbe3;
+  box-shadow: inset 4px 0 0 #67dbe3, 0 0 0 1px rgba(103, 219, 227, 0.16);
+}
+
+:root[data-theme="dark"] .nav-group-items {
+  border-left-color: rgba(103, 219, 227, 0.42);
+}
+
+:root[data-theme="dark"] .nav-button {
+  color: #d8e0e4;
+  background: transparent !important;
+}
+
+:root[data-theme="dark"] .nav-group-items .nav-button {
+  color: #d8e0e4 !important;
+  background: #293033 !important;
+  border-color: #657178 !important;
+}
+
+:root[data-theme="dark"] .nav-group-items .nav-button:hover {
+  color: #ffffff !important;
+  background: #343d41 !important;
+  border-color: #67dbe3 !important;
+}
+
+:root[data-theme="dark"] .nav-group-items .nav-button.active {
+  color: #ffffff !important;
+  background: rgba(35, 200, 213, 0.2) !important;
+  border-color: #67dbe3 !important;
+}
+
+:root[data-theme="dark"] .nav-glyph,
+:root[data-theme="dark"] .nav-direct-link > .nav-glyph {
+  color: #8be7ed;
+  background: #232a2d;
+  border-color: #657178;
+}
+
+:root[data-theme="dark"] .sidebar-toggle,
+:root[data-theme="dark"] .sidebar-collapsed .sidebar-toggle,
+:root[data-theme="dark"] .sidebar-refresh-button,
+:root[data-theme="dark"] .user-chip,
+:root[data-theme="dark"] .sidebar-collapsed .user-chip {
+  color: #f4f7f8;
+  background: #293033 !important;
+  border-color: #657178 !important;
+}
+
+:root[data-theme="dark"] .sidebar-toggle:hover,
+:root[data-theme="dark"] .sidebar-refresh-button:hover,
+:root[data-theme="dark"] .sidebar-refresh-button:focus-visible,
+:root[data-theme="dark"] .user-chip:hover {
+  color: #ffffff;
+  background: #343d41 !important;
+  border-color: #67dbe3 !important;
+}
+
+:root[data-theme="dark"] .sidebar-collapsed .user-avatar {
+  color: #f4f7f8;
+  background: #293033 !important;
+  border-color: #657178 !important;
+}
+
+:root[data-theme="dark"] .sidebar-collapsed .user-avatar-profile-icon {
+  color: #8be7ed;
+}
+
+:root[data-theme="dark"] .sidebar .danger-button {
+  color: #ff9a9a;
+  background: rgba(255, 123, 123, 0.14);
+  border-color: rgba(255, 154, 154, 0.5);
+}
+
+:root[data-theme="dark"] .sidebar .danger-button:hover {
+  background: rgba(255, 123, 123, 0.23);
+  border-color: #ff9a9a;
+}
+
+/* Keep dashboard cards and their text in the dark color system. */
+:root[data-theme="dark"] .incident-management-item,
+:root[data-theme="dark"] .incident-info-card,
+:root[data-theme="dark"] .dashboard-metrics .metric,
+:root[data-theme="dark"] .approvals-metrics .metric {
+  color: var(--ink) !important;
+  background: var(--surface-raised) !important;
+  border-color: var(--line) !important;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22) !important;
+}
+
+:root[data-theme="dark"] .incident-management-toggle,
+:root[data-theme="dark"] .incident-info-card {
+  color: var(--ink) !important;
+  background: var(--surface-raised) !important;
+}
+
+:root[data-theme="dark"] .incident-management-toggle:hover {
+  background: var(--selected-bg) !important;
+}
+
+:root[data-theme="dark"] .incident-management-toggle h3,
+:root[data-theme="dark"] .incident-info-card h3,
+:root[data-theme="dark"] .incident-management-toggle strong,
+:root[data-theme="dark"] .incident-info-card strong,
+:root[data-theme="dark"] .dashboard-metrics .metric strong {
+  color: var(--ink) !important;
+}
+
+:root[data-theme="dark"] .incident-management-toggle .eyebrow,
+:root[data-theme="dark"] .incident-management-toggle p,
+:root[data-theme="dark"] .incident-management-meta,
+:root[data-theme="dark"] .incident-info-card dt,
+:root[data-theme="dark"] .incident-info-card dd,
+:root[data-theme="dark"] .dashboard-metrics .metric span,
+:root[data-theme="dark"] .dashboard-metrics .metric small {
+  color: var(--muted) !important;
+}
+
+:root[data-theme="dark"] .incident-management-item.is-current .incident-management-toggle {
+  background: var(--selected-bg) !important;
+}

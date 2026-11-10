@@ -346,15 +346,7 @@ export async function createHealthcareFacility(
       .eq("is_active", true)
       .limit(1);
 
-    if (
-      creator.role !== "super_admin" ||
-      normalizedAssignedAdminId
-    ) {
-      existingQuery = existingQuery.eq(
-        "created_by",
-        facilityOwnerId,
-      );
-    }
+    existingQuery = existingQuery.eq("created_by", facilityOwnerId);
 
     const normalizedMunicipality = municipality?.trim();
     const normalizedProvince = province?.trim();
@@ -573,9 +565,10 @@ export async function updateHealthcareFacility(
       .neq("id", facilityId)
       .limit(1);
 
-    if (creator.role !== "super_admin") {
-      duplicateQuery = duplicateQuery.eq("created_by", user.id);
-    }
+    duplicateQuery = duplicateQuery.eq(
+      "created_by",
+      existingFacility.created_by ?? user.id,
+    );
 
     const normalizedMunicipality = municipality?.trim();
     const normalizedProvince = province?.trim();
