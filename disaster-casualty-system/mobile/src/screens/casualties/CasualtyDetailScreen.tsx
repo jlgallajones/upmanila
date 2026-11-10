@@ -1718,9 +1718,7 @@ export default function CasualtyDetailScreen() {
                   />
                   <DetailRow
                     label="Triage Assessment"
-                    value={formatStatus(
-                      casualty.latestTriage.triage_category,
-                    )}
+                    value={triageCategoryLabel}
                     valueColor={COLORS.maroon}
                   />
                   <DetailRow
@@ -1949,9 +1947,7 @@ export default function CasualtyDetailScreen() {
 
                   <DetailRow
                     label="Triage Assessment"
-                    value={formatStatus(
-                      casualty.latestTriage.triage_category,
-                    )}
+                    value={triageCategoryLabel}
                     valueColor={COLORS.maroon}
                   />
 

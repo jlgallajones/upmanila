@@ -25,6 +25,7 @@ export type ProfileUser = {
   id: string;
   full_name: string;
   email: string;
+  user_code: string | null;
   phone_number: string | null;
   role: UserRole;
   reporting_context: ReportingContext | null;

@@ -5792,6 +5792,8 @@ const [
   );
   const [currentUserFullName, setCurrentUserFullName] =
     useState<string | null>(null);
+  const [currentUserCode, setCurrentUserCode] =
+    useState<string | null>(null);
   const [currentUserRole, setCurrentUserRole] = useState<
     UserRole | null
   >(null);
@@ -5947,7 +5949,8 @@ const [
       : "No patient name entered");
   const showHealthcareDocumenterStickyHeader =
     isHealthcareDocumenterFlow;
-  const generatedUserCode = generateUserCodeFromName(currentUserFullName);
+  const generatedUserCode =
+    currentUserCode?.trim() || generateUserCodeFromName(currentUserFullName);
   const hasSavedResponderSafetyResponse =
     responderSafetyResponse !== null &&
     responderSafetyResponse.incident_id === form.incidentId;
@@ -6641,6 +6644,7 @@ const victimCodeAlreadyExists = useMemo(() => {
 
         setCurrentUserId(user?.id ?? null);
         setCurrentUserFullName(user?.full_name ?? null);
+        setCurrentUserCode(user?.user_code ?? null);
         setCurrentUserRole(user?.role ?? null);
         setCurrentReportingContext(user?.reporting_context ?? null);
         setCurrentAssignedMunicipality(

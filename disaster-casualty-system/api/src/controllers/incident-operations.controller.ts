@@ -233,9 +233,7 @@ function mergeDmmpRecordWithResponderSafety(
     responder_safety_status:
       responderSafety?.safety_status ?? null,
     status:
-      currentStatus === "deceased"
-        ? currentStatus
-        : safetyStatus ?? currentStatus,
+      currentStatus ?? safetyStatus,
   };
 }
 
@@ -306,18 +304,40 @@ async function syncResponderSafetyFromDmmpStatus(
   const now = new Date().toISOString();
   const responderArrivedAt = fallbackArrivalAt ?? now;
 
-  const { error } = await supabase
+  const { data: existingResponse, error: lookupError } = await supabase
     .from("responder_safety_responses")
-    .insert({
-      incident_id: incidentId,
-      responder_id: linkedUserId,
-      safety_status: safetyStatus,
-      responder_arrived_at: responderArrivedAt,
-      ppe_used_at: now,
-      updated_at: now,
-    });
+    .select("id")
+    .eq("incident_id", incidentId)
+    .eq("responder_id", linkedUserId)
+    .maybeSingle();
 
-  if (error?.code === "23505") {
+  if (lookupError) {
+    throw new Error(
+      `Unable to retrieve responder safety status: ${lookupError.message}`,
+    );
+  }
+
+  const { error } = existingResponse
+    ? await supabase
+        .from("responder_safety_responses")
+        .update({
+          safety_status: safetyStatus,
+          updated_at: now,
+        })
+        .eq("id", existingResponse.id)
+    : await supabase.from("responder_safety_responses").insert({
+        incident_id: incidentId,
+        responder_id: linkedUserId,
+        safety_status: safetyStatus,
+        responder_arrived_at: responderArrivedAt,
+        ppe_used_at: now,
+        updated_at: now,
+      });
+
+  // Older deployments still have the original yes/no/unknown check constraint.
+  // Keep the DMMP status update successful until that compatibility migration
+  // is applied; the DMMP record remains the authoritative display source.
+  if (error?.code === "23514") {
     return;
   }
 

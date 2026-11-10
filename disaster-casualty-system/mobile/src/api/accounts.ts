@@ -37,6 +37,7 @@ export type RegisterUnitUserPayload = {
     | "sa_responder"
     | "minor_incident_documenter"
     | "documenter";
+  userCode: string;
   phoneNumber?: string;
   assignedMunicipality?: string;
   assignedBarangay?: string;

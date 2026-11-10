@@ -43,6 +43,7 @@ type FilterMode = "all" | "unit";
 type AccountRole = RegisterAdminAccountPayload["role"] | RegisterUnitUserPayload["role"];
 type AccountForm = {
   fullName: string;
+  userCode: string;
   email: string;
   password: string;
   role: AccountRole;
@@ -53,6 +54,7 @@ type AccountForm = {
 
 const initialForm: AccountForm = {
   fullName: "",
+  userCode: "",
   email: "",
   password: "",
   role: "administrator",
@@ -237,12 +239,26 @@ export default function AccountManagementScreen() {
     const payload = {
       ...form,
       fullName: form.fullName.trim(),
+      userCode: form.userCode.trim().toUpperCase(),
       email: form.email.trim().toLowerCase(),
       password: form.password,
       phoneNumber: form.phoneNumber?.trim() || undefined,
       assignedMunicipality: form.assignedMunicipality?.trim() || undefined,
       assignedBarangay: form.assignedBarangay?.trim() || undefined,
     };
+
+    if (!isSuperAdmin && !payload.userCode) {
+      Alert.alert(
+        "Missing required fields",
+        "User code is required for FR, AMP, MID, and HCFD accounts.",
+      );
+      return;
+    }
+
+    if (!isSuperAdmin && !/^[A-Z]+$/.test(payload.userCode)) {
+      Alert.alert("Invalid user code", "User code must contain letters only.");
+      return;
+    }
 
     if (!payload.fullName || !payload.email || !payload.password) {
       Alert.alert(
@@ -270,6 +286,7 @@ export default function AccountManagementScreen() {
               : payload.role === "documenter"
                 ? "documenter"
                 : "field_responder",
+          userCode: payload.userCode,
         });
       }
 
@@ -355,6 +372,21 @@ export default function AccountManagementScreen() {
             placeholder="Full name"
             placeholderTextColor={COLORS.muted}
           />
+          {!isSuperAdmin ? (
+            <TextInput
+              style={styles.input}
+              value={form.userCode}
+              onChangeText={(value) =>
+                updateForm(
+                  "userCode",
+                  value.replace(/[^A-Za-z]/g, "").toUpperCase(),
+                )
+              }
+              placeholder="User code (letters only)"
+              placeholderTextColor={COLORS.muted}
+              autoCapitalize="characters"
+            />
+          ) : null}
           <TextInput
             style={styles.input}
             value={form.email}

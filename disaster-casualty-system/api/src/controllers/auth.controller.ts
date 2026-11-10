@@ -38,6 +38,7 @@ type RegisterUnitUserRequest = {
   email: string;
   password: string;
   role: UnitUserRole;
+  userCode: string;
   phoneNumber?: string;
   assignedMunicipality?: string;
   assignedBarangay?: string;
@@ -144,10 +145,37 @@ function isUnitUserRole(role: string | null | undefined): role is UnitUserRole {
   return unitUserRoles.includes(role as UnitUserRole);
 }
 
+function normalizeUserCode(value: unknown): string {
+  return String(value ?? "").trim().toUpperCase();
+}
+
+function isValidUserCode(value: string): boolean {
+  return /^[A-Z]+$/.test(value);
+}
+
+async function isUserCodeTaken(
+  createdBy: string,
+  userCode: string,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("users")
+    .select("id")
+    .eq("created_by", createdBy)
+    .eq("user_code", userCode)
+    .limit(1);
+
+  if (error) {
+    throw new Error(`Unable to validate user code: ${error.message}`);
+  }
+
+  return Boolean(data?.length);
+}
+
 const userSelect = `
   id,
   full_name,
   email,
+  user_code,
   phone_number,
   role,
   reporting_context,
@@ -163,6 +191,7 @@ const unitUserSelect = `
   id,
   full_name,
   email,
+  user_code,
   phone_number,
   role,
   reporting_context,
@@ -1224,12 +1253,21 @@ export async function registerUnitUser(
     const email = request.body.email?.trim().toLowerCase();
     const password = request.body.password;
     const requestedRole = request.body.role;
+    const userCode = normalizeUserCode(request.body.userCode);
 
-    if (!fullName || !email || !password || !requestedRole) {
+    if (!fullName || !email || !password || !requestedRole || !userCode) {
       response.status(400).json({
         success: false,
         message:
-          "fullName, email, password, and role are required.",
+          "fullName, email, password, role, and userCode are required.",
+      });
+      return;
+    }
+
+    if (!isValidUserCode(userCode)) {
+      response.status(400).json({
+        success: false,
+        message: "userCode must contain letters only.",
       });
       return;
     }
@@ -1286,6 +1324,14 @@ export async function registerUnitUser(
       return;
     }
 
+    if (await isUserCodeTaken(currentUser.id, userCode)) {
+      response.status(409).json({
+        success: false,
+        message: "That user code is already used in this admin unit.",
+      });
+      return;
+    }
+
     const { role, reportingContext } =
       getUnitUserContext(requestedRole);
     const assignedMunicipality =
@@ -1322,6 +1368,7 @@ export async function registerUnitUser(
           id: authData.user.id,
           full_name: fullName,
           email,
+          user_code: userCode,
           phone_number: request.body.phoneNumber?.trim() || null,
           role,
           reporting_context: reportingContext,
@@ -1441,14 +1488,30 @@ export async function bulkRegisterUnitUsers(
         const fullName = row.fullName?.trim();
         const email = row.email?.trim().toLowerCase();
         const password = row.password;
-        const requestedRole = row.role;
+        const userCode = normalizeUserCode(row.userCode);
+        // Keep the public CSV role name readable while storing the existing
+        // canonical AMP role used by permissions and mobile workflows.
+        const requestedRole =
+          String(row.role) === "amp_responder" ? "sa_responder" : row.role;
 
-        if (!fullName || !email || !password || !requestedRole) {
+        if (!fullName || !email || !password || !requestedRole || !userCode) {
           results.push(
             rowError(
               rowNumber,
-              "fullName, email, password, and role are required.",
+              "fullName, email, password, role, and userCode are required.",
             ),
+          );
+          continue;
+        }
+
+        if (!isValidUserCode(userCode)) {
+          results.push(rowError(rowNumber, "userCode must contain letters only."));
+          continue;
+        }
+
+        if (await isUserCodeTaken(currentUser.id, userCode)) {
+          results.push(
+            rowError(rowNumber, "That user code is already used in this admin unit."),
           );
           continue;
         }
@@ -1531,6 +1594,7 @@ export async function bulkRegisterUnitUsers(
               id: authData.user.id,
               full_name: fullName,
               email,
+              user_code: userCode,
               phone_number: row.phoneNumber?.trim() || null,
               role,
               reporting_context: reportingContext,

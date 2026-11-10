@@ -54,6 +54,23 @@ function activeBoolean(value: unknown): boolean | undefined {
   return value === true;
 }
 
+function sameOptionalText(
+  first: string | null | undefined,
+  second: string | null | undefined,
+): boolean {
+  return (first ?? null) === (second ?? null);
+}
+
+async function recordCallDownAuditLog(input: Parameters<typeof recordAuditLog>[0]) {
+  try {
+    await recordAuditLog(input);
+  } catch (error) {
+    // The staff mutation has already succeeded. Do not make the UI retry the
+    // mutation and create duplicates only because audit storage is unavailable.
+    console.error("[Call Down List] Unable to record audit log:", error);
+  }
+}
+
 async function getStaffScope(user: {
   id: string;
   role: string;
@@ -136,6 +153,37 @@ export async function createCallDownStaff(
       is_active: true,
     };
 
+    const { data: existingContacts, error: duplicateLookupError } =
+      await supabase
+        .from("call_down_staff")
+        .select(callDownStaffSelect)
+        .eq("created_by", user.id)
+        .eq("is_active", true)
+        .eq("full_name", fullName);
+
+    if (duplicateLookupError) {
+      throw new Error(
+        `Unable to check existing call down staff: ${duplicateLookupError.message}`,
+      );
+    }
+
+    const duplicate = (existingContacts ?? []).find(
+      (staff) =>
+        sameOptionalText(staff.role_position, payload.role_position) &&
+        sameOptionalText(staff.contact_number, payload.contact_number) &&
+        sameOptionalText(staff.assigned_team_unit, payload.assigned_team_unit) &&
+        sameOptionalText(staff.notes, payload.notes),
+    );
+
+    if (duplicate) {
+      response.status(409).json({
+        success: false,
+        message: "This call-down staff contact already exists.",
+        data: duplicate,
+      });
+      return;
+    }
+
     const { data, error } = await supabase
       .from("call_down_staff")
       .insert(payload)
@@ -146,7 +194,7 @@ export async function createCallDownStaff(
       throw new Error(`Unable to create call down staff: ${error.message}`);
     }
 
-    await recordAuditLog({
+    await recordCallDownAuditLog({
       actor: user,
       action: "call_down_staff.created",
       entityType: "call_down_staff",
@@ -260,7 +308,7 @@ export async function updateCallDownStaff(
       throw new Error(`Unable to update call down staff: ${error.message}`);
     }
 
-    await recordAuditLog({
+    await recordCallDownAuditLog({
       actor: user,
       action: "call_down_staff.updated",
       entityType: "call_down_staff",

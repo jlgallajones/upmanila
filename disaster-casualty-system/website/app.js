@@ -18,6 +18,8 @@ let analyticsLiveRefreshTimer = null;
 let analyticsLiveRefreshInFlight = false;
 let auditLogsLiveRefreshTimer = null;
 let auditLogsLiveRefreshInFlight = false;
+let accountsLiveRefreshTimer = null;
+let accountsLiveRefreshInFlight = false;
 let webSessionRefreshTimer = null;
 let webSessionRefreshPromise = null;
 
@@ -217,6 +219,8 @@ const state = {
   casualtyRecordDateFilter: "",
   verificationReviewIncidentFilter: "all",
   analyticsAdminScopeFilter: "all",
+  accountSortOrder: "newest",
+  accountAdminFilter: "all",
   incidentTimelineExpanded: false,
   matchCasingIncidentFilter: "all",
   selectedMatchCasingRecordIds: [],
@@ -848,6 +852,12 @@ function restoreResponseTimelineDraftIntoForm() {
       customContainer.innerHTML = draft.customTimelineEvents
         .map((event, index) => renderCustomTimelineEventRow(event, index))
         .join("");
+
+      const savedContainer = form.querySelector("[data-custom-timeline-saved-events]");
+      if (savedContainer) {
+        savedContainer.innerHTML =
+          '<div class="empty-state">Draft custom events are ready to review above.</div>';
+      }
     }
   }
 
@@ -1390,6 +1400,86 @@ function adminScopeLabel(adminId) {
   return admin
     ? `${admin.full_name || admin.email} (${admin.email})`
     : "Unknown admin group";
+}
+
+function getAccountListLabel(user) {
+  return String(user?.full_name || user?.email || "Unnamed account").trim();
+}
+
+function isLegacyAccount(user) {
+  return ["responder", "medical_personnel"].includes(String(user?.role || ""));
+}
+
+function filterLegacyAccounts(accounts) {
+  return accounts.filter((user) => !isLegacyAccount(user));
+}
+
+function compareDates(firstValue, secondValue) {
+  const firstTime = firstValue ? new Date(firstValue).getTime() : 0;
+  const secondTime = secondValue ? new Date(secondValue).getTime() : 0;
+
+  return (Number.isFinite(firstTime) ? firstTime : 0) -
+    (Number.isFinite(secondTime) ? secondTime : 0);
+}
+
+function sortAccountsForList(accounts) {
+  return accounts.slice().sort((first, second) => {
+    if (state.accountSortOrder === "oldest") {
+      return compareDates(first.created_at, second.created_at);
+    }
+
+    if (state.accountSortOrder === "alphabetical") {
+      return compareText(getAccountListLabel(first), getAccountListLabel(second));
+    }
+
+    return compareDates(second.created_at, first.created_at);
+  });
+}
+
+function filterAccountsForSuperAdmin(accounts) {
+  if (state.accountAdminFilter === "all") {
+    return accounts;
+  }
+
+  if (state.accountAdminFilter === "unassigned") {
+    return accounts.filter((user) => !user.created_by);
+  }
+
+  return accounts.filter(
+    (user) => String(user.created_by || "") === state.accountAdminFilter,
+  );
+}
+
+function renderAccountListControls({ includeAdminFilter = false } = {}) {
+  const admins = getAdminAccountUsers();
+
+  return `
+    <div class="form-grid ${includeAdminFilter ? "two" : ""} account-list-toolbar" aria-label="Account list controls">
+      <label class="field">
+        <span>Sort accounts</span>
+        <select data-account-sort>
+          <option value="newest" ${state.accountSortOrder === "newest" ? "selected" : ""}>Newest to oldest</option>
+          <option value="oldest" ${state.accountSortOrder === "oldest" ? "selected" : ""}>Oldest to newest</option>
+          <option value="alphabetical" ${state.accountSortOrder === "alphabetical" ? "selected" : ""}>Alphabetically</option>
+        </select>
+      </label>
+      ${includeAdminFilter
+        ? `<label class="field">
+            <span>Filter by admin</span>
+            <select data-account-admin-filter>
+              <option value="all" ${state.accountAdminFilter === "all" ? "selected" : ""}>All admin groups</option>
+              <option value="unassigned" ${state.accountAdminFilter === "unassigned" ? "selected" : ""}>Command accounts</option>
+              ${admins
+                .map(
+                  (admin) =>
+                    `<option value="${escapeHtml(admin.id)}" ${state.accountAdminFilter === admin.id ? "selected" : ""}>${escapeHtml(adminOrganizationLabel(admin))}</option>`,
+                )
+                .join("")}
+            </select>
+          </label>`
+        : ""}
+    </div>
+  `;
 }
 
 function getIncidentAdminScopeId(incident) {
@@ -3809,6 +3899,7 @@ function bindView() {
   bindRegisterAdminForm();
   bindRegisterUnitUserForm();
   bindAccountActions();
+  bindAccountListControls();
   bindIncidentManagementActions();
   bindIncidentAnalyticsActions();
   bindIncidentHistoryActions();
@@ -3828,6 +3919,7 @@ function bindView() {
   bindExportDownloadActions();
   syncAnalyticsLiveRefresh();
   syncAuditLogsLiveRefresh();
+  syncAccountsLiveRefresh();
 }
 
 function bindExportDownloadActions() {
@@ -6005,6 +6097,7 @@ const bulkImportConfigs = {
     messageId: "unitBulkImportMessage",
     headers: [
       "fullName",
+      "userCode",
       "email",
       "password",
       "role",
@@ -6015,6 +6108,7 @@ const bulkImportConfigs = {
     sampleRows: [
       [
         "Field Responder One",
+        "FR",
         "fr@example.com",
         "Temporary123",
         "field_responder",
@@ -6024,15 +6118,27 @@ const bulkImportConfigs = {
       ],
       [
         "Advanced Medical Responder One",
+        "AMP",
         "amp@example.com",
         "Temporary123",
-        "sa_responder",
+        "amp_responder",
         "09171234568",
         state.user?.assigned_municipality || "Manila",
         state.user?.assigned_barangay || "Ermita",
       ],
       [
+        "Minor Incident Documenter One",
+        "MID",
+        "minor.documenter@example.com",
+        "Temporary123",
+        "minor_incident_documenter",
+        "09171234570",
+        state.user?.assigned_municipality || "Manila",
+        state.user?.assigned_barangay || "Ermita",
+      ],
+      [
         "HCFD One",
+        "HCFD",
         "hcfd@example.com",
         "Temporary123",
         "documenter",
@@ -6295,6 +6401,10 @@ function validateBulkImportRow(type, row) {
     }
   } else if (type === "unitAccounts") {
     if (!row.fullName) reasons.push("fullName is required.");
+    if (!row.userCode) reasons.push("userCode is required.");
+    if (row.userCode && !/^[A-Za-z]+$/.test(row.userCode)) {
+      reasons.push("userCode must contain letters only.");
+    }
     if (!row.email) reasons.push("email is required.");
     if (row.email && !isImportEmail(row.email)) reasons.push("email is invalid.");
     if (!row.password) reasons.push("password is required.");
@@ -6607,6 +6717,8 @@ function normalizeHeader(value) {
 const bulkHeaderAliases = {
   fullname: "fullName",
   name: "fullName",
+  usercode: "userCode",
+  accountcode: "userCode",
   email: "email",
   password: "password",
   temporarypassword: "password",
@@ -6666,9 +6778,10 @@ function normalizeBulkRows(rows) {
         ) {
           normalized[mappedKey] = "documenter";
         } else if (
-          normalizedRole.includes("advanced medical responder") ||
+          normalizedRole.includes("advanced_medical") ||
           normalizedRole.includes("stabilization") ||
-          normalizedRole === "sa_responder"
+          normalizedRole === "sa_responder" ||
+          normalizedRole === "amp_responder"
         ) {
           normalized[mappedKey] = "sa_responder";
         } else if (
@@ -7111,6 +7224,7 @@ function renderAdminUnitRegistration() {
       <form id="unitUserForm" class="form-grid">
         <div class="form-grid two">
           <label class="field"><span>Full name</span><input name="fullName" required placeholder="Responder full name" /></label>
+          <label class="field"><span>User code</span><input name="userCode" required pattern="[A-Za-z]+" maxlength="32" title="Letters only" placeholder="Example: FR" /></label>
           <label class="field"><span>Email</span><input name="email" type="email" required placeholder="responder@example.com" /></label>
           ${renderPasswordField({
             label: "Temporary password",
@@ -7159,14 +7273,17 @@ function renderAdminUnitRegistration() {
 }
 
 function renderAdminAccountList() {
+  const accounts = sortAccountsForList(filterLegacyAccounts(state.unitUsers));
+
   return `
     <section class="panel">
       <div class="panel-header">
         <div>
           <h2>Accounts created by this admin</h2>
-          <p class="panel-subtitle">FR, AMP, HCFD, and legacy responder accounts that can access the mobile app.</p>
+          <p class="panel-subtitle">FR, AMP, MID, HCFD, and Responsible Officer accounts created by this admin.</p>
         </div>
       </div>
+      ${renderAccountListControls()}
       <div class="table-wrap">
         <table>
           <thead>
@@ -7181,7 +7298,7 @@ function renderAdminAccountList() {
           </thead>
           <tbody>
             ${
-              state.unitUsers
+              accounts
                 .map((user) => {
                   const online = isRecentlyOnline(user);
 
@@ -7196,7 +7313,7 @@ function renderAdminAccountList() {
                     </tr>
                   `;
                 })
-                .join("") || `<tr><td colspan="6"><div class="empty-state">No FR, AMP, or HCFD accounts created yet.</div></td></tr>`
+                .join("") || `<tr><td colspan="6"><div class="empty-state">No current unit accounts created yet.</div></td></tr>`
             }
           </tbody>
         </table>
@@ -7207,11 +7324,9 @@ function renderAdminAccountList() {
 }
 
 function renderSuperAdminAccountRecords() {
-  const accounts = state.adminAccounts
-    .slice()
-    .sort((first, second) =>
-      compareText(first.full_name || first.email, second.full_name || second.email),
-    );
+  const accounts = sortAccountsForList(
+    filterLegacyAccounts(filterAccountsForSuperAdmin(state.adminAccounts)),
+  );
 
   return `
     <section class="panel">
@@ -7229,6 +7344,7 @@ function renderSuperAdminAccountRecords() {
           Export FR/AMP/HCFD CSV
         </button>
       </div>
+      ${renderAccountListControls({ includeAdminFilter: true })}
       <div class="table-wrap">
         <table>
           <thead>
@@ -7316,6 +7432,7 @@ function bindRegisterUnitUserForm() {
         method: "POST",
         body: JSON.stringify({
           fullName: formValue(form, "fullName"),
+          userCode: formValue(form, "userCode"),
           email: formValue(form, "email"),
           password: form.elements.password.value,
           role: formValue(form, "role"),
@@ -7456,6 +7573,89 @@ function bindAccountActions() {
       openAccountEditModal(button.dataset.editAccount);
     });
   });
+}
+
+function bindAccountListControls() {
+  const sortControl = qs("[data-account-sort]");
+  const adminFilterControl = qs("[data-account-admin-filter]");
+
+  sortControl?.addEventListener("change", () => {
+    state.accountSortOrder = sortControl.value;
+    renderCurrentView();
+    bindView();
+  });
+
+  adminFilterControl?.addEventListener("change", () => {
+    state.accountAdminFilter = adminFilterControl.value;
+    renderCurrentView();
+    bindView();
+  });
+}
+
+function getAccountsSignature(accounts) {
+  return (accounts || [])
+    .map(
+      (account) =>
+        [
+          account.id,
+          account.full_name,
+          account.email,
+          account.role,
+          account.created_by,
+          account.is_active,
+          account.last_seen_at,
+          account.created_at,
+        ].join(":"),
+    )
+    .join("|");
+}
+
+async function refreshAccountsLive() {
+  if (
+    state.activeView !== "users" ||
+    !state.accessToken ||
+    accountsLiveRefreshInFlight ||
+    qs("#accountEditForm")
+  ) {
+    return;
+  }
+
+  accountsLiveRefreshInFlight = true;
+
+  try {
+    const previousAccounts = isSuperAdmin()
+      ? state.adminAccounts
+      : state.unitUsers;
+    const previousSignature = getAccountsSignature(previousAccounts);
+
+    await loadSharedData();
+
+    const nextAccounts = isSuperAdmin()
+      ? state.adminAccounts
+      : state.unitUsers;
+
+    if (getAccountsSignature(nextAccounts) !== previousSignature) {
+      renderCurrentView();
+      bindView();
+    }
+  } catch (error) {
+    console.error("[DCMS Accounts] Unable to refresh accounts:", error);
+  } finally {
+    accountsLiveRefreshInFlight = false;
+  }
+}
+
+function syncAccountsLiveRefresh() {
+  window.clearInterval(accountsLiveRefreshTimer);
+  accountsLiveRefreshTimer = null;
+
+  if (state.activeView !== "users" || !state.accessToken) {
+    return;
+  }
+
+  accountsLiveRefreshTimer = window.setInterval(() => {
+    void refreshAccountsLive();
+  }, 5000);
 }
 
 function bindAccountEditForm(userId) {
@@ -11967,8 +12167,42 @@ function bindCallDownStaffActions() {
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
 
+      if (form.dataset.submitting === "true") return;
+
       const staffId = formValue(form, "staffId");
       const isEditing = Boolean(staffId);
+      const payload = {
+        fullName: formValue(form, "fullName"),
+        rolePosition: nullableFormText(form, "rolePosition"),
+        contactNumber: nullableFormText(form, "contactNumber"),
+        assignedTeamUnit: nullableFormText(form, "assignedTeamUnit"),
+        notes: nullableFormText(form, "notes"),
+      };
+
+      if (!isEditing) {
+        const isExactDuplicate = state.callDownStaff.some(
+          (staff) =>
+            staff.is_active !== false &&
+            staff.full_name?.trim() === payload.fullName.trim() &&
+            (staff.role_position || null) === payload.rolePosition &&
+            (staff.contact_number || null) === payload.contactNumber &&
+            (staff.assigned_team_unit || null) === payload.assignedTeamUnit &&
+            (staff.notes || null) === payload.notes,
+        );
+
+        if (isExactDuplicate) {
+          setMessage(
+            "callDownStaffMessage",
+            "This call-down staff contact already exists.",
+            "error",
+          );
+          return;
+        }
+      }
+
+      form.dataset.submitting = "true";
+      const submitButton = qs("#callDownStaffSubmitButton");
+      if (submitButton) submitButton.disabled = true;
 
       try {
         setMessage("callDownStaffMessage", isEditing ? "Saving staff contact..." : "Adding staff contact...");
@@ -11978,13 +12212,7 @@ function bindCallDownStaffActions() {
             : "/call-down-staff",
           {
             method: isEditing ? "PATCH" : "POST",
-            body: JSON.stringify({
-              fullName: formValue(form, "fullName"),
-              rolePosition: nullableFormText(form, "rolePosition"),
-              contactNumber: nullableFormText(form, "contactNumber"),
-              assignedTeamUnit: nullableFormText(form, "assignedTeamUnit"),
-              notes: nullableFormText(form, "notes"),
-            }),
+            body: JSON.stringify(payload),
           },
         );
         await loadSharedData();
@@ -11993,6 +12221,9 @@ function bindCallDownStaffActions() {
         setMessage("callDownStaffMessage", isEditing ? "Staff contact saved." : "Staff contact added.", "success");
       } catch (error) {
         setMessage("callDownStaffMessage", getErrorMessage(error), "error");
+      } finally {
+        form.dataset.submitting = "false";
+        if (submitButton) submitButton.disabled = false;
       }
     });
   }
@@ -12015,12 +12246,17 @@ function bindCallDownStaffActions() {
     .querySelectorAll("[data-deactivate-call-down-staff], [data-activate-call-down-staff]")
     .forEach((button) => {
       button.addEventListener("click", async () => {
+        if (button.dataset.actionBusy === "true") return;
+
         const staffId =
           button.dataset.deactivateCallDownStaff ||
           button.dataset.activateCallDownStaff;
         const isActive = Boolean(button.dataset.activateCallDownStaff);
 
         if (!staffId) return;
+
+        button.dataset.actionBusy = "true";
+        button.disabled = true;
 
         try {
           await apiRequest(`/call-down-staff/${encodeURIComponent(staffId)}`, {
@@ -12036,6 +12272,9 @@ function bindCallDownStaffActions() {
           );
         } catch (error) {
           showDashboardToast(getErrorMessage(error), "error");
+        } finally {
+          button.dataset.actionBusy = "false";
+          button.disabled = false;
         }
       });
     });
@@ -12236,7 +12475,7 @@ function renderIncidentActingIcPanel(incident, details) {
                 </div>
               </div>
             </label>
-            <button class="secondary-button" type="submit" ${availableUsers.length ? "" : "disabled"}>Save Acting IC</button>
+            <button class="primary-button" type="submit" ${availableUsers.length ? "" : "disabled"}>Save Acting IC</button>
             </form>
           </div>`
         : ""}
@@ -12351,6 +12590,8 @@ function renderActingIcWorkspace() {
 
 function renderIncidentManagementItem(incident) {
   const isExpanded = state.expandedIncidentId === incident.id;
+  const isCurrentIncident =
+    isExpanded || state.activeIncidentSectionModal?.incidentId === incident.id;
   const location = [incident.barangay, incident.municipality, incident.province]
     .filter(Boolean)
     .join(", ");
@@ -12358,14 +12599,15 @@ function renderIncidentManagementItem(incident) {
   const isLoading = state.loadingIncidentManagementId === incident.id;
 
   return `
-    <article class="incident-management-item">
-      <button class="incident-management-toggle" type="button" data-incident-toggle="${escapeHtml(incident.id)}">
+    <article class="incident-management-item ${isCurrentIncident ? "is-current" : ""}">
+      <button class="incident-management-toggle" type="button" data-incident-toggle="${escapeHtml(incident.id)}" aria-expanded="${isExpanded ? "true" : "false"}"${isCurrentIncident ? ' aria-current="true"' : ""}>
         <div>
           <span class="eyebrow">${escapeHtml(incident.incident_code)}</span>
           <h3>${escapeHtml(incident.incident_name)}</h3>
           <p>${escapeHtml(location || incident.description || "No location recorded")}</p>
         </div>
         <div class="incident-management-meta">
+          ${isCurrentIncident ? '<span class="pill blue incident-current-pill">Currently editing</span>' : ""}
           <span class="pill ${incident.status === "active" ? "green" : "blue"}">${escapeHtml(roleLabel(incident.status))}</span>
           <span>${formatDate(incident.started_at)}</span>
           <strong>${isExpanded ? "Collapse" : "Expand"}</strong>
@@ -12397,33 +12639,7 @@ function getIncidentSectionLauncherSubtitle(sectionId, canEdit, details) {
   }
 
   if (sectionId === "dmmp-safety") {
-    const accountNames = state.unitUsers
-      .filter(
-        (user) =>
-          user.is_active !== false && user.role !== "responsible_officer",
-      )
-      .map((user) => user.full_name || user.email)
-      .filter(Boolean);
-    const extraNames = state.callDownStaff
-      .filter((staff) => staff.is_active !== false)
-      .map((staff) => staff.full_name)
-      .filter(Boolean);
-    const names = [...accountNames, ...extraNames]
-      .slice(0, 3)
-      .filter(Boolean);
-    const extraCount = Math.max(
-      0,
-      accountNames.length + extraNames.length - names.length,
-    );
-
-    const safetySummary = details?.responderSafety?.summary;
-    const unsafeCount =
-      Number(safetySummary?.illOrInjuredResponders || 0) +
-      Number(safetySummary?.deceasedResponders || 0);
-    const rosterSummary = names.length > 0
-      ? `${names.join(", ")}${extraCount > 0 ? ` +${extraCount} more` : ""}`
-      : "Created accounts appear automatically";
-    return `${rosterSummary}; ${unsafeCount} unsafe responder${unsafeCount === 1 ? "" : "s"} reported`;
+    return canEdit ? "View or edit" : "View summary";
   }
 
   return canEdit ? "View or edit" : "View summary";
@@ -12820,6 +13036,24 @@ function renderCustomTimelineEventRow(event = {}, index = 0) {
         </div>
       </label>
       <button class="ghost-button mini custom-timeline-remove" type="button" data-remove-custom-timeline-event>Remove</button>
+    </div>
+  `;
+}
+
+function renderSavedCustomTimelineEvent(event = {}, index = 0) {
+  return `
+    <div class="custom-timeline-saved-row" data-custom-timeline-row data-custom-timeline-saved-row>
+      <input type="hidden" data-custom-timeline-field="id" value="${escapeHtml(event.id || `custom-${index + 1}`)}" />
+      <input type="hidden" data-custom-timeline-field="label" value="${escapeHtml(event.label || "")}" />
+      <input type="hidden" data-custom-timeline-field="at" value="${escapeHtml(event.at || "")}" />
+      <div class="custom-timeline-saved-copy">
+        <strong>${escapeHtml(event.label || "Custom event")}</strong>
+        <time>${escapeHtml(formatDate(event.at))}</time>
+      </div>
+      <div class="custom-timeline-saved-actions">
+        <button class="ghost-button mini" type="button" data-edit-custom-timeline-event>Edit</button>
+        <button class="ghost-button mini custom-timeline-remove" type="button" data-remove-custom-timeline-event>Remove</button>
+      </div>
     </div>
   `;
 }
@@ -13332,9 +13566,6 @@ function renderSceneClearanceRecordsTable(ambulances) {
 function renderTimelineManagementForm(incident, details, forModal = false) {
   const timeline = details?.timeline?.data ?? null;
   const customEvents = normalizeCustomTimelineEvents(timeline?.custom_events);
-  const customRows = customEvents.length
-    ? customEvents
-    : [{ id: "custom-1", label: "", at: null }];
 
   return `
     <form id="${forModal ? "incidentSectionEditForm" : ""}" class="incident-section-card" data-incident-section-form="timeline">
@@ -13380,14 +13611,29 @@ function renderTimelineManagementForm(incident, details, forModal = false) {
           .join("")}
       </div>
       <div class="custom-timeline-section">
-        <div class="form-section-title">Custom timeline event</div>
+        <div class="form-section-title">Add custom timeline event</div>
+        <p class="panel-subtitle custom-timeline-help">Add one or more events, then save the timeline to store them.</p>
         <div class="custom-timeline-events" data-custom-timeline-events>
-          ${customRows
-            .map((event, index) => renderCustomTimelineEventRow(event, index))
-            .join("")}
+          ${renderCustomTimelineEventRow({ id: "custom-new-1", label: "", at: null }, 0)}
         </div>
-        <button class="ghost-button mini" type="button" data-add-custom-timeline-event>Add custom event</button>
+        <div class="custom-timeline-actions">
+          <button class="ghost-button mini" type="button" data-add-custom-timeline-event>Add another event</button>
+          ${forModal ? '<button class="primary-button mini" type="submit">Save timeline</button>' : ""}
+        </div>
       </div>
+      <section class="custom-timeline-saved-section">
+        <div class="section-card-header">
+          <div>
+            <h3>Saved Custom Timeline Events</h3>
+            <p class="panel-subtitle">Edit or remove saved events, then save the timeline to apply changes.</p>
+          </div>
+        </div>
+        <div class="custom-timeline-saved-events" data-custom-timeline-saved-events>
+          ${customEvents.length
+            ? customEvents.map((event, index) => renderSavedCustomTimelineEvent(event, index)).join("")
+            : '<div class="empty-state">No custom timeline events saved yet.</div>'}
+        </div>
+      </section>
       ${renderExtractedTimelineFacts(details)}
       <div id="timelineMessage" class="status-message" hidden></div>
     </form>
@@ -14879,10 +15125,11 @@ function bindIncidentManagementActions() {
     });
   });
 
-  document.querySelectorAll("[data-custom-timeline-events]").forEach((container) => {
-    container.addEventListener("click", (event) => {
+  document.querySelectorAll('[data-incident-section-form="timeline"]').forEach((form) => {
+    form.addEventListener("click", (event) => {
       const currentTimeButton = event.target.closest("[data-use-current-custom-timeline-time]");
       const removeButton = event.target.closest("[data-remove-custom-timeline-event]");
+      const editButton = event.target.closest("[data-edit-custom-timeline-event]");
 
       if (currentTimeButton) {
         const row = currentTimeButton.closest("[data-custom-timeline-row]");
@@ -14893,18 +15140,31 @@ function bindIncidentManagementActions() {
         }
       }
 
+      if (editButton) {
+        const row = editButton.closest("[data-custom-timeline-saved-row]");
+        if (row) {
+          const valueFor = (field) =>
+            row.querySelector(`[data-custom-timeline-field="${field}"]`)?.value || "";
+          row.outerHTML = renderCustomTimelineEventRow(
+            {
+              id: valueFor("id"),
+              label: valueFor("label"),
+              at: valueFor("at"),
+            },
+            form.querySelectorAll("[data-custom-timeline-row]").length,
+          );
+        }
+      }
+
       if (removeButton) {
         const row = removeButton.closest("[data-custom-timeline-row]");
-        const remainingRows = container.querySelectorAll("[data-custom-timeline-row]").length;
-
-        if (row && remainingRows > 1) {
+        if (row) {
           row.remove();
-        } else if (row) {
-          row.querySelectorAll("input").forEach((input) => {
-            if (input.type !== "hidden") {
-              input.value = "";
-            }
-          });
+          const savedContainer = form.querySelector("[data-custom-timeline-saved-events]");
+          if (savedContainer && !savedContainer.querySelector("[data-custom-timeline-row]")) {
+            savedContainer.innerHTML =
+              '<div class="empty-state">No custom timeline events saved yet.</div>';
+          }
         }
       }
     });
@@ -15463,6 +15723,7 @@ function getIncidentDraftPayload(form) {
   return {
     incidentName: formValue(form, "incidentName"),
     disasterType: formValue(form, "disasterType"),
+    otherHazard: formValue(form, "otherHazard"),
     triageMode: formValue(form, "triageMode"),
     description: formValue(form, "description"),
     barangay: formValue(form, "barangay"),
@@ -15493,6 +15754,7 @@ function getHealthcareFacilityDraftPayload(form) {
 function getAccountDraftPayload(form) {
   return {
     fullName: formValue(form, "fullName"),
+    userCode: formValue(form, "userCode"),
     email: formValue(form, "email"),
     role: formValue(form, "role"),
     phoneNumber: formValue(form, "phoneNumber"),
@@ -15790,7 +16052,29 @@ function renderIncidentCreator(compact = false) {
         <div class="form-section-title">Incident identity</div>
         <div class="form-grid two">
           <label class="field"><span>Incident name</span><input name="incidentName" required placeholder="e.g. Flood in Barangay San Isidro" /></label>
-          <label class="field"><span>Type of hazard</span><select name="disasterType" required>${hazardTypes.map((item) => `<option>${item}</option>`).join("")}</select></label>
+          <label class="field">
+            <span>Type of hazard</span>
+            <input
+              name="disasterType"
+              list="officialHazardTypes"
+              value="${escapeHtml(hazardTypes[0])}"
+              autocomplete="off"
+              placeholder="Search or select a hazard type"
+              required
+            />
+            <datalist id="officialHazardTypes">
+              ${hazardTypes.map((item) => `<option value="${escapeHtml(item)}"></option>`).join("")}
+            </datalist>
+          </label>
+          <label class="field" id="otherHazardField" hidden>
+            <span>Specify other hazard</span>
+            <input
+              name="otherHazard"
+              placeholder="Enter the type of hazard"
+              autocomplete="off"
+            />
+            <small class="field-hint">Describe the hazard for this incident.</small>
+          </label>
         </div>
         <label class="field">
           <span>Triage mode for this incident</span>
@@ -15854,6 +16138,19 @@ function bindCreateIncidentForm() {
 
   applyPendingDraftToForm(form, "incident", "incidentMessage");
 
+  const hazardInput = form.elements.disasterType;
+  const otherHazardField = qs("#otherHazardField");
+  const otherHazardInput = form.elements.otherHazard;
+  const syncOtherHazardField = () => {
+    const isOther = hazardInput?.value.trim() === "Other";
+    if (otherHazardField) otherHazardField.hidden = !isOther;
+    if (otherHazardInput) otherHazardInput.required = isOther;
+  };
+
+  hazardInput?.addEventListener("input", syncOtherHazardField);
+  hazardInput?.addEventListener("change", syncOtherHazardField);
+  syncOtherHazardField();
+
   qs('[data-save-draft="incident"]')?.addEventListener("click", async () => {
     try {
       await saveFormDraft({
@@ -15880,11 +16177,25 @@ function bindCreateIncidentForm() {
     setMessage("incidentMessage", "Creating incident...");
 
     try {
+      const disasterType = formValue(form, "disasterType");
+      if (!hazardTypes.includes(disasterType)) {
+        setMessage("incidentMessage", "Select a hazard type from the list.", "error");
+        form.elements.disasterType?.focus();
+        return;
+      }
+
+      const otherHazard = formValue(form, "otherHazard").trim();
+      if (disasterType === "Other" && !otherHazard) {
+        setMessage("incidentMessage", "Specify the other hazard before creating the incident.", "error");
+        form.elements.otherHazard?.focus();
+        return;
+      }
+
       const created = await apiRequest("/incidents", {
         method: "POST",
         body: JSON.stringify({
           incidentName: formValue(form, "incidentName"),
-          disasterType: formValue(form, "disasterType"),
+          disasterType: disasterType === "Other" ? otherHazard : disasterType,
           triageMode: formValue(form, "triageMode"),
           assignedAdminId: formValue(form, "assignedAdminId") || undefined,
           description: formValue(form, "description"),

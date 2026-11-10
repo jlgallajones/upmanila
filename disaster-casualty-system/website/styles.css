@@ -822,6 +822,14 @@ button {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.account-list-toolbar {
+  margin: 16px 0;
+}
+
+.account-list-toolbar .field {
+  min-width: 0;
+}
+
 .field {
   display: grid;
   gap: 7px;
@@ -1392,8 +1400,8 @@ button:disabled {
   flex-direction: column;
   justify-content: center;
   gap: 12px;
-  margin-bottom: 24px;
-  padding: 0 0 18px;
+  margin-bottom: 12px;
+  padding: 0 0 10px;
 }
 
 .sidebar-collapsed .user-chip-text {
@@ -2735,6 +2743,17 @@ tr[data-records-incident-details]:hover > td {
   color: var(--cyan);
 }
 
+.custom-timeline-help {
+  margin: -4px 0 0;
+}
+
+.custom-timeline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
 .custom-timeline-row {
   display: grid;
   grid-template-columns: minmax(180px, 1fr) minmax(260px, 1.5fr) auto;
@@ -2744,6 +2763,49 @@ tr[data-records-incident-details]:hover > td {
   border: 1px solid var(--line);
   border-radius: 10px;
   background: #fbfcfe;
+}
+
+.custom-timeline-saved-section {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.custom-timeline-saved-events {
+  display: grid;
+  gap: 10px;
+}
+
+.custom-timeline-saved-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-raised);
+}
+
+.custom-timeline-saved-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.custom-timeline-saved-copy time {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.custom-timeline-saved-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .custom-timeline-remove {
@@ -2951,6 +3013,20 @@ tr[data-records-incident-details]:hover > td {
   padding: 16px;
   border-top: 1px solid var(--line);
   background: #f8fafc;
+}
+
+.incident-management-item.is-current {
+  border: 2px solid var(--cyan) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cyan) 16%, transparent),
+    0 10px 28px rgba(33, 43, 64, 0.08) !important;
+}
+
+.incident-management-item.is-current .incident-management-toggle {
+  background: var(--selected-bg) !important;
+}
+
+.incident-current-pill {
+  font-weight: 700;
 }
 
 .incident-acting-ic-panel {
@@ -4751,8 +4827,13 @@ tr[data-records-incident-details]:hover > td {
   }
 
   .custom-timeline-row,
+  .custom-timeline-saved-row,
   .rating-guide {
     grid-template-columns: 1fr;
+  }
+
+  .custom-timeline-saved-actions {
+    justify-content: flex-start;
   }
 
   .casualty-detail-grid {

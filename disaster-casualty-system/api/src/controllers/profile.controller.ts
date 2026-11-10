@@ -54,6 +54,7 @@ export async function getProfile(
           id,
           full_name,
           email,
+          user_code,
           phone_number,
           role,
           reporting_context,

@@ -69,6 +69,7 @@ type UpdateIncidentTimelineRequest = {
   firstTransportFromSceneAt?: string | null;
   lastTransportFromSceneAt?: string | null;
   sceneDemobilizedAt?: string | null;
+  customTimelineEvents?: unknown;
 };
 
 type SceneClearanceAmbulanceType =
@@ -683,6 +684,7 @@ const incidentTimelineSelect = `
   first_transport_from_scene_at,
   last_transport_from_scene_at,
   scene_demobilized_at,
+  custom_events,
   updated_by,
   created_at,
   updated_at
@@ -730,6 +732,62 @@ function parseNullableTimestamp(
   }
 
   return parsed.toISOString();
+}
+
+type CustomTimelineEvent = {
+  id: string;
+  label: string;
+  at: string;
+};
+
+function normalizeCustomTimelineEvents(
+  value: unknown,
+  fallback: unknown,
+): CustomTimelineEvent[] {
+  const source = value === undefined ? fallback : value;
+
+  if (source === undefined || source === null) {
+    return [];
+  }
+
+  if (!Array.isArray(source)) {
+    throw new Error("Custom timeline events must be an array.");
+  }
+
+  if (source.length > 100) {
+    throw new Error("A maximum of 100 custom timeline events may be saved.");
+  }
+
+  return source.map((event, index) => {
+    const candidate = event && typeof event === "object"
+      ? event as Record<string, unknown>
+      : {};
+    const label = typeof candidate.label === "string"
+      ? candidate.label.trim()
+      : "";
+    const rawAt = typeof candidate.at === "string" ? candidate.at.trim() : "";
+
+    if (!label) {
+      throw new Error(`Custom timeline event ${index + 1} name is required.`);
+    }
+
+    const at = parseNullableTimestamp(
+      rawAt,
+      `Custom timeline event ${index + 1} time`,
+    );
+
+    if (!at) {
+      throw new Error(`Custom timeline event ${index + 1} time is required.`);
+    }
+
+    return {
+      id: typeof candidate.id === "string" && candidate.id.trim()
+        ? candidate.id.trim()
+        : `custom-${index + 1}`,
+      label,
+      at,
+    };
+  });
 }
 
 function assertChronologicalPair(
@@ -3231,6 +3289,11 @@ export async function updateIncidentTimeline(
       );
     }
 
+    const customEvents = normalizeCustomTimelineEvents(
+      request.body.customTimelineEvents,
+      existingTimeline?.custom_events,
+    );
+
     const disasterOccurredAt = parseNullableTimestamp(
       request.body.disasterOccurredAt,
       "Disaster occurrence time",
@@ -3362,6 +3425,7 @@ export async function updateIncidentTimeline(
       first_transport_from_scene_at: firstTransportFromSceneAt,
       last_transport_from_scene_at: lastTransportFromSceneAt,
       scene_demobilized_at: sceneDemobilizedAt,
+      custom_events: customEvents,
       updated_by: user.id,
       updated_at: new Date().toISOString(),
     };
@@ -3538,7 +3602,10 @@ export async function getIncidentOnsiteTriageSummary(
           cutoff === null
             ? 0
             : firstOnsiteRows.filter((row) => {
-                if (row.triage_category !== category || !row.triaged_at) {
+                if (
+                  getAnalyticsTriageCategory(row) !== category ||
+                  !row.triaged_at
+                ) {
                   return false;
                 }
 
@@ -3797,7 +3864,7 @@ export async function getIncidentOnsiteCareSummary(
       (item) => item.id,
     );
 
-    const facilityTriageResult =
+    const onsiteTriageResult =
       casualtyIncidentIds.length > 0
         ? await supabase
             .from("casualty_triage_assessments")
@@ -3805,13 +3872,13 @@ export async function getIncidentOnsiteCareSummary(
               "casualty_incident_id, triage_system, triage_category, responder_category, calculated_category, triage_stage, triaged_at, assessment_answers, is_over_triage, is_under_triage",
             )
             .in("casualty_incident_id", casualtyIncidentIds)
-            .eq("triage_stage", "facility_arrival")
+            .eq("triage_stage", "on_site")
             .order("triaged_at", { ascending: true })
         : { data: [], error: null };
 
-    if (facilityTriageResult.error) {
+    if (onsiteTriageResult.error) {
       throw new Error(
-        `Unable to retrieve HCFD triage data: ${facilityTriageResult.error.message}`,
+        `Unable to retrieve onsite triage data: ${onsiteTriageResult.error.message}`,
       );
     }
 
@@ -3832,14 +3899,14 @@ export async function getIncidentOnsiteCareSummary(
       );
     }
 
-    const firstFacilityTriageByCasualty = new Map<
+    const firstOnsiteTriageByCasualty = new Map<
       string,
       TriageAssessmentRow
     >();
 
-    for (const row of (facilityTriageResult.data ?? []) as TriageAssessmentRow[]) {
-      if (!firstFacilityTriageByCasualty.has(row.casualty_incident_id)) {
-        firstFacilityTriageByCasualty.set(row.casualty_incident_id, row);
+    for (const row of (onsiteTriageResult.data ?? []) as TriageAssessmentRow[]) {
+      if (!firstOnsiteTriageByCasualty.has(row.casualty_incident_id)) {
+        firstOnsiteTriageByCasualty.set(row.casualty_incident_id, row);
       }
     }
 
@@ -3875,7 +3942,7 @@ export async function getIncidentOnsiteCareSummary(
           cutoff === null
             ? 0
             : treatmentRows.filter((treatment) => {
-                const triage = firstFacilityTriageByCasualty.get(
+                const triage = firstOnsiteTriageByCasualty.get(
                   treatment.casualty_incident_id,
                 );
 
@@ -3907,7 +3974,7 @@ export async function getIncidentOnsiteCareSummary(
       });
 
     const stabilizedImmediateCategoryTotal = treatmentRows.filter((treatment) => {
-      const triage = firstFacilityTriageByCasualty.get(
+      const triage = firstOnsiteTriageByCasualty.get(
         treatment.casualty_incident_id,
       );
 
@@ -3917,7 +3984,7 @@ export async function getIncidentOnsiteCareSummary(
       );
     }).length;
     const stabilizedDelayedCategoryTotal = treatmentRows.filter((treatment) => {
-      const triage = firstFacilityTriageByCasualty.get(
+      const triage = firstOnsiteTriageByCasualty.get(
         treatment.casualty_incident_id,
       );
 
@@ -4147,7 +4214,7 @@ export async function getIncidentSceneClearanceSummary(
                 );
 
                 if (
-                  triage?.triage_category !== category ||
+                  getAnalyticsTriageCategory(triage) !== category ||
                   !transport.departed_scene_at ||
                   !transport.receiving_facility_id
                 ) {
@@ -4510,8 +4577,6 @@ export async function getIncidentSurvivorDistributionSummary(
               "casualty_incident_id, transport_mode, arrived_facility_at, receiving_facility_id, notes",
             )
             .in("casualty_incident_id", casualtyIncidentIds)
-            .not("receiving_facility_id", "is", null)
-            .not("arrived_facility_at", "is", null)
             .order("arrived_facility_at", { ascending: true })
         : { data: [], error: null };
 
@@ -4578,19 +4643,54 @@ export async function getIncidentSurvivorDistributionSummary(
       "tertiary",
       "specialized",
     ] as const;
-    const arrivedRows = transportRows.filter((row) => {
+    const arrivalRowsByCasualty = new Map<string, TransportRecordRow>();
+
+    for (const row of transportRows) {
       const facility = row.receiving_facility_id
         ? facilityMap.get(row.receiving_facility_id)
         : null;
 
-      return (
+      if (
         Boolean(row.arrived_facility_at) &&
         Boolean(facility?.facility_level) &&
         facilityLevels.includes(
           facility?.facility_level as (typeof facilityLevels)[number],
+        ) &&
+        !arrivalRowsByCasualty.has(row.casualty_incident_id)
+      ) {
+        arrivalRowsByCasualty.set(row.casualty_incident_id, row);
+      }
+    }
+
+    // HCFD submissions can create a facility encounter without a transport
+    // record. Treat that arrival as the source of truth when no transport
+    // arrival exists for the casualty.
+    for (const row of encounterRows) {
+      const facility = row.facility_id ? facilityMap.get(row.facility_id) : null;
+
+      if (
+        !arrivalRowsByCasualty.has(row.casualty_incident_id) &&
+        row.arrived_at &&
+        Boolean(facility?.facility_level) &&
+        facilityLevels.includes(
+          facility?.facility_level as (typeof facilityLevels)[number],
         )
-      );
-    });
+      ) {
+        arrivalRowsByCasualty.set(row.casualty_incident_id, {
+          casualty_incident_id: row.casualty_incident_id,
+          transport_required: null,
+          transport_mode: null,
+          ems_unit_type: null,
+          arrived_scene_at: null,
+          departed_scene_at: null,
+          arrived_facility_at: row.arrived_at,
+          receiving_facility_id: row.facility_id,
+          notes: null,
+        });
+      }
+    }
+
+    const arrivedRows = Array.from(arrivalRowsByCasualty.values());
 
     const firstPrimaryTriageByCasualty = new Map<
       string,
@@ -4907,7 +5007,7 @@ export async function getIncidentEdResourceSummary(
         ? await supabase
             .from("facility_encounters")
             .select(
-              "casualty_incident_id, facility_id, arrived_at, ed_admitted_at, ed_departed_at, referred_or_transferred, sought_ed_care, admitted_to_hospital, discharged_home, ed_resuscitation_started_at, created_at",
+              "casualty_incident_id, facility_id, arrived_at, pre_transport_triage_category, ed_admitted_at, ed_departed_at, referred_or_transferred, sought_ed_care, admitted_to_hospital, discharged_home, ed_resuscitation_started_at, hospital_admitted_at, hospital_discharged_at, disposition, created_at",
             )
             .in("casualty_incident_id", casualtyIncidentIds)
             .order("arrived_at", { ascending: true })
@@ -4979,10 +5079,22 @@ export async function getIncidentEdResourceSummary(
       : null;
     const intervalMinutes = [0, 15, 30, 45, 60];
 
-    const getCategoryForCasualty = (casualtyIncidentId: string) =>
-      getAnalyticsTriageCategory(
+    const getCategoryForCasualty = (casualtyIncidentId: string) => {
+      const assessedCategory = getAnalyticsTriageCategory(
         latestTriageByCasualty.get(casualtyIncidentId),
       );
+
+      if (assessedCategory !== "unknown") {
+        return assessedCategory;
+      }
+
+      // HCFD stores the category used before facility transport on its
+      // facility encounter when a normal triage assessment is unavailable.
+      return normalizeAnalyticsTriageCategory(
+        firstEncounterByCasualty.get(casualtyIncidentId)
+          ?.pre_transport_triage_category,
+      );
+    };
 
     const buildRatioMetric = (
       label: string,
@@ -5029,7 +5141,9 @@ export async function getIncidentEdResourceSummary(
           categoryRows.filter(
             (row) =>
               row.discharged_home === true ||
-              Boolean(row.ed_departed_at),
+              Boolean(row.ed_departed_at) ||
+              Boolean(row.hospital_discharged_at) ||
+              row.disposition === "discharged_home",
           ).length,
           categoryRows.length,
         ),
@@ -5211,7 +5325,7 @@ export async function getIncidentHospitalResourceSummary(
         ? await supabase
             .from("facility_encounters")
             .select(
-              "casualty_incident_id, facility_id, arrived_at, admitted_to_hospital, sought_ed_care, surgical_intervention_started_at, surgical_intervention_ended_at, operating_room_started_at, xray_required, xray_performed_at, ultrasound_required, ultrasound_performed_at, ct_required, ct_performed_at, icu_admitted_at, mechanical_ventilation_required, alternative_icu_used, created_at",
+              "casualty_incident_id, facility_id, arrived_at, pre_transport_triage_category, admitted_to_hospital, sought_ed_care, surgical_intervention_started_at, surgical_intervention_ended_at, operating_room_started_at, xray_required, xray_performed_at, ultrasound_required, ultrasound_performed_at, ct_required, ct_performed_at, icu_admitted_at, mechanical_ventilation_required, alternative_icu_used, created_at",
             )
             .in("casualty_incident_id", casualtyIncidentIds)
             .order("arrived_at", { ascending: true })
@@ -5263,10 +5377,20 @@ export async function getIncidentHospitalResourceSummary(
       (snapshotResult.data as HospitalResourceSnapshotRow | null) ?? null;
     const totalOperatingRooms = snapshot?.total_operating_rooms ?? 0;
 
-    const getCategoryForCasualty = (casualtyIncidentId: string) =>
-      getAnalyticsTriageCategory(
+    const getCategoryForCasualty = (casualtyIncidentId: string) => {
+      const triageCategory = getAnalyticsTriageCategory(
         latestTriageByCasualty.get(casualtyIncidentId),
       );
+
+      if (triageCategory !== "unknown") {
+        return triageCategory;
+      }
+
+      return normalizeAnalyticsTriageCategory(
+        firstEncounterByCasualty.get(casualtyIncidentId)
+          ?.pre_transport_triage_category,
+      );
+    };
     const isCritical = (casualtyIncidentId: string) =>
       severityByCasualty.get(casualtyIncidentId) === "critical" ||
       getCategoryForCasualty(casualtyIncidentId) === "immediate";
@@ -5564,7 +5688,7 @@ export async function getIncidentMorbidityMortalitySummary(
         ? await supabase
             .from("facility_encounters")
             .select(
-              "casualty_incident_id, facility_id, arrived_at, ed_admitted_at, ed_departed_at, hospital_admitted_at, hospital_discharged_at, icu_admitted_at, icu_discharged_at, ventilation_started_at, ventilation_ended_at, disposition, created_at",
+              "casualty_incident_id, facility_id, arrived_at, pre_transport_triage_category, ed_admitted_at, ed_departed_at, hospital_admitted_at, hospital_discharged_at, icu_admitted_at, icu_discharged_at, ventilation_started_at, ventilation_ended_at, disposition, created_at",
             )
             .in("casualty_incident_id", casualtyIncidentIds)
             .order("arrived_at", { ascending: true })
@@ -5645,10 +5769,23 @@ export async function getIncidentMorbidityMortalitySummary(
       }
     }
 
-    const getCategoryForCasualty = (casualtyIncidentId: string) =>
-      getAnalyticsTriageCategory(
+    const getCategoryForCasualty = (casualtyIncidentId: string) => {
+      const assessedCategory = getAnalyticsTriageCategory(
         latestTriageByCasualty.get(casualtyIncidentId),
       );
+
+      if (assessedCategory !== "unknown") {
+        return assessedCategory;
+      }
+
+      // HCFD records carry the category used before facility transport on the
+      // facility encounter itself. Use it when no normal triage assessment
+      // was saved for the casualty.
+      return normalizeAnalyticsTriageCategory(
+        firstEncounterByCasualty.get(casualtyIncidentId)
+          ?.pre_transport_triage_category,
+      );
+    };
     const rowsByCategory = (category: string) =>
       encounterRows.filter(
         (row) => getCategoryForCasualty(row.casualty_incident_id) === category,
@@ -5697,6 +5834,18 @@ export async function getIncidentMorbidityMortalitySummary(
         transferredOutCount: rows.filter((row) => Boolean(getEnd(row))).length,
       };
     };
+
+    const getEdStayStart = (row: FacilityEncounterRow) =>
+      row.ed_admitted_at ??
+      (row.sought_ed_care === true ||
+      ["active_care", "discharged_home"].includes(row.disposition ?? "")
+        ? row.arrived_at
+        : null);
+    const getEdStayEnd = (row: FacilityEncounterRow) =>
+      row.ed_departed_at ??
+      // The HCFD form records an ED discharge in hospital_discharged_at when
+      // the patient was not admitted to a ward/ICU.
+      (!row.hospital_admitted_at ? row.hospital_discharged_at : null);
 
     const t1EncounterRows = rowsByCategory("immediate");
     const t2EncounterRows = rowsByCategory("delayed");
@@ -5749,13 +5898,13 @@ export async function getIncidentMorbidityMortalitySummary(
           ed: {
             immediate: buildMinuteStayMetric(
               t1EncounterRows,
-              (row) => row.ed_admitted_at,
-              (row) => row.ed_departed_at,
+              getEdStayStart,
+              getEdStayEnd,
             ),
             delayed: buildMinuteStayMetric(
               t2EncounterRows,
-              (row) => row.ed_admitted_at,
-              (row) => row.ed_departed_at,
+              getEdStayStart,
+              getEdStayEnd,
             ),
           },
           icu: {
@@ -5995,7 +6144,9 @@ export async function getIncidentAnalyticsSummary(
       );
     }
 
-    const timeline = timelineResult.data as Record<string, string | null> | null;
+    const timeline = timelineResult.data as
+      | (Record<string, string | null> & { custom_events?: unknown })
+      | null;
     const triageRows =
       (triageResult.data ?? []) as TriageAssessmentRow[];
     const transportRows =
@@ -6450,8 +6601,16 @@ const unsafeResponders = responderSafetyResponses.filter(
         at: timeline?.last_facility_deactivated_at ?? null,
       },
     ];
+    const customTimelineVisuals = normalizeCustomTimelineEvents(
+      timeline?.custom_events,
+      undefined,
+    ).map((event, index) => ({
+      key: `customTimelineEvent-${index + 1}`,
+      label: event.label,
+      at: event.at,
+    }));
     const timelineVisuals = addTimelineElapsedMetrics(
-      rawTimelineVisuals,
+      [...rawTimelineVisuals, ...customTimelineVisuals],
       dmmpActivatedAt,
     );
 

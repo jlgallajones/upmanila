@@ -142,12 +142,10 @@ export async function exportRespondersDocumentersCsv(
   try {
     const user = getAuthenticatedUser(request);
     const unitRoles = [
-      "responder",
       "field_responder",
       "sa_responder",
       "minor_incident_documenter",
       "documenter",
-      "medical_personnel",
     ];
     let query = supabase
       .from("users")
